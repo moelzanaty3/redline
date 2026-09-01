@@ -1,0 +1,178 @@
+# Reusable readiness gate. Host in the org `.github` repo at
+# .github/workflows/redline-gate.yml; repos call it from .github/workflows/redline.yml
+# (see templates/redline.yml).
+#
+# IMPORTANT — required-status-check naming. A reusable workflow reports its check runs
+# as "<caller job id> / <called job id>". templates/redline.yml names the caller job
+# `redline-gate`, and the aggregate job below is `gate`, so the context a branch ruleset
+# must require is exactly:
+#
+#     redline-gate / gate
+#
+# Changing either job id changes the required context and will silently block every PR
+# in every onboarded repo. scripts/setup-repo.sh verifies the real name after onboarding.
+name: Redline Gate
+
+on:
+  workflow_call:
+    inputs:
+      adr-diff-threshold:
+        description: Changed lines above which an ADR link (or the no-adr label) is required
+        type: number
+        default: 300
+      fail-on-dependency-severity:
+        description: Minimum dependency-review severity that fails the gate
+        type: string
+        default: high
+      soft-fail-labels:
+        description: >-
+          Comma-separated labels that downgrade the process checks (checklist, ADR) to
+          warnings. Security checks are never downgraded.
+        type: string
+        default: redline-exempt,redline-sync
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  checklist:
+    name: PR checklist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the launch-readiness checklist is complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          body=$(gh pr view "$PR" --repo "$REPO" --json body --jq '.body // ""')
+
+          # Only the Launch readiness section is enforced. "Change type" is a pick-one
+          # list, so requiring every box there would make the gate unpassable.
+          section=$(printf '%s\n' "$body" | awk '
+            /^##[[:space:]]+Launch readiness/ { inside = 1; next }
+            /^##[[:space:]]/                  { inside = 0 }
+            inside                            { print }
+          ')
+
+          if [[ -z "${section//[[:space:]]/}" ]]; then
+            echo "::error::No '## Launch readiness' section in the PR description. Restore .github/pull_request_template.md and complete the checklist."
+            exit 1
+          fi
+
+          unchecked=$(printf '%s\n' "$section" | grep -c '^[[:space:]]*- \[ \]' || true)
+          if [[ "$unchecked" -gt 0 ]]; then
+            printf '%s\n' "$section" | grep '^[[:space:]]*- \[ \]' || true
+            echo "::error::$unchecked unchecked launch-readiness item(s). Tick each one, or delete the line and say why in the PR description."
+            exit 1
+          fi
+          echo "Launch readiness complete."
+
+  adr:
+    name: ADR required for significant changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check diff size against ADR link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          THRESHOLD: ${{ inputs.adr-diff-threshold }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr view "$PR" --repo "$REPO" --json additions,deletions,body,labels)
+          changed=$(jq '.additions + .deletions' <<<"$pr")
+          has_adr=$(jq -r '.body // ""' <<<"$pr" | grep -c 'docs/adr/' || true)
+          exempt=$(jq -r '.labels[].name' <<<"$pr" | grep -cx 'no-adr' || true)
+          echo "changed=$changed threshold=$THRESHOLD adr-links=$has_adr no-adr-label=$exempt"
+          if [[ "$changed" -gt "$THRESHOLD" && "$has_adr" -eq 0 && "$exempt" -eq 0 ]]; then
+            echo "::error::${changed} changed lines with no ADR link. Add docs/adr/NNNN-*.md and link it in the PR body, or apply the 'no-adr' label with a justification comment."
+            exit 1
+          fi
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: ${{ inputs.fail-on-dependency-severity }}
+          comment-summary-in-pr: on-failure
+
+  secrets:
+    name: Secret scan (diff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan the PR range
+        # Pinned to the commit behind tag v3.97.1 (2026-08-24). This action runs with
+        # access to the PR diff, so the ref must be immutable — a tag can be moved.
+        # GitHub Actions does not allow expressions in a step `uses:`, so the pin is
+        # reviewed here, in the org `.github` repo, which is the right place for it.
+        # scripts/check-pins.mjs re-resolves it against the upstream tag in CI.
+        uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          # verified only: `unknown` produces false positives, and this is a blocking
+          # check. Unverified candidates are caught by GHAS secret scanning instead.
+          extra_args: --results=verified --fail
+
+  gate:
+    # Aggregate. The branch ruleset requires the check "redline-gate / gate".
+    name: gate
+    needs: [checklist, adr, dependency-review, secrets]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          SOFT_FAIL_LABELS: ${{ inputs.soft-fail-labels }}
+        run: |
+          set -euo pipefail
+
+          # Security checks can never be downgraded by a label.
+          HARD_JOBS='["dependency-review","secrets"]'
+
+          hard_failed=$(jq -r --argjson hard "$HARD_JOBS" \
+            'to_entries[] | select(.value.result != "success") | select(.key as $k | $hard | index($k)) | .key' <<<"$RESULTS")
+          soft_failed=$(jq -r --argjson hard "$HARD_JOBS" \
+            'to_entries[] | select(.value.result != "success") | select(.key as $k | $hard | index($k) | not) | .key' <<<"$RESULTS")
+
+          exempt=false
+          for label in ${SOFT_FAIL_LABELS//,/ }; do
+            if jq -e --arg l "$label" 'index($l)' <<<"$LABELS" >/dev/null; then
+              exempt=true
+              echo "Soft-fail label present: $label"
+            fi
+          done
+
+          {
+            echo "### Redline gate"
+            echo
+            jq -r 'to_entries[] | "- \(.key): \(.value.result)"' <<<"$RESULTS"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ -n "$hard_failed" ]]; then
+            echo "::error::Redline gate failed on security checks (not label-exemptible): $hard_failed"
+            exit 1
+          fi
+
+          if [[ -n "$soft_failed" ]]; then
+            if [[ "$exempt" == true ]]; then
+              echo "::warning::Process checks failed but a soft-fail label is applied: $soft_failed. A reviewer is accepting this deliberately."
+              echo "- **exempted:** $soft_failed" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::error::Redline gate failed: $soft_failed"
+              exit 1
+            fi
+          fi
+
+          echo "Redline gate passed."

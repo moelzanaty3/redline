@@ -1,0 +1,77 @@
+# Lives in the redline-metrics repo. Monday-morning stakeholder digest.
+#
+# TEAMS_WEBHOOK_URL must point at a Power Automate "When a Teams webhook request is
+# received" flow. The old Office 365 connector webhooks (the `{"text": "..."}` shape)
+# were retired by Microsoft and silently stop delivering.
+name: Redline Weekly Digest
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Count open and stale PRs
+        id: prs
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '7 days ago' +%Y-%m-%d)
+
+          # gh search caps at 1000 results; --json + jq length would silently truncate.
+          # total_count from the REST search endpoint is exact.
+          count() {
+            gh api -X GET search/issues -f q="$1" -f per_page=1 --jq '.total_count'
+          }
+          open_prs=$(count "org:$ORG is:pr is:open draft:false")
+          stale_prs=$(count "org:$ORG is:pr is:open draft:false updated:<$cutoff")
+
+          echo "open=$open_prs"  >> "$GITHUB_OUTPUT"
+          echo "stale=$stale_prs" >> "$GITHUB_OUTPUT"
+
+      - name: Build Adaptive Card
+        env:
+          ORG: ${{ github.repository_owner }}
+          DAYS: '7'
+          OPEN_PRS: ${{ steps.prs.outputs.open }}
+          STALE_PRS: ${{ steps.prs.outputs.stale }}
+          SEED_SCORES: data/seed-scores.jsonl
+          DASHBOARD_URL: ${{ vars.REDLINE_DASHBOARD_URL }}
+        run: node scripts/build-digest.mjs --out digest.json
+
+      - name: Post to Teams
+        env:
+          WEBHOOK: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${WEBHOOK:-}" ]]; then
+            echo "::error::TEAMS_WEBHOOK_URL is not set — digest built but not delivered."
+            exit 1
+          fi
+          curl -sS --fail-with-body -X POST \
+            -H 'Content-Type: application/json' \
+            --data @digest.json "$WEBHOOK"
+
+      - name: Attach digest to the run
+        if: always()
+        run: |
+          {
+            echo '### Digest payload'
+            echo '```json'
+            cat digest.json 2>/dev/null || echo '{}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,227 @@
+# Lives in the redline-metrics repo. Opens a throwaway PR of known-bad code against a
+# canary repo, waits for the automated reviewer, scores it, records the result, and
+# closes the PR.
+#
+# This is the regression test for the review layer itself. Standards drift, models change
+# underneath you, and a repo can silently lose its Copilot review entitlement — none of
+# which shows up in ordinary telemetry, because "no findings" and "nothing to find" look
+# identical. Only a corpus with known answers tells them apart.
+#
+# Configuration (repo variables / secrets on redline-metrics):
+#   vars.CANARY_TARGETS   JSON array, e.g.
+#                         [{"repo":"acme/pilot-web","stack":"react"},
+#                          {"repo":"acme/pilot-api","stack":"nodejs"}]
+#   vars.REDLINE_SOURCE   owner/repo of the Redline source bundle (default <owner>/redline)
+#   secrets.REDLINE_CANARY_TOKEN   contents:write + pull_requests:write on the canary
+#                                  repos ONLY. Never an org-wide token.
+#   secrets.REDLINE_ORG_READ_TOKEN read access, used to check out the source bundle.
+name: Redline Seed Canary
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: Override CANARY_TARGETS with a JSON array for this run
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: seed-canary
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+      any: ${{ steps.plan.outputs.any }}
+    steps:
+      - id: plan
+        env:
+          OVERRIDE: ${{ inputs.targets }}
+          CONFIGURED: ${{ vars.CANARY_TARGETS }}
+        run: |
+          set -euo pipefail
+          raw="${OVERRIDE:-${CONFIGURED:-[]}}"
+          if ! jq -e 'type == "array"' <<<"$raw" >/dev/null 2>&1; then
+            echo "::error::CANARY_TARGETS must be a JSON array of {repo, stack} objects."
+            exit 1
+          fi
+          count=$(jq 'length' <<<"$raw")
+          echo "targets=$(jq -c . <<<"$raw")" >> "$GITHUB_OUTPUT"
+          echo "any=$([[ "$count" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "$count canary target(s)" >> "$GITHUB_STEP_SUMMARY"
+
+  score:
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.targets) }}
+    steps:
+      - name: Check out the Redline source bundle
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.REDLINE_SOURCE || format('{0}/redline', github.repository_owner) }}
+          token: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
+          path: redline
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Open the seed pull request
+        id: open
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_CANARY_TOKEN }}
+          TARGET_REPO: ${{ matrix.target.repo }}
+          STACK: ${{ matrix.target.stack }}
+        run: |
+          set -euo pipefail
+          branch="redline/seed-canary-$(date -u +%Y%m%d%H%M%S)"
+          work=$(mktemp -d)
+          gh repo clone "$TARGET_REPO" "$work" -- --depth 1 --quiet
+          cd "$work"
+          git checkout -q -b "$branch"
+
+          mkdir -p seeded
+          cp -r "$GITHUB_WORKSPACE/redline/seeded/$STACK"  seeded/
+          cp -r "$GITHUB_WORKSPACE/redline/seeded/clean"   seeded/
+
+          git -c user.name="redline-bot" -c user.email="redline-bot@users.noreply.github.com" \
+            add seeded
+          git -c user.name="redline-bot" -c user.email="redline-bot@users.noreply.github.com" \
+            commit -q -m "test(redline): seed canary for $STACK — DO NOT MERGE"
+          git push -q origin "$branch"
+
+          # redline-exempt keeps the readiness gate from blocking a PR nobody will merge.
+          pr=$(gh pr create --repo "$TARGET_REPO" --head "$branch" \
+            --title "DO NOT MERGE — Redline seed canary ($STACK)" \
+            --body "Automated validation run. This branch contains deliberately broken code and fake credentials. It is scored and closed automatically; never merge it." \
+            --label redline-exempt 2>/dev/null || \
+            gh pr create --repo "$TARGET_REPO" --head "$branch" \
+              --title "DO NOT MERGE — Redline seed canary ($STACK)" \
+              --body "Automated validation run. Scored and closed automatically; never merge it.")
+
+          number="${pr##*/}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "pr=$number"     >> "$GITHUB_OUTPUT"
+          echo "Opened $TARGET_REPO#$number on $branch"
+
+      - name: Wait for the automated review to settle
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_CANARY_TOKEN }}
+          TARGET_REPO: ${{ matrix.target.repo }}
+          PR: ${{ steps.open.outputs.pr }}
+        run: |
+          set -euo pipefail
+          # Reviewers stream comments in over several minutes. Poll until the count stops
+          # moving for two consecutive checks, so a slow reviewer is not scored half-done.
+          deadline=$(( SECONDS + 2400 ))
+          previous=-1
+          stable=0
+          while (( SECONDS < deadline )); do
+            sleep 60
+            count=$(gh api "repos/$TARGET_REPO/pulls/$PR/comments" --paginate --jq 'length' | paste -sd+ - | bc)
+            echo "  comments: $count (previous $previous, stable $stable)"
+            if [[ "$count" -eq "$previous" && "$count" -gt 0 ]]; then
+              stable=$(( stable + 1 ))
+              [[ "$stable" -ge 2 ]] && break
+            else
+              stable=0
+            fi
+            previous="$count"
+          done
+          if [[ "${previous:-0}" -le 0 ]]; then
+            echo "::warning::No review comments appeared within the wait window. Scoring will report zero recall, which is itself the finding."
+          fi
+
+      - name: Score against the corpus
+        id: score
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_CANARY_TOKEN }}
+          TARGET_REPO: ${{ matrix.target.repo }}
+          PR: ${{ steps.open.outputs.pr }}
+        working-directory: redline
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/scores"
+          node scripts/score-seeds.mjs --repo "$TARGET_REPO" --pr "$PR" --json \
+            > "$GITHUB_WORKSPACE/scores/$(echo "$TARGET_REPO" | tr / -).json" || echo "score-seeds exited non-zero"
+          node scripts/score-seeds.mjs --repo "$TARGET_REPO" --pr "$PR" \
+            | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Close the canary pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_CANARY_TOKEN }}
+          TARGET_REPO: ${{ matrix.target.repo }}
+          PR: ${{ steps.open.outputs.pr }}
+          BRANCH: ${{ steps.open.outputs.branch }}
+        run: |
+          set -euo pipefail
+          # Cleanup must not be skippable: the branch contains fake credentials and code
+          # that exists only to fail review.
+          [[ -n "${PR:-}" ]] && gh pr close "$PR" --repo "$TARGET_REPO" --delete-branch --comment "Scored automatically by the Redline seed canary. Closing." || true
+          [[ -n "${BRANCH:-}" ]] && gh api -X DELETE "repos/$TARGET_REPO/git/refs/heads/$BRANCH" >/dev/null 2>&1 || true
+          echo "cleanup done"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seed-score-${{ strategy.job-index }}
+          path: scores/
+          if-no-files-found: ignore
+
+  record:
+    needs: score
+    if: always() && needs.score.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: scores
+          merge-multiple: true
+
+      - name: Append scores and fail on regression
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          touch data/seed-scores.jsonl
+          shopt -s nullglob
+          files=(scores/*.json)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No score artifacts were produced — every canary run failed before scoring."
+            exit 1
+          fi
+
+          regressed=0
+          for file in "${files[@]}"; do
+            jq -c . "$file" >> data/seed-scores.jsonl
+            repo=$(jq -r .repo "$file")
+            recall=$(jq -r .totals.blocker_recall "$file")
+            fps=$(jq -r .totals.false_positives_on_clean "$file")
+            attribution=$(jq -r .totals.rule_attribution "$file")
+            echo "- $repo: BLOCKER recall $recall, rule attribution $attribution, false positives $fps" >> "$GITHUB_STEP_SUMMARY"
+            awk -v r="$recall" 'BEGIN { exit (r >= 1 ? 0 : 1) }' || { echo "::error::$repo BLOCKER recall $recall is below 1.0"; regressed=1; }
+            [[ "$fps" -gt 0 ]] && { echo "::error::$repo produced $fps false positive(s) on the clean corpus"; regressed=1; }
+          done
+
+          git config user.name  "redline-bot"
+          git config user.email "redline-bot@users.noreply.github.com"
+          git add data/seed-scores.jsonl
+          git commit -q -m "data: seed canary scores $(date -u +%Y-%m-%d)" || echo "nothing to commit"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+          exit "$regressed"

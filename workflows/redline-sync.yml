@@ -1,0 +1,66 @@
+# Lives in the Redline source repo. Distributes standards, the readiness-gate caller and
+# the PR template to onboarded repos as pull requests — never as direct pushes.
+#
+# Targets and their profiles are listed in sync-targets.txt.
+name: Redline Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'standards/**'
+      - 'scripts/render.mjs'
+      - 'scripts/sync.sh'
+      - 'templates/**'
+      - '.github/pull_request_template.md'
+      - 'sync-targets.txt'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Render and diff without opening pull requests
+        type: boolean
+        default: false
+      only:
+        description: Sync a single repo by name
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: redline-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify rendered artifacts in this repo are current
+        run: node scripts/render.mjs --self --check
+
+      - name: Open sync pull requests
+        env:
+          # Fine-grained PAT or GitHub App installation token. Required permissions on
+          # every target repo: contents:write, pull_requests:write, workflows:write.
+          # Without `workflows` the push of .github/workflows/redline.yml is rejected.
+          GH_TOKEN: ${{ secrets.REDLINE_SYNC_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          DRY: ${{ inputs.dry-run && '--dry-run' || '' }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -euo pipefail
+          args=()
+          [[ -n "$DRY" ]] && args+=("$DRY")
+          [[ -n "$ONLY" ]] && args+=(--only "$ONLY")
+          bash scripts/sync.sh ${args[@]+"${args[@]}"}
+
+      - name: Summarise
+        if: always()
+        run: echo "Sync finished with status ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

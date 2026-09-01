@@ -1,0 +1,87 @@
+# Lives in the Redline source repo. Rebuilds the org-wide PR inbox on a schedule and
+# publishes it to GitHub Pages.
+#
+# SECURITY: the page lists PR titles, authors and repo names. Set the Pages site to
+# private or internal visibility (Settings > Pages > Visibility) BEFORE enabling this.
+# On a public Pages site this publishes internal delivery detail to the internet. The
+# build refuses to run until PAGES_VISIBILITY_ACKNOWLEDGED is set as a repo variable.
+name: Redline Inbox
+
+on:
+  schedule:
+    - cron: '*/30 6-19 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: inbox
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Confirm Pages visibility was reviewed
+        env:
+          ACK: ${{ vars.PAGES_VISIBILITY_ACKNOWLEDGED }}
+        run: |
+          if [[ "${ACK:-}" != "private" && "${ACK:-}" != "internal" ]]; then
+            echo "::error::Set the repository variable PAGES_VISIBILITY_ACKNOWLEDGED to 'private' or 'internal' after confirming the Pages site is not public. This page exposes org-wide PR titles and authors."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build inbox
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+        run: node scripts/build-inbox.mjs
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # A silently stale inbox is worse than no inbox: people trust a page that stopped
+  # updating three weeks ago. Surface the failure where someone will see it.
+  alert:
+    needs: [build, deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update a failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Redline inbox build is failing"
+          existing=$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // ""')
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --repo "$REPO" --body "Still failing: $RUN"
+          else
+            gh issue create --repo "$REPO" --title "$title" \
+              --body "The scheduled inbox build failed. The published page is now stale. Run: $RUN"
+          fi

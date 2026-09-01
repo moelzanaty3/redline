@@ -1,0 +1,98 @@
+# Lives in the Redline source repo. Re-verifies every onboarded repo on a schedule.
+#
+# Onboarding is verified once, by hand, at setup — and then quietly rots: someone edits
+# the ruleset, renames the caller job, or turns off push protection, and the gate becomes
+# decorative without a single failing build anywhere. This turns that from a thing
+# somebody was supposed to remember into a thing that opens an issue.
+name: Redline Verify Onboarding
+
+on:
+  schedule:
+    - cron: '0 6 * * 2'
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Verify a single repo (owner/name) instead of every sync target
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: verify-onboarding
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify each onboarded repo
+        id: verify
+        env:
+          # Read-only is enough: --verify only reads rulesets, check runs and repo settings.
+          GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          SINGLE: ${{ inputs.repo }}
+        run: |
+          set -uo pipefail
+          failures=()
+          checked=0
+
+          verify_one() {
+            local repo="$1"
+            echo "::group::$repo"
+            if bash scripts/setup-repo.sh "$repo" --verify; then
+              echo "::endgroup::"
+              return 0
+            fi
+            echo "::endgroup::"
+            return 1
+          }
+
+          if [[ -n "${SINGLE:-}" ]]; then
+            checked=1
+            verify_one "$SINGLE" || failures+=("$SINGLE")
+          else
+            exec 3< sync-targets.txt
+            while read -r name _profile _rest <&3; do
+              [[ -z "${name// /}" || "$name" == \#* ]] && continue
+              checked=$(( checked + 1 ))
+              verify_one "$ORG/$name" || failures+=("$ORG/$name")
+            done
+            exec 3<&-
+          fi
+
+          {
+            echo "### Redline onboarding verification"
+            echo
+            echo "Checked **$checked** repo(s); **${#failures[@]}** failing."
+            for repo in ${failures[@]+"${failures[@]}"}; do echo "- $repo"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          printf 'checked=%s\n' "$checked" >> "$GITHUB_OUTPUT"
+          printf 'failures=%s\n' "${failures[*]:-}" >> "$GITHUB_OUTPUT"
+          [[ ${#failures[@]} -eq 0 ]]
+
+      - name: Open or update a drift issue
+        if: failure() && steps.verify.outputs.failures != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          FAILURES: ${{ steps.verify.outputs.failures }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Redline onboarding drift detected"
+          body=$(printf 'These repos no longer verify. Their gate may be reporting a check name the ruleset does not require, or their security floor has been turned off.\n\n%s\n\nRun: %s\n\nInvestigate with:\n```sh\nscripts/setup-repo.sh <org>/<repo> --verify\n```' \
+            "$(for r in $FAILURES; do echo "- $r"; done)" "$RUN")
+          existing=$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // ""')
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi

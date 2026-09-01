@@ -1,0 +1,107 @@
+# Lives in the redline-metrics repo. Rebuilds the Redline dashboard from collected
+# telemetry and publishes it to GitHub Pages.
+#
+# SECURITY: the page lists repo names, rule ids and finding counts. Set the Pages site to
+# private or internal visibility BEFORE enabling this. The build refuses to run until
+# PAGES_VISIBILITY_ACKNOWLEDGED is set as a repository variable.
+name: Redline Dashboard
+
+on:
+  schedule:
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+  workflow_run:
+    # Rebuild as soon as new telemetry lands, so the page is never a day behind the data.
+    workflows: [Redline Collect, Redline Seed Canary]
+    types: [completed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dashboard
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Confirm Pages visibility was reviewed
+        env:
+          ACK: ${{ vars.PAGES_VISIBILITY_ACKNOWLEDGED }}
+        run: |
+          if [[ "${ACK:-}" != "private" && "${ACK:-}" != "internal" ]]; then
+            echo "::error::Set the repository variable PAGES_VISIBILITY_ACKNOWLEDGED to 'private' or 'internal' after confirming the Pages site is not public. This page exposes org-wide delivery detail."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Count onboarded repos
+        id: coverage
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
+          SOURCE: ${{ vars.REDLINE_SOURCE || format('{0}/redline', github.repository_owner) }}
+        run: |
+          set -euo pipefail
+          # sync-targets.txt is the register of onboarded repos; the dashboard reports
+          # instrumented-vs-onboarded so partial coverage cannot be mistaken for health.
+          if targets=$(gh api "repos/$SOURCE/contents/sync-targets.txt" --jq '.content' 2>/dev/null | base64 -d); then
+            count=$(grep -cE '^[^#[:space:]]+[[:space:]]+[^#[:space:]]+' <<<"$targets" || true)
+          else
+            count=""
+            echo "::warning::Could not read sync-targets.txt from $SOURCE — coverage will be omitted."
+          fi
+          echo "onboarded=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Build dashboard
+        env:
+          ORG: ${{ github.repository_owner }}
+          DAYS: '90'
+          ONBOARDED: ${{ steps.coverage.outputs.onboarded }}
+          STANDARDS_VERSION: ${{ vars.STANDARDS_VERSION }}
+        run: node scripts/build-dashboard.mjs
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  alert:
+    needs: [build, deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update a failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Redline dashboard build is failing"
+          existing=$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // ""')
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --repo "$REPO" --body "Still failing: $RUN"
+          else
+            gh issue create --repo "$REPO" --title "$title" \
+              --body "The dashboard build failed, so the published page is now stale. Run: $RUN"
+          fi

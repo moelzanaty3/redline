@@ -1,0 +1,103 @@
+# CI for the Redline bundle itself. This repo enforces standards on hundreds of others;
+# a broken workflow or a stale rendered artifact here propagates everywhere.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Every rule carries an id
+        run: node scripts/assign-rule-ids.mjs --check
+
+      - name: Bundle invariants
+        run: node scripts/validate.mjs
+
+      - name: Rendered artifacts are current
+        run: node scripts/render.mjs --self --check
+
+      - name: Every profile renders cleanly
+        run: |
+          set -euo pipefail
+          profiles=$(node -p "Object.keys(require('./standards/manifest.json').profiles).join(' ')")
+          for profile in $profiles; do
+            out=$(mktemp -d)
+            echo "--- $profile"
+            node scripts/render.mjs --profile "$profile" --out "$out" --vendors copilot,agents,claude,cursor
+          done
+
+      - name: Unknown profile fails loudly
+        run: |
+          if node scripts/render.mjs --profile nope --out "$(mktemp -d)" 2>/dev/null; then
+            echo "::error::render.mjs accepted an unknown profile"
+            exit 1
+          fi
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: actionlint
+        env:
+          ACTIONLINT_VERSION: '1.7.7'
+        run: |
+          set -euo pipefail
+          curl -sSLo actionlint.tgz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          tar -xzf actionlint.tgz actionlint
+          # workflows/ holds files destined for other repos, so actionlint is pointed at
+          # them explicitly rather than relying on its .github/workflows discovery.
+          ./actionlint -color .github/workflows/*.yml workflows/*.yml templates/redline.yml
+
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning scripts/*.sh
+
+      - name: JSON is parseable
+        run: |
+          set -euo pipefail
+          for file in standards/manifest.json rulesets/*.json; do
+            node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$file"
+            echo "ok $file"
+          done
+
+      - name: Node scripts parse
+        run: |
+          set -euo pipefail
+          for file in scripts/*.mjs; do
+            node --check "$file"
+            echo "ok $file"
+          done
+
+  pins:
+    # Needs network, so it is its own job: a GitHub outage must not block the whole PR.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pinned actions still match their tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-pins.mjs

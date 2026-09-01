@@ -1,0 +1,57 @@
+# Lives in the redline-metrics repo. Pulls review outcomes for merged PRs across the org
+# and commits them as monthly JSONL.
+#
+# Replaces the old per-repo telemetry workflow: no Redline secret is stored in any
+# product repo, so onboarding a repo grants Redline no write access to anything.
+name: Redline Collect
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Look-back window in days
+        type: string
+        default: '8'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: redline-collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Collect telemetry
+        env:
+          # Read-only: repo metadata + pull requests across the org. No write scope.
+          GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          DAYS: ${{ inputs.days || '8' }}
+        run: node scripts/collect-telemetry.mjs
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data; then
+            echo "no telemetry changes" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name  "redline-bot"
+          git config user.email "redline-bot@users.noreply.github.com"
+          git add data
+          git commit -m "data: telemetry through $(date -u +%Y-%m-%d)"
+          # Another run (or a digest commit) may have landed since checkout.
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git diff --stat HEAD~1 -- data >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,142 @@
+{
+  "$comment": "Single source of truth for Redline. scripts/render.mjs turns this into vendor-specific artifacts. Never hand-edit generated output.",
+  "version": "0.0.1",
+  "core": {
+    "title": "Redline Core Engineering Standards",
+    "source": "standards/core.md"
+  },
+  "stacks": {
+    "javascript": {
+      "title": "JavaScript",
+      "source": "standards/stacks/javascript.md",
+      "globs": ["**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
+    },
+    "react": {
+      "title": "React (web)",
+      "source": "standards/stacks/react.md",
+      "globs": [
+        "**/*.tsx",
+        "**/*.jsx",
+        "src/**/*.ts",
+        "app/**/*.ts",
+        "packages/**/src/**/*.ts",
+        "apps/**/src/**/*.ts"
+      ]
+    },
+    "react-native": {
+      "title": "React Native",
+      "source": "standards/stacks/react-native.md",
+      "extends": ["react"],
+      "globs": [
+        "**/*.tsx",
+        "**/*.native.ts",
+        "app/**/*.ts",
+        "src/screens/**",
+        "src/components/**",
+        "packages/**/src/**/*.tsx",
+        "apps/**/src/**/*.tsx"
+      ]
+    },
+    "nodejs": {
+      "title": "Node.js (NestJS)",
+      "source": "standards/stacks/nodejs.md",
+      "globs": [
+        "src/**/*.ts",
+        "apps/**/src/**/*.ts",
+        "libs/**/src/**/*.ts",
+        "packages/**/src/**/*.ts"
+      ]
+    },
+    "microservices": {
+      "title": "Microservice cross-cutting",
+      "source": "standards/stacks/microservices.md",
+      "globs": [
+        "**/*.java",
+        "**/*.go",
+        "**/*.py",
+        "**/*.cs",
+        "src/**/*.ts",
+        "cmd/**",
+        "internal/**",
+        "services/**"
+      ]
+    },
+    "java": {
+      "title": "Java (Spring Boot)",
+      "source": "standards/stacks/java.md",
+      "globs": ["**/*.java"]
+    },
+    "go": {
+      "title": "Go",
+      "source": "standards/stacks/go.md",
+      "globs": ["**/*.go"]
+    },
+    "python": {
+      "title": "Python",
+      "source": "standards/stacks/python.md",
+      "globs": ["**/*.py"]
+    },
+    "csharp": {
+      "title": "C# (.NET)",
+      "source": "standards/stacks/csharp.md",
+      "globs": ["**/*.cs"]
+    },
+    "kotlin": {
+      "title": "Kotlin",
+      "source": "standards/stacks/kotlin.md",
+      "globs": ["**/*.kt", "**/*.kts"]
+    },
+    "swift": {
+      "title": "Swift (iOS)",
+      "source": "standards/stacks/swift.md",
+      "globs": ["**/*.swift"]
+    },
+    "terraform": {
+      "title": "Terraform / HCL",
+      "source": "standards/stacks/terraform.md",
+      "globs": ["**/*.tf", "**/*.tfvars", "**/*.hcl"]
+    }
+  },
+  "$profileComment": "A repo installs exactly one profile. Profiles are the disambiguation mechanism: glob negation is not portable across vendors, so we never install two rule sets that would contradict each other in the same repo.",
+  "profiles": {
+    "tooling": ["javascript"],
+    "web": ["javascript", "react"],
+    "mobile-rn": ["javascript", "react", "react-native"],
+    "mobile-android": ["kotlin"],
+    "mobile-ios": ["swift"],
+    "service-java": ["microservices", "java"],
+    "service-go": ["microservices", "go"],
+    "service-node": ["javascript", "microservices", "nodejs"],
+    "service-python": ["microservices", "python"],
+    "service-dotnet": ["microservices", "csharp"],
+    "infra": ["terraform"],
+    "fullstack-node": ["javascript", "react", "microservices", "nodejs"]
+  },
+  "$aliasComment": "Legacy profile names accepted by sync-targets.txt for backwards compatibility.",
+  "profileAliases": {
+    "mobile": "mobile-rn",
+    "java": "service-java",
+    "go": "service-go",
+    "node": "service-node",
+    "python": "service-python",
+    "dotnet": "service-dotnet"
+  },
+  "vendors": {
+    "copilot": {
+      "title": "GitHub Copilot code review",
+      "enabled": true
+    },
+    "agents": {
+      "title": "AGENTS.md (OpenAI Codex, Copilot coding agent, Jules, Cursor agent, Devin)",
+      "enabled": true
+    },
+    "claude": {
+      "title": "Claude Code / Claude in GitHub",
+      "enabled": true
+    },
+    "cursor": {
+      "title": "Cursor rules",
+      "enabled": false
+    }
+  }
+}

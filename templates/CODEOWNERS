@@ -1,0 +1,27 @@
+# Redline CODEOWNERS template. Installed at .github/CODEOWNERS by scripts/setup-repo.sh.
+#
+# The branch ruleset sets require_code_owner_review: true. Without this file that rule is
+# a silent no-op, so the platform team must own at minimum the enforcement surface below —
+# otherwise any contributor can weaken their own gate in a self-approved PR.
+#
+# Replace <org>/<team> placeholders before installing.
+
+# Default owner for everything not matched below.
+*                                   @<org>/<owning-team>
+
+# --- Enforcement surface: platform team must approve any change here -------------------
+# Editing the caller workflow, the ruleset, or the review standards changes what this
+# repo is allowed to merge. These are the paths an attacker or a rushed engineer would
+# touch to make the gate stop failing.
+/.github/workflows/                 @<org>/platform-engineering
+/.github/CODEOWNERS                 @<org>/platform-engineering
+/.github/copilot-instructions.md    @<org>/platform-engineering
+/.github/instructions/              @<org>/platform-engineering
+/AGENTS.md                          @<org>/platform-engineering
+/CLAUDE.md                          @<org>/platform-engineering
+
+# --- Security-sensitive paths ---------------------------------------------------------
+/infra/                             @<org>/platform-engineering
+/terraform/                         @<org>/platform-engineering
+Dockerfile                          @<org>/platform-engineering
+/.github/dependabot.yml             @<org>/platform-engineering
