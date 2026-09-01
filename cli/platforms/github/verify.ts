@@ -16,11 +16,17 @@ import { RULESET_NAME } from './install.ts';
 // GitHub type.
 
 function isNonNullObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function hostShapeError(what: string): RedlineError {
   return new RedlineError('host', `GitHub returned an unexpected shape for ${what}`);
+}
+
+function assertOk(status: number, path: string): void {
+  if (status < 200 || status >= 300) {
+    throw new RedlineError('host', `GitHub returned HTTP ${status} reading ${path}`);
+  }
 }
 
 interface RulesetSummary {
@@ -81,7 +87,8 @@ function parsePullRequestParams(parameters: Record<string, unknown> | undefined)
 
 function parseRequiredCheckContexts(parameters: Record<string, unknown> | undefined): string[] {
   const checks = parameters?.['required_status_checks'];
-  if (!Array.isArray(checks)) return [];
+  if (checks === undefined) return [];
+  if (!Array.isArray(checks)) throw hostShapeError('required status checks');
   return checks.map((c) => {
     if (!isNonNullObject(c) || typeof c['context'] !== 'string') {
       throw hostShapeError('a required status check');
@@ -170,7 +177,9 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
     },
 
     async readSecurityState(ref: RepoRef): Promise<SecurityResult> {
-      const repo = await client.rest<unknown>('GET', repoPath(ref));
+      const path = repoPath(ref);
+      const repo = await client.rest<unknown>('GET', path);
+      assertOk(repo.status, path);
       const statuses = parseSecurityAnalysisStatuses(repo.body);
       const stateFor = (key: string): CapabilityOutcome['status'] =>
         statuses[key] === 'enabled' ? 'applied' : 'denied';

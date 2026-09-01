@@ -59,6 +59,22 @@ test('no Redline ruleset reads back as null, not as an empty policy', async () =
   assert.equal(await createGitHubVerify(client).readPolicy(ref), null);
 });
 
+test('a required_status_checks rule with a non-array value is a host-shape error, not an empty policy', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [{ id: 42, name: 'Redline' }] },
+    'GET /repos/acme/web/rulesets/42': {
+      status: 200,
+      body: {
+        rules: [{ type: 'required_status_checks', parameters: { required_status_checks: 'oops' } }],
+      },
+    },
+  });
+  await assert.rejects(
+    createGitHubVerify(client).readPolicy(ref),
+    (err: unknown) => isRedlineError(err) && err.kind === 'host'
+  );
+});
+
 test('readReportedCheckNames resolves the head sha then lists check runs', async () => {
   const client = fakeGitHubClient({
     'GET /repos/acme/web/pulls/12': { status: 200, body: { head: { sha: 'abc123' } } },
@@ -123,6 +139,31 @@ test('readSecurityState reports each capability from security_and_analysis', asy
   assert.equal(state.outcomes.find((o) => o.capability === 'push-protection')?.status, 'denied');
 });
 
+// A 404 (typo'd repo, deleted repo, insufficient token scope) must not read as
+// "both capabilities are off" — `denied` is exactly the status that files
+// pending-admin work, so a transient host error would send an administrator
+// looking for a problem that does not exist.
+test('readSecurityState surfaces a non-2xx response as a host error, not as capabilities being denied', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': {
+      status: 404,
+      body: { message: 'Not Found', documentation_url: 'https://docs.github.com/rest' },
+    },
+  });
+  await assert.rejects(
+    createGitHubVerify(client).readSecurityState(ref),
+    (err: unknown) => isRedlineError(err) && err.kind === 'host'
+  );
+});
+
+test('readSecurityState rejects a malformed (non-object) repository body instead of reading it as "nothing enabled"', async () => {
+  const client = fakeGitHubClient({ 'GET /repos/acme/web': { status: 200, body: [] } });
+  await assert.rejects(
+    createGitHubVerify(client).readSecurityState(ref),
+    (err: unknown) => isRedlineError(err) && err.kind === 'host'
+  );
+});
+
 test('latestPullRequestNumber returns null on a repo with no pull requests', async () => {
   const client = fakeGitHubClient({
     'GET /repos/acme/web/pulls?state=all&per_page=1': { status: 200, body: [] },
@@ -147,4 +188,27 @@ test('repoRef derives org, repo and default branch from the remote plus one api 
     defaultBranch: 'trunk',
   });
   assert.equal(platform.host, 'github');
+});
+
+// A typo'd remote, a deleted repository, or a token missing a scope must not
+// silently resolve to defaultBranch: 'main' — every install and verify call
+// depends on this RepoRef, so masking the failure sends everything downstream
+// against a branch that may not exist.
+test('repoRef surfaces a non-2xx response as a host error instead of defaulting to "main"', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': {
+      status: 404,
+      body: { message: 'Not Found', documentation_url: 'https://docs.github.com/rest' },
+    },
+  });
+  const gitFor: (cwd: string) => ReturnType<typeof createGit> = (cwd) => {
+    const run: GitRunner = (args) =>
+      args[0] === 'remote' ? 'git@github.com:acme/web.git' : args[0] === 'rev-parse' ? 'true' : '';
+    return createGit(cwd, run);
+  };
+  const platform = createGitHubPlatform({ client, gitFor });
+  await assert.rejects(
+    platform.repoRef('/anywhere'),
+    (err: unknown) => isRedlineError(err) && err.kind === 'host'
+  );
 });
