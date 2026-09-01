@@ -22,12 +22,16 @@ test('github https without the .git suffix', () => {
   assert.equal(parseRemote('https://github.com/acme/web').repo, 'web');
 });
 
-test('github enterprise host is recognised by path shape, not domain', () => {
+test('github enterprise host is recognised when the hostname contains "github"', () => {
   assert.deepEqual(parseRemote('https://github.acme-corp.net/platform/web.git'), {
     host: 'github',
     org: 'platform',
     repo: 'web',
   });
+});
+
+test('a self-hosted GHES on a hostname without "github" is not auto-detected', () => {
+  assert.throws(() => parseRemote('https://git.internal-corp.io/platform/web.git'), /github.*azure/i);
 });
 
 test('azure devops https carries a project', () => {
@@ -59,6 +63,15 @@ test('legacy visualstudio.com host', () => {
 
 test('an unrecognised remote is a usage error naming the two supported hosts', () => {
   assert.throws(() => parseRemote('https://gitlab.com/acme/web.git'), /github.*azure/i);
+});
+
+// Phase 1 scope decision: an explicit SSH port (`ssh://git@host:22/org/repo`)
+// is not a shape any host commonly emits by default and is not parsed. It
+// must fail loudly through the same "cannot tell which host" error rather
+// than being silently misparsed (the port digits could otherwise be mistaken
+// for a path segment).
+test('an ssh remote with an explicit port is out of scope and throws cleanly', () => {
+  assert.throws(() => parseRemote('ssh://git@github.com:22/acme/web.git'), /github.*azure/i);
 });
 
 test('a repository with no remote is a usage error', () => {
