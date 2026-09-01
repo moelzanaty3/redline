@@ -56,6 +56,7 @@ export interface Change {
   title: string;
   body: string;
   labels: string[];
+  files: string[];
 }
 
 export interface PullRequestRef {

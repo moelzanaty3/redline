@@ -61,6 +61,16 @@ test('hasStagedChanges inverts the exit status of diff --cached --quiet', () => 
   assert.equal(createGit('/repo', dirty).hasStagedChanges(), true);
 });
 
+test('stagePaths adds only the named files, as argv, and is a no-op for an empty list', () => {
+  const { run, calls } = recorder();
+  const git = createGit('/repo', run);
+  git.stagePaths(['.github/workflows/redline.yml', '.github/CODEOWNERS']);
+  git.stagePaths([]);
+  assert.deepEqual(calls, [
+    ['add', '--', '.github/workflows/redline.yml', '.github/CODEOWNERS'],
+  ]);
+});
+
 test('branch, commit and push pass their arguments as argv, never a shell string', () => {
   const { run, calls } = recorder();
   const git = createGit('/repo', run);

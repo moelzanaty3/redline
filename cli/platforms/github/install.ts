@@ -38,12 +38,49 @@ const GATE_LABELS = [
   },
 ];
 
+// GitHub response bodies are untrusted external input: the transport (http.ts)
+// only guarantees valid JSON, never a particular shape. Bodies read here are
+// typed `unknown` and narrowed by an explicit parse function, in the house
+// style of cli/render/manifest.ts and cli/platforms/github/verify.ts.
+
+function isNonNullObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+interface RulesetSummary {
+  id: number;
+  name: string;
+}
+
+function parseRulesetSummaries(body: unknown): RulesetSummary[] | null {
+  if (!Array.isArray(body)) return null;
+  const summaries: RulesetSummary[] = [];
+  for (const item of body) {
+    if (!isNonNullObject(item) || typeof item['id'] !== 'number' || typeof item['name'] !== 'string') {
+      return null;
+    }
+    summaries.push({ id: item['id'], name: item['name'] });
+  }
+  return summaries;
+}
+
+function parseCreatedPullRequest(body: unknown): PullRequestRef | null {
+  if (!isNonNullObject(body) || typeof body['number'] !== 'number' || typeof body['html_url'] !== 'string') {
+    return null;
+  }
+  return { number: body['number'], url: body['html_url'] };
+}
+
+function isSuccess(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
 function outcome(
   capability: AdminCapability,
   status: number,
   detail: string
 ): CapabilityOutcome {
-  if (status >= 200 && status < 300) return { capability, status: 'applied', detail };
+  if (isSuccess(status)) return { capability, status: 'applied', detail };
   if (status === 401 || status === 403) {
     return { capability, status: 'denied', detail: `${detail} (needs repository admin)` };
   }
@@ -51,6 +88,28 @@ function outcome(
     return { capability, status: 'unsupported', detail: `${detail} (not available on this repository)` };
   }
   return { capability, status: 'denied', detail: `${detail} (HTTP ${status})` };
+}
+
+// Combines several outcomes for one logical capability (e.g. GitHub reports
+// dependency-alerts as two separate calls, and labels are created one at a
+// time) into a single outcome. Ranked by how actionable/notable the status is
+// so a real permission denial on one sub-call is never masked by a merely
+// larger HTTP status number on another (a 404 "unsupported" must not hide a
+// 403 "denied", and an "already exists" 422 must not hide a 403 "denied").
+const OUTCOME_RANK: Record<CapabilityOutcome['status'], number> = {
+  denied: 3,
+  unsupported: 2,
+  already: 1,
+  applied: 0,
+};
+
+function worstOutcome(outcomes: CapabilityOutcome[]): CapabilityOutcome {
+  const [first, ...rest] = outcomes;
+  if (!first) throw new Error('worstOutcome requires at least one outcome');
+  return rest.reduce(
+    (worst, next) => (OUTCOME_RANK[next.status] > OUTCOME_RANK[worst.status] ? next : worst),
+    first
+  );
 }
 
 function writeFile(cwd: string, relPath: string, contents: string): void {
@@ -106,21 +165,26 @@ export function createGitHubInstall(
       const alerts = await client.rest('PUT', `${repoPath(ref)}/vulnerability-alerts`);
       const fixes = await client.rest('PUT', `${repoPath(ref)}/automated-security-fixes`);
 
+      // Two independent host calls fold into one "dependency-alerts" capability.
+      // Combine by outcome severity, not by comparing raw status numbers — see
+      // worstOutcome.
+      const dependencyAlerts = worstOutcome([
+        outcome('dependency-alerts', alerts.status, 'dependabot alerts (vulnerability alerts)'),
+        outcome('dependency-alerts', fixes.status, 'dependabot alerts (automated security fixes)'),
+      ]);
+
       return {
         outcomes: [
           outcome('secret-scanning', scanning.status, 'secret scanning'),
           outcome('push-protection', scanning.status, 'secret scanning push protection'),
-          outcome('dependency-alerts', Math.max(alerts.status, fixes.status), 'dependabot alerts'),
+          dependencyAlerts,
         ],
       };
     },
 
     async applyPolicy(ref: RepoRef, policy: MergePolicy): Promise<PolicyResult> {
-      const existing = await client.rest<{ id: number; name: string }[]>(
-        'GET',
-        `${repoPath(ref)}/rulesets`
-      );
-      const mine = (existing.body ?? []).find((r) => r.name === RULESET_NAME);
+      const existing = await client.rest<unknown>('GET', `${repoPath(ref)}/rulesets`);
+
       const payload = {
         name: RULESET_NAME,
         target: 'branch',
@@ -130,9 +194,26 @@ export function createGitHubInstall(
         rules: buildRules(policy),
       };
 
-      const applied = mine
-        ? await client.rest('PUT', `${repoPath(ref)}/rulesets/${mine.id}`, payload)
-        : await client.rest('POST', `${repoPath(ref)}/rulesets`, payload);
+      let mergePolicy: CapabilityOutcome;
+      let policyApplied = false;
+
+      if (!isSuccess(existing.status)) {
+        // Denied (401/403) or unsupported (404/422) — never guess whether a
+        // Redline ruleset already exists, and never crash on it. Skip the
+        // write entirely; onboarding still continues below.
+        mergePolicy = outcome('merge-policy', existing.status, 'branch ruleset');
+      } else {
+        const summaries = parseRulesetSummaries(existing.body);
+        if (summaries === null) {
+          throw new RedlineError('host', 'GitHub returned an unexpected shape for the rulesets list');
+        }
+        const mine = summaries.find((r) => r.name === RULESET_NAME);
+        const applied = mine
+          ? await client.rest('PUT', `${repoPath(ref)}/rulesets/${mine.id}`, payload)
+          : await client.rest('POST', `${repoPath(ref)}/rulesets`, payload);
+        mergePolicy = outcome('merge-policy', applied.status, 'branch ruleset');
+        policyApplied = isSuccess(applied.status);
+      }
 
       const property = await client.rest('PATCH', `${repoPath(ref)}/properties/values`, {
         properties: [{ property_name: 'redline', value: 'onboarded' }],
@@ -140,10 +221,10 @@ export function createGitHubInstall(
 
       return {
         outcomes: [
-          outcome('merge-policy', applied.status, 'branch ruleset'),
+          mergePolicy,
           outcome('repo-property', property.status, 'repository property "redline=onboarded"'),
         ],
-        policy: applied.status < 300 ? policy : null,
+        policy: policyApplied ? policy : null,
       };
     },
 
@@ -154,7 +235,8 @@ export function createGitHubInstall(
         .replace(
           /fail-on-dependency-severity: \w+/,
           `fail-on-dependency-severity: ${opts.failOnDependencySeverity}`
-        );
+        )
+        .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`);
       writeFile(cwd, '.github/workflows/redline.yml', caller);
 
       const template = readFileSync(
@@ -163,19 +245,19 @@ export function createGitHubInstall(
       );
       writeFile(cwd, '.github/pull_request_template.md', template);
 
-      let worst = 200;
+      const labelOutcomes: CapabilityOutcome[] = [];
       for (const label of GATE_LABELS) {
         const res = await client.rest('POST', `${repoPath(ref)}/labels`, label);
-        if (res.status !== 201 && res.status !== 200) worst = Math.max(worst, res.status);
+        labelOutcomes.push(
+          res.status === 422
+            ? { capability: 'labels', status: 'already', detail: `label "${label.name}" already exists` }
+            : outcome('labels', res.status, `label "${label.name}"`)
+        );
       }
-      const labels: CapabilityOutcome =
-        worst === 422
-          ? { capability: 'labels', status: 'already', detail: 'gate labels already exist' }
-          : outcome('labels', worst, 'gate labels');
 
       return {
         files: ['.github/workflows/redline.yml', '.github/pull_request_template.md'],
-        outcomes: [labels],
+        outcomes: [worstOutcome(labelOutcomes)],
       };
     },
 
@@ -210,27 +292,31 @@ export function createGitHubInstall(
     async openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef> {
       const git = gitFor(cwd);
       git.checkoutNewBranch(change.branch);
-      git.stageAll();
+      // Stage only what Redline itself wrote — never sweep in pre-existing
+      // dirty or untracked state from the working tree (decision 6: no
+      // customer secret is ever committed by this tool).
+      git.stagePaths(change.files);
       if (!git.hasStagedChanges()) {
         throw new RedlineError('failed', 'nothing to commit — this repository is already onboarded');
       }
       git.commit(change.title);
       git.push(change.branch);
 
-      const created = await client.rest<{ number: number; html_url: string }>(
+      const created = await client.rest<unknown>(
         'POST',
         `${repoPath(ref)}/pulls`,
         { title: change.title, body: change.body, head: change.branch, base: ref.defaultBranch }
       );
-      if (!created.body) {
+      const pr = isSuccess(created.status) ? parseCreatedPullRequest(created.body) : null;
+      if (!pr) {
         throw new RedlineError('host', `could not open a pull request (HTTP ${created.status})`);
       }
       if (change.labels.length > 0) {
-        await client.rest('POST', `${repoPath(ref)}/issues/${created.body.number}/labels`, {
+        await client.rest('POST', `${repoPath(ref)}/issues/${pr.number}/labels`, {
           labels: change.labels,
         });
       }
-      return { number: created.body.number, url: created.body.html_url };
+      return pr;
     },
   };
 }

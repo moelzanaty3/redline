@@ -64,6 +64,16 @@ test('a 422 from an unlicensed org is unsupported, so it never becomes pending a
   assert.equal(result.outcomes[0]?.status, 'unsupported');
 });
 
+test('a denied vulnerability-alerts call is not masked by an unsupported automated-security-fixes call', async () => {
+  const client = fakeGitHubClient({
+    'PUT /repos/acme/web/vulnerability-alerts': { status: 403 },
+    'PUT /repos/acme/web/automated-security-fixes': { status: 404 },
+  });
+  const result = await createGitHubInstall(client, gitFor).enableSecurityFloor(ref);
+  const dependencyAlerts = result.outcomes.find((o) => o.capability === 'dependency-alerts');
+  assert.equal(dependencyAlerts?.status, 'denied');
+});
+
 test('an advisory policy omits the required status check rule', async () => {
   const client = fakeGitHubClient({ 'GET /repos/acme/web/rulesets': { status: 200, body: [] } });
   await createGitHubInstall(client, gitFor).applyPolicy(ref, advisory);
@@ -106,6 +116,39 @@ test('a denied ruleset write is reported, and the custom property is still attem
   assert.ok(client.calls.some((c) => c.path === '/repos/acme/web/properties/values'));
 });
 
+test('a 403 on the rulesets read does not crash applyPolicy, and the custom property is still attempted', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    },
+  });
+  const result = await createGitHubInstall(client, gitFor).applyPolicy(ref, advisory);
+  assert.equal(result.outcomes.find((o) => o.capability === 'merge-policy')?.status, 'denied');
+  assert.equal(result.policy, null);
+  assert.ok(client.calls.some((c) => c.path === '/repos/acme/web/properties/values'));
+  assert.ok(!client.calls.some((c) => c.method === 'POST' && c.path === '/repos/acme/web/rulesets'));
+  assert.ok(!client.calls.some((c) => c.method === 'PUT' && c.path.startsWith('/repos/acme/web/rulesets/')));
+});
+
+test('a 404 on the rulesets read is unsupported, not pending admin, and does not crash', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 404, body: { message: 'Not Found' } },
+  });
+  const result = await createGitHubInstall(client, gitFor).applyPolicy(ref, advisory);
+  assert.equal(result.outcomes.find((o) => o.capability === 'merge-policy')?.status, 'unsupported');
+});
+
+test('a malformed 200 rulesets body is a host error, not a silent corruption', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: { not: 'an array' } },
+  });
+  await assert.rejects(
+    createGitHubInstall(client, gitFor).applyPolicy(ref, advisory),
+    /unexpected shape/
+  );
+});
+
 test('installGate writes the caller workflow and the PR template into the working tree', async () => {
   const cwd = tmp();
   const client = fakeGitHubClient();
@@ -117,7 +160,20 @@ test('installGate writes the caller workflow and the PR template into the workin
   assert.match(yml, /^ {2}redline-gate:$/m, 'the caller job id must be redline-gate');
   assert.match(yml, /uses: acme\/\.github\/\.github\/workflows\/redline-gate\.yml@main/);
   assert.match(yml, /adr-diff-threshold: 300/);
+  assert.match(yml, /soft-fail-labels: redline-exempt,redline-sync/);
   assert.ok(!yml.includes('<org>'), 'the org placeholder must be substituted');
+});
+
+test('installGate renders a non-default soft-fail-labels list into the caller workflow', async () => {
+  const cwd = tmp();
+  const client = fakeGitHubClient();
+  await createGitHubInstall(client, gitFor).installGate(ref, cwd, {
+    ...gateOpts,
+    softFailLabels: ['needs-security-review'],
+  });
+  const yml = readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8');
+  assert.match(yml, /soft-fail-labels: needs-security-review/);
+  assert.ok(!yml.includes('redline-exempt,redline-sync'), 'the template default must be replaced, not appended');
 });
 
 test('installGate creates the three labels the gate depends on', async () => {
@@ -133,6 +189,21 @@ test('a label that already exists is not an error', async () => {
   const client = fakeGitHubClient({ 'POST /repos/acme/web/labels': { status: 422 } });
   const result = await createGitHubInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
   assert.equal(result.outcomes.find((o) => o.capability === 'labels')?.status, 'already');
+});
+
+test('a 403 on label creation is denied, not already', async () => {
+  const client = fakeGitHubClient({ 'POST /repos/acme/web/labels': { status: 403 } });
+  const result = await createGitHubInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  assert.equal(result.outcomes.find((o) => o.capability === 'labels')?.status, 'denied');
+});
+
+test('a denied label is not masked by an already-exists label on a different call', async () => {
+  const client = fakeGitHubClient({
+    'POST /repos/acme/web/labels': [{ status: 422 }, { status: 403 }, { status: 422 }],
+  });
+  const result = await createGitHubInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  assert.equal(result.outcomes.find((o) => o.capability === 'labels')?.status, 'denied');
+  assert.equal(client.calls.filter((c) => c.path === '/repos/acme/web/labels').length, 3);
 });
 
 test('ensureReviewOwnership seeds CODEOWNERS once and never overwrites an existing one', async () => {
@@ -165,11 +236,17 @@ test('openPullRequest commits, pushes and opens a PR against the default branch'
     title: 'chore(redline): onboard',
     body: 'body',
     labels: ['redline-sync'],
+    files: ['.github/workflows/redline.yml', '.github/pull_request_template.md'],
   });
 
   assert.deepEqual(pr, { number: 7, url: 'https://x/7' });
   assert.deepEqual(gitCalls[0], ['checkout', '-B', 'redline/onboard']);
-  assert.deepEqual(gitCalls[1], ['add', '-A']);
+  assert.deepEqual(gitCalls[1], [
+    'add',
+    '--',
+    '.github/workflows/redline.yml',
+    '.github/pull_request_template.md',
+  ]);
   const create = client.calls.find((c) => c.path === '/repos/acme/web/pulls')!;
   assert.deepEqual(create.body, {
     title: 'chore(redline): onboard',
@@ -178,6 +255,33 @@ test('openPullRequest commits, pushes and opens a PR against the default branch'
     base: 'main',
   });
   assert.ok(client.calls.some((c) => c.path === '/repos/acme/web/issues/7/labels'));
+});
+
+test('openPullRequest stages only the files Redline wrote, never a dirty unrelated file', async () => {
+  const client = fakeGitHubClient({
+    'POST /repos/acme/web/pulls': { status: 201, body: { number: 1, html_url: 'https://x/1' } },
+  });
+  const gitCalls: string[][] = [];
+  const recording = (cwd: string) =>
+    createGit(cwd, (args) => {
+      gitCalls.push(args);
+      if (args[0] === 'diff') throw new Error('staged changes exist');
+      return '';
+    });
+
+  await createGitHubInstall(client, recording).openPullRequest(ref, tmp(), {
+    branch: 'redline/onboard',
+    title: 'chore(redline): onboard',
+    body: 'body',
+    labels: [],
+    files: ['.github/CODEOWNERS'],
+  });
+
+  assert.ok(!gitCalls.some((c) => c[0] === 'add' && c.includes('-A')), 'must never stage the whole tree');
+  assert.deepEqual(
+    gitCalls.find((c) => c[0] === 'add'),
+    ['add', '--', '.github/CODEOWNERS']
+  );
 });
 
 test('nothing to commit means no push and no pull request', async () => {
@@ -189,8 +293,32 @@ test('nothing to commit means no push and no pull request', async () => {
       title: 't',
       body: 'b',
       labels: [],
+      files: ['.github/CODEOWNERS'],
     }),
     /nothing to commit/
   );
   assert.equal(client.calls.length, 0);
+});
+
+test('a denied pull request creation throws, instead of returning a fabricated PullRequestRef', async () => {
+  const client = fakeGitHubClient({
+    'POST /repos/acme/web/pulls': { status: 403, body: { message: 'Resource not accessible by integration' } },
+  });
+  const recording = (cwd: string) =>
+    createGit(cwd, (args) => {
+      if (args[0] === 'diff') throw new Error('staged changes exist');
+      return '';
+    });
+
+  await assert.rejects(
+    createGitHubInstall(client, recording).openPullRequest(ref, tmp(), {
+      branch: 'redline/onboard',
+      title: 'chore(redline): onboard',
+      body: 'body',
+      labels: [],
+      files: ['.github/CODEOWNERS'],
+    }),
+    /could not open a pull request/
+  );
+  assert.ok(!client.calls.some((c) => c.path.includes('/issues/')));
 });

@@ -11,6 +11,7 @@ export interface Git {
   defaultBranch(): string;
   checkoutNewBranch(name: string): void;
   stageAll(): void;
+  stagePaths(paths: string[]): void;
   hasStagedChanges(): boolean;
   commit(message: string): void;
   push(branch: string): void;
@@ -41,6 +42,10 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
     },
     stageAll() {
       g('add', '-A');
+    },
+    stagePaths(paths) {
+      if (paths.length === 0) return;
+      g('add', '--', ...paths);
     },
     hasStagedChanges() {
       try {

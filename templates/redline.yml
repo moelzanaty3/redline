@@ -26,3 +26,4 @@ jobs:
     with:
       adr-diff-threshold: 300
       fail-on-dependency-severity: high
+      soft-fail-labels: redline-exempt,redline-sync
