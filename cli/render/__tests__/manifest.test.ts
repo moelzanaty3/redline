@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { loadManifest } from '../manifest.ts';
+import { loadManifest, parseManifest } from '../manifest.ts';
+import { isRedlineError } from '../../core/errors.ts';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -18,4 +19,31 @@ test('loads the real manifest', () => {
 
 test('a missing manifest is a host-independent usage failure', () => {
   assert.throws(() => loadManifest('/nonexistent-root'), /manifest/i);
+});
+
+test('a manifest missing "profiles" throws a RedlineError instead of returning a half-typed object', () => {
+  assert.throws(
+    () =>
+      parseManifest({
+        version: '0.0.1',
+        core: { title: 'Core', source: 'standards/core.md' },
+        stacks: {},
+        vendors: {},
+      }),
+    (err: unknown) => isRedlineError(err) && err.kind === 'usage' && /"profiles"/.test(err.message),
+  );
+});
+
+test('a manifest with a non-string "version" throws a RedlineError', () => {
+  assert.throws(
+    () =>
+      parseManifest({
+        version: 1,
+        core: { title: 'Core', source: 'standards/core.md' },
+        stacks: {},
+        profiles: {},
+        vendors: {},
+      }),
+    (err: unknown) => isRedlineError(err) && err.kind === 'usage' && /"version"/.test(err.message),
+  );
 });
