@@ -1,5 +1,5 @@
 {
-  "name": "redline",
+  "name": "redline-cli",
   "version": "0.0.0-development",
   "description": "Engineering control plane: standards, merge gates and evidence across GitHub and Azure DevOps",
   "type": "module",
