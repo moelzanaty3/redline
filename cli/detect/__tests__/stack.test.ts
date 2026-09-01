@@ -56,6 +56,11 @@ test('maven and java sources mean a java service', () => {
   assert.equal(p.profile, 'service-java');
 });
 
+test('build.gradle.kts alone means a java/kotlin service', () => {
+  const p = proposeProfile({ paths: ['build.gradle.kts', 'src/main/kotlin/App.kt'] });
+  assert.equal(p.profile, 'service-java');
+});
+
 test('an android manifest with kotlin means mobile-android', () => {
   const p = proposeProfile({
     paths: ['build.gradle.kts', 'app/src/main/AndroidManifest.xml', 'app/src/main/java/A.kt'],

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanRepo } from '../scan.ts';
@@ -38,4 +38,32 @@ test('a malformed package.json is ignored rather than fatal', () => {
   const dir = mkdtempSync(join(tmpdir(), 'redline-scan-bad-'));
   writeFileSync(join(dir, 'package.json'), '{ not json');
   assert.equal(scanRepo(dir).packageJson, undefined);
+});
+
+test('a package.json with dependencies as a string degrades rather than crashing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-scan-strdeps-'));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: 'not-an-object' }));
+  assert.equal(scanRepo(dir).packageJson, undefined);
+});
+
+test('a package.json with dependencies as an array degrades rather than crashing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-scan-arrdeps-'));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: ['react'] }));
+  assert.equal(scanRepo(dir).packageJson, undefined);
+});
+
+test('an unreadable subdirectory is skipped rather than fatal', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-scan-unreadable-'));
+  const blocked = join(dir, 'blocked');
+  mkdirSync(blocked);
+  writeFileSync(join(blocked, 'secret.txt'), '');
+  writeFileSync(join(dir, 'visible.txt'), '');
+  chmodSync(blocked, 0o000);
+  try {
+    const { paths } = scanRepo(dir);
+    assert.ok(paths.includes('visible.txt'));
+    assert.ok(!paths.some((p) => p.startsWith('blocked/')));
+  } finally {
+    chmodSync(blocked, 0o755);
+  }
 });

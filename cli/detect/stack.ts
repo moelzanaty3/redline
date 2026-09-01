@@ -61,7 +61,9 @@ const RULES: Rule[] = [
   {
     profile: 'service-java',
     when: (s) =>
-      s.has('pom.xml') || s.has('build.gradle') ? ['maven or gradle build file'] : null,
+      s.has('pom.xml') || s.has('build.gradle') || s.has('build.gradle.kts')
+        ? ['maven or gradle build file']
+        : null,
   },
   { profile: 'service-go', when: (s) => (s.has('go.mod') ? ['go.mod'] : null) },
   {
