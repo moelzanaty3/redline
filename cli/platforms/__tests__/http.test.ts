@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHttp, type FetchLike } from '../http.ts';
+import { isRedlineError } from '../../core/errors.ts';
 
 const noSleep = async (): Promise<void> => {};
 
@@ -74,4 +75,23 @@ test('a transport failure is a host error naming the url', async () => {
   };
   const http = createHttp('https://api.example', {}, { fetch, sleep: noSleep, retries: 1 });
   await assert.rejects(http.request('GET', '/x'), /api\.example/);
+});
+
+test('a 200 with a non-JSON body is a host error naming status and url, never the body', async () => {
+  // e.g. an SSO/WAF interstitial returning an HTML login page with a 200 status —
+  // the ordinary failure mode on a corporate network, not a contrived edge case.
+  const interstitial = '<html>session=deadbeef please sign in</html>';
+  const { fetch } = stub([
+    new Response(interstitial, { status: 200, headers: { 'content-type': 'text/html' } }),
+  ]);
+  const http = createHttp('https://api.example', {}, { fetch, sleep: noSleep });
+  await assert.rejects(http.request('GET', '/x'), (err: unknown) => {
+    assert.ok(isRedlineError(err));
+    assert.equal(err.kind, 'host');
+    assert.match(err.message, /200/);
+    assert.match(err.message, /api\.example/);
+    assert.doesNotMatch(err.message, /session/);
+    assert.doesNotMatch(err.message, /deadbeef/);
+    return true;
+  });
 });

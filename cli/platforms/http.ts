@@ -63,7 +63,17 @@ export function createHttp(
           return { status: response.status, body: null };
         }
         const text = await response.text();
-        return { status: response.status, body: text === '' ? null : (JSON.parse(text) as T) };
+        if (text === '') {
+          return { status: response.status, body: null };
+        }
+        try {
+          return { status: response.status, body: JSON.parse(text) as T };
+        } catch {
+          throw new RedlineError(
+            'host',
+            `request to ${url} returned ${response.status} with a body that was not JSON`
+          );
+        }
       }
 
       throw new RedlineError('host', `request to ${url} kept returning ${lastStatus}`);
