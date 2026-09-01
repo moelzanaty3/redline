@@ -1,0 +1,6 @@
+node_modules/
+*.tsbuildinfo
+.redline-tmp/
+
+# scratch: SDD execution workspace, never part of the branch diff
+.superpowers/

@@ -19,6 +19,15 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
       - name: Every rule carries an id
         run: node scripts/assign-rule-ids.mjs --check
 

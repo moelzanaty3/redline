@@ -1,0 +1,16 @@
+{
+  "name": "redline",
+  "version": "0.0.0-development",
+  "description": "Engineering control plane: standards, merge gates and evidence across GitHub and Azure DevOps",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": false,
+  "engines": { "node": ">=22" },
+  "bin": { "redline": "./cli/bin/redline.ts" },
+  "files": ["cli/", "standards/", "commands/", "templates/", "platforms/", "workflows/", "rulesets/"],
+  "scripts": {
+    "test": "node --test 'cli/**/__tests__/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": { "typescript": "^5.7.0", "@types/node": "^22.10.0" }
+}
