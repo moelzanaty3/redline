@@ -56,12 +56,22 @@ export function parseManifest(raw: unknown): Manifest {
   if (!isNonNullObject(vendors)) {
     throw new RedlineError('usage', 'standards manifest is missing an object "vendors" field');
   }
+  const coreTitle = core['title'];
+  const coreSource = core['source'];
+  if (typeof coreTitle !== 'string' || typeof coreSource !== 'string') {
+    throw new RedlineError('usage', 'standards manifest "core" needs string "title" and "source" fields');
+  }
+  const profileAliasesRaw = raw['profileAliases'];
+  if (profileAliasesRaw !== undefined && !isNonNullObject(profileAliasesRaw)) {
+    throw new RedlineError('usage', 'standards manifest "profileAliases" must be an object');
+  }
+  const profileAliases = (profileAliasesRaw ?? {}) as Record<string, string>;
   return {
     version,
-    core: core as unknown as CoreDef,
+    core: { title: coreTitle, source: coreSource },
     stacks: stacks as Record<string, StackDef>,
     profiles: profiles as Record<string, string[]>,
-    profileAliases: raw['profileAliases'] as Record<string, string>,
+    profileAliases,
     vendors: vendors as Record<string, VendorDef>,
   };
 }

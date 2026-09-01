@@ -47,3 +47,43 @@ test('a manifest with a non-string "version" throws a RedlineError', () => {
     (err: unknown) => isRedlineError(err) && err.kind === 'usage' && /"version"/.test(err.message),
   );
 });
+
+test('a "core" missing "source" throws a RedlineError', () => {
+  assert.throws(
+    () =>
+      parseManifest({
+        version: '0.0.1',
+        core: { title: 'Core' },
+        stacks: {},
+        profiles: {},
+        vendors: {},
+      }),
+    (err: unknown) => isRedlineError(err) && err.kind === 'usage' && /"core"/.test(err.message),
+  );
+});
+
+test('a manifest with no "profileAliases" at all succeeds and yields {}', () => {
+  const m = parseManifest({
+    version: '0.0.1',
+    core: { title: 'Core', source: 'standards/core.md' },
+    stacks: {},
+    profiles: {},
+    vendors: {},
+  });
+  assert.deepEqual(m.profileAliases, {});
+});
+
+test('a manifest with a non-object "profileAliases" throws a RedlineError', () => {
+  assert.throws(
+    () =>
+      parseManifest({
+        version: '0.0.1',
+        core: { title: 'Core', source: 'standards/core.md' },
+        stacks: {},
+        profiles: {},
+        profileAliases: 'nope',
+        vendors: {},
+      }),
+    (err: unknown) => isRedlineError(err) && err.kind === 'usage' && /"profileAliases"/.test(err.message),
+  );
+});
