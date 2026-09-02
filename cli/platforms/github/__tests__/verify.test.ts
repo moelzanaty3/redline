@@ -212,3 +212,20 @@ test('repoRef surfaces a non-2xx response as a host error instead of defaulting 
     (err: unknown) => isRedlineError(err) && err.kind === 'host'
   );
 });
+
+// A 403 on the rulesets list used to be parsed as a body and reported as
+// "GitHub returned an unexpected shape", sending the operator after a host
+// bug when the real problem is a token scope.
+test('a 403 on a verify read is reported as an HTTP status, not a shape error', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 403, body: { message: 'Forbidden' } },
+    'GET /repos/acme/web/pulls?state=all&per_page=1': { status: 403, body: { message: 'Forbidden' } },
+  });
+  const verify = createGitHubVerify(client);
+  for (const call of [() => verify.readPolicy(ref), () => verify.latestPullRequestNumber(ref)]) {
+    await assert.rejects(
+      call,
+      (err: unknown) => isRedlineError(err) && err.kind === 'host' && err.message.includes('HTTP 403'),
+    );
+  }
+});

@@ -136,11 +136,19 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
 
   return {
     async readPolicy(ref: RepoRef): Promise<MergePolicy | null> {
-      const list = await client.rest<unknown>('GET', `${repoPath(ref)}/rulesets`);
+      // Status is checked before the body is parsed, as azure/verify.ts does
+      // in all four of its methods. Without it a 403 error body ({"message":
+      // "Forbidden"}) fails the shape check instead, and the operator is sent
+      // after a host bug when the real problem is a token scope.
+      const listPath = `${repoPath(ref)}/rulesets`;
+      const list = await client.rest<unknown>('GET', listPath);
+      assertOk(list.status, listPath);
       const mine = parseRulesetList(list.body).find((r) => r.name === RULESET_NAME);
       if (!mine) return null;
 
-      const detail = await client.rest<unknown>('GET', `${repoPath(ref)}/rulesets/${mine.id}`);
+      const detailPath = `${repoPath(ref)}/rulesets/${mine.id}`;
+      const detail = await client.rest<unknown>('GET', detailPath);
+      assertOk(detail.status, detailPath);
       const rules = parseRulesetRules(detail.body);
       const prParams = parsePullRequestParams(rules.find((r) => r.type === 'pull_request')?.parameters);
       const checksRule = rules.find((r) => r.type === 'required_status_checks');
@@ -156,12 +164,13 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
     },
 
     async readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]> {
-      const detail = await client.rest<unknown>('GET', `${repoPath(ref)}/pulls/${pr}`);
+      const prPath = `${repoPath(ref)}/pulls/${pr}`;
+      const detail = await client.rest<unknown>('GET', prPath);
+      assertOk(detail.status, prPath);
       const sha = parsePullRequestHeadSha(detail.body);
-      const runs = await client.rest<unknown>(
-        'GET',
-        `${repoPath(ref)}/commits/${sha}/check-runs?per_page=100`
-      );
+      const runsPath = `${repoPath(ref)}/commits/${sha}/check-runs?per_page=100`;
+      const runs = await client.rest<unknown>('GET', runsPath);
+      assertOk(runs.status, runsPath);
       return parseCheckRunNames(runs.body);
     },
 
@@ -186,7 +195,9 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
     },
 
     async latestPullRequestNumber(ref: RepoRef): Promise<number | null> {
-      const list = await client.rest<unknown>('GET', `${repoPath(ref)}/pulls?state=all&per_page=1`);
+      const path = `${repoPath(ref)}/pulls?state=all&per_page=1`;
+      const list = await client.rest<unknown>('GET', path);
+      assertOk(list.status, path);
       return parsePullRequestNumbers(list.body)[0] ?? null;
     },
   };
