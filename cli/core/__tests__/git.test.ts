@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGit, type GitRunner } from '../git.ts';
+import { isRedlineError } from '../errors.ts';
 
 function recorder(responses: Record<string, string> = {}): { run: GitRunner; calls: string[][] } {
   const calls: string[][] = [];
@@ -81,4 +82,50 @@ test('branch, commit and push pass their arguments as argv, never a shell string
   assert.deepEqual(calls[1]?.slice(0, 2), ['commit', '-m']);
   assert.equal(calls[1]?.[2], 'chore(redline): onboard');
   assert.deepEqual(calls[2], ['push', '--set-upstream', 'origin', 'redline/onboard']);
+});
+
+test('a rejected push becomes a permission RedlineError naming the branch it was left on', () => {
+  const run: GitRunner = (args) => {
+    if (args[0] === 'push') throw Object.assign(new Error('Command failed'), {
+      stderr: 'remote: Permission to acme/web.git denied.\nfatal: unable to access repository\n',
+    });
+    return 'redline/onboard';
+  };
+  assert.throws(
+    () => createGit('/repo', run).push('redline/onboard'),
+    (err: unknown) =>
+      isRedlineError(err) &&
+      err.kind === 'permission' &&
+      err.message.includes('Permission to acme/web.git denied.') &&
+      (err.hint ?? '').includes('redline/onboard'),
+  );
+});
+
+test('a failed commit becomes a host RedlineError saying the changes are still staged', () => {
+  const run: GitRunner = (args) => {
+    if (args[0] === 'commit') throw new Error('pre-commit hook failed');
+    return 'redline/onboard';
+  };
+  assert.throws(
+    () => createGit('/repo', run).commit('chore(redline): onboard'),
+    (err: unknown) =>
+      isRedlineError(err) &&
+      err.kind === 'host' &&
+      err.message.includes('pre-commit hook failed') &&
+      (err.hint ?? '').includes('still staged on "redline/onboard"'),
+  );
+});
+
+test('a failed branch checkout becomes a host RedlineError and reports nothing was committed', () => {
+  const run: GitRunner = (args) => {
+    if (args[0] === 'checkout') throw new Error('your local changes would be overwritten');
+    return 'main';
+  };
+  assert.throws(
+    () => createGit('/repo', run).checkoutNewBranch('redline/onboard'),
+    (err: unknown) =>
+      isRedlineError(err) &&
+      err.kind === 'host' &&
+      (err.hint ?? '').includes('nothing was committed'),
+  );
 });
