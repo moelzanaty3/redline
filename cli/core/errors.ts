@@ -20,7 +20,7 @@ export class RedlineError extends Error {
     super(message);
     this.name = 'RedlineError';
     this.kind = kind;
-    this.exitCode = EXIT_CODES[kind];
+    this.exitCode = exitCodeFor(kind);
     this.hint = hint;
   }
 }

@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { CLI_VERSION } from '../core/version.ts';
 import { createLog, type Sink } from '../core/log.ts';
-import { exitCodeFor, isRedlineError } from '../core/errors.ts';
+import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
 import { resolvePlatform as defaultResolvePlatform } from '../platforms/resolve.ts';
 import { init } from '../commands/init.ts';
 import { verify } from '../commands/verify.ts';
@@ -22,6 +22,18 @@ const USAGE = [
   '',
   '  redline --version',
 ].join('\n');
+
+// node:util's parseArgs throws a plain Error on an unrecognised flag — that
+// is bad input, not an internal defect, so it is converted to a usage
+// RedlineError right at its own call site rather than left for the run()
+// catch-all below to misclassify.
+function parseCliArgs<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    throw new RedlineError('usage', error instanceof Error ? error.message : String(error));
+  }
+}
 
 export interface RunDeps {
   cwd?: string;
@@ -49,16 +61,18 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
   try {
     if (command === 'init') {
-      const { values } = parseArgs({
-        args: rest,
-        options: {
-          profile: { type: 'string' },
-          blocking: { type: 'boolean', default: false },
-          'no-a11y': { type: 'boolean', default: false },
-          speckit: { type: 'boolean', default: false },
-        },
-        allowPositionals: false,
-      });
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: {
+            profile: { type: 'string' },
+            blocking: { type: 'boolean', default: false },
+            'no-a11y': { type: 'boolean', default: false },
+            speckit: { type: 'boolean', default: false },
+          },
+          allowPositionals: false,
+        })
+      );
 
       const platform = await resolve(cwd);
       const report = await init(platform, {
@@ -89,11 +103,13 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
 
     if (command === 'verify') {
-      const { values } = parseArgs({
-        args: rest,
-        options: { gate: { type: 'boolean', default: false } },
-        allowPositionals: false,
-      });
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { gate: { type: 'boolean', default: false } },
+          allowPositionals: false,
+        })
+      );
       const platform = await resolve(cwd);
       const report = await verify(platform, { cwd, root });
       log.report(report.findings);
@@ -110,14 +126,19 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       log.error(error.message, error.hint);
       return error.exitCode;
     }
-    // Not a RedlineError: resolveProfile (unknown profile) and render()
-    // (unknown vendor) in cli/render/ throw RedlineError('usage', ...) as of
-    // Task 21, so the only remaining source here is node:util parseArgs
-    // rejecting an unrecognised flag. That is bad input, so it gets the usage
-    // exit code rather than being mistaken for a host outage (4) or a
-    // permission failure (3) that implies an admin can fix it.
-    log.error(error instanceof Error ? error.message : String(error));
-    return exitCodeFor('usage');
+    // Not a RedlineError: parseArgs failures are already converted to a
+    // usage RedlineError at their own call site (parseCliArgs above), and
+    // resolveProfile (unknown profile) and render() (unknown vendor) in
+    // cli/render/ throw RedlineError('usage', ...) as of Task 21. So
+    // whatever reaches here is a genuine internal defect — a TypeError, a
+    // null dereference, an unexpected throw from anywhere — not the user's
+    // mistake. Exit 2 would tell the user to check their flags when the
+    // tool itself is broken, which sends CI readers debugging the wrong
+    // thing. There is no sixth exit code to add for "internal defect", so
+    // this reuses exit 4 (host/network) as the least-wrong of the five
+    // published codes: at least it does not accuse the user.
+    log.error(`redline failed unexpectedly: ${error instanceof Error ? error.message : String(error)}`);
+    return exitCodeFor('host');
   }
 }
 

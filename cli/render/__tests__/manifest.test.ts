@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadManifest, parseManifest } from '../manifest.ts';
 import { isRedlineError } from '../../core/errors.ts';
@@ -18,7 +21,27 @@ test('loads the real manifest', () => {
 });
 
 test('a missing manifest is a host-independent usage failure', () => {
-  assert.throws(() => loadManifest('/nonexistent-root'), /manifest/i);
+  assert.throws(
+    () => loadManifest('/nonexistent-root'),
+    (err: unknown) => isRedlineError(err) && err.kind === 'usage' && /manifest/i.test(err.message),
+  );
+});
+
+test('a manifest that cannot be read for permission reasons is a "permission" RedlineError', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-manifest-'));
+  t.after(() => {
+    chmodSync(join(dir, 'standards', 'manifest.json'), 0o644);
+    rmSync(dir, { recursive: true, force: true });
+  });
+  mkdirSync(join(dir, 'standards'), { recursive: true });
+  const path = join(dir, 'standards', 'manifest.json');
+  writeFileSync(path, '{}');
+  chmodSync(path, 0o000);
+
+  assert.throws(
+    () => loadManifest(dir),
+    (err: unknown) => isRedlineError(err) && err.kind === 'permission' && /permission/i.test(err.message),
+  );
 });
 
 test('a manifest missing "profiles" throws a RedlineError instead of returning a half-typed object', () => {

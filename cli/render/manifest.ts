@@ -76,12 +76,21 @@ export function parseManifest(raw: unknown): Manifest {
   };
 }
 
+function errorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  const code = error.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
 export function loadManifest(root: string): Manifest {
   const path = join(root, 'standards/manifest.json');
   let raw: string;
   try {
     raw = readFileSync(path, 'utf8');
-  } catch {
+  } catch (error) {
+    if (errorCode(error) === 'EACCES') {
+      throw new RedlineError('permission', `permission denied reading the standards manifest at ${path}`);
+    }
     throw new RedlineError('usage', `cannot read the standards manifest at ${path}`);
   }
   const parsed: unknown = JSON.parse(raw);

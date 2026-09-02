@@ -118,6 +118,19 @@ test('a host RedlineError exits 4', async () => {
   assert.ok(lines.some((l) => l.includes('GitHub returned HTTP 502')));
 });
 
+test('an unclassified internal error exits 4, not 2, and says it is unexpected', async () => {
+  const cwd = repo();
+  const { opts, lines } = deps(cwd);
+  const failing = {
+    ...opts,
+    resolvePlatform: async () => {
+      throw new TypeError('cannot read properties of undefined');
+    },
+  };
+  assert.equal(await run(['init'], failing), 4);
+  assert.ok(lines.some((l) => l.includes('redline failed unexpectedly') && l.includes('cannot read properties of undefined')));
+});
+
 test('an unknown profile is a usage RedlineError and exits 2 without a stack trace', async () => {
   const cwd = repo();
   const { opts, lines } = deps(cwd);
