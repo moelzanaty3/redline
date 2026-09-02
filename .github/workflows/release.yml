@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Gate before publish
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npm test
+          node scripts/assign-rule-ids.mjs --check
+          node scripts/validate.mjs
+          node scripts/render-self.mjs --check
+
+      - name: Stamp the standards version
+        run: |
+          node -e "
+            const fs = require('node:fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const manifest = JSON.parse(fs.readFileSync('standards/manifest.json', 'utf8'));
+            manifest.version = pkg.version;
+            fs.writeFileSync('standards/manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+          "
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx --yes semantic-release
