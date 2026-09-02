@@ -9,7 +9,7 @@ export default function Page() {
     <DocsPage
       crumb="Introduction"
       title="Introduction"
-      intro="Redline is the engineering oversight layer for AI-assisted development — versioned standards, automated review, a merge-readiness gate and telemetry, driven by a single CLI on GitHub or Azure DevOps."
+      intro="Redline is the engineering oversight layer for AI-assisted development — versioned standards rendered into your repo's AI tooling, and a merge-readiness gate, installed and verified by a single CLI on GitHub or Azure DevOps. Automated review against a measurable output contract, and telemetry, are later-phase work."
       href="/docs"
     >
       <p>
@@ -33,7 +33,7 @@ export default function Page() {
         {"   "}↓ <span className="tk-white">the CLI&apos;s renderer</span>{"\n"}
         <span className="tk-white">4 vendor formats</span>  <span className="tk-dim">— Copilot · AGENTS.md · Claude · Cursor</span>{"\n"}
         {"   "}↓ <span className="tk-white">redline init (one PR, per repo)</span>{"\n"}
-        <span className="tk-white">every onboarded repo</span>  <span className="tk-dim">— reviewed on each PR, gated on merge</span>{"\n"}
+        <span className="tk-white">every onboarded repo</span>  <span className="tk-dim">— gated on merge; PR review comes from the AI assistant you connect</span>{"\n"}
         {"   "}↓ <span className="tk-white">redline verify (on demand, or weekly)</span>{"\n"}
         <span className="tk-white">drift caught early</span>  <span className="tk-dim">— policy, security floor, stale artifacts, pending admin work</span>
       </CodeWindow>

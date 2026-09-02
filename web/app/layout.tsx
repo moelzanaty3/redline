@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s — Redline",
   },
   description:
-    "Versioned standards, automated review with a measurable output contract, a merge-readiness gate and org-wide telemetry — on GitHub and Azure DevOps. No servers, no SaaS.",
+    "Versioned standards rendered straight into your repo's AI tooling, a merge-readiness gate, and one-command onboarding and verification — on GitHub and Azure DevOps. No servers, no SaaS.",
 };
 
 export const viewport: Viewport = {

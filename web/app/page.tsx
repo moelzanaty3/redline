@@ -25,8 +25,11 @@ export default function Home() {
           </h1>
           <p className="sub">
             The engineering oversight layer for AI-assisted development:
-            versioned standards, automated review with a measurable output
-            contract, a merge-readiness gate and org-wide telemetry.{" "}
+            versioned standards rendered straight into your AI tooling, and a
+            merge-readiness gate — installed and verified by one command, on
+            GitHub and Azure DevOps. Automated review against a measurable
+            output contract, and org-wide telemetry across both hosts, are
+            later-phase work.{" "}
             <b>No servers. No SaaS. No per-seat fee.</b>
           </p>
           <div className="ctas">
