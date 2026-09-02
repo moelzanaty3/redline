@@ -14,7 +14,7 @@ export function SiteFooter() {
             </div>
             <p>
               The engineering oversight layer for AI-assisted development.
-              Built on GitHub-native primitives — no servers, no SaaS.
+              GitHub and Azure DevOps, from one CLI — no servers, no SaaS.
             </p>
           </div>
           <div>

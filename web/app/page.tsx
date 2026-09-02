@@ -4,8 +4,8 @@ import { Counter } from "@/components/counter";
 import { Reveal } from "@/components/reveal";
 import { VERSION } from "@/lib/site";
 
-const HERO_CMD = `scripts/setup-repo.sh acme/checkout-service service-node
-scripts/setup-repo.sh acme/checkout-service --verify`;
+const HERO_CMD = `npx redline-cli init
+npx redline-cli verify`;
 
 export default function Home() {
   return (
@@ -16,7 +16,7 @@ export default function Home() {
         <div className="container">
           <div className="hero-badge">
             <span className="dot" aria-hidden="true" />
-            <b>Redline v{VERSION}</b>&nbsp;· vendor-neutral · GitHub-native
+            <b>Redline v{VERSION}</b>&nbsp;· vendor-neutral · GitHub &amp; Azure DevOps
           </div>
           <h1>
             AI writes the code.
@@ -26,7 +26,7 @@ export default function Home() {
           <p className="sub">
             The engineering oversight layer for AI-assisted development:
             versioned standards, automated review with a measurable output
-            contract, hard readiness gates and org-wide telemetry.{" "}
+            contract, a merge-readiness gate and org-wide telemetry.{" "}
             <b>No servers. No SaaS. No per-seat fee.</b>
           </p>
           <div className="ctas">
@@ -38,12 +38,14 @@ export default function Home() {
             </Link>
           </div>
           <CodeWindow title="terminal — onboard a repository" copyText={HERO_CMD}>
-            <span className="tk-prompt">$</span> <span className="tk-white">scripts/setup-repo.sh acme/checkout-service service-node</span>{"\n"}
-            <span className="tk-green">✓</span> <span className="tk-dim">security floor</span>      secret scanning · push protection · dependabot · dependency review{"\n"}
-            <span className="tk-green">✓</span> <span className="tk-dim">branch ruleset</span>      1 human approval · thread resolution · <span className="tk-blue">redline-gate / gate</span> required{"\n"}
-            <span className="tk-green">✓</span> <span className="tk-dim">standards synced</span>    profile: service-node → copilot · AGENTS.md · claude{"\n"}
-            <span className="tk-prompt">$</span> <span className="tk-white">scripts/setup-repo.sh acme/checkout-service --verify</span>{"\n"}
-            <span className="tk-green">✓</span> <span className="tk-dim">verified</span>            <span className="tk-blue">redline-gate / gate</span> reported on a real PR — the gate is live
+            <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli init</span>{"\n"}
+            <span className="tk-green">✓</span> <span className="tk-dim">standards rendered</span>   profile: web → copilot · AGENTS.md · claude{"\n"}
+            <span className="tk-green">✓</span> <span className="tk-dim">security floor</span>       secret scanning · push protection · dependency review{"\n"}
+            <span className="tk-green">✓</span> <span className="tk-dim">merge gate installed</span> <span className="tk-blue">redline-gate / gate</span> — advisory{"\n"}
+            <span className="tk-amber">⚠</span> <span className="tk-dim">pending admin</span>        branch settings need a repo admin — recorded in .redline.json{"\n"}
+            <span className="tk-dim">  pull request: https://github.com/acme/checkout-service/pull/42</span>{"\n"}
+            <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli verify</span>{"\n"}
+            <span className="tk-green">ok</span>  <span className="tk-dim">check-name-reported</span>  <span className="tk-blue">redline-gate / gate</span> reported on a real PR — the gate is live
           </CodeWindow>
         </div>
       </section>
@@ -91,15 +93,17 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
                 </div>
               </div>
               <div className="bento-card wide">
-                <h3>Hard readiness gates</h3>
+                <h3>A merge-readiness gate, host-verified</h3>
                 <p>
-                  Org-level ruleset, one human approval always, and a required
-                  check whose name is verified in three places.
+                  One human approval always, and a required check whose name
+                  is confirmed against what the host actually reported —{" "}
+                  <code>redline-gate / gate</code> on GitHub,{" "}
+                  <code>redline/gate</code> on Azure DevOps.
                 </p>
                 <div className="bento-visual">
                   <div className="gate-check"><span className="st ok">✓</span> redline-gate / gate — checklist · ADR · deps · secret scan</div>
                   <div className="gate-check"><span className="st ok">✓</span> 1 human approval — cannot be lowered, CI enforces it</div>
-                  <div className="gate-check"><span className="st no">✗</span> merge blocked — BLOCKER finding unresolved</div>
+                  <div className="gate-check"><span className="st ok">✓</span> advisory by default — promoted to blocking after a soak</div>
                 </div>
               </div>
               <div className="bento-card">
@@ -111,9 +115,9 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
                 <div className="bento-visual">
                   <div className="flow">
                     <span className="hot">standards/</span><b>→</b>
-                    <span>render.mjs</span><b>→</b>
+                    <span>redline init</span><b>→</b>
                     <span>4 vendors</span><b>→</b>
-                    <span>sync PRs</span>
+                    <span>1 pull request</span>
                   </div>
                 </div>
               </div>
@@ -186,10 +190,10 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
           <Reveal>
             <div className="section-head">
               <span className="pill">How it works</span>
-              <h2>Edit a rule once. It reaches every repo.</h2>
+              <h2>One command onboards a repo. Standards do the rest.</h2>
               <p>
-                Rendered per vendor, distributed as PRs, gated on merge,
-                measured nightly.
+                Rendered per vendor, installed by the CLI, gated on merge,
+                verified against what the host actually reports.
               </p>
             </div>
           </Reveal>
@@ -203,17 +207,17 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
               <div className="how-card">
                 <span className="n">02 — Render</span>
                 <h3>Four formats</h3>
-                <p><code>render.mjs</code> emits Copilot instructions, <code>AGENTS.md</code>, <code>CLAUDE.md</code> and Cursor rules per profile.</p>
+                <p>The CLI&apos;s renderer emits Copilot instructions, <code>AGENTS.md</code>, <code>CLAUDE.md</code> and Cursor rules per profile.</p>
               </div>
               <div className="how-card">
-                <span className="n">03 — Distribute</span>
-                <h3>Sync as PRs</h3>
-                <p>Merging to main opens a sync PR on every onboarded repo. Each PR runs the readiness gate.</p>
+                <span className="n">03 — Onboard</span>
+                <h3><code>redline init</code></h3>
+                <p>Detects GitHub or Azure DevOps, installs the floor, opens one pull request. Never a direct push.</p>
               </div>
               <div className="how-card">
-                <span className="n">04 — Measure</span>
-                <h3>Evolve from data</h3>
-                <p>Nightly telemetry, Monday digest, org inbox, weekly seed canary. Noisy rules get tuned or cut.</p>
+                <span className="n">04 — Verify</span>
+                <h3><code>redline verify</code></h3>
+                <p>Confirms the gate reported for real, the policy still matches, and nothing is left pending an admin.</p>
               </div>
             </div>
           </Reveal>
@@ -237,7 +241,7 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
             <div className="doc-cards">
               <Link className="doc-card" href="/docs/installation">
                 <h3>Installation <span>→</span></h3>
-                <p>The eight-step org rollout: source repo, gate, metrics, secrets, ruleset, pilot, validation, widening.</p>
+                <p>Install the gate workflow into the org, then run <code>npx redline-cli init</code> per repo — GitHub or Azure DevOps.</p>
               </Link>
               <Link className="doc-card" href="/docs/standards">
                 <h3>Standards <span>→</span></h3>
@@ -253,7 +257,7 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
               </Link>
               <Link className="doc-card" href="/docs/scripts">
                 <h3>Scripts <span>→</span></h3>
-                <p>Render, sync, onboarding, validation, scoring and telemetry — every script, ready to copy.</p>
+                <p>Validation, scoring and telemetry scripts still run outside the CLI — ready to copy.</p>
               </Link>
               <Link className="doc-card" href="/docs/workflows">
                 <h3>Workflows <span>→</span></h3>
@@ -269,8 +273,8 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
         <div className="container">
           <h2>Ship at AI speed.<br />The line still holds.</h2>
           <p>
-            Security floor, branch ruleset, standards sync and a verified gate —
-            from a single onboarding command.
+            Security floor, rendered standards and a verified merge gate —
+            from a single onboarding command, on GitHub or Azure DevOps.
           </p>
           <div className="ctas">
             <Link className="btn btn-red" href="/docs/installation">

@@ -25,14 +25,14 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Installation",
         href: "/docs/installation",
-        description: "The eight-step org rollout, from source repo to widening.",
-        keywords: "install setup rollout org secrets tokens ruleset pilot metrics repo",
+        description: "Install the CLI, install the gate workflow into the org, onboard a repo.",
+        keywords: "install setup npx redline-cli npm package github azure devops gate workflow",
       },
       {
         title: "Onboard a repository",
         href: "/docs/onboarding",
-        description: "One command per repo, then verify the gate is real.",
-        keywords: "onboard repo setup-repo.sh verify profile security floor branch ruleset",
+        description: "One command per repo, on GitHub or Azure DevOps, then verify the gate is real.",
+        keywords: "onboard repo redline init verify profile security floor merge policy pending admin azure github",
       },
     ],
   },
@@ -52,10 +52,10 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "profiles stacks javascript react nodejs java go python kotlin swift terraform glob negation",
       },
       {
-        title: "The readiness gate",
+        title: "The merge gate",
         href: "/docs/gate",
-        description: "Checklist, ADR-for-big-diffs, dependency review, diff secret scan.",
-        keywords: "gate redline-gate required check ruleset checklist adr secret scan exempt label",
+        description: "Checklist, ADR-for-big-diffs, dependency review, diff secret scan — advisory on both hosts.",
+        keywords: "gate merge redline-gate redline/gate required check ruleset checklist adr secret scan exempt label azure github advisory blocking",
       },
       {
         title: "Telemetry & validation",
@@ -95,8 +95,8 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Add your own vendor",
         href: "/docs/adaptors/custom",
-        description: "One function in render.mjs — merge markers, pruning, manifest toggle.",
-        keywords: "custom vendor adaptor render.mjs add new vendor merge prune manifest",
+        description: "One function in cli/render/vendors.ts — merge markers, pruning, manifest toggle.",
+        keywords: "custom vendor adaptor cli render vendors.ts add new vendor merge prune manifest",
       },
     ],
   },
