@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,4 +48,21 @@ test('every rendered command body is identical across hosts', () => {
 
 test('an unknown host is rejected by name', () => {
   assert.throws(() => renderCommands({ root, out: tmp(), hosts: ['emacs'] }), /unknown command host "emacs"/);
+});
+
+test('a second render of an unchanged tree writes nothing', () => {
+  const out = tmp();
+  renderCommands({ root, out, hosts: ['claude'] });
+  const second = renderCommands({ root, out, hosts: ['claude'] });
+  assert.deepEqual(second, []);
+});
+
+test('a changed file on disk is rewritten and reported as written', () => {
+  const out = tmp();
+  renderCommands({ root, out, hosts: ['claude'] });
+  writeFileSync(join(out, '.claude/commands/redline-init.md'), 'stale body from an older CLI version\n');
+  const second = renderCommands({ root, out, hosts: ['claude'] });
+  assert.ok(second.includes('.claude/commands/redline-init.md'));
+  const body = readFileSync(join(out, '.claude/commands/redline-init.md'), 'utf8');
+  assert.ok(!body.includes('stale body from an older CLI version'));
 });

@@ -40,7 +40,7 @@ export async function verify(platform: Platform, opts: VerifyOptions): Promise<V
     return { findings, ok: false };
   }
   if (!config) {
-    add('onboarded', false, `no ${opts.cwd}/.redline.json — run: npx redline init`);
+    add('onboarded', false, `no ${opts.cwd}/.redline.json — run: npx --package=redline-cli@latest redline init`);
     return { findings, ok: false };
   }
   add('onboarded', true, `profile ${config.profile}, standards v${config.standardsVersion}`);

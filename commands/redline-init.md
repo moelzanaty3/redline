@@ -21,8 +21,12 @@ When it finishes, tell them three things and nothing else:
 3. anything under `partially onboarded` — that list needs a repository administrator, and
    until it is cleared this repository is not fully onboarded
 
-Exit code `0` covers both a full onboard and a partial one — a denied capability is recorded
-under `pendingAdmin` and is still success. Only total failure to reach the host exits non-zero.
+A bad flag, an unknown profile, or a host failure all exit non-zero. What exits `0` is a
+**denied** capability — the operator lacks the rights, so it is recorded in `.redline.json`
+under `pendingAdmin` for an administrator to grant later. A capability the host reports as
+**unsupported** — for example Azure DevOps Advanced Security when it isn't licensed on this
+repository — is different again: it is never pending admin work, and never appears in
+`pendingAdmin`, because there is nothing an administrator here could grant.
 
 Do not edit the files it generated. Content inside `<!-- REDLINE:BEGIN -->` markers is
 owned by Redline and is replaced on the next sync.

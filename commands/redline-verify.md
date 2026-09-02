@@ -18,4 +18,8 @@ Each line is a check. For any `FAIL`, explain what it means and what fixes it:
 - `artifacts-current` — the rendered standards are stale. Merge the open sync pull request.
 - `pending-admin` — a repository administrator still has work to do.
 
+A capability the host reports as **unsupported** — for example Azure DevOps Advanced Security
+when it isn't licensed on this repository — is not the same as **denied**: it never counts
+against `pending-admin`, because there is no administrator action that would change it.
+
 Do not attempt to fix host settings yourself. Report and stop.

@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { RedlineError } from '../core/errors.ts';
 
@@ -65,8 +65,11 @@ export function renderCommands(opts: RenderCommandsOptions): string[] {
     for (const command of commands) {
       const { path, body } = renderer(command);
       const target = join(opts.out, path);
+      const current = existsSync(target) ? readFileSync(target, 'utf8') : null;
+      const next = `${body.trimEnd()}\n`;
+      if (current === next) continue;
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, `${body.trimEnd()}\n`);
+      writeFileSync(target, next);
       written.push(path);
     }
   }

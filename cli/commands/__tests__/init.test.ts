@@ -126,6 +126,26 @@ test('re-running on an onboarded repo is a no-op report, not a second pull reque
   assert.ok(!second.applied.includes('openPullRequest'));
 });
 
+test('a re-run whose only change is a rewritten command file still opens a pull request', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+
+  // Command sources ship with the CLI and version independently of
+  // standards/manifest.json — simulate a CLI upgrade that changed a command
+  // body without touching any rendered standards file.
+  const commandFile = join(cwd, '.claude/commands/redline-init.md');
+  writeFileSync(commandFile, 'stale body from an older CLI version\n');
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, false);
+  assert.ok(report.pullRequest !== null, 'a genuinely changed command file must still carry a PR');
+  assert.ok(second.applied.includes('openPullRequest'));
+  assert.ok(report.files.includes('.claude/commands/redline-init.md'));
+  assert.ok(!readFileSync(commandFile, 'utf8').includes('stale body from an older CLI version'));
+});
+
 test('.redline.json records the versions that produced it', async () => {
   const cwd = repo();
   await init(fakePlatform(), { cwd, root, now });

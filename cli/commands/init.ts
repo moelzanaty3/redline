@@ -128,12 +128,18 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     CONFIG_FILE,
   ];
 
-  // Determined before writeConfig, and covering prunes too: a no-op re-run
-  // (nothing rendered, nothing pruned, already onboarded) must not dirty the
-  // working tree with a fresh onboardedAt/pendingAdmin it will then have
-  // nothing to commit.
+  // Determined before writeConfig, and covering prunes and command files too:
+  // a no-op re-run (nothing rendered, nothing pruned, no command body
+  // changed, already onboarded) must not dirty the working tree with a fresh
+  // onboardedAt/pendingAdmin it will then have nothing to commit. Command
+  // sources ship with the CLI and version independently of
+  // standards/manifest.json, so a content change there must open a PR on its
+  // own even when nothing under standards/ moved.
   const alreadyOnboarded =
-    existing !== null && rendered.written.length === 0 && rendered.removed.length === 0;
+    existing !== null &&
+    rendered.written.length === 0 &&
+    rendered.removed.length === 0 &&
+    commandFiles.length === 0;
 
   if (!alreadyOnboarded) {
     writeConfig(cwd, {
