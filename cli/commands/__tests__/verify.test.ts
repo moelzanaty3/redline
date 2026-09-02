@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,8 +13,19 @@ import { RedlineError, isRedlineError } from '../../core/errors.ts';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const now = (): Date => new Date('2026-09-01T00:00:00.000Z');
 
+const createdDirs: string[] = [];
+after(() => {
+  for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+function tempRepo(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  createdDirs.push(dir);
+  return dir;
+}
+
 async function onboarded(): Promise<string> {
-  const cwd = mkdtempSync(join(tmpdir(), 'redline-verify-'));
+  const cwd = tempRepo('redline-verify-');
   writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
   await init(fakePlatform(), { cwd, root, now });
   return cwd;
@@ -30,7 +41,7 @@ test('a freshly onboarded repository verifies clean', async () => {
 });
 
 test('a repository with no .redline.json fails the onboarding check and stops', async () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'redline-verify-none-'));
+  const cwd = tempRepo('redline-verify-none-');
   const report = await verify(fakePlatform(), { cwd, root });
   assert.equal(report.ok, false);
   assert.equal(find(report, 'onboarded')?.ok, false);

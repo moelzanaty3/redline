@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CONFIG_FILE, parseConfig, readConfig, writeConfig, type RedlineConfig } from '../redline-json.ts';
@@ -43,8 +43,9 @@ test('rejects a non-object', () => {
   assert.throws(() => parseConfig('nope'), /object/);
 });
 
-test('round-trips through disk with stable formatting', () => {
+test('round-trips through disk with stable formatting', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'redline-cfg-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   writeConfig(dir, valid);
   const onDisk = readFileSync(join(dir, CONFIG_FILE), 'utf8');
   assert.ok(onDisk.endsWith('\n'), 'file must end with a newline');
@@ -52,12 +53,15 @@ test('round-trips through disk with stable formatting', () => {
   assert.deepEqual(readConfig(dir), valid);
 });
 
-test('readConfig returns null when the repo is not onboarded', () => {
-  assert.equal(readConfig(mkdtempSync(join(tmpdir(), 'redline-cfg-none-'))), null);
+test('readConfig returns null when the repo is not onboarded', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-cfg-none-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  assert.equal(readConfig(dir), null);
 });
 
-test('a corrupt config is a failure, not a silent null', () => {
+test('a corrupt config is a failure, not a silent null', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'redline-cfg-bad-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   writeFileSync(join(dir, CONFIG_FILE), '{ not json');
   assert.throws(() => readConfig(dir), /\.redline\.json/);
 });

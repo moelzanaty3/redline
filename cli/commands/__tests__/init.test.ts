@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,8 +12,14 @@ import type { AdminCapability, CapabilityOutcome } from '../../platforms/types.t
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const now = (): Date => new Date('2026-09-01T00:00:00.000Z');
 
+const createdDirs: string[] = [];
+after(() => {
+  for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
+});
+
 function repo(files: Record<string, string> = { 'package.json': '{"dependencies":{"react":"19"}}' }): string {
   const dir = mkdtempSync(join(tmpdir(), 'redline-init-'));
+  createdDirs.push(dir);
   for (const [path, contents] of Object.entries(files)) {
     mkdirSync(join(dir, path, '..'), { recursive: true });
     writeFileSync(join(dir, path), contents);
@@ -149,7 +155,8 @@ test('a re-run whose only change is a rewritten command file still opens a pull 
 test('.redline.json records the versions that produced it', async () => {
   const cwd = repo();
   await init(fakePlatform(), { cwd, root, now });
-  const config = readConfig(cwd)!;
+  const config = readConfig(cwd);
+  assert.ok(config);
   assert.equal(config.host, 'github');
   assert.equal(config.onboardedAt, '2026-09-01T00:00:00.000Z');
   assert.equal(typeof config.standardsVersion, 'string');
