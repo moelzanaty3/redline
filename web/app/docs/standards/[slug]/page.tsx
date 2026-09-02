@@ -6,6 +6,7 @@ import { FileViewer } from "@/components/file-viewer";
 import { loadManifest } from "@/lib/manifest";
 import { STANDARDS, findBySlug } from "@/lib/registry";
 import { bySeverityDesc, rulesForStack, type RuleEntry } from "@/lib/rules";
+import { STANDARDS_INFO } from "@/lib/standards-info";
 
 export function generateStaticParams() {
   return STANDARDS.map((s) => ({ slug: s.slug }));
@@ -103,7 +104,7 @@ export default async function Page({
           <p>
             {isCore
               ? "The rules that apply to every file in every profile, regardless of stack — security, type safety, error handling, scope discipline, and the output contract itself."
-              : entry.description}
+              : (STANDARDS_INFO[slug] ?? entry.description)}
           </p>
           {stack?.extends && stack.extends.length > 0 && (
             <p>
