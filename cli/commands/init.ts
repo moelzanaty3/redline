@@ -32,13 +32,41 @@ export const FLOOR_GATE: GateOptions = {
   softFailLabels: ['redline-exempt', 'redline-sync'],
 };
 
-export const SENSITIVE_PATHS: OwnershipRule[] = [
-  { pattern: '/.github/workflows/', owners: ['@platform-engineering'] },
-  { pattern: '/.github/CODEOWNERS', owners: ['@platform-engineering'] },
-  { pattern: '/infra/', owners: ['@platform-engineering'] },
-  { pattern: '/terraform/', owners: ['@platform-engineering'] },
-  { pattern: 'Dockerfile', owners: ['@platform-engineering'] },
-];
+// Mirrors templates/CODEOWNERS. Two things are load-bearing here.
+//
+// The owner is org-scoped: GitHub reads a bare `@platform-engineering` as a
+// *user*, and a user that does not exist makes GitHub mark the whole
+// CODEOWNERS file erroneous — at which point `require_code_owner_review`
+// degrades to the silent no-op this file exists to prevent. A team must be
+// written `@org/team`.
+//
+// The rendered standards are owned too. Without them a contributor can edit
+// AGENTS.md, CLAUDE.md or the Copilot instructions — the rules their own pull
+// request is reviewed against — and self-merge the weakening.
+//
+// There is deliberately no `*` default-owner line, which templates/CODEOWNERS
+// carries as an `@<org>/<owning-team>` placeholder: the CLI cannot know a
+// repository's owning team, and naming the platform team there would make it
+// a required reviewer on every file in every onboarded repository. The
+// ruleset already requires one approval on every pull request.
+export const SENSITIVE_PATHS = [
+  '/.github/workflows/',
+  '/.github/CODEOWNERS',
+  '/.github/copilot-instructions.md',
+  '/.github/instructions/',
+  '/.github/dependabot.yml',
+  '/AGENTS.md',
+  '/CLAUDE.md',
+  '/infra/',
+  '/terraform/',
+  'Dockerfile',
+] as const;
+
+export const OWNING_TEAM = 'platform-engineering';
+
+export function sensitivePathRules(org: string): OwnershipRule[] {
+  return SENSITIVE_PATHS.map((pattern) => ({ pattern, owners: [`@${org}/${OWNING_TEAM}`] }));
+}
 
 const ONBOARD_BRANCH = 'redline/onboard';
 
@@ -98,7 +126,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   });
 
   const ownership = menu.sensitivePathReviewers
-    ? await platform.ensureReviewOwnership(ref, cwd, SENSITIVE_PATHS)
+    ? await platform.ensureReviewOwnership(ref, cwd, sensitivePathRules(ref.org))
     : { files: [], outcomes: [] };
 
   const security = await platform.enableSecurityFloor(ref);
@@ -108,6 +136,10 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     dismissStaleReviews: true,
     requireCodeOwnerReview: menu.sensitivePathReviewers,
     requireThreadResolution: true,
+    // Empty by design: the required check is the host's own gate check name,
+    // and each adapter supplies it (GitHub's REQUIRED_CHECK, Azure's
+    // AZURE_STATUS_NAME/GENRE). requiredChecks is the read side of
+    // MergePolicy — what verify reports back off the host.
     requiredChecks: [],
     blocking: menu.blockingGate,
   });

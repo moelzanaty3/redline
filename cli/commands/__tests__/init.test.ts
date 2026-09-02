@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fakePlatform } from './fake-platform.ts';
-import { init } from '../init.ts';
+import { init, sensitivePathRules } from '../init.ts';
 import { readConfig } from '../../config/redline-json.ts';
 import type { AdminCapability, CapabilityOutcome } from '../../platforms/types.ts';
 
@@ -279,4 +279,30 @@ test('unsupported capabilities are excluded from pendingAdmin even when every ot
   assert.ok(!report.pendingAdmin.includes('dependency-alerts'));
   assert.equal(report.pendingAdmin.length, ALL_CAPABILITIES.length - 1);
   assert.equal(report.pullRequest?.number, 1);
+});
+
+// The generated CODEOWNERS is the only thing standing between a contributor
+// and the standards their own pull request is reviewed against. Two ways it
+// silently fails: it omits the rendered artifacts, or it names a bare
+// `@platform-engineering`, which GitHub reads as a user — a user that does
+// not exist makes the file erroneous and require_code_owner_review a no-op.
+test('sensitive-path owners are org-scoped teams, never bare slugs', () => {
+  for (const rule of sensitivePathRules('acme')) {
+    assert.deepEqual(rule.owners, ['@acme/platform-engineering'], rule.pattern);
+  }
+});
+
+test('sensitive paths cover every path templates/CODEOWNERS protects', () => {
+  const template = readFileSync(join(root, 'templates/CODEOWNERS'), 'utf8');
+  const templatePatterns = template
+    .split('\n')
+    .filter((line) => line.trim() !== '' && !line.startsWith('#'))
+    .map((line) => line.trim().split(/\s+/)[0])
+    // `*` is the default-owner placeholder; the CLI cannot know a
+    // repository's owning team, so it deliberately emits no default owner.
+    .filter((pattern): pattern is string => pattern !== undefined && pattern !== '*');
+
+  const generated = sensitivePathRules('acme').map((r) => r.pattern);
+  const missing = templatePatterns.filter((p) => !generated.includes(p));
+  assert.deepEqual(missing, [], 'templates/CODEOWNERS protects paths redline init does not');
 });
