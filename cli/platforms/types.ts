@@ -42,6 +42,11 @@ export interface MergePolicy {
   dismissStaleReviews: boolean;
   requireCodeOwnerReview: boolean;
   requireThreadResolution: boolean;
+  // Read side only. On write each adapter supplies its own gate check name
+  // (GitHub's REQUIRED_CHECK, Azure's AZURE_STATUS_NAME/GENRE) — a host's
+  // check name is host knowledge and must not be assembled by a caller
+  // outside cli/platforms/. On read it is whatever the host actually
+  // reports, which is what verify compares against the reported checks.
   requiredChecks: string[];
   blocking: boolean;
 }
@@ -91,35 +96,6 @@ export interface PlatformVerify {
   readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]>;
   readSecurityState(ref: RepoRef): Promise<SecurityResult>;
   latestPullRequestNumber(ref: RepoRef): Promise<number | null>;
-}
-
-export type ThreadOutcome = 'acted_on' | 'dismissed' | 'ignored' | 'open';
-
-export interface ReviewThread {
-  id: string;
-  outcome: ThreadOutcome;
-  author: string;
-  body: string;
-}
-
-export interface PullRequestSummary {
-  number: number;
-  repo: string;
-  mergedAt: string;
-}
-
-export interface TriageItem {
-  repo: string;
-  number: number;
-  title: string;
-  reason: 'gate-failing' | 'changes-requested' | 'awaiting-review' | 'idle';
-  url: string;
-}
-
-export interface PlatformMeasure {
-  listMergedPullRequests(org: string, since: string): AsyncIterable<PullRequestSummary>;
-  readReviewThreads(ref: RepoRef, pr: number): Promise<ReviewThread[]>;
-  listNeedsAttention(org: string): Promise<TriageItem[]>;
 }
 
 export interface Platform extends PlatformInstall, PlatformVerify {

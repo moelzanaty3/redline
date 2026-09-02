@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeGitHubClient } from '../../__tests__/fake-client.ts';
@@ -25,7 +25,16 @@ const advisory: MergePolicy = {
 
 const noopGit: GitRunner = () => '';
 const gitFor = (cwd: string) => createGit(cwd, noopGit);
-const tmp = (): string => mkdtempSync(join(tmpdir(), 'redline-install-'));
+const createdDirs: string[] = [];
+after(() => {
+  for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+const tmp = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-install-'));
+  createdDirs.push(dir);
+  return dir;
+};
 
 test('the security floor makes three calls and reports each applied', async () => {
   const client = fakeGitHubClient();
@@ -321,4 +330,22 @@ test('a denied pull request creation throws, instead of returning a fabricated P
     /could not open a pull request/
   );
   assert.ok(!client.calls.some((c) => c.path.includes('/issues/')));
+});
+
+// `redline init --blocking` passes requiredChecks: [] — a blocking ruleset
+// that requires nothing is indistinguishable from an advisory one.
+test('a blocking ruleset requires the gate check even when the caller names none', async () => {
+  const client = fakeGitHubClient({ 'GET /repos/acme/web/rulesets': { status: 200, body: [] } });
+  await createGitHubInstall(client, gitFor).applyPolicy(ref, {
+    requiredApprovals: 1,
+    dismissStaleReviews: true,
+    requireCodeOwnerReview: true,
+    requireThreadResolution: true,
+    requiredChecks: [],
+    blocking: true,
+  });
+  const create = client.calls.find((c) => c.method === 'POST' && c.path === '/repos/acme/web/rulesets');
+  const rules = (create?.body as { rules: { type: string; parameters?: Record<string, unknown> }[] }).rules;
+  const checks = rules.find((r) => r.type === 'required_status_checks');
+  assert.deepEqual(checks?.parameters?.['required_status_checks'], [{ context: REQUIRED_CHECK }]);
 });

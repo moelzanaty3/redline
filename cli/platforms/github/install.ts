@@ -129,12 +129,17 @@ function buildRules(policy: MergePolicy): unknown[] {
     },
   ];
   if (policy.blocking) {
+    // The check name is this adapter's own, exactly as Azure's status policy
+    // uses AZURE_STATUS_NAME/GENRE. It previously came from
+    // policy.requiredChecks, which cli/commands/init.ts passes empty — so
+    // `redline init --blocking` published a blocking ruleset that required
+    // nothing at all.
     rules.push({
       type: 'required_status_checks',
       parameters: {
         strict_required_status_checks_policy: false,
         do_not_enforce_on_create: false,
-        required_status_checks: policy.requiredChecks.map((context) => ({ context })),
+        required_status_checks: [{ context: REQUIRED_CHECK }],
       },
     });
   }
