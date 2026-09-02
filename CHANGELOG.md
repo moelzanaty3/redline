@@ -67,7 +67,10 @@ Record seed scores here. A standards change with no measurement is an opinion.
   onboarding mechanism (repo → `init` → floor installed → every PR checked → drift
   caught) plus a severity split of the rule catalogue and a stat strip. All numbers
   are loaded from `standards/` at build time via `web/lib` — the hardcoded stats-band
-  counts were rewired to the same loaders, so they can no longer drift.
+  counts were rewired to the same loaders, so they can no longer drift. The seeded-findings
+  tile is counted from `seeded/` using the marker convention `scripts/score-seeds.mjs`
+  parses (it read 105; the corpus holds 106), and the `100%` tile now says on its face that
+  it is the target the corpus is scored against, not a measurement.
 
 ## 3.0.0 — 2026-09-02
 

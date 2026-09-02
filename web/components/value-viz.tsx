@@ -53,7 +53,7 @@ export function ValueViz() {
       <div className="container">
         <Reveal>
           <div className="vv-head">
-            <span className="vv-lbl">One command in — a floor under every merge</span>
+            <h2 className="vv-lbl">One command in — a floor under every merge</h2>
           </div>
           <div className="vv-card">
             <div className="vv-pipeline" role="list">

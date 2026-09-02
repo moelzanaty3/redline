@@ -5,6 +5,7 @@ import { Reveal } from "@/components/reveal";
 import { ValueViz } from "@/components/value-viz";
 import { loadManifest } from "@/lib/manifest";
 import { getRules } from "@/lib/rules";
+import { seededFindingCount } from "@/lib/seeds";
 import { VERSION } from "@/lib/site";
 
 const HERO_CMD = `npx redline-cli init
@@ -13,6 +14,7 @@ npx redline-cli verify`;
 export default function Home() {
   const ruleCount = getRules().length;
   const stackCount = Object.keys(loadManifest().stacks).length;
+  const seedCount = seededFindingCount();
   return (
     <main>
       <section className="hero">
@@ -185,12 +187,12 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
             <span className="lbl">stack rule sets, composed by profile</span>
           </div>
           <div className="stat">
-            <span className="num"><Counter value={105} /></span>
+            <span className="num"><Counter value={seedCount} /></span>
             <span className="lbl">seeded findings in the validation corpus</span>
           </div>
           <div className="stat">
             <span className="num"><Counter value={100} /><em>%</em></span>
-            <span className="lbl">BLOCKER recall target, zero noise on clean code</span>
+            <span className="lbl">BLOCKER recall — the target the corpus is scored against</span>
           </div>
         </div>
       </section>

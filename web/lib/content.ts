@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-function repoRoot(): string {
+export function repoRoot(): string {
   const parent = resolve(process.cwd(), "..");
   if (existsSync(join(parent, "standards", "manifest.json"))) return parent;
   return process.cwd();
