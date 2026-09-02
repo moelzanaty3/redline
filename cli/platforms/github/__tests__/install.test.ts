@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeGitHubClient } from '../../__tests__/fake-client.ts';
 import { createGit, type GitRunner } from '../../../core/git.ts';
+import { isRedlineError } from '../../../core/errors.ts';
 import { createGitHubInstall, REQUIRED_CHECK, RULESET_NAME } from '../install.ts';
-import type { GateOptions, MergePolicy, RepoRef } from '../../types.ts';
+import { isPending, type GateOptions, type MergePolicy, type RepoRef } from '../../types.ts';
 
 const ref: RepoRef = { host: 'github', org: 'acme', repo: 'web', defaultBranch: 'main' };
 const gateOpts: GateOptions = {
@@ -71,6 +72,66 @@ test('a 422 from an unlicensed org is unsupported, so it never becomes pending a
   const client = fakeGitHubClient({ 'PATCH /repos/acme/web': { status: 422 } });
   const result = await createGitHubInstall(client, gitFor).enableSecurityFloor(ref);
   assert.equal(result.outcomes[0]?.status, 'unsupported');
+});
+
+// GitHub answers 404, not 403, on these admin write endpoints when a
+// fine-grained token lacks the administration scope on a repository it can
+// otherwise read — so a write-404 is a permission denial that must reach
+// pendingAdmin, never a "not available on this repository".
+test('a 404 on a security-floor write is denied and pending admin, not unsupported', async () => {
+  const client = fakeGitHubClient({
+    'PATCH /repos/acme/web': { status: 404 },
+    'PUT /repos/acme/web/vulnerability-alerts': { status: 404 },
+    'PUT /repos/acme/web/automated-security-fixes': { status: 404 },
+  });
+  const result = await createGitHubInstall(client, gitFor).enableSecurityFloor(ref);
+  assert.deepEqual(
+    result.outcomes.map((o) => [o.capability, o.status]),
+    [
+      ['secret-scanning', 'denied'],
+      ['push-protection', 'denied'],
+      ['dependency-alerts', 'denied'],
+    ]
+  );
+  assert.ok(result.outcomes.every(isPending), 'a write-404 must appear in pendingAdmin');
+});
+
+test('a 404 on the ruleset write is denied, not unsupported', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [] },
+    'POST /repos/acme/web/rulesets': { status: 404, body: { message: 'Not Found' } },
+  });
+  const result = await createGitHubInstall(client, gitFor).applyPolicy(ref, advisory);
+  const mergePolicy = result.outcomes.find((o) => o.capability === 'merge-policy');
+  assert.equal(mergePolicy?.status, 'denied');
+  assert.equal(result.policy, null);
+});
+
+// A 422 from the ruleset write means GitHub rejected the payload — a Redline
+// bug or a repo-settings conflict. Recording it as "unsupported" would leave
+// the repository silently policy-less with exit 0.
+test('a 422 from the ruleset create throws a host error naming the endpoint', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [] },
+    'POST /repos/acme/web/rulesets': { status: 422, body: { message: 'Invalid rules' } },
+  });
+  await assert.rejects(
+    createGitHubInstall(client, gitFor).applyPolicy(ref, advisory),
+    (err: unknown) =>
+      isRedlineError(err) && err.kind === 'host' && err.message.includes('POST /repos/acme/web/rulesets')
+  );
+});
+
+test('a 422 from the ruleset update throws a host error naming the endpoint', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [{ id: 42, name: 'Redline' }] },
+    'PUT /repos/acme/web/rulesets/42': { status: 422, body: { message: 'Invalid rules' } },
+  });
+  await assert.rejects(
+    createGitHubInstall(client, gitFor).applyPolicy(ref, advisory),
+    (err: unknown) =>
+      isRedlineError(err) && err.kind === 'host' && err.message.includes('PUT /repos/acme/web/rulesets/42')
+  );
 });
 
 test('a denied vulnerability-alerts call is not masked by an unsupported automated-security-fixes call', async () => {

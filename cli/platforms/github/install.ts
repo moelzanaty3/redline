@@ -83,6 +83,21 @@ function outcome(
   return { capability, status: 'denied', detail: `${detail} (HTTP ${status})` };
 }
 
+// GitHub answers 404, not 403, on these admin write endpoints when a
+// fine-grained token lacks the administration scope on a repository it can
+// otherwise read — so on a write, 404 is a permission denial that must reach
+// pendingAdmin, not a missing feature. Read endpoints keep 404 = unsupported.
+function writeOutcome(
+  capability: AdminCapability,
+  status: number,
+  detail: string
+): CapabilityOutcome {
+  if (status === 404) {
+    return { capability, status: 'denied', detail: `${detail} (needs repository admin)` };
+  }
+  return outcome(capability, status, detail);
+}
+
 // Combines several outcomes for one logical capability (e.g. GitHub reports
 // dependency-alerts as two separate calls, and labels are created one at a
 // time) into a single outcome. Ranked by how actionable/notable the status is
@@ -167,14 +182,14 @@ export function createGitHubInstall(
       // Combine by outcome severity, not by comparing raw status numbers — see
       // worstOutcome.
       const dependencyAlerts = worstOutcome([
-        outcome('dependency-alerts', alerts.status, 'dependabot alerts (vulnerability alerts)'),
-        outcome('dependency-alerts', fixes.status, 'dependabot alerts (automated security fixes)'),
+        writeOutcome('dependency-alerts', alerts.status, 'dependabot alerts (vulnerability alerts)'),
+        writeOutcome('dependency-alerts', fixes.status, 'dependabot alerts (automated security fixes)'),
       ]);
 
       return {
         outcomes: [
-          outcome('secret-scanning', scanning.status, 'secret scanning'),
-          outcome('push-protection', scanning.status, 'secret scanning push protection'),
+          writeOutcome('secret-scanning', scanning.status, 'secret scanning'),
+          writeOutcome('push-protection', scanning.status, 'secret scanning push protection'),
           dependencyAlerts,
         ],
       };
@@ -206,10 +221,21 @@ export function createGitHubInstall(
           throw new RedlineError('host', 'GitHub returned an unexpected shape for the rulesets list');
         }
         const mine = summaries.find((r) => r.name === RULESET_NAME);
-        const applied = mine
-          ? await client.rest('PUT', `${repoPath(ref)}/rulesets/${mine.id}`, payload)
-          : await client.rest('POST', `${repoPath(ref)}/rulesets`, payload);
-        mergePolicy = outcome('merge-policy', applied.status, 'branch ruleset');
+        const method = mine ? 'PUT' : 'POST';
+        const path = mine
+          ? `${repoPath(ref)}/rulesets/${mine.id}`
+          : `${repoPath(ref)}/rulesets`;
+        const applied = await client.rest(method, path, payload);
+        if (applied.status === 422) {
+          // A rejected ruleset payload is a Redline bug or a repo-settings
+          // conflict — surfacing it as "unsupported" would leave the repo
+          // silently policy-less with exit 0.
+          throw new RedlineError(
+            'host',
+            `GitHub rejected the Redline ruleset payload (HTTP 422 on ${method} ${path})`
+          );
+        }
+        mergePolicy = writeOutcome('merge-policy', applied.status, 'branch ruleset');
         policyApplied = isSuccess(applied.status);
       }
 

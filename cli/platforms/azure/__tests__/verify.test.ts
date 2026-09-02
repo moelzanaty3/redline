@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createAzurePlatform } from '../index.ts';
 import { createAzureVerify } from '../verify.ts';
+import { createGit, type GitRunner } from '../../../core/git.ts';
 import { isRedlineError } from '../../../core/errors.ts';
 import type { AzureClient } from '../client.ts';
 import type { HttpResponse } from '../../http.ts';
@@ -204,6 +206,33 @@ test('latestPullRequestNumber returns null when the repository has no pull reque
     },
   });
   assert.equal(await createAzureVerify(client).latestPullRequestNumber(ref), null);
+});
+
+// Same decision as the GitHub adapter: "token lacks scope" and "the host is
+// down" must exit differently (3 vs 4) so CI can tell them apart.
+test('repoRef maps a 401/403 to a permission error with a token hint, not a host error', async () => {
+  for (const status of [401, 403]) {
+    const client = fakeAzure({
+      'GET /Payments/_apis/git/repositories/web': { status, body: { message: 'Forbidden' } },
+    });
+    const gitFor: (cwd: string) => ReturnType<typeof createGit> = (cwd) => {
+      const run: GitRunner = (args) =>
+        args[0] === 'remote'
+          ? 'git@ssh.dev.azure.com:v3/acme/Payments/web'
+          : args[0] === 'rev-parse'
+            ? 'true'
+            : '';
+      return createGit(cwd, run);
+    };
+    await assert.rejects(
+      createAzurePlatform({ client, gitFor }).repoRef('/anywhere'),
+      (err: unknown) =>
+        isRedlineError(err) &&
+        err.kind === 'permission' &&
+        err.exitCode === 3 &&
+        /AZURE_DEVOPS_EXT_PAT/.test(err.hint ?? '')
+    );
+  }
 });
 
 test('latestPullRequestNumber surfaces a non-2xx response as a host error, not null', async () => {

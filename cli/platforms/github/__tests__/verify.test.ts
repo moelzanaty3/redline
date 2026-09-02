@@ -213,6 +213,29 @@ test('repoRef surfaces a non-2xx response as a host error instead of defaulting 
   );
 });
 
+// "token lacks scope" and "GitHub is down" must exit differently (3 vs 4) so
+// CI can tell an operator problem from a host problem.
+test('repoRef maps a 401/403 to a permission error with a token hint, not a host error', async () => {
+  for (const status of [401, 403]) {
+    const client = fakeGitHubClient({
+      'GET /repos/acme/web': { status, body: { message: 'Forbidden' } },
+    });
+    const gitFor: (cwd: string) => ReturnType<typeof createGit> = (cwd) => {
+      const run: GitRunner = (args) =>
+        args[0] === 'remote' ? 'git@github.com:acme/web.git' : args[0] === 'rev-parse' ? 'true' : '';
+      return createGit(cwd, run);
+    };
+    await assert.rejects(
+      createGitHubPlatform({ client, gitFor }).repoRef('/anywhere'),
+      (err: unknown) =>
+        isRedlineError(err) &&
+        err.kind === 'permission' &&
+        err.exitCode === 3 &&
+        /GH_TOKEN/.test(err.hint ?? '')
+    );
+  }
+});
+
 // A 403 on the rulesets list used to be parsed as a body and reported as
 // "GitHub returned an unexpected shape", sending the operator after a host
 // bug when the real problem is a token scope.

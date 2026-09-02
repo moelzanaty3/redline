@@ -26,6 +26,15 @@ export function createAzurePlatform(opts: AzurePlatformOptions): Platform {
       }
       const path = `/${identity.project}/_apis/git/repositories/${identity.repo}`;
       const repo = await opts.client.request<unknown>('GET', path);
+      if (repo.status === 401 || repo.status === 403) {
+        // Same decision as the GitHub adapter: a token-scope failure exits 3,
+        // a host failure exits 4.
+        throw new RedlineError(
+          'permission',
+          `Azure DevOps returned HTTP ${repo.status} reading ${path}`,
+          'check the AZURE_DEVOPS_EXT_PAT scopes, or run: az login'
+        );
+      }
       if (repo.status < 200 || repo.status >= 300) {
         throw new RedlineError('host', `Azure DevOps returned HTTP ${repo.status} reading ${path}`);
       }

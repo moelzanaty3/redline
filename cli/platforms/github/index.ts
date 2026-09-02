@@ -23,6 +23,15 @@ export function createGitHubPlatform(opts: GitHubPlatformOptions): Platform {
       const identity = parseRemote(gitFor(cwd).remoteUrl());
       const path = `/repos/${identity.org}/${identity.repo}`;
       const repo = await opts.client.rest<unknown>('GET', path);
+      if (repo.status === 401 || repo.status === 403) {
+        // "Token lacks scope" and "GitHub is down" must exit differently
+        // (3 vs 4) so CI can tell an operator problem from a host problem.
+        throw new RedlineError(
+          'permission',
+          `GitHub returned HTTP ${repo.status} reading ${path}`,
+          'check the GH_TOKEN scopes, or run: gh auth login'
+        );
+      }
       if (repo.status < 200 || repo.status >= 300) {
         throw new RedlineError('host', `GitHub returned HTTP ${repo.status} reading ${path}`);
       }
