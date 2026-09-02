@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { CLI_VERSION } from '../core/version.ts';
@@ -152,6 +153,22 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
   }
 }
 
-if (process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
+// npm installs a bin as a symlink on POSIX, so process.argv[1] is the symlink
+// path while import.meta.url is the real file. A textual comparison is false
+// there, run() never fires, and the process exits 0 having printed nothing —
+// which would make `redline verify --gate` pass unconditionally in CI. Compare
+// resolved real paths instead. realpathSync throws if argv[1] is not a real
+// path (an eval/stdin entry point), which is not this module being executed.
+function isDirectlyExecuted(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(entry) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectlyExecuted()) {
   process.exitCode = await run(process.argv.slice(2));
 }
