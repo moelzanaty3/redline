@@ -12,7 +12,14 @@ export const POLICY_TYPE_NAMES = {
   comments: 'Comment requirements',
   status: 'Status',
   requiredReviewers: 'Required reviewers',
+  build: 'Build',
 } as const;
+
+// Brownfield marker: every branch policy Redline writes carries a
+// displayName starting with this prefix. A policy of the same type without
+// it is human-owned and is never updated or deleted.
+export const REDLINE_POLICY_MARKER = 'Redline:';
+export const AZURE_BUILD_POLICY_DISPLAY_NAME = `${REDLINE_POLICY_MARKER} gate build`;
 
 /**
  * Well-known Azure DevOps policy type ids, used only when the live lookup is
@@ -24,6 +31,7 @@ export const POLICY_TYPE_FALLBACK: Record<string, string> = {
   'Comment requirements': 'c6a1889d-b943-4856-b76f-9e46bb6b0df2',
   Status: 'cbdc66da-9728-4af8-aada-9a5a32e4a226',
   'Required reviewers': 'fd2167ab-b0be-447a-8ec8-39368250530e',
+  Build: '0609b952-1397-4640-95ec-e00a01b2c241',
 };
 
 interface PolicyType {

@@ -1,17 +1,18 @@
 # Redline merge gate for Azure DevOps.
 #
 # CONTRACT: the final step publishes a pull-request status with genre `redline`
-# and name `gate`. The branch policy installed by `redline init` requires exactly
+# and name `gate`. The Status branch policy installed by `redline init` requires exactly
 # that status. Renaming either value makes the policy unsatisfiable and every pull
 # request in this repository will sit blocked. `redline verify` checks the live
 # status name against this contract.
+#
+# There is deliberately no `pr:` block here: Azure Repos ignores YAML `pr:`
+# triggers (they only fire for GitHub-hosted repositories). This pipeline is
+# queued on pull requests by the "Redline: gate build" Build Validation branch
+# policy that `redline init` creates against the registered `redline-gate`
+# build definition.
 
 trigger: none
-
-pr:
-  branches:
-    include:
-      - '*'
 
 pool:
   vmImage: ubuntu-latest

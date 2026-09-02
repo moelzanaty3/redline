@@ -46,6 +46,23 @@ Record seed scores here. A standards change with no measurement is an opinion.
 - A 401/403 while resolving the repository (both GitHub and Azure DevOps) now exits 3
   (permission, with a token hint) instead of 4 (host), so CI can tell "token lacks
   scope" from "the host is down".
+- The Azure merge gate now actually runs. Azure Repos ignores YAML `pr:` triggers (a
+  GitHub-only feature), so writing `.azuredevops/redline-gate.yml` alone ran nothing
+  and, with `--blocking`, the required `redline/gate` status would have blocked every
+  pull request forever. `redline init` on Azure DevOps now creates two more host
+  objects: a `redline-gate` build definition pointing at the gate YAML (an existing
+  definition matching that name and YAML file is reused; one with the same name but a
+  different YAML file is human-owned — reported and left untouched), and a
+  "Redline: gate build" Build Validation branch policy on the default branch that
+  queues the pipeline on every pull request. Build policies without the `Redline:`
+  displayName marker are never written to. Without Build Administrator rights the
+  registration degrades to a pending `gate` capability instead of failing the run —
+  and the `redline/gate` Status policy is then written advisory, never blocking, since
+  no pipeline could publish the status it would require. The dead `pr:` block is
+  removed from the gate template, and `redline verify` now reads the Build Validation
+  policy back as part of the gate check: required checks are derived only from a
+  blocking Status policy, and the gate only counts as blocking when the Build
+  Validation policy exists.
 
 ## 3.0.0 — 2026-09-02
 

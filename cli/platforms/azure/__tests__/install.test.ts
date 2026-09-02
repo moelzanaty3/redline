@@ -49,9 +49,18 @@ const typesRoute = {
         { id: 'comments-id', displayName: 'Comment requirements' },
         { id: 'status-id', displayName: 'Status' },
         { id: 'required-rev-id', displayName: 'Required reviewers' },
+        { id: 'build-id', displayName: 'Build' },
       ],
     },
   },
+};
+
+const BUILD_DEFS_PATH = '/Payments/_apis/build/definitions?name=redline-gate&includeAllProperties=true';
+
+// installGate's registration path: no definition yet, creation succeeds.
+const registrationRoutes = {
+  [`GET ${BUILD_DEFS_PATH}`]: { status: 200, body: { value: [] } },
+  'POST /Payments/_apis/build/definitions': { status: 200, body: { id: 42 } },
 };
 
 const advisory: MergePolicy = {
@@ -176,12 +185,18 @@ test('advanced security denied by permissions is denied, so it does become pendi
 
 test('installGate writes the azure pipeline and PR template, and labels are unsupported', async () => {
   const cwd = tmp();
-  const result = await createAzureInstall(fakeAzure(), gitFor).installGate(ref, cwd, gateOpts);
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
   assert.deepEqual(result.files, ['.azuredevops/redline-gate.yml', '.azuredevops/pull_request_template.md']);
   const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
   assert.match(yml, /ADR_DIFF_THRESHOLD: 300/);
   assert.match(yml, /genre[^\n]*redline/);
   assert.equal(result.outcomes.find((o) => o.capability === 'labels')?.status, 'unsupported');
+
+  // Regression guard: Azure Repos ignores YAML `pr:` triggers (GitHub-only
+  // feature) — the Build Validation policy is what queues this pipeline, so
+  // a `pr:` block in the template is dead code that misleads readers.
+  assert.doesNotMatch(yml, /^pr:/m);
+  assert.match(yml, /Build Validation/);
 
   // Regression guard: `redline` alone is a different, unrelated package on
   // the public registry. The gate must pin npx to redline-cli explicitly,
@@ -203,9 +218,189 @@ test('installGate writes the azure pipeline and PR template, and labels are unsu
 test('installGate threads a non-default dependency severity into the rendered pipeline', async () => {
   const cwd = tmp();
   const opts: GateOptions = { ...gateOpts, failOnDependencySeverity: 'critical' };
-  await createAzureInstall(fakeAzure(), gitFor).installGate(ref, cwd, opts);
+  await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, opts);
   const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
   assert.match(yml, /FAIL_ON_DEPENDENCY_SEVERITY: critical/);
+});
+
+// --- gate build definition + Build Validation policy. Azure Repos ignores
+// YAML `pr:` triggers, so without a registered pipeline definition and a
+// Build Validation branch policy the gate never runs and `redline/gate` is
+// never published — a blocking Status policy would then block every pull
+// request in the repository forever.
+
+test('installGate registers the gate pipeline definition when none exists', async () => {
+  const client = fakeAzure(registrationRoutes);
+  const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  const create = client.calls.find(
+    (c) => c.method === 'POST' && c.path === '/Payments/_apis/build/definitions'
+  );
+  assert.deepEqual(create?.body, {
+    name: 'redline-gate',
+    process: { type: 2, yamlFilename: '.azuredevops/redline-gate.yml' },
+    repository: { id: 'repo-guid', type: 'TfsGit' },
+  });
+  assert.equal(result.outcomes.find((o) => o.capability === 'gate')?.status, 'applied');
+});
+
+test('installGate reuses a definition matching name and yamlFilename instead of duplicating it', async () => {
+  const client = fakeAzure({
+    [`GET ${BUILD_DEFS_PATH}`]: {
+      status: 200,
+      body: {
+        value: [
+          { id: 7, name: 'redline-gate', process: { type: 2, yamlFilename: '.azuredevops/redline-gate.yml' } },
+        ],
+      },
+    },
+  });
+  const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  assert.ok(!client.calls.some((c) => c.method === 'POST' && c.path === '/Payments/_apis/build/definitions'));
+  assert.equal(result.outcomes.find((o) => o.capability === 'gate')?.status, 'already');
+});
+
+test('a human-owned redline-gate definition with a different yamlFilename is reported and left untouched', async () => {
+  const client = fakeAzure({
+    [`GET ${BUILD_DEFS_PATH}`]: {
+      status: 200,
+      body: { value: [{ id: 7, name: 'redline-gate', process: { type: 2, yamlFilename: 'pipelines/ci.yml' } }] },
+    },
+  });
+  const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  assert.ok(
+    !client.calls.some(
+      (c) => c.method !== 'GET' && c.path.startsWith('/Payments/_apis/build/definitions')
+    ),
+    'must neither create nor update a human-owned definition'
+  );
+  const gate = result.outcomes.find((o) => o.capability === 'gate');
+  assert.equal(gate?.status, 'denied');
+  assert.match(gate?.detail ?? '', /id 7/);
+  assert.match(gate?.detail ?? '', /left untouched/);
+});
+
+test('missing Build Administrator degrades the gate capability to denied, never throws', async () => {
+  const client = fakeAzure({
+    [`GET ${BUILD_DEFS_PATH}`]: { status: 200, body: { value: [] } },
+    'POST /Payments/_apis/build/definitions': {
+      status: 403,
+      body: { message: 'TF400813: The user is not authorized to access this resource.' },
+    },
+  });
+  const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  const gate = result.outcomes.find((o) => o.capability === 'gate');
+  assert.equal(gate?.status, 'denied');
+  assert.match(gate?.detail ?? '', /build administrator/i);
+});
+
+test('a project without Azure Pipelines reads as unsupported, not pending admin', async () => {
+  const client = fakeAzure({ [`GET ${BUILD_DEFS_PATH}`]: { status: 404 } });
+  const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  assert.equal(result.outcomes.find((o) => o.capability === 'gate')?.status, 'unsupported');
+});
+
+test('a registered definition gets a Build Validation policy whose isBlocking mirrors the menu', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    ...registrationRoutes,
+    'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } },
+  });
+  const install = createAzureInstall(client, gitFor);
+  await install.installGate(ref, tmp(), gateOpts);
+  const result = await install.applyPolicy(ref, { ...advisory, blocking: true });
+  const buildPolicy = client.calls.find(
+    (c) => c.method === 'POST' && c.path === '/Payments/_apis/policy/configurations' &&
+      (c.body as { type: { id: string } }).type.id === 'build-id'
+  );
+  assert.ok(buildPolicy, 'a Build Validation policy must be created');
+  const body = buildPolicy?.body as {
+    isBlocking: boolean;
+    settings: Record<string, unknown>;
+  };
+  assert.equal(body.isBlocking, true);
+  assert.equal(body.settings['buildDefinitionId'], 42);
+  assert.equal(body.settings['displayName'], 'Redline: gate build');
+  assert.equal(body.settings['validDuration'], 0);
+  assert.equal(body.settings['queueOnSourceUpdateOnly'], true);
+  assert.deepEqual(body.settings['scope'], [
+    { repositoryId: 'repo-guid', refName: 'refs/heads/main', matchKind: 'exact' },
+  ]);
+  assert.equal(result.policy?.blocking, true);
+});
+
+// Security property: a blocking redline/gate Status policy with no pipeline
+// to publish the status blocks every pull request forever. A failed
+// registration must force the whole gate advisory.
+test('when the definition could not be registered the status policy is written advisory, never blocking', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    [`GET ${BUILD_DEFS_PATH}`]: { status: 200, body: { value: [] } },
+    'POST /Payments/_apis/build/definitions': { status: 403 },
+    'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } },
+  });
+  const install = createAzureInstall(client, gitFor);
+  const gateResult = await install.installGate(ref, tmp(), gateOpts);
+  const result = await install.applyPolicy(ref, { ...advisory, blocking: true });
+
+  const statusPolicy = client.calls.find(
+    (c) => c.method === 'POST' && c.path === '/Payments/_apis/policy/configurations' &&
+      (c.body as { type: { id: string } }).type.id === 'status-id'
+  );
+  assert.equal((statusPolicy?.body as { isBlocking: boolean }).isBlocking, false);
+  assert.ok(
+    !client.calls.some(
+      (c) => c.method === 'POST' && c.path === '/Payments/_apis/policy/configurations' &&
+        (c.body as { type: { id: string } }).type.id === 'build-id'
+    ),
+    'no Build Validation policy may reference a definition that does not exist'
+  );
+  assert.equal(result.policy?.blocking, false, 'the applied policy must report itself advisory');
+  const gate = gateResult.outcomes.find((o) => o.capability === 'gate');
+  assert.equal(gate?.status, 'denied');
+  assert.match(gate?.detail ?? '', /advisory/);
+});
+
+test('an existing Redline-marked build policy is updated in place; human build policies coexist untouched', async () => {
+  const scope = [{ repositoryId: 'repo-guid' }];
+  const client = fakeAzure({
+    ...typesRoute,
+    [`GET ${BUILD_DEFS_PATH}`]: {
+      status: 200,
+      body: {
+        value: [
+          { id: 42, name: 'redline-gate', process: { type: 2, yamlFilename: '.azuredevops/redline-gate.yml' } },
+        ],
+      },
+    },
+    'GET /Payments/_apis/policy/configurations': {
+      status: 200,
+      body: {
+        value: [
+          {
+            id: 50,
+            type: { id: 'build-id' },
+            settings: { buildDefinitionId: 9, displayName: 'Nightly CI', scope },
+          },
+          {
+            id: 51,
+            type: { id: 'build-id' },
+            settings: { buildDefinitionId: 42, displayName: 'Redline: gate build', scope },
+          },
+        ],
+      },
+    },
+  });
+  const install = createAzureInstall(client, gitFor);
+  await install.installGate(ref, tmp(), gateOpts);
+  await install.applyPolicy(ref, advisory);
+  assert.ok(
+    client.calls.some((c) => c.method === 'PUT' && c.path === '/Payments/_apis/policy/configurations/51'),
+    'the Redline-marked build policy is updated in place'
+  );
+  assert.ok(
+    !client.calls.some((c) => c.path === '/Payments/_apis/policy/configurations/50'),
+    'a build policy without the Redline: marker is human-owned and never written to'
+  );
 });
 
 test('a non-2xx truthy error body on policy/configurations degrades to denied, never throws', async () => {

@@ -7,7 +7,7 @@ import type {
   SecurityResult,
 } from '../types.ts';
 import type { AzureClient } from './client.ts';
-import { POLICY_TYPE_NAMES, resolvePolicyTypeIds } from './policy-types.ts';
+import { POLICY_TYPE_NAMES, REDLINE_POLICY_MARKER, resolvePolicyTypeIds } from './policy-types.ts';
 import { createHostShapeError, isNonNullObject, isSuccess } from '../shape.ts';
 
 // Azure response bodies are untrusted external input, same house style as
@@ -143,10 +143,25 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
       const comments = byType(POLICY_TYPE_NAMES.comments);
       const status = byType(POLICY_TYPE_NAMES.status);
 
+      // The gate's Build Validation policy — what actually queues the gate
+      // pipeline, since Azure Repos ignores YAML `pr:` triggers. Matched by
+      // the Redline: displayName marker, never by type alone: a repository
+      // routinely carries human-owned build policies of the same type.
+      const gateBuild = mine.find((c) => {
+        const displayName = c.settings['displayName'];
+        return (
+          c.type.id === types[POLICY_TYPE_NAMES.build] &&
+          typeof displayName === 'string' &&
+          displayName.startsWith(REDLINE_POLICY_MARKER)
+        );
+      });
+
       const genre = status?.settings['statusGenre'];
       const statusName = status?.settings['statusName'];
+      // Mirrors the GitHub adapter: an advisory gate requires nothing, so
+      // required checks are derived only from a blocking status policy.
       const requiredChecks =
-        status !== undefined && typeof genre === 'string' && typeof statusName === 'string'
+        status !== undefined && status.isBlocking && typeof genre === 'string' && typeof statusName === 'string'
           ? [`${genre}/${statusName}`]
           : [];
 
@@ -158,7 +173,10 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
         requireCodeOwnerReview: byType(POLICY_TYPE_NAMES.requiredReviewers) !== undefined,
         requireThreadResolution: comments?.isEnabled === true,
         requiredChecks,
-        blocking: status?.isBlocking === true,
+        // Without the Build Validation policy nothing runs the gate pipeline
+        // and redline/gate is never published — a blocking status policy on
+        // its own is a misconfiguration, not an enforcing gate.
+        blocking: status?.isBlocking === true && gateBuild !== undefined,
       };
     },
 

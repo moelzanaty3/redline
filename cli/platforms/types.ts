@@ -9,6 +9,11 @@ export const ADMIN_CAPABILITIES = [
   'repo-property',
   'labels',
   'review-ownership',
+  // The machinery that runs the merge gate on the host. GitHub needs none (a
+  // workflow file's pr trigger fires natively); Azure Repos ignores YAML
+  // `pr:` triggers, so there it is a registered pipeline definition plus a
+  // Build Validation branch policy.
+  'gate',
 ] as const;
 export type AdminCapability = (typeof ADMIN_CAPABILITIES)[number];
 

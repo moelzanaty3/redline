@@ -26,7 +26,27 @@ function fakeAzure(routes: Record<string, { status: number; body?: unknown }>): 
   };
 }
 
-const configurations = (isBlocking: boolean) => ({
+// The gate's Build Validation policy: it is what actually queues the gate
+// pipeline on Azure (YAML `pr:` triggers are ignored by Azure Repos), so the
+// blocking read below requires it to exist under the Redline: marker.
+const buildValidation = (displayName: string) => ({
+  id: 4,
+  isEnabled: true,
+  isBlocking: true,
+  type: { id: 'build-id' },
+  settings: {
+    buildDefinitionId: 42,
+    displayName,
+    validDuration: 0,
+    queueOnSourceUpdateOnly: true,
+    scope: [{ repositoryId: 'repo-guid' }],
+  },
+});
+
+const configurations = (
+  isBlocking: boolean,
+  build: unknown = buildValidation('Redline: gate build')
+) => ({
   'GET /Payments/_apis/policy/types': {
     status: 200,
     body: {
@@ -34,6 +54,7 @@ const configurations = (isBlocking: boolean) => ({
         { id: 'min-rev-id', displayName: 'Minimum number of reviewers' },
         { id: 'comments-id', displayName: 'Comment requirements' },
         { id: 'status-id', displayName: 'Status' },
+        { id: 'build-id', displayName: 'Build' },
       ],
     },
   },
@@ -70,6 +91,7 @@ const configurations = (isBlocking: boolean) => ({
             scope: [{ repositoryId: 'repo-guid' }],
           },
         },
+        ...(build === null ? [] : [build]),
       ],
     },
   },
@@ -86,6 +108,27 @@ test('readPolicy maps branch policies back to a MergePolicy', async () => {
 
 test('a non-blocking status policy reads back as advisory', async () => {
   const policy = await createAzureVerify(fakeAzure(configurations(false))).readPolicy(ref);
+  assert.equal(policy?.blocking, false);
+});
+
+// Mirrors the GitHub adapter: an advisory gate requires nothing, so a
+// non-blocking status policy must not report redline/gate as a required check.
+test('a non-blocking status policy derives no required checks', async () => {
+  const policy = await createAzureVerify(fakeAzure(configurations(false))).readPolicy(ref);
+  assert.deepEqual(policy?.requiredChecks, []);
+});
+
+test('a blocking status policy without the Build Validation policy reads back as advisory', async () => {
+  // Without a Build Validation policy nothing queues the gate pipeline, so
+  // the gate is not actually enforcing — blocking must read false.
+  const policy = await createAzureVerify(fakeAzure(configurations(true, null))).readPolicy(ref);
+  assert.equal(policy?.blocking, false);
+});
+
+test('a human build policy without the Redline marker does not count as the gate build', async () => {
+  const policy = await createAzureVerify(
+    fakeAzure(configurations(true, buildValidation('Nightly CI')))
+  ).readPolicy(ref);
   assert.equal(policy?.blocking, false);
 });
 
