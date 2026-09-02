@@ -43,6 +43,7 @@ Record seed scores here. A standards change with no measurement is an opinion.
   instead of misdiagnosing it as missing push access. A repository with no `origin`
   remote gets the friendly "add one with: git remote add origin <url>" usage error
   instead of "redline failed unexpectedly".
+- A 401/403 while resolving the repository (both GitHub and Azure DevOps) now exits 3
   (permission, with a token hint) instead of 4 (host), so CI can tell "token lacks
   scope" from "the host is down".
 
