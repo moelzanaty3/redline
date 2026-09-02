@@ -172,6 +172,30 @@ test('installGate writes the azure pipeline and PR template, and labels are unsu
   assert.match(yml, /ADR_DIFF_THRESHOLD: 300/);
   assert.match(yml, /genre[^\n]*redline/);
   assert.equal(result.outcomes.find((o) => o.capability === 'labels')?.status, 'unsupported');
+
+  // Regression guard: `redline` alone is a different, unrelated package on
+  // the public registry. The gate must pin npx to redline-cli explicitly,
+  // never resolve `redline@<version>` directly.
+  assert.doesNotMatch(yml, /npx --yes redline@/);
+  assert.match(yml, /npx --yes --package=redline-cli@latest redline verify --gate/);
+
+  // Regression guard: the access token must never be interpolated into a
+  // curl argv (visible to `ps`/`/proc/<pid>/cmdline`) — it is passed via a
+  // -K stdin config instead.
+  assert.doesNotMatch(yml, /-H "Authorization: Bearer \$SYSTEM_ACCESSTOKEN"/);
+  assert.match(yml, /curl -K -/);
+
+  // Regression guard: $SYSTEM_TEAMPROJECT is encoded before it is
+  // interpolated into the JSON body / URL, not used raw.
+  assert.match(yml, /@uri/);
+});
+
+test('installGate threads a non-default dependency severity into the rendered pipeline', async () => {
+  const cwd = tmp();
+  const opts: GateOptions = { ...gateOpts, failOnDependencySeverity: 'critical' };
+  await createAzureInstall(fakeAzure(), gitFor).installGate(ref, cwd, opts);
+  const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
+  assert.match(yml, /FAIL_ON_DEPENDENCY_SEVERITY: critical/);
 });
 
 test('a non-2xx truthy error body on policy/configurations degrades to denied, never throws', async () => {

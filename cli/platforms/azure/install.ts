@@ -73,6 +73,21 @@ function parseCreatedPullRequestId(body: unknown): number | null {
   return body['pullRequestId'];
 }
 
+// resolvePolicyTypeIds always seeds its result from POLICY_TYPE_FALLBACK, so
+// every POLICY_TYPE_NAMES value is guaranteed present — but its return type
+// is the plain `Record<string, string>` (cli/platforms/azure/verify.ts also
+// consumes it and indexes it with a plain string, so narrowing the exported
+// type here would break that file), and noUncheckedIndexedAccess therefore
+// still sees `string | undefined` at this call site. This proves the
+// invariant with a real check instead of a `!` assertion.
+function requiredTypeId(types: Record<string, string>, name: string): string {
+  const id = types[name];
+  if (id === undefined) {
+    throw new RedlineError('host', `Azure policy type "${name}" could not be resolved`);
+  }
+  return id;
+}
+
 function outcome(capability: AdminCapability, status: number, detail: string): CapabilityOutcome {
   if (isSuccess(status)) return { capability, status: 'applied', detail };
   if (status === 401 || status === 403) {
@@ -153,7 +168,7 @@ export function createAzureInstall(
       // resolvePolicyTypeIds always seeds it from POLICY_TYPE_FALLBACK first.
       const wanted = [
         {
-          type: { id: types[POLICY_TYPE_NAMES.minimumReviewers]! },
+          type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.minimumReviewers) },
           isEnabled: true,
           isBlocking: true,
           settings: {
@@ -165,13 +180,13 @@ export function createAzureInstall(
           },
         },
         {
-          type: { id: types[POLICY_TYPE_NAMES.comments]! },
+          type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.comments) },
           isEnabled: policy.requireThreadResolution,
           isBlocking: policy.requireThreadResolution,
           settings: { scope },
         },
         {
-          type: { id: types[POLICY_TYPE_NAMES.status]! },
+          type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.status) },
           isEnabled: true,
           // Advisory is native on Azure: isBlocking mirrors policy.blocking
           // directly, no rule needs omitting the way GitHub's does.
@@ -237,6 +252,10 @@ export function createAzureInstall(
     async installGate(ref: RepoRef, cwd: string, opts: GateOptions): Promise<InstallResult> {
       const pipeline = readFileSync(join(PACKAGE_ROOT, 'platforms/azure/gate-template.yml'), 'utf8')
         .replace(/ADR_DIFF_THRESHOLD: \d+/, `ADR_DIFF_THRESHOLD: ${opts.adrDiffThreshold}`)
+        .replace(
+          /FAIL_ON_DEPENDENCY_SEVERITY: \w+/,
+          `FAIL_ON_DEPENDENCY_SEVERITY: ${opts.failOnDependencySeverity}`
+        )
         .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`);
       writeFile(cwd, '.azuredevops/redline-gate.yml', pipeline);
 
@@ -275,7 +294,7 @@ export function createAzureInstall(
       const results: CapabilityOutcome[] = [];
       for (const rule of rules) {
         const res = await client.request('POST', `/${proj}/_apis/policy/configurations`, {
-          type: { id: types[POLICY_TYPE_NAMES.requiredReviewers]! },
+          type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.requiredReviewers) },
           isEnabled: true,
           isBlocking: true,
           settings: {

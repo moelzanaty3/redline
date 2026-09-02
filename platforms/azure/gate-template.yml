@@ -18,6 +18,7 @@ pool:
 
 variables:
   ADR_DIFF_THRESHOLD: 300
+  FAIL_ON_DEPENDENCY_SEVERITY: high
   SOFT_FAIL_LABELS: redline-exempt,redline-sync
 
 steps:
@@ -29,23 +30,42 @@ steps:
     inputs:
       versionSpec: '22.x'
 
-  - script: npx --yes redline@latest verify --gate
+  # --package pins npx to the redline-cli package explicitly. `redline` alone
+  # names a different, unrelated package on the public registry — `redline`
+  # is only this package's bin name, never resolve npx against it directly.
+  - script: npx --yes --package=redline-cli@latest redline verify --gate
     displayName: Redline gate
     name: gate
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       ADR_DIFF_THRESHOLD: $(ADR_DIFF_THRESHOLD)
+      FAIL_ON_DEPENDENCY_SEVERITY: $(FAIL_ON_DEPENDENCY_SEVERITY)
       SOFT_FAIL_LABELS: $(SOFT_FAIL_LABELS)
 
   - script: |
       set -euo pipefail
       state="succeeded"
       if [ "$AGENT_JOBSTATUS" != "Succeeded" ]; then state="failed"; fi
-      curl -sS --fail-with-body -X POST \
-        -H "Authorization: Bearer $SYSTEM_ACCESSTOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{\"state\":\"$state\",\"description\":\"Redline merge gate\",\"context\":{\"name\":\"gate\",\"genre\":\"redline\"},\"targetUrl\":\"$SYSTEM_TEAMFOUNDATIONCOLLECTIONURI$SYSTEM_TEAMPROJECT/_build/results?buildId=$BUILD_BUILDID\"}" \
-        "$SYSTEM_TEAMFOUNDATIONCOLLECTIONURI$SYSTEM_TEAMPROJECT/_apis/git/repositories/$BUILD_REPOSITORY_ID/pullRequests/$SYSTEM_PULLREQUEST_PULLREQUESTID/statuses?api-version=7.1"
+
+      # $SYSTEM_TEAMPROJECT is admin-set, not attacker-controlled, but a
+      # display name containing a space or a quote must not be allowed to
+      # break the JSON body or the URL path — encode it, never interpolate
+      # it raw into either.
+      project_enc=$(jq -rn --arg v "$SYSTEM_TEAMPROJECT" '$v | @uri')
+      target_url="${SYSTEM_TEAMFOUNDATIONCOLLECTIONURI}${project_enc}/_build/results?buildId=$BUILD_BUILDID"
+      status_url="${SYSTEM_TEAMFOUNDATIONCOLLECTIONURI}${project_enc}/_apis/git/repositories/$BUILD_REPOSITORY_ID/pullRequests/$SYSTEM_PULLREQUEST_PULLREQUESTID/statuses?api-version=7.1"
+      body=$(jq -n --arg state "$state" --arg url "$target_url" \
+        '{state: $state, description: "Redline merge gate", context: {name: "gate", genre: "redline"}, targetUrl: $url}')
+
+      # The access token must never appear in argv — visible via `ps` or
+      # /proc/<pid>/cmdline to any process on the agent for the call's
+      # duration. It is already an env var; hand it to curl through a
+      # stdin config instead of putting it on the command line with -H.
+      printf 'header = "Authorization: Bearer %s"\n' "$SYSTEM_ACCESSTOKEN" \
+        | curl -K - -sS --fail-with-body -X POST \
+          -H "Content-Type: application/json" \
+          -d "$body" \
+          "$status_url"
     displayName: Publish redline/gate status
     condition: always()
     env:
