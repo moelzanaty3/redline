@@ -33,7 +33,16 @@ Record seed scores here. A standards change with no measurement is an opinion.
   404 = unsupported.
 - A 422 from the ruleset create/update now fails loudly as a host error naming the
   endpoint, instead of leaving the repository silently policy-less with exit 0.
-- A 401/403 while resolving the repository (both GitHub and Azure DevOps) now exits 3
+- `redline init` is now safe on a brownfield working tree. It refuses to run (exit 2,
+  with a hint) when the git index already has staged changes, because the onboarding
+  commit would sweep them into the Redline PR. A successful run — and a failed one —
+  returns the operator to the branch they started on instead of leaving them on
+  `redline/onboard`. "Nothing to commit" is reported as an already-onboarded no-op
+  instead of exiting 1. A non-fast-forward push (a previous partial run left a stale
+  `redline/onboard` on origin) now says exactly that, with the delete-or-merge fix,
+  instead of misdiagnosing it as missing push access. A repository with no `origin`
+  remote gets the friendly "add one with: git remote add origin <url>" usage error
+  instead of "redline failed unexpectedly".
   (permission, with a token hint) instead of 4 (host), so CI can tell "token lacks
   scope" from "the host is down".
 

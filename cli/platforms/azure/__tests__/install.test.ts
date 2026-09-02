@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGit, type GitRunner } from '../../../core/git.ts';
+import { isRedlineError } from '../../../core/errors.ts';
 import { createAzureInstall } from '../install.ts';
 import { AZURE_STATUS_GENRE, AZURE_STATUS_NAME, POLICY_TYPE_FALLBACK } from '../policy-types.ts';
 import type { AzureClient } from '../client.ts';
@@ -264,6 +265,23 @@ test('advanced security denial carries a realistic azure error body without thro
   assert.ok(result.outcomes.every((o) => o.status === 'denied'));
 });
 
+// Models a real index: `add` stages, `commit` clears, `diff --cached --quiet`
+// exits 1 (throws) only while something is staged. `preStaged` starts with an
+// unrelated user file already in the index.
+function fakeRepoGit(branch = 'main', preStaged = false): { gitFor: (cwd: string) => ReturnType<typeof createGit>; calls: string[][] } {
+  const calls: string[][] = [];
+  let staged = preStaged;
+  const run: GitRunner = (args) => {
+    calls.push(args);
+    if (args[0] === 'add') staged = true;
+    if (args[0] === 'commit') staged = false;
+    if (args[0] === 'diff' && staged) throw new Error('exit 1: staged changes exist');
+    if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return branch;
+    return '';
+  };
+  return { gitFor: (cwd: string) => createGit(cwd, run), calls };
+}
+
 test('openPullRequest reports a host error, not a false success, on a truthy non-2xx error body', async () => {
   const client = fakeAzure({
     'POST /Payments/_apis/git/repositories/repo-guid/pullrequests': {
@@ -273,18 +291,14 @@ test('openPullRequest reports a host error, not a false success, on a truthy non
       },
     },
   });
-  const dirty = (cwd: string) =>
-    createGit(cwd, (args) => {
-      if (args[0] === 'diff') throw new Error('staged changes exist');
-      return '';
-    });
+  const repo = fakeRepoGit();
   await assert.rejects(
-    createAzureInstall(client, dirty).openPullRequest(ref, tmp(), {
+    createAzureInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
       branch: 'redline/onboard',
       title: 'chore(redline): onboard',
       body: 'body',
       labels: [],
-      files: [],
+      files: ['.azuredevops/redline-gate.yml'],
     }),
     /could not open a pull request/
   );
@@ -297,18 +311,15 @@ test('openPullRequest uses full ref names and returns the azure pull request id'
       body: { pullRequestId: 31 },
     },
   });
-  const dirty = (cwd: string) =>
-    createGit(cwd, (args) => {
-      if (args[0] === 'diff') throw new Error('staged changes exist');
-      return '';
-    });
-  const pr = await createAzureInstall(client, dirty).openPullRequest(ref, tmp(), {
+  const repo = fakeRepoGit();
+  const pr = await createAzureInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
     branch: 'redline/onboard',
     title: 'chore(redline): onboard',
     body: 'body',
     labels: [],
-    files: [],
+    files: ['.azuredevops/redline-gate.yml'],
   });
+  assert.ok(pr);
   assert.equal(pr.number, 31);
   assert.equal(pr.url, 'https://dev.azure.com/acme/Payments/_git/web/pullrequest/31');
   const create = client.calls.find((c) => c.method === 'POST')!;
@@ -318,6 +329,66 @@ test('openPullRequest uses full ref names and returns the azure pull request id'
     title: 'chore(redline): onboard',
     description: 'body',
   });
+});
+
+test('an unrelated pre-staged file refuses onboarding before any branch is created', async () => {
+  const client = fakeAzure();
+  const repo = fakeRepoGit('main', true);
+  await assert.rejects(
+    createAzureInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
+      branch: 'redline/onboard',
+      title: 't',
+      body: 'b',
+      labels: [],
+      files: ['.azuredevops/redline-gate.yml'],
+    }),
+    (err: unknown) => isRedlineError(err) && err.kind === 'usage',
+  );
+  assert.ok(!repo.calls.some((c) => c[0] === 'checkout'), 'must refuse before creating a branch');
+  assert.deepEqual(client.calls, []);
+});
+
+test('nothing to commit is a null-PR no-op that ends on the original branch', async () => {
+  const client = fakeAzure();
+  const calls: string[][] = [];
+  const clean = (cwd: string) =>
+    createGit(cwd, (args) => {
+      calls.push(args);
+      if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return 'main';
+      return '';
+    });
+  const pr = await createAzureInstall(client, clean).openPullRequest(ref, tmp(), {
+    branch: 'redline/onboard',
+    title: 't',
+    body: 'b',
+    labels: [],
+    files: ['.azuredevops/redline-gate.yml'],
+  });
+  assert.equal(pr, null);
+  assert.ok(!calls.some((c) => c[0] === 'commit'));
+  assert.ok(!calls.some((c) => c[0] === 'push'));
+  assert.deepEqual(calls.at(-1), ['checkout', 'main']);
+  assert.deepEqual(client.calls, []);
+});
+
+test('a successful run ends on the original branch, not on redline/onboard', async () => {
+  const client = fakeAzure({
+    'POST /Payments/_apis/git/repositories/repo-guid/pullrequests': {
+      status: 201,
+      body: { pullRequestId: 5 },
+    },
+  });
+  const repo = fakeRepoGit('feature/payments');
+  await createAzureInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
+    branch: 'redline/onboard',
+    title: 'chore(redline): onboard',
+    body: 'body',
+    labels: [],
+    files: ['.azuredevops/redline-gate.yml'],
+  });
+  const pushIndex = repo.calls.findIndex((c) => c[0] === 'push');
+  assert.ok(pushIndex >= 0);
+  assert.deepEqual(repo.calls.at(-1), ['checkout', 'feature/payments']);
 });
 
 // It used to POST one blocking required-reviewer policy per rule, every run,

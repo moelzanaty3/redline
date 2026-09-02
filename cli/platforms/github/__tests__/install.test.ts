@@ -289,19 +289,30 @@ test('ensureReviewOwnership seeds CODEOWNERS once and never overwrites an existi
   assert.deepEqual(second.files, []);
 });
 
+// Models a real index: `add` stages, `commit` clears, `diff --cached --quiet`
+// exits 1 (throws) only while something is staged. `preStaged` starts with an
+// unrelated user file already in the index.
+function fakeRepoGit(branch = 'main', preStaged = false): { gitFor: (cwd: string) => ReturnType<typeof createGit>; calls: string[][] } {
+  const calls: string[][] = [];
+  let staged = preStaged;
+  const run: GitRunner = (args) => {
+    calls.push(args);
+    if (args[0] === 'add') staged = true;
+    if (args[0] === 'commit') staged = false;
+    if (args[0] === 'diff' && staged) throw new Error('exit 1: staged changes exist');
+    if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return branch;
+    return '';
+  };
+  return { gitFor: (cwd: string) => createGit(cwd, run), calls };
+}
+
 test('openPullRequest commits, pushes and opens a PR against the default branch', async () => {
   const client = fakeGitHubClient({
     'POST /repos/acme/web/pulls': { status: 201, body: { number: 7, html_url: 'https://x/7' } },
   });
-  const gitCalls: string[][] = [];
-  const recording = (cwd: string) =>
-    createGit(cwd, (args) => {
-      gitCalls.push(args);
-      if (args[0] === 'diff') throw new Error('staged changes exist');
-      return '';
-    });
+  const repo = fakeRepoGit();
 
-  const pr = await createGitHubInstall(client, recording).openPullRequest(ref, tmp(), {
+  const pr = await createGitHubInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
     branch: 'redline/onboard',
     title: 'chore(redline): onboard',
     body: 'body',
@@ -310,8 +321,8 @@ test('openPullRequest commits, pushes and opens a PR against the default branch'
   });
 
   assert.deepEqual(pr, { number: 7, url: 'https://x/7' });
-  assert.deepEqual(gitCalls[0], ['checkout', '-B', 'redline/onboard']);
-  assert.deepEqual(gitCalls[1], [
+  assert.ok(repo.calls.some((c) => c[0] === 'checkout' && c[1] === '-B' && c[2] === 'redline/onboard'));
+  assert.deepEqual(repo.calls.find((c) => c[0] === 'add'), [
     'add',
     '--',
     '.github/workflows/redline.yml',
@@ -331,15 +342,9 @@ test('openPullRequest stages only the files Redline wrote, never a dirty unrelat
   const client = fakeGitHubClient({
     'POST /repos/acme/web/pulls': { status: 201, body: { number: 1, html_url: 'https://x/1' } },
   });
-  const gitCalls: string[][] = [];
-  const recording = (cwd: string) =>
-    createGit(cwd, (args) => {
-      gitCalls.push(args);
-      if (args[0] === 'diff') throw new Error('staged changes exist');
-      return '';
-    });
+  const repo = fakeRepoGit();
 
-  await createGitHubInstall(client, recording).openPullRequest(ref, tmp(), {
+  await createGitHubInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
     branch: 'redline/onboard',
     title: 'chore(redline): onboard',
     body: 'body',
@@ -347,26 +352,106 @@ test('openPullRequest stages only the files Redline wrote, never a dirty unrelat
     files: ['.github/CODEOWNERS'],
   });
 
-  assert.ok(!gitCalls.some((c) => c[0] === 'add' && c.includes('-A')), 'must never stage the whole tree');
+  assert.ok(!repo.calls.some((c) => c[0] === 'add' && c.includes('-A')), 'must never stage the whole tree');
   assert.deepEqual(
-    gitCalls.find((c) => c[0] === 'add'),
+    repo.calls.find((c) => c[0] === 'add'),
     ['add', '--', '.github/CODEOWNERS']
   );
 });
 
-test('nothing to commit means no push and no pull request', async () => {
+test('an unrelated pre-staged file refuses onboarding before any branch is created', async () => {
   const client = fakeGitHubClient();
-  const clean = (cwd: string) => createGit(cwd, () => '');
+  const repo = fakeRepoGit('main', true);
+
   await assert.rejects(
-    createGitHubInstall(client, clean).openPullRequest(ref, tmp(), {
+    createGitHubInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
       branch: 'redline/onboard',
       title: 't',
       body: 'b',
       labels: [],
       files: ['.github/CODEOWNERS'],
     }),
-    /nothing to commit/
+    (err: unknown) => isRedlineError(err) && err.kind === 'usage',
   );
+  assert.ok(!repo.calls.some((c) => c[0] === 'checkout'), 'must refuse before creating a branch');
+  assert.ok(!repo.calls.some((c) => c[0] === 'commit'));
+  assert.equal(client.calls.length, 0);
+});
+
+test('nothing to commit is a null-PR no-op that ends on the original branch', async () => {
+  const client = fakeGitHubClient();
+  // Staging never dirties the index: the rendered files are already committed.
+  const calls: string[][] = [];
+  const clean = (cwd: string) =>
+    createGit(cwd, (args) => {
+      calls.push(args);
+      if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return 'main';
+      return '';
+    });
+
+  const pr = await createGitHubInstall(client, clean).openPullRequest(ref, tmp(), {
+    branch: 'redline/onboard',
+    title: 't',
+    body: 'b',
+    labels: [],
+    files: ['.github/CODEOWNERS'],
+  });
+
+  assert.equal(pr, null);
+  assert.ok(!calls.some((c) => c[0] === 'commit'));
+  assert.ok(!calls.some((c) => c[0] === 'push'));
+  assert.deepEqual(calls.at(-1), ['checkout', 'main']);
+  assert.equal(client.calls.length, 0);
+});
+
+test('a successful run ends on the original branch, not on redline/onboard', async () => {
+  const client = fakeGitHubClient({
+    'POST /repos/acme/web/pulls': { status: 201, body: { number: 9, html_url: 'https://x/9' } },
+  });
+  const repo = fakeRepoGit('feature/payments');
+
+  await createGitHubInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
+    branch: 'redline/onboard',
+    title: 'chore(redline): onboard',
+    body: 'body',
+    labels: [],
+    files: ['.github/CODEOWNERS'],
+  });
+
+  const pushIndex = repo.calls.findIndex((c) => c[0] === 'push');
+  assert.ok(pushIndex >= 0);
+  assert.deepEqual(repo.calls.at(-1), ['checkout', 'feature/payments']);
+  assert.ok(repo.calls.length - 1 > pushIndex, 'the restore happens after the push');
+});
+
+test('a failed push still returns the operator to the original branch', async () => {
+  const client = fakeGitHubClient();
+  const calls: string[][] = [];
+  let staged = false;
+  const failingPush = (cwd: string) =>
+    createGit(cwd, (args) => {
+      calls.push(args);
+      if (args[0] === 'add') staged = true;
+      if (args[0] === 'commit') staged = false;
+      if (args[0] === 'diff' && staged) throw new Error('exit 1: staged changes exist');
+      if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return 'feature/payments';
+      if (args[0] === 'push') throw Object.assign(new Error('Command failed'), {
+        stderr: 'remote: Permission to acme/web.git denied.\n',
+      });
+      return '';
+    });
+
+  await assert.rejects(
+    createGitHubInstall(client, failingPush).openPullRequest(ref, tmp(), {
+      branch: 'redline/onboard',
+      title: 'chore(redline): onboard',
+      body: 'body',
+      labels: [],
+      files: ['.github/CODEOWNERS'],
+    }),
+    (err: unknown) => isRedlineError(err) && err.kind === 'permission',
+  );
+  assert.deepEqual(calls.at(-1), ['checkout', 'feature/payments']);
   assert.equal(client.calls.length, 0);
 });
 
@@ -374,14 +459,10 @@ test('a denied pull request creation throws, instead of returning a fabricated P
   const client = fakeGitHubClient({
     'POST /repos/acme/web/pulls': { status: 403, body: { message: 'Resource not accessible by integration' } },
   });
-  const recording = (cwd: string) =>
-    createGit(cwd, (args) => {
-      if (args[0] === 'diff') throw new Error('staged changes exist');
-      return '';
-    });
+  const repo = fakeRepoGit();
 
   await assert.rejects(
-    createGitHubInstall(client, recording).openPullRequest(ref, tmp(), {
+    createGitHubInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
       branch: 'redline/onboard',
       title: 'chore(redline): onboard',
       body: 'body',

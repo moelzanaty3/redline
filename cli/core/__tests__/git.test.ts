@@ -37,6 +37,41 @@ test('remoteUrl defaults to origin and is overridable', () => {
   assert.deepEqual(calls[0], ['remote', 'get-url', 'origin']);
 });
 
+test('remoteUrl returns an empty string when the repository has no remote', () => {
+  const run: GitRunner = () => {
+    throw new Error("fatal: No such remote 'origin'");
+  };
+  assert.equal(createGit('/repo', run).remoteUrl(), '');
+});
+
+test('currentBranch reads HEAD and falls back to "HEAD" when rev-parse fails', () => {
+  const { run } = recorder({ 'rev-parse --abbrev-ref HEAD': 'feature/payments' });
+  assert.equal(createGit('/repo', run).currentBranch(), 'feature/payments');
+  const broken: GitRunner = () => {
+    throw new Error('fatal: not a git repository');
+  };
+  assert.equal(createGit('/repo', broken).currentBranch(), 'HEAD');
+});
+
+test('checkoutBranch switches by argv and a failure becomes a host RedlineError naming the branch', () => {
+  const { run, calls } = recorder();
+  createGit('/repo', run).checkoutBranch('feature/payments');
+  assert.deepEqual(calls, [['checkout', 'feature/payments']]);
+
+  const broken: GitRunner = (args) => {
+    if (args[0] === 'checkout') throw new Error('your local changes would be overwritten');
+    return 'redline/onboard';
+  };
+  assert.throws(
+    () => createGit('/repo', broken).checkoutBranch('feature/payments'),
+    (err: unknown) =>
+      isRedlineError(err) &&
+      err.kind === 'host' &&
+      err.message.includes('feature/payments') &&
+      (err.hint ?? '').includes('git checkout feature/payments'),
+  );
+});
+
 test('defaultBranch reads the remote HEAD and strips the prefix', () => {
   const { run } = recorder({
     'symbolic-ref --short refs/remotes/origin/HEAD': 'origin/main',
@@ -98,6 +133,25 @@ test('a rejected push becomes a permission RedlineError naming the branch it was
       err.kind === 'permission' &&
       err.message.includes('Permission to acme/web.git denied.') &&
       (err.hint ?? '').includes('redline/onboard'),
+  );
+});
+
+test('a non-fast-forward push becomes a failed RedlineError blaming the stale onboarding branch', () => {
+  const run: GitRunner = (args) => {
+    if (args[0] === 'push') throw Object.assign(new Error('Command failed'), {
+      stderr:
+        " ! [rejected]        redline/onboard -> redline/onboard (non-fast-forward)\n" +
+        "error: failed to push some refs to 'github.com:acme/web.git'\n",
+    });
+    return 'redline/onboard';
+  };
+  assert.throws(
+    () => createGit('/repo', run).push('redline/onboard'),
+    (err: unknown) =>
+      isRedlineError(err) &&
+      err.kind === 'failed' &&
+      err.message.includes('redline/onboard') &&
+      (err.hint ?? '').includes('git push origin --delete redline/onboard'),
   );
 });
 

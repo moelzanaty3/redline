@@ -318,18 +318,47 @@ export function createGitHubInstall(
       };
     },
 
-    async openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef> {
+    async openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef | null> {
       const git = gitFor(cwd);
-      git.checkoutNewBranch(change.branch);
-      // Stage only what Redline itself wrote — never sweep in pre-existing
-      // dirty or untracked state from the working tree (decision 6: no
-      // customer secret is ever committed by this tool).
-      git.stagePaths(change.files);
-      if (!git.hasStagedChanges()) {
-        throw new RedlineError('failed', 'nothing to commit — this repository is already onboarded');
+      // `git commit -m` commits the WHOLE index, so anything the user staged
+      // before running redline would be swept into the onboarding PR.
+      // Refusing beats `commit -- <paths>`: a partial-index commit surprises
+      // in the opposite direction.
+      if (git.hasStagedChanges()) {
+        throw new RedlineError(
+          'usage',
+          'this repository already has staged changes',
+          'commit or unstage them first, then re-run — redline will not sweep them into its onboarding pull request'
+        );
       }
-      git.commit(change.title);
-      git.push(change.branch);
+      const originalBranch = git.currentBranch();
+      git.checkoutNewBranch(change.branch);
+      let gitFailed = false;
+      try {
+        // Stage only what Redline itself wrote — never sweep in pre-existing
+        // dirty or untracked state from the working tree (decision 6: no
+        // customer secret is ever committed by this tool).
+        git.stagePaths(change.files);
+        if (!git.hasStagedChanges()) {
+          // Already onboarded and nothing changed: a legitimate no-op, not
+          // an error — the caller reports it instead of a pull request.
+          return null;
+        }
+        git.commit(change.title);
+        git.push(change.branch);
+      } catch (error) {
+        gitFailed = true;
+        throw error;
+      } finally {
+        // Leave the operator on their own branch, never on redline/onboard.
+        // When a git step failed its error already says where the work sits,
+        // and a failed restore must not mask it.
+        try {
+          git.checkoutBranch(originalBranch);
+        } catch (restoreError) {
+          if (!gitFailed) throw restoreError;
+        }
+      }
 
       const created = await client.rest<unknown>(
         'POST',

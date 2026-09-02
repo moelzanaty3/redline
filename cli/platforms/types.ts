@@ -88,7 +88,9 @@ export interface PlatformInstall {
   applyPolicy(ref: RepoRef, policy: MergePolicy): Promise<PolicyResult>;
   enableSecurityFloor(ref: RepoRef): Promise<SecurityResult>;
   ensureReviewOwnership(ref: RepoRef, cwd: string, rules: OwnershipRule[]): Promise<InstallResult>;
-  openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef>;
+  // Resolves null when there is nothing to commit — the repository already
+  // matches what Redline would push, so a no-op, not an error.
+  openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef | null>;
 }
 
 export interface PlatformVerify {
