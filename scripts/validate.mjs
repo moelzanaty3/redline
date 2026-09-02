@@ -135,6 +135,39 @@ if (!gate.includes('pull-requests: write')) {
   fail('workflows/redline-gate.yml: dependency-review needs pull-requests: write to comment');
 }
 
+// --- pull request template ----------------------------------------------------
+// Two copies of one file, deliberately, kept identical by this check.
+//
+// templates/github/pull_request_template.md is the shipped source: package.json
+// "files" packages templates/, and `redline init` installs it into an onboarded
+// repository. It cannot live under .github/, because .github/ is excluded from the
+// tarball on purpose — packaging it would push this repo's own CI workflows into
+// every consumer.
+//
+// .github/pull_request_template.md is this repository's own copy. Redline is
+// onboarded to Redline, and the `checklist` job in workflows/redline-gate.yml reads
+// the pull request *body*, which GitHub pre-fills from that path. Without it every
+// pull request opened here starts empty and fails this repo's own gate.
+//
+// Neither file carries an explanatory comment of its own: the shipped one is copied
+// verbatim into every consumer's PR body, so a note about Redline's packaging would
+// end up in other teams' pull requests. The explanation lives here, where the drift
+// it guards against is caught.
+const GATED_SECTION = '## Launch readiness';
+const shippedTemplate = read('templates/github/pull_request_template.md');
+const ownTemplate = existsSync(join(ROOT, '.github/pull_request_template.md'))
+  ? read('.github/pull_request_template.md')
+  : null;
+
+if (ownTemplate === null) {
+  fail('.github/pull_request_template.md is missing — every pull request here would start with an empty body and fail the checklist job in workflows/redline-gate.yml');
+} else if (ownTemplate !== shippedTemplate) {
+  fail('.github/pull_request_template.md has drifted from templates/github/pull_request_template.md — the shipped template is the source, copy it across');
+}
+if (!shippedTemplate.includes(GATED_SECTION)) {
+  fail(`templates/github/pull_request_template.md: no "${GATED_SECTION}" section — workflows/redline-gate.yml fails the checklist job without it`);
+}
+
 const workflowFiles = [
   ...readdirSync(join(ROOT, 'workflows')).map((f) => `workflows/${f}`),
   ...(existsSync(join(ROOT, '.github/workflows'))
