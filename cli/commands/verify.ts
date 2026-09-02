@@ -20,7 +20,15 @@ export interface VerifyOptions {
   root: string;
 }
 
-export async function verify(platform: Platform, opts: VerifyOptions): Promise<VerifyReport> {
+// The platform arrives as a thunk, not a value: resolving one builds a host
+// client, which resolves a credential and throws `permission` (exit 3) when
+// there is none. A repository whose only problem is that nobody ran
+// `redline init` must not be told it lacks credentials, so the .redline.json
+// short-circuit below runs before the platform is ever resolved.
+export async function verify(
+  platformFor: () => Platform | Promise<Platform>,
+  opts: VerifyOptions
+): Promise<VerifyReport> {
   const findings: VerifyFinding[] = [];
   const add = (check: string, ok: boolean, detail: string): void => {
     findings.push({ check, ok, detail });
@@ -51,6 +59,7 @@ export async function verify(platform: Platform, opts: VerifyOptions): Promise<V
   // failure (exit 4), never get reinterpreted as a capability finding. A
   // previous task's bug reported a host 404 as two "denied" capabilities,
   // filing false work against an administrator — that must not repeat here.
+  const platform = await platformFor();
   const ref = await platform.repoRef(opts.cwd);
   const policy = await platform.readPolicy(ref);
 
