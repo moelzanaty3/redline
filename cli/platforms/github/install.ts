@@ -120,10 +120,20 @@ function worstOutcome(outcomes: CapabilityOutcome[]): CapabilityOutcome {
   );
 }
 
-function writeFile(cwd: string, relPath: string, contents: string): void {
+// Writes only when the bytes differ, and answers whether they did — the same
+// contract as cli/render/standards.ts. `redline init` folds the returned file
+// list into its already-onboarded decision, so a file reported as written when
+// nothing changed leaves a modified tracked file behind with no pull request
+// to carry it: exactly what a CLI-version bump used to do to the pinned gate
+// template. `check` computes the answer and writes nothing.
+function syncFile(cwd: string, relPath: string, contents: string, check: boolean): boolean {
   const target = join(cwd, relPath);
+  const current = existsSync(target) ? readFileSync(target, 'utf8') : null;
+  if (current === contents) return false;
+  if (check) return true;
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, contents);
+  return true;
 }
 
 function buildRules(policy: MergePolicy): unknown[] {
@@ -252,7 +262,13 @@ export function createGitHubInstall(
       };
     },
 
-    async installGate(ref: RepoRef, cwd: string, opts: GateOptions): Promise<InstallResult> {
+    async installGate(
+      ref: RepoRef,
+      cwd: string,
+      opts: GateOptions,
+      check = false
+    ): Promise<InstallResult> {
+      const files: string[] = [];
       const caller = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
         .replaceAll('<org>', ref.org)
         .replace(/adr-diff-threshold: \d+/, `adr-diff-threshold: ${opts.adrDiffThreshold}`)
@@ -261,7 +277,9 @@ export function createGitHubInstall(
           `fail-on-dependency-severity: ${opts.failOnDependencySeverity}`
         )
         .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`);
-      writeFile(cwd, '.github/workflows/redline.yml', caller);
+      if (syncFile(cwd, '.github/workflows/redline.yml', caller, check)) {
+        files.push('.github/workflows/redline.yml');
+      }
 
       // Read from templates/, never from this repository's own .github/:
       // .github/ is deliberately outside package.json "files" (shipping it
@@ -272,7 +290,11 @@ export function createGitHubInstall(
         join(PACKAGE_ROOT, 'templates/github/pull_request_template.md'),
         'utf8'
       );
-      writeFile(cwd, '.github/pull_request_template.md', template);
+      if (syncFile(cwd, '.github/pull_request_template.md', template, check)) {
+        files.push('.github/pull_request_template.md');
+      }
+
+      if (check) return { files, outcomes: [] };
 
       const labelOutcomes: CapabilityOutcome[] = [];
       for (const label of GATE_LABELS) {
@@ -284,16 +306,14 @@ export function createGitHubInstall(
         );
       }
 
-      return {
-        files: ['.github/workflows/redline.yml', '.github/pull_request_template.md'],
-        outcomes: [worstOutcome(labelOutcomes)],
-      };
+      return { files, outcomes: [worstOutcome(labelOutcomes)] };
     },
 
     async ensureReviewOwnership(
       ref: RepoRef,
       cwd: string,
-      rules: OwnershipRule[]
+      rules: OwnershipRule[],
+      check = false
     ): Promise<InstallResult> {
       const candidates = ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS'];
       if (candidates.some((p) => existsSync(join(cwd, p)))) {
@@ -309,7 +329,9 @@ export function createGitHubInstall(
         };
       }
       const body = rules.map((r) => `${r.pattern} ${r.owners.join(' ')}`).join('\n');
-      writeFile(cwd, '.github/CODEOWNERS', `# Managed by Redline.\n\n${body}\n`);
+      // No candidate exists (checked above), so this always writes — `check`
+      // is what holds the write back on a dry run.
+      syncFile(cwd, '.github/CODEOWNERS', `# Managed by Redline.\n\n${body}\n`, check);
       return {
         files: ['.github/CODEOWNERS'],
         outcomes: [

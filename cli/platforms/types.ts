@@ -100,10 +100,20 @@ export interface SecurityResult {
 }
 
 export interface PlatformInstall {
-  installGate(ref: RepoRef, cwd: string, opts: GateOptions): Promise<InstallResult>;
+  // `check` computes which files would change and does nothing else: no write,
+  // no host call, no outcome for work that never happened. `redline init`
+  // plans with it — both for `--dry-run` and to decide whether a re-run has
+  // anything to do at all, which it must know BEFORE it touches a host
+  // setting on a repository that is already settled.
+  installGate(ref: RepoRef, cwd: string, opts: GateOptions, check?: boolean): Promise<InstallResult>;
   applyPolicy(ref: RepoRef, policy: MergePolicy): Promise<PolicyResult>;
   enableSecurityFloor(ref: RepoRef): Promise<SecurityResult>;
-  ensureReviewOwnership(ref: RepoRef, cwd: string, rules: OwnershipRule[]): Promise<InstallResult>;
+  ensureReviewOwnership(
+    ref: RepoRef,
+    cwd: string,
+    rules: OwnershipRule[],
+    check?: boolean
+  ): Promise<InstallResult>;
   // Resolves null when there is nothing to commit — the repository already
   // matches what Redline would push, so a no-op, not an error.
   openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef | null>;

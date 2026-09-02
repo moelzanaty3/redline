@@ -1,7 +1,14 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { isRedlineError } from '../core/errors.ts';
 import { CLI_VERSION } from '../core/version.ts';
-import { CONFIG_FILE, readConfig, writeConfig, type MenuSelections } from '../config/redline-json.ts';
+import {
+  CONFIG_FILE,
+  MENU_KEYS,
+  readConfig,
+  writeConfig,
+  type MenuSelections,
+} from '../config/redline-json.ts';
 import { proposeProfile } from '../detect/stack.ts';
 import { scanRepo } from '../detect/scan.ts';
 import { loadManifest } from '../render/manifest.ts';
@@ -64,18 +71,56 @@ export const SENSITIVE_PATHS = [
 
 export const OWNING_TEAM = 'platform-engineering';
 
+// Accessibility rules only exist for the stacks that render a user interface,
+// so recording `accessibility: true` on a Terraform or Go repository files a
+// commitment against rules that will never be rendered there.
+const ACCESSIBILITY_STACKS = ['react', 'react-native', 'kotlin', 'swift'];
+
+// The 2.1 artifact that identifies a repository onboarded by the previous
+// generation. It is NOT in the removal list below: v3's GitHub adapter writes
+// the same path, so removing it would delete the gate this run just installed.
+const LEGACY_MARKER = '.github/workflows/redline.yml';
+
+// Everything 2.1 left behind that v3 does not write. Rendered vendor artifacts
+// (`.github/instructions/redline-*.instructions.md`, `.cursor/rules/redline-*.mdc`)
+// are not here: render() already prunes those as stale.
+const LEGACY_PATHS = ['.github/workflows/redline-sync.yml'];
+const LEGACY_SCRIPT = /^redline-.*\.sh$/;
+
 export function sensitivePathRules(org: string): OwnershipRule[] {
   return SENSITIVE_PATHS.map((pattern) => ({ pattern, owners: [`@${org}/${OWNING_TEAM}`] }));
 }
 
-const ONBOARD_BRANCH = 'redline/onboard';
+export const ONBOARD_BRANCH = 'redline/onboard';
+
+// Deleted, not just unwritten: a 2.1 sync workflow left in place keeps running
+// against a repository that has moved to v3. The deletions ride out in the
+// same pull request as the rest of the migration.
+function removeLegacyArtifacts(cwd: string, dryRun: boolean): string[] {
+  const removed: string[] = [];
+  const remove = (relPath: string): void => {
+    if (!existsSync(join(cwd, relPath))) return;
+    if (!dryRun) rmSync(join(cwd, relPath));
+    removed.push(relPath);
+  };
+  for (const relPath of LEGACY_PATHS) remove(relPath);
+  if (existsSync(join(cwd, 'scripts'))) {
+    for (const file of readdirSync(join(cwd, 'scripts'))) {
+      if (LEGACY_SCRIPT.test(file)) remove(`scripts/${file}`);
+    }
+  }
+  return removed;
+}
 
 export interface InitOptions {
   cwd: string;
   root: string;
   profile?: string;
   vendors?: string[];
+  // Only the selections the caller actually asked for. Anything absent falls
+  // back to what the repository already chose — see the menu precedence below.
   menu?: Partial<MenuSelections>;
+  dryRun?: boolean;
   now?: () => Date;
 }
 
@@ -85,24 +130,44 @@ export interface InitReport {
   outcomes: CapabilityOutcome[];
   pendingAdmin: AdminCapability[];
   pullRequest: PullRequestRef | null;
+  // Set when the host mutations succeeded but the pull request could not be
+  // opened. The work is real and recorded; only the review vehicle is missing,
+  // which is a `failed` (exit 1), not a host outage.
+  pullRequestError: string | null;
   migratedFrom: string | null;
   alreadyOnboarded: boolean;
+  dryRun: boolean;
+  // The menu this run resolved, and the host settings it would change. Both
+  // exist so `--dry-run` can print a plan the operator can act on.
+  menu: MenuSelections;
+  hostPlan: string[];
 }
 
 export async function init(platform: Platform, opts: InitOptions): Promise<InitReport> {
   const { cwd, root } = opts;
+  const dryRun = opts.dryRun === true;
   const manifest = loadManifest(root);
-  const menu = { ...DEFAULT_MENU, ...opts.menu };
   const now = opts.now ?? (() => new Date());
 
   // Profile resolution happens before any host call or write: a bad --profile
   // flag must fail clean, with nothing on disk and nothing sent to the host.
   const detected = opts.profile ?? proposeProfile(scanRepo(cwd)).profile;
-  const { profile } = resolveProfile(manifest, detected);
+  const { profile, stacks } = resolveProfile(manifest, detected);
 
   const existing = readConfig(cwd);
-  const migratedFrom =
-    existing === null && existsSync(join(cwd, '.github/workflows/redline.yml')) ? '2.1' : null;
+  const migratedFrom = existing === null && existsSync(join(cwd, LEGACY_MARKER)) ? '2.1' : null;
+
+  // DEFAULT_MENU <- what this repository already chose <- the flags the caller
+  // actually typed. Rebuilding the menu from flag defaults alone demoted a
+  // `--blocking` repository back to advisory on the next plain `redline init`
+  // — and did it before the no-op check, so even a run with nothing to commit
+  // rewrote the live ruleset while .redline.json still claimed blocking.
+  const menu: MenuSelections = {
+    ...DEFAULT_MENU,
+    accessibility: stacks.some((stack) => ACCESSIBILITY_STACKS.includes(stack)),
+    ...existing?.menu,
+    ...opts.menu,
+  };
 
   const ref = await platform.repoRef(cwd);
   const vendors =
@@ -113,20 +178,98 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   // Files first, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
-  const rendered = render({ root, profile, out: cwd, vendors });
+  const rendered = render({ root, profile, out: cwd, vendors, check: dryRun });
   const commandFiles = renderCommands({
     root,
     out: cwd,
     hosts: vendors.flatMap((v) => (v in COMMAND_HOSTS ? [v] : [])),
+    check: dryRun,
   });
+  const legacyRemovals = migratedFrom === '2.1' ? removeLegacyArtifacts(cwd, dryRun) : [];
 
-  const gate = await platform.installGate(ref, cwd, {
+  const gateOptions: GateOptions = {
     ...FLOOR_GATE,
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
-  });
+  };
+  const ownershipRules = sensitivePathRules(ref.org);
+
+  // The gate and ownership file diffs are computed in check mode FIRST, before
+  // a single host setting is touched. Without it there was no way to know a
+  // re-run had nothing to do until four host objects had already been
+  // rewritten — and the answer itself was wrong, because alreadyOnboarded read
+  // only the rendered files and never these two.
+  const gatePlan = await platform.installGate(ref, cwd, gateOptions, true);
+  const ownershipPlan = menu.sensitivePathReviewers
+    ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules, true)
+    : { files: [], outcomes: [] };
+
+  // render() prunes stale vendor files with rmSync; those deletions must ride
+  // along in the same file list as the writes, or the PR never reflects them.
+  const changedFiles = [
+    ...(dryRun ? rendered.stale : rendered.written),
+    ...rendered.removed,
+    ...commandFiles,
+    ...legacyRemovals,
+    ...gatePlan.files,
+    ...ownershipPlan.files,
+  ];
+  // A menu change moves no file of its own (the gate template already diffs
+  // adrForLargeDiffs), but it is exactly what `redline init --blocking` on a
+  // settled repository is for: swallowing it as "nothing to change" would drop
+  // the promotion silently.
+  const menuChanged = existing !== null && MENU_KEYS.some((key) => existing.menu[key] !== menu[key]);
+  const alreadyOnboarded = existing !== null && changedFiles.length === 0 && !menuChanged;
+
+  const hostPlan = [
+    `merge gate machinery on ${platform.host}`,
+    ...(menu.sensitivePathReviewers ? ['review ownership for the sensitive paths'] : []),
+    'security floor: secret scanning, push protection, dependency alerts',
+    `branch policy: 1 approval, gate ${menu.blockingGate ? 'blocking' : 'advisory'}`,
+    `pull request on ${ONBOARD_BRANCH}`,
+  ];
+
+  if (alreadyOnboarded) {
+    return {
+      profile,
+      files: [],
+      outcomes: [],
+      // What .redline.json records is the honest answer here: no host call was
+      // made this run, so nothing new could be learned about admin work.
+      pendingAdmin: existing.pendingAdmin,
+      pullRequest: null,
+      pullRequestError: null,
+      migratedFrom,
+      alreadyOnboarded: true,
+      dryRun,
+      menu,
+      hostPlan,
+    };
+  }
+
+  const files = [...changedFiles, CONFIG_FILE];
+
+  if (dryRun) {
+    return {
+      profile,
+      files,
+      // installGate's plan reports no outcome (it made no host call);
+      // ensureReviewOwnership's are decided locally and worth printing.
+      outcomes: [...gatePlan.outcomes, ...ownershipPlan.outcomes],
+      pendingAdmin: [],
+      pullRequest: null,
+      pullRequestError: null,
+      migratedFrom,
+      alreadyOnboarded: false,
+      dryRun: true,
+      menu,
+      hostPlan,
+    };
+  }
+
+  const gate = await platform.installGate(ref, cwd, gateOptions);
 
   const ownership = menu.sensitivePathReviewers
-    ? await platform.ensureReviewOwnership(ref, cwd, sensitivePathRules(ref.org))
+    ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules)
     : { files: [], outcomes: [] };
 
   const security = await platform.enableSecurityFloor(ref);
@@ -149,60 +292,58 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // unlicensed) and must never be reported as permanently half-onboarded.
   const outcomes = [...gate.outcomes, ...ownership.outcomes, ...security.outcomes, ...policy.outcomes];
   const pendingAdmin = outcomes.filter(isPending).map((o) => o.capability);
-  // render() prunes stale vendor files with rmSync; those deletions must ride
-  // along in the same file list as the writes, or the PR never reflects them.
-  const files = [
-    ...rendered.written,
-    ...rendered.removed,
-    ...commandFiles,
-    ...gate.files,
-    ...ownership.files,
-    CONFIG_FILE,
-  ];
 
-  // Determined before writeConfig, and covering prunes and command files too:
-  // a no-op re-run (nothing rendered, nothing pruned, no command body
-  // changed, already onboarded) must not dirty the working tree with a fresh
-  // onboardedAt/pendingAdmin it will then have nothing to commit. Command
-  // sources ship with the CLI and version independently of
-  // standards/manifest.json, so a content change there must open a PR on its
-  // own even when nothing under standards/ moved.
-  const alreadyOnboarded =
-    existing !== null &&
-    rendered.written.length === 0 &&
-    rendered.removed.length === 0 &&
-    commandFiles.length === 0;
+  writeConfig(cwd, {
+    standardsVersion: manifest.version,
+    cliVersion: CLI_VERSION,
+    host: platform.host,
+    profile,
+    vendors,
+    menu,
+    pendingAdmin,
+    // When the repository joined, not when it was last touched: overwriting
+    // this on every run erased the only record of when the standard landed.
+    onboardedAt: existing?.onboardedAt ?? now().toISOString(),
+    lastRunAt: now().toISOString(),
+  });
 
-  if (!alreadyOnboarded) {
-    writeConfig(cwd, {
-      standardsVersion: manifest.version,
-      cliVersion: CLI_VERSION,
-      host: platform.host,
-      profile,
-      vendors,
-      menu,
-      pendingAdmin,
-      onboardedAt: now().toISOString(),
+  let pullRequest: PullRequestRef | null = null;
+  let pullRequestError: string | null = null;
+  try {
+    pullRequest = await platform.openPullRequest(ref, cwd, {
+      branch: ONBOARD_BRANCH,
+      title: `chore(redline): onboard to standards v${manifest.version}`,
+      body: onboardBody(profile, manifest.version, pendingAdmin),
+      labels: ['redline-sync'],
+      files,
     });
+  } catch (error) {
+    // A usage refusal — a dirty git index — happens before any branch exists
+    // and before anything is pushed. That stays the caller's input error, not
+    // a half-finished onboarding.
+    if (isRedlineError(error) && error.kind === 'usage') throw error;
+    // Everything else: the host mutations and .redline.json above are real and
+    // must not be thrown away. The operator is told where the work sits.
+    pullRequestError = error instanceof Error ? error.message : String(error);
   }
-
-  // Re-running on an already-onboarded repository with nothing new to render
-  // is a no-op report, not a second pull request: never push an empty diff.
-  const pullRequest = alreadyOnboarded
-    ? null
-    : await platform.openPullRequest(ref, cwd, {
-        branch: ONBOARD_BRANCH,
-        title: `chore(redline): onboard to standards v${manifest.version}`,
-        body: onboardBody(profile, manifest.version, pendingAdmin),
-        labels: ['redline-sync'],
-        files,
-      });
   // Work that only exists once the pull request does — labelling it. It is
   // reported, but it cannot reach pendingAdmin: .redline.json records that
   // list and is itself part of the pull request, so it was written above.
   if (pullRequest?.outcomes) outcomes.push(...pullRequest.outcomes);
 
-  return { profile, files, outcomes, pendingAdmin, pullRequest, migratedFrom, alreadyOnboarded };
+  return {
+    profile,
+    files,
+    outcomes,
+    pendingAdmin,
+    pullRequest,
+    pullRequestError,
+    migratedFrom,
+    alreadyOnboarded: false,
+    dryRun: false,
+    menu,
+    hostPlan,
+  };
 }
 
 function onboardBody(profile: string, version: string, pendingAdmin: AdminCapability[]): string {

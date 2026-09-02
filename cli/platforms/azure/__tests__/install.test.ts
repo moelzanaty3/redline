@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGit, type GitRunner } from '../../../core/git.ts';
@@ -933,4 +933,77 @@ test('ensureReviewOwnership reports unsupported on Azure and writes no policy', 
   assert.equal(result.outcomes.length, 1);
   assert.equal(result.outcomes[0]?.status, 'unsupported');
   assert.deepEqual(client.calls, [], 'no host call, so nothing accumulates across re-runs');
+});
+
+// A re-run must leave a matching file alone. The gate yml carries a pinned
+// `redline-cli@<version>`, so under a published CLI every re-run rewrote it
+// and `redline init` — which reads installGate's file list — could not tell a
+// real change from a rewrite of identical bytes.
+test('installGate rewrites nothing and reports no file when the pinned pipeline already matches', async () => {
+  const cwd = tmp();
+  const install = createAzureInstall(fakeAzure(registrationRoutes), gitFor, '3.1.4');
+  const first = await install.installGate(ref, cwd, gateOpts);
+  assert.deepEqual(first.files, ['.azuredevops/redline-gate.yml', '.azuredevops/pull_request_template.md']);
+
+  const second = await install.installGate(ref, cwd, gateOpts);
+  assert.deepEqual(second.files, [], 'an identical pinned pipeline is not a change');
+});
+
+test('a CLI version bump reports the gate pipeline as changed', async () => {
+  const cwd = tmp();
+  await createAzureInstall(fakeAzure(registrationRoutes), gitFor, '3.1.4').installGate(ref, cwd, gateOpts);
+  const bumped = await createAzureInstall(fakeAzure(registrationRoutes), gitFor, '3.2.0').installGate(
+    ref,
+    cwd,
+    gateOpts
+  );
+  assert.deepEqual(bumped.files, ['.azuredevops/redline-gate.yml']);
+  assert.match(readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8'), /redline-cli@3\.2\.0/);
+});
+
+test('installGate in check mode writes nothing and registers no build definition', async () => {
+  const cwd = tmp();
+  const client = fakeAzure(registrationRoutes);
+  const result = await createAzureInstall(client, gitFor, '3.1.4').installGate(ref, cwd, gateOpts, true);
+
+  assert.deepEqual(result.files, ['.azuredevops/redline-gate.yml', '.azuredevops/pull_request_template.md']);
+  assert.deepEqual(result.outcomes, []);
+  assert.deepEqual(client.calls, []);
+  assert.equal(existsSync(join(cwd, '.azuredevops/redline-gate.yml')), false);
+});
+
+// Azure echoes matchKind back with the casing the object was created with: a
+// policy made in the portal comes back as 'Prefix'. Read case-sensitively, a
+// human's `refs/heads/` prefix policy stops looking like it covers `main`,
+// and Redline stacks a second minimum-reviewers policy beside it.
+test('a human prefix-scoped policy is recognised whatever case Azure echoes matchKind in', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    'GET /Payments/_apis/policy/configurations': {
+      status: 200,
+      body: {
+        value: [
+          {
+            id: 51,
+            type: { id: 'min-rev-id' },
+            settings: {
+              minimumApproverCount: 3,
+              displayName: 'Two seniors on every branch',
+              scope: [{ repositoryId: 'repo-guid', refName: 'refs/heads/', matchKind: 'Prefix' }],
+            },
+          },
+        ],
+      },
+    },
+  });
+  const result = await createAzureInstall(client, gitFor).applyPolicy(ref, advisory);
+
+  assert.ok(
+    !client.calls.some(
+      (c) => c.method === 'POST' && (c.body as { type?: { id: string } } | undefined)?.type?.id === 'min-rev-id'
+    ),
+    'a Prefix-scoped human policy already governs main — Redline must not stack a second one'
+  );
+  const mergePolicy = result.outcomes.find((o) => o.capability === 'merge-policy');
+  assert.match(mergePolicy?.detail ?? '', /Two seniors on every branch/);
 });

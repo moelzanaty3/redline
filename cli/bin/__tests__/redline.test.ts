@@ -1,13 +1,13 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../redline.ts';
 import { CLI_VERSION } from '../../core/version.ts';
-import { fakePlatform } from '../../commands/__tests__/fake-platform.ts';
+import { fakePlatform, type FakePlatform } from '../../commands/__tests__/fake-platform.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const BIN = fileURLToPath(new URL('../redline.ts', import.meta.url));
@@ -191,4 +191,54 @@ test('the binary invoked through a symlink with no command exits 2, never silent
   const res = spawnThroughSymlink([]);
   assert.notEqual(res.stdout.trim(), '', 'the binary printed nothing — the entry-point guard did not fire');
   assert.equal(res.status, 2, res.stderr);
+});
+
+// --- init re-run, dry-run and pull-request failure ---------------------------
+
+test('init --dry-run prints the plan, writes nothing and exits 0', async () => {
+  const cwd = repo();
+  const { opts, lines } = deps(cwd);
+  assert.equal(await run(['init', '--dry-run'], opts), 0);
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+  assert.equal(existsSync(join(cwd, 'AGENTS.md')), false);
+  assert.ok(lines.some((l) => l.includes('dry run')));
+  assert.ok(lines.some((l) => l.includes('would write')));
+});
+
+test('a flagless re-run does not demote a repository that was onboarded with --blocking', async () => {
+  const cwd = repo();
+  const first = deps(cwd);
+  assert.equal(await run(['init', '--blocking'], first.opts), 0);
+
+  writeFileSync(join(cwd, 'AGENTS.md'), 'drifted by hand\n');
+  const platforms: FakePlatform[] = [];
+  const second = deps(cwd);
+  assert.equal(
+    await run(['init'], {
+      ...second.opts,
+      resolvePlatform: async () => {
+        const p = fakePlatform();
+        platforms.push(p);
+        return p;
+      },
+    }),
+    0
+  );
+  assert.equal(platforms[0]?.lastPolicy?.blocking, true);
+});
+
+test('a pull request that could not be opened exits 1 and says where the branch is', async () => {
+  const cwd = repo();
+  const { opts, lines } = deps(cwd);
+  const failing = { ...opts, resolvePlatform: async () => fakePlatform({ failPullRequest: true }) };
+  assert.equal(await run(['init'], failing), 1);
+  assert.ok(lines.some((l) => l.includes('redline/onboard') && l.includes('manually')), lines.join('\n'));
+});
+
+test('usage names --dry-run and says what --no-a11y and --speckit actually do', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['--help'], opts);
+  const usage = lines.join('\n');
+  assert.ok(usage.includes('--dry-run'));
+  assert.ok(usage.includes('changes nothing in Phase 1'));
 });

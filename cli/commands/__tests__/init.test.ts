@@ -306,3 +306,193 @@ test('sensitive paths cover every path templates/CODEOWNERS protects', () => {
   const missing = templatePatterns.filter((p) => !generated.includes(p));
   assert.deepEqual(missing, [], 'templates/CODEOWNERS protects paths redline init does not');
 });
+
+// --- Re-run, repair and dry-run --------------------------------------------
+//
+// `redline init` is run again far more often than it is run once: a standards
+// bump, a CLI upgrade, an operator repairing a deleted file. Every scenario
+// below is a second run, and each pins one way the second run used to be
+// dishonest about what it did.
+
+test('a plain re-run preserves the blocking gate the repository already chose', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, menu: { blockingGate: true } });
+
+  // A standards drift makes the second run a real one, so the menu it sends
+  // to the host is observable.
+  writeFileSync(join(cwd, 'AGENTS.md'), 'drifted by hand\n');
+  const second = fakePlatform();
+  await init(second, { cwd, root, now });
+
+  assert.equal(second.lastPolicy?.blocking, true, 'a flagless re-run must not demote the gate to advisory');
+  assert.equal(readConfig(cwd)?.menu.blockingGate, true);
+});
+
+test('an explicit flag on a re-run still overrides what the config recorded', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, menu: { blockingGate: true } });
+
+  const second = fakePlatform();
+  await init(second, { cwd, root, now, menu: { blockingGate: false } });
+
+  assert.equal(second.lastPolicy?.blocking, false);
+  assert.equal(readConfig(cwd)?.menu.blockingGate, false);
+});
+
+test('promoting a settled repository to blocking is a real run, not an already-onboarded no-op', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now, menu: { blockingGate: true } });
+
+  assert.equal(report.alreadyOnboarded, false, 'a menu change must not be swallowed as "nothing to change"');
+  assert.equal(second.lastPolicy?.blocking, true);
+  assert.ok(second.applied.includes('openPullRequest'));
+});
+
+test('a no-op re-run makes zero platform calls', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, true);
+  assert.deepEqual(second.applied, [], 'a settled repository must not have a single host setting rewritten');
+  assert.ok(second.planned.includes('installGate'), 'the file diff is still computed, without writing');
+});
+
+test('a deleted gate workflow and CODEOWNERS are repaired in a pull request, not reported as nothing to change', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  rmSync(join(cwd, '.github/workflows/redline.yml'));
+  rmSync(join(cwd, '.github/CODEOWNERS'));
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, false);
+  assert.ok(report.pullRequest !== null, 'a repaired file must ride out in a pull request');
+  assert.ok(report.files.includes('.github/workflows/redline.yml'));
+  assert.ok(report.files.includes('.github/CODEOWNERS'));
+  assert.ok(existsSync(join(cwd, '.github/workflows/redline.yml')));
+});
+
+test('a gate file rewritten by a CLI upgrade opens a pull request instead of dirtying the tree silently', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  // What a version-pinned gate template looks like after a CLI bump: same
+  // path, different bytes. The old alreadyOnboarded ignored gate.files
+  // entirely and left this modified tracked file behind with no PR.
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'pinned to an older redline-cli\n');
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, false);
+  assert.ok(report.files.includes('.github/workflows/redline.yml'));
+  assert.ok(second.applied.includes('openPullRequest'));
+});
+
+test('onboardedAt survives a re-run while lastRunAt moves', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.equal(readConfig(cwd)?.onboardedAt, '2026-09-01T00:00:00.000Z');
+
+  writeFileSync(join(cwd, 'AGENTS.md'), 'drifted by hand\n');
+  const later = (): Date => new Date('2026-10-05T12:00:00.000Z');
+  await init(fakePlatform(), { cwd, root, now: later });
+
+  const config = readConfig(cwd);
+  assert.equal(config?.onboardedAt, '2026-09-01T00:00:00.000Z', 'onboardedAt is when the repo joined, once');
+  assert.equal(config?.lastRunAt, '2026-10-05T12:00:00.000Z');
+});
+
+test('--dry-run writes nothing, touches no host setting, and still reports the full plan', async () => {
+  const cwd = repo();
+  const platform = fakePlatform();
+  const report = await init(platform, { cwd, root, now, dryRun: true });
+
+  assert.deepEqual(platform.applied, [], 'a dry run must not change a single repository setting');
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+  assert.equal(existsSync(join(cwd, 'AGENTS.md')), false);
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false);
+  assert.equal(report.dryRun, true);
+  assert.ok(report.files.length > 0, 'the plan must name the files it would write');
+  assert.ok(report.files.includes('.redline.json'));
+  assert.ok(report.hostPlan.length > 0, 'the plan must name the host settings it would change');
+});
+
+test('--dry-run on a settled repository reports it as already onboarded and writes nothing', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  const before = readFileSync(join(cwd, '.redline.json'), 'utf8');
+
+  const platform = fakePlatform();
+  const report = await init(platform, { cwd, root, now, dryRun: true });
+
+  assert.equal(report.alreadyOnboarded, true);
+  assert.deepEqual(platform.applied, []);
+  assert.equal(readFileSync(join(cwd, '.redline.json'), 'utf8'), before);
+});
+
+test('accessibility defaults on for a web profile and off for one with no user interface', async () => {
+  const web = repo();
+  await init(fakePlatform(), { cwd: web, root, now });
+  assert.equal(readConfig(web)?.menu.accessibility, true);
+
+  const infra = repo();
+  await init(fakePlatform(), { cwd: infra, root, now, profile: 'infra' });
+  assert.equal(readConfig(infra)?.menu.accessibility, false, 'terraform has no accessibility rules to record');
+});
+
+test('a 2.1 migration stages the removal of the 2.1-era sync workflow and scripts', async () => {
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/workflows/redline.yml': 'name: Redline 2.1\n',
+    '.github/workflows/redline-sync.yml': 'name: Redline sync 2.1\n',
+    'scripts/redline-install.sh': '#!/bin/sh\n',
+    'scripts/deploy.sh': '#!/bin/sh\n',
+  });
+
+  const report = await init(fakePlatform(), { cwd, root, now });
+
+  assert.equal(report.migratedFrom, '2.1');
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline-sync.yml')), false);
+  assert.equal(existsSync(join(cwd, 'scripts/redline-install.sh')), false);
+  assert.ok(existsSync(join(cwd, 'scripts/deploy.sh')), 'a script that is not Redline 2.1 is never touched');
+  assert.ok(report.files.includes('.github/workflows/redline-sync.yml'));
+  assert.ok(report.files.includes('scripts/redline-install.sh'));
+});
+
+test('a pull request that cannot be opened is reported, not thrown, and the config still records onboarding', async () => {
+  const cwd = repo();
+  const platform = fakePlatform({ failPullRequest: true });
+  const report = await init(platform, { cwd, root, now });
+
+  assert.equal(report.pullRequest, null);
+  assert.match(report.pullRequestError ?? '', /nothing to commit/);
+  assert.equal(report.alreadyOnboarded, false);
+  assert.ok(existsSync(join(cwd, '.redline.json')), 'the host mutations were real — the config must record them');
+});
+
+test('a label refused after the pull request exists is reported but never becomes pending admin work', async () => {
+  const cwd = repo();
+  const platform = fakePlatform({
+    pullRequestOutcomes: [
+      { capability: 'labels', status: 'denied', detail: 'pull request label "redline-sync" (needs admin)' },
+    ],
+  });
+  const report = await init(platform, { cwd, root, now });
+
+  assert.ok(
+    report.outcomes.some((o) => o.capability === 'labels' && o.status === 'denied'),
+    'post-PR work must reach the report an operator reads'
+  );
+  assert.ok(
+    !report.pendingAdmin.includes('labels'),
+    '.redline.json is written before the PR exists, so this can never be recorded as pending'
+  );
+  assert.ok(!readConfig(cwd)?.pendingAdmin.includes('labels'));
+});

@@ -11,8 +11,12 @@ pass it through:
 
 - a stack override: `--profile <name>`
 - a blocking rather than advisory gate: `--blocking`
-- skip the accessibility standard: `--no-a11y`
-- scaffold SpecKit: `--speckit`
+- the plan only, writing nothing and changing no repository setting: `--dry-run`
+- `--no-a11y` and `--speckit` are recorded in `.redline.json` for later phases; they change
+  nothing in Phase 1, so do not describe them to the engineer as having taken effect
+
+Flags you do not pass keep whatever `.redline.json` already recorded — re-running without
+`--blocking` on a repository onboarded with it does not demote the gate.
 
 When it finishes, tell them three things and nothing else:
 

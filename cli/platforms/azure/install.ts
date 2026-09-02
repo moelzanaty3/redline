@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RedlineError } from '../../core/errors.ts';
@@ -197,10 +197,23 @@ function worstOutcome(outcomes: CapabilityOutcome[]): CapabilityOutcome {
   );
 }
 
-function writeFile(cwd: string, relPath: string, contents: string): void {
+// Writes only when the bytes differ, and answers whether they did — same
+// contract as cli/platforms/github/install.ts and cli/render/standards.ts.
+// The gate template carries a pinned `redline-cli@<version>`, so under a
+// published CLI an unconditional write rewrote this file on every single run:
+// `redline init` reads the returned file list to decide whether a re-run has
+// anything to do, and an always-dirty gate file made that decision worthless
+// in one direction and, once the list was ignored, left a modified tracked
+// file behind with no pull request in the other. `check` computes the answer
+// and writes nothing.
+function syncFile(cwd: string, relPath: string, contents: string, check: boolean): boolean {
   const target = join(cwd, relPath);
+  const current = existsSync(target) ? readFileSync(target, 'utf8') : null;
+  if (current === contents) return false;
+  if (check) return true;
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, contents);
+  return true;
 }
 
 export function createAzureInstall(
@@ -380,7 +393,13 @@ export function createAzureInstall(
           // default branch.
           if (refName === undefined || refName === null) return true;
           if (typeof refName !== 'string') return false;
-          return entry['matchKind'] === 'prefix'
+          // Azure echoes matchKind back with whatever casing the object was
+          // created with: a policy made through the portal returns 'Prefix'.
+          // Compared case-sensitively, a human's `refs/heads/` prefix policy
+          // stops looking like it covers the default branch and Redline
+          // stacks a second policy beside it.
+          const matchKind = entry['matchKind'];
+          return typeof matchKind === 'string' && matchKind.toLowerCase() === 'prefix'
             ? defaultRef.startsWith(refName)
             : refName === defaultRef;
         });
@@ -557,6 +576,11 @@ export function createAzureInstall(
         const humanOwned =
           match === undefined && wantedPolicy.oneSettingPerBranch === true ? sameType[0] : undefined;
         if (humanOwned) {
+          // Backing off a control that is what queues the gate means nothing
+          // Redline registered can publish `redline/gate`, so everything
+          // written after this must drop to advisory — a blocking Status
+          // policy with no publisher blocks every pull request forever.
+          if (wantedPolicy.runsTheGate === true) effectiveBlocking = false;
           results.push({
             capability: 'merge-policy',
             status: 'already',
@@ -589,7 +613,13 @@ export function createAzureInstall(
       };
     },
 
-    async installGate(ref: RepoRef, cwd: string, opts: GateOptions): Promise<InstallResult> {
+    async installGate(
+      ref: RepoRef,
+      cwd: string,
+      opts: GateOptions,
+      check = false
+    ): Promise<InstallResult> {
+      const files: string[] = [];
       const pipeline = readFileSync(join(PACKAGE_ROOT, 'platforms/azure/gate-template.yml'), 'utf8')
         .replace(/ADR_DIFF_THRESHOLD: \d+/, `ADR_DIFF_THRESHOLD: ${opts.adrDiffThreshold}`)
         .replace(
@@ -605,13 +635,19 @@ export function createAzureInstall(
         cliVersion === UNPUBLISHED_VERSION
           ? pipeline
           : pipeline.replace('redline-cli@latest', `redline-cli@${cliVersion}`);
-      writeFile(cwd, '.azuredevops/redline-gate.yml', pinned);
+      if (syncFile(cwd, '.azuredevops/redline-gate.yml', pinned, check)) {
+        files.push('.azuredevops/redline-gate.yml');
+      }
 
       const template = readFileSync(
         join(PACKAGE_ROOT, 'templates/azure/pull_request_template.md'),
         'utf8'
       );
-      writeFile(cwd, '.azuredevops/pull_request_template.md', template);
+      if (syncFile(cwd, '.azuredevops/pull_request_template.md', template, check)) {
+        files.push('.azuredevops/pull_request_template.md');
+      }
+
+      if (check) return { files, outcomes: [] };
 
       // Azure Repos ignores the YAML `pr:` trigger, so writing the pipeline
       // file alone runs nothing: the definition must be registered so the
@@ -619,7 +655,7 @@ export function createAzureInstall(
       const gate = await ensureGateBuildDefinition(ref);
 
       return {
-        files: ['.azuredevops/redline-gate.yml', '.azuredevops/pull_request_template.md'],
+        files,
         // No `labels` outcome here: Azure creates pull request labels on use
         // rather than pre-declaring them, so the capability is only exercised
         // when openPullRequest applies them — and it reports it there.

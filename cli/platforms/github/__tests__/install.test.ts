@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeGitHubClient } from '../../__tests__/fake-client.ts';
@@ -490,4 +490,50 @@ test('a blocking ruleset requires the gate check even when the caller names none
   const rules = (create?.body as { rules: { type: string; parameters?: Record<string, unknown> }[] }).rules;
   const checks = rules.find((r) => r.type === 'required_status_checks');
   assert.deepEqual(checks?.parameters?.['required_status_checks'], [{ context: REQUIRED_CHECK }]);
+});
+
+// A re-run must leave a matching file alone. `redline init` folds installGate's
+// file list into its already-onboarded decision, so a file reported as written
+// when its bytes did not change means a modified tracked file left behind with
+// no pull request to carry it.
+test('installGate rewrites nothing and reports no file when the workflow already matches', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  await install.installGate(ref, cwd, gateOpts);
+  const stamp = statSync(join(cwd, '.github/workflows/redline.yml')).mtimeMs;
+
+  const second = await install.installGate(ref, cwd, gateOpts);
+
+  assert.deepEqual(second.files, []);
+  assert.equal(statSync(join(cwd, '.github/workflows/redline.yml')).mtimeMs, stamp);
+});
+
+test('installGate reports only the file whose content actually changed', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  await install.installGate(ref, cwd, gateOpts);
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'left over from an older CLI\n');
+
+  const second = await install.installGate(ref, cwd, gateOpts);
+  assert.deepEqual(second.files, ['.github/workflows/redline.yml']);
+});
+
+test('installGate in check mode writes nothing and makes no host call', async () => {
+  const cwd = tmp();
+  const client = fakeGitHubClient();
+  const result = await createGitHubInstall(client, gitFor).installGate(ref, cwd, gateOpts, true);
+
+  assert.deepEqual(result.files, ['.github/workflows/redline.yml', '.github/pull_request_template.md']);
+  assert.deepEqual(result.outcomes, [], 'a plan must not report work that was never done');
+  assert.deepEqual(client.calls, []);
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false);
+});
+
+test('ensureReviewOwnership in check mode reports the file it would seed without writing it', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  const result = await install.ensureReviewOwnership(ref, cwd, [{ pattern: '/AGENTS.md', owners: ['@acme/team'] }], true);
+
+  assert.deepEqual(result.files, ['.github/CODEOWNERS']);
+  assert.equal(existsSync(join(cwd, '.github/CODEOWNERS')), false);
 });

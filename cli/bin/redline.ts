@@ -6,7 +6,8 @@ import { CLI_VERSION } from '../core/version.ts';
 import { createLog, type Sink } from '../core/log.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
 import { resolvePlatform as defaultResolvePlatform } from '../platforms/resolve.ts';
-import { init } from '../commands/init.ts';
+import { init, ONBOARD_BRANCH } from '../commands/init.ts';
+import type { MenuSelections } from '../config/redline-json.ts';
 import { verify } from '../commands/verify.ts';
 import type { Platform } from '../platforms/types.ts';
 
@@ -15,8 +16,12 @@ const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const USAGE = [
   'redline — engineering control plane',
   '',
-  '  redline init [--profile <name>] [--blocking] [--no-a11y] [--speckit]',
+  '  redline init [--profile <name>] [--blocking] [--no-a11y] [--speckit] [--dry-run]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
+  '      --dry-run   print the plan; writes nothing and changes no repository setting',
+  '      --blocking  promote the merge gate from advisory to blocking',
+  '      --no-a11y, --speckit  recorded in .redline.json for later phases; changes nothing in Phase 1',
+  '      omitted flags keep whatever .redline.json already recorded',
   '',
   '  redline verify [--gate]',
   '      check this repository still matches what .redline.json claims',
@@ -65,30 +70,51 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const { values } = parseCliArgs(() =>
         parseArgs({
           args: rest,
+          // No `default`: parseArgs then leaves an untyped flag `undefined`,
+          // which is how init() tells "the user asked for advisory" from "the
+          // user said nothing, keep what the repository already chose". A
+          // default here silently demoted every --blocking repo on its next
+          // plain re-run.
           options: {
             profile: { type: 'string' },
-            blocking: { type: 'boolean', default: false },
-            'no-a11y': { type: 'boolean', default: false },
-            speckit: { type: 'boolean', default: false },
+            blocking: { type: 'boolean' },
+            'no-a11y': { type: 'boolean' },
+            speckit: { type: 'boolean' },
+            'dry-run': { type: 'boolean' },
           },
           allowPositionals: false,
         })
       );
+
+      const menu: Partial<MenuSelections> = {};
+      if (values.blocking !== undefined) menu.blockingGate = values.blocking;
+      if (values['no-a11y'] !== undefined) menu.accessibility = !values['no-a11y'];
+      if (values.speckit !== undefined) menu.speckit = values.speckit;
 
       const platform = await resolve(cwd);
       const report = await init(platform, {
         cwd,
         root,
         ...(values.profile ? { profile: values.profile } : {}),
-        menu: {
-          blockingGate: values.blocking === true,
-          accessibility: values['no-a11y'] !== true,
-          speckit: values.speckit === true,
-        },
+        ...(values['dry-run'] === true ? { dryRun: true } : {}),
+        menu,
       });
 
       log.info(`profile ${report.profile}`);
       if (report.migratedFrom) log.info(`migrated from ${report.migratedFrom}`);
+
+      if (report.dryRun) {
+        log.info('dry run — nothing was written and no repository setting was changed');
+        if (report.alreadyOnboarded) {
+          log.info('already onboarded — nothing to change');
+          return 0;
+        }
+        for (const file of report.files) log.info(`  would write  ${file}`);
+        for (const step of report.hostPlan) log.info(`  would apply  ${step}`);
+        for (const [key, value] of Object.entries(report.menu)) log.info(`  menu   ${key}: ${value}`);
+        return 0;
+      }
+
       for (const file of report.files) log.info(`  write  ${file}`);
       for (const outcome of report.outcomes) {
         log.info(`  ${outcome.status.padEnd(11)} ${outcome.capability}  ${outcome.detail}`);
@@ -97,6 +123,19 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         log.warn(
           `partially onboarded — an administrator must still enable: ${report.pendingAdmin.join(', ')}`
         );
+      }
+      // The host settings and .redline.json are already written — only the
+      // review vehicle is missing. That is `failed` (1), not host (4): there
+      // is nothing to retry, there is a branch to open a pull request from.
+      // The hint does not assert the push succeeded, because the same wrap
+      // catches a git step that failed before it: the error line above is the
+      // git error itself, which already says where the work was left.
+      if (report.pullRequestError !== null) {
+        log.error(
+          `could not open the pull request: ${report.pullRequestError}`,
+          `the Redline changes are on branch ${ONBOARD_BRANCH} — push it if it is not already on origin, then open the pull request manually`
+        );
+        return exitCodeFor('failed');
       }
       if (report.pullRequest) log.info(`pull request: ${report.pullRequest.url}`);
       else if (report.alreadyOnboarded) log.info('already onboarded — nothing to change');

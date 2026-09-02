@@ -20,6 +20,7 @@ const valid: RedlineConfig = {
   },
   pendingAdmin: ['secret-scanning'],
   onboardedAt: '2026-09-01T00:00:00.000Z',
+  lastRunAt: '2026-09-02T00:00:00.000Z',
 };
 
 test('parses a valid config', () => {
@@ -64,4 +65,11 @@ test('a corrupt config is a failure, not a silent null', (t) => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   writeFileSync(join(dir, CONFIG_FILE), '{ not json');
   assert.throws(() => readConfig(dir), /\.redline\.json/);
+});
+
+// Repositories onboarded before lastRunAt existed must keep re-running: the
+// field is derived from onboardedAt rather than rejected as invalid.
+test('a config written before lastRunAt existed parses, dating the last run to onboarding', () => {
+  const { lastRunAt: _lastRunAt, ...legacy } = valid;
+  assert.equal(parseConfig(legacy).lastRunAt, valid.onboardedAt);
 });

@@ -48,6 +48,9 @@ export interface RenderCommandsOptions {
   root: string;
   out: string;
   hosts: string[];
+  // Report which files would change and write none of them, matching
+  // render()'s own check mode — what `redline init --dry-run` plans with.
+  check?: boolean;
 }
 
 export function renderCommands(opts: RenderCommandsOptions): string[] {
@@ -68,8 +71,10 @@ export function renderCommands(opts: RenderCommandsOptions): string[] {
       const current = existsSync(target) ? readFileSync(target, 'utf8') : null;
       const next = `${body.trimEnd()}\n`;
       if (current === next) continue;
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, next);
+      if (!opts.check) {
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, next);
+      }
       written.push(path);
     }
   }

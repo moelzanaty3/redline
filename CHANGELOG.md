@@ -134,6 +134,45 @@ Record seed scores here. A standards change with no measurement is an opinion.
   every repository using Redline gets a pull request when a standard changes, which is
   Phase 3 work — it now says a repository picks the change up the next time someone runs
   `redline init` there. "Count which ones keep firing" lost its implied built-in report.
+- `redline init` is now honest about a re-run. The menu is resolved as defaults ← what
+  `.redline.json` already recorded ← only the flags the operator actually typed, so a
+  plain `redline init` on a repository onboarded with `--blocking` no longer demotes its
+  live ruleset back to advisory while the config still claims blocking (the same reset
+  hit `--no-a11y` and `--speckit`). The whole file diff — rendered standards, command
+  files, the gate workflow and CODEOWNERS — is now computed *before* the first host call,
+  so a settled repository re-run changes zero repository settings instead of rewriting
+  four of them to discover it had nothing to do. Conversely, a repair (someone deleted
+  CODEOWNERS or the gate workflow) and a CLI-version bump that repins the gate template
+  now open a pull request instead of reporting "already onboarded — nothing to change"
+  and leaving a modified tracked file behind: `installGate` and `ensureReviewOwnership`
+  compare content before writing and report only the files that actually changed, and a
+  menu change alone is a real run.
+- `redline init --dry-run` prints the plan — the files it would write, the repository
+  settings it would change and the resolved menu — and exits 0 having written nothing and
+  called no host endpoint. `--no-a11y` and `--speckit` now say in the usage text what they
+  really do: they are recorded in `.redline.json` for later phases and change nothing in
+  Phase 1. `accessibility` defaults from the resolved stacks rather than being `true`
+  everywhere, so a Terraform or Go repository no longer records a commitment to rules that
+  are never rendered there.
+- `.redline.json` gained `lastRunAt`, and `onboardedAt` now records when the repository
+  joined rather than being overwritten on every run. A config written before `lastRunAt`
+  existed still parses; the field reads back as `onboardedAt`.
+- A pull request that cannot be opened after the host settings and `.redline.json` are
+  already written is now reported instead of thrown: the CLI names the cause, says the
+  `redline/onboard` branch is pushed and to open the pull request by hand, and exits 1
+  (`failed`) rather than 4. The onboarded state is still recorded, because the host
+  mutations really happened. A dirty git index still refuses up front with exit 2.
+- Migrating a 2.1 repository now stages the removal of what 2.1 left behind that v3 does
+  not write — `.github/workflows/redline-sync.yml` and `scripts/redline-*.sh` — into the
+  same pull request, so a 2.1 sync workflow cannot keep running against a repository that
+  has moved on.
+- Azure branch-policy scope matching lowercases `matchKind` before comparing: Azure echoes
+  it back with the casing the object was created with, so a human's `refs/heads/`-prefix
+  policy created in the portal comes back as `Prefix`, was not recognised as covering the
+  default branch, and got a second Redline policy stacked beside it. Backing off a
+  human-owned control that is what queues the gate now degrades the gate to advisory
+  before the back-off, so a blocking status can never be written with nothing able to
+  publish it.
 
 ## 3.0.0 — 2026-09-02
 

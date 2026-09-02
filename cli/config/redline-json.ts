@@ -21,10 +21,15 @@ export interface RedlineConfig {
   vendors: string[];
   menu: MenuSelections;
   pendingAdmin: AdminCapability[];
+  // When this repository joined the standard. Set once and carried forward by
+  // every later run, so a re-run cannot rewrite the repository's own history.
   onboardedAt: string;
+  // When `redline init` last did real work here. Absent in configs written
+  // before the field existed, where it reads back as onboardedAt.
+  lastRunAt: string;
 }
 
-const MENU_KEYS: (keyof MenuSelections)[] = [
+export const MENU_KEYS: (keyof MenuSelections)[] = [
   'blockingGate',
   'adrForLargeDiffs',
   'accessibility',
@@ -68,6 +73,10 @@ export function parseConfig(raw: unknown): RedlineConfig {
     }
   }
 
+  const onboardedAt = str('onboardedAt');
+  const lastRunRaw = o['lastRunAt'];
+  const lastRunAt = typeof lastRunRaw === 'string' && lastRunRaw !== '' ? lastRunRaw : onboardedAt;
+
   return {
     standardsVersion: str('standardsVersion'),
     cliVersion: str('cliVersion'),
@@ -76,7 +85,8 @@ export function parseConfig(raw: unknown): RedlineConfig {
     vendors: vendors as string[],
     menu,
     pendingAdmin: pending as AdminCapability[],
-    onboardedAt: str('onboardedAt'),
+    onboardedAt,
+    lastRunAt,
   };
 }
 
