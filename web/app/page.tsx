@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { Counter } from "@/components/counter";
 import { Reveal } from "@/components/reveal";
+import { ValueCase } from "@/components/value-case";
 import { ValueViz } from "@/components/value-viz";
 import { loadManifest } from "@/lib/manifest";
 import { getRules } from "@/lib/rules";
@@ -61,6 +62,8 @@ export default function Home() {
       </section>
 
       <ValueViz />
+
+      <ValueCase />
 
       <section className="works-with">
         <div className="container inner">

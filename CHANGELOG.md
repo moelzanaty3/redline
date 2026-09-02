@@ -86,6 +86,15 @@ Record seed scores here. A standards change with no measurement is an opinion.
   tile is counted from `seeded/` using the marker convention `scripts/score-seeds.mjs`
   parses (it read 105; the corpus holds 106), and the `100%` tile now says on its face that
   it is the target the corpus is scored against, not a measurement.
+- The web home page now states the value proposition it was missing, in a section after
+  the mechanism block: four problem/answer pairs (the rules never reach the AI writing
+  the code; every reviewer draws the line somewhere else; a check gets switched off and
+  forgotten; a standard nobody can revise is one nobody follows), each with what it costs
+  today and what Redline changes. The argument is made from mechanism and real counts
+  only: every figure on it (rule sets, project types, AI-tool formats, severity levels,
+  rule and id totals, standards version) is read from `standards/` at build time through
+  `web/lib/manifest.ts` and `web/lib/rules.ts`. No time-saved, defect-reduction or
+  adoption figure appears, because Phase 1 ships no telemetry to support one.
 
 ## 3.0.0 — 2026-09-02
 
