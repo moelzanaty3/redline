@@ -1,13 +1,22 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCommands, renderCommands } from '../commands.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const tmp = (): string => mkdtempSync(join(tmpdir(), 'redline-commands-'));
+const createdDirs: string[] = [];
+after(() => {
+  for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+const tmp = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-commands-'));
+  createdDirs.push(dir);
+  return dir;
+};
 
 test('both command sources load with a name and description', () => {
   const commands = loadCommands(root).sort((a, b) => a.name.localeCompare(b.name));

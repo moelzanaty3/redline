@@ -1,6 +1,7 @@
 import { RedlineError } from '../../core/errors.ts';
 import { createGit, type Git } from '../../core/git.ts';
 import { parseRemote } from '../detect.ts';
+import { isNonNullObject } from '../shape.ts';
 import type { Platform, RepoRef } from '../types.ts';
 import type { AzureClient } from './client.ts';
 import { createAzureInstall } from './install.ts';
@@ -9,12 +10,6 @@ import { createAzureVerify } from './verify.ts';
 export interface AzurePlatformOptions {
   client: AzureClient;
   gitFor?: (cwd: string) => Git;
-}
-
-// Same untrusted-input posture as github/index.ts: the repository body is
-// typed unknown and narrowed explicitly, never asserted with `as`.
-function isNonNullObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function createAzurePlatform(opts: AzurePlatformOptions): Platform {
