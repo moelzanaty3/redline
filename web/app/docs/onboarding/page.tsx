@@ -78,19 +78,22 @@ export default function Page() {
         <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli verify</span>{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">onboarded</span>              profile web, standards v0.0.1{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">merge-policy</span>           policy is advisory, config says advisory{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">check-name-reported</span>    <span className="tk-blue">redline-gate / gate</span> reported on PR #42{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">check-name-reported</span>    no required check configured yet (advisory gate) — PR #42 reported: <span className="tk-blue">redline-gate / gate</span>{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">security-floor</span>         security floor enabled{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">artifacts-current</span>      rendered artifacts match standards v0.0.1{"\n"}
         <span className="tk-red">FAIL</span> <span className="tk-dim">pending-admin</span>          partially onboarded — an administrator must still enable: dependency-alerts
       </CodeWindow>
       <p>
-        Five checks: the repo is onboarded at all; the required check name has
+        Six checks: the repo is onboarded at all; the required check name has
         actually been reported on a real pull request (skipped, not failed, on
         a repo with no PR yet — a fresh repo isn&apos;t drifted, it&apos;s
-        just new); the live merge policy matches the menu; the security floor
-        is still on; and rendered artifacts aren&apos;t stale. Run it on
-        demand, or wire <code>redline verify --gate</code> into CI — it&apos;s
-        the same checks, exiting non-zero on failure.
+        just new — and in Phase 1 nothing is marked <em>required</em> yet, so
+        this only confirms the name is being reported at all); the live merge
+        policy matches the menu; the security floor is still on; rendered
+        artifacts aren&apos;t stale; and nothing is still waiting on an
+        administrator. Run it on demand, or wire{" "}
+        <code>redline verify --gate</code> into CI — it&apos;s the same
+        checks, exiting non-zero on failure.
       </p>
 
       <h2>Exit codes</h2>
