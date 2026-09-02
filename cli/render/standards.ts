@@ -4,6 +4,7 @@ import { loadManifest } from './manifest.ts';
 import { resolveProfile } from './profile.ts';
 import { wrapBlock } from './markers.ts';
 import { VENDORS, type PruneRule, type RenderedFile } from './vendors.ts';
+import { RedlineError } from '../core/errors.ts';
 
 export interface RenderOptions {
   root: string;
@@ -38,7 +39,7 @@ export function render(opts: RenderOptions): RenderResult {
   for (const name of selected) {
     const renderer = VENDORS[name];
     if (!renderer) {
-      throw new Error(`unknown vendor "${name}". Known: ${Object.keys(VENDORS).join(', ')}`);
+      throw new RedlineError('usage', `unknown vendor "${name}". Known: ${Object.keys(VENDORS).join(', ')}`);
     }
     const result = renderer({ manifest, root, profile: resolved.profile, stacks: resolved.stacks });
     for (const [path, file] of result.files) planned.set(path, file);

@@ -118,7 +118,7 @@ test('a host RedlineError exits 4', async () => {
   assert.ok(lines.some((l) => l.includes('GitHub returned HTTP 502')));
 });
 
-test('an unknown profile throws a plain Error and exits 2 without a stack trace', async () => {
+test('an unknown profile is a usage RedlineError and exits 2 without a stack trace', async () => {
   const cwd = repo();
   const { opts, lines } = deps(cwd);
   assert.equal(await run(['init', '--profile', 'not-a-real-profile'], opts), 2);

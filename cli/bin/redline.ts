@@ -110,12 +110,12 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       log.error(error.message, error.hint);
       return error.exitCode;
     }
-    // Not a RedlineError: in ordinary use the only sources are resolveProfile
-    // (unknown profile) and render() (unknown vendor) in cli/render/ — both
-    // deliberately still plain Error ahead of Task 21 — plus node:util
-    // parseArgs rejecting an unrecognised flag. All three are bad input, so
-    // they get the usage exit code rather than being mistaken for a host
-    // outage (4) or a permission failure (3) that implies an admin can fix it.
+    // Not a RedlineError: resolveProfile (unknown profile) and render()
+    // (unknown vendor) in cli/render/ throw RedlineError('usage', ...) as of
+    // Task 21, so the only remaining source here is node:util parseArgs
+    // rejecting an unrecognised flag. That is bad input, so it gets the usage
+    // exit code rather than being mistaken for a host outage (4) or a
+    // permission failure (3) that implies an admin can fix it.
     log.error(error instanceof Error ? error.message : String(error));
     return exitCodeFor('usage');
   }
