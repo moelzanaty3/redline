@@ -7,6 +7,7 @@ import { scanRepo } from '../detect/scan.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { resolveProfile } from '../render/profile.ts';
 import { render } from '../render/standards.ts';
+import { renderCommands, COMMAND_HOSTS } from '../render/commands.ts';
 import { isPending } from '../platforms/types.ts';
 import type {
   AdminCapability,
@@ -85,6 +86,11 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // Files first, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
   const rendered = render({ root, profile, out: cwd, vendors });
+  const commandFiles = renderCommands({
+    root,
+    out: cwd,
+    hosts: vendors.flatMap((v) => (v in COMMAND_HOSTS ? [v] : [])),
+  });
 
   const gate = await platform.installGate(ref, cwd, {
     ...FLOOR_GATE,
@@ -113,7 +119,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const pendingAdmin = outcomes.filter(isPending).map((o) => o.capability);
   // render() prunes stale vendor files with rmSync; those deletions must ride
   // along in the same file list as the writes, or the PR never reflects them.
-  const files = [...rendered.written, ...rendered.removed, ...gate.files, ...ownership.files, CONFIG_FILE];
+  const files = [
+    ...rendered.written,
+    ...rendered.removed,
+    ...commandFiles,
+    ...gate.files,
+    ...ownership.files,
+    CONFIG_FILE,
+  ];
 
   // Determined before writeConfig, and covering prunes too: a no-op re-run
   // (nothing rendered, nothing pruned, already onboarded) must not dirty the
