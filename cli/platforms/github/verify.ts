@@ -8,20 +8,9 @@ import type {
 } from '../types.ts';
 import type { GitHubClient } from './client.ts';
 import { RULESET_NAME } from './install.ts';
+import { createHostShapeError, isNonNullObject } from '../shape.ts';
 
-// GitHub response bodies are untrusted external input: the transport (http.ts)
-// only guarantees valid JSON, never a particular shape. Every body is typed
-// `unknown` here and narrowed by an explicit parse function below, in the
-// house style of cli/render/manifest.ts — never a bare `as` onto a concrete
-// GitHub type.
-
-function isNonNullObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function hostShapeError(what: string): RedlineError {
-  return new RedlineError('host', `GitHub returned an unexpected shape for ${what}`);
-}
+const hostShapeError = createHostShapeError('GitHub');
 
 function assertOk(status: number, path: string): void {
   if (status < 200 || status >= 300) {

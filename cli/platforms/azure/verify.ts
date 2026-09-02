@@ -8,6 +8,7 @@ import type {
 } from '../types.ts';
 import type { AzureClient } from './client.ts';
 import { POLICY_TYPE_NAMES, resolvePolicyTypeIds } from './policy-types.ts';
+import { createHostShapeError, isNonNullObject, isSuccess } from '../shape.ts';
 
 // Azure response bodies are untrusted external input, same house style as
 // cli/platforms/github/verify.ts and cli/platforms/azure/install.ts: typed
@@ -17,17 +18,7 @@ import { POLICY_TYPE_NAMES, resolvePolicyTypeIds } from './policy-types.ts';
 // fires on it, so shape is verified with `Array.isArray`/`isNonNullObject`,
 // not coercion.
 
-function isNonNullObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isSuccess(status: number): boolean {
-  return status >= 200 && status < 300;
-}
-
-function hostShapeError(what: string): RedlineError {
-  return new RedlineError('host', `Azure DevOps returned an unexpected shape for ${what}`);
-}
+const hostShapeError = createHostShapeError('Azure DevOps');
 
 function assertOk(status: number, path: string): void {
   if (!isSuccess(status)) {

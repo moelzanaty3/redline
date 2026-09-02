@@ -1,4 +1,5 @@
 import type { AzureClient } from './client.ts';
+import { isNonNullObject, isSuccess } from '../shape.ts';
 
 // CONTRACT: the gate pipeline (platforms/azure/gate-template.yml) publishes a
 // pull-request status with this genre and name. The Status policy this file
@@ -24,14 +25,6 @@ export const POLICY_TYPE_FALLBACK: Record<string, string> = {
   Status: 'cbdc66da-9728-4af8-aada-9a5a32e4a226',
   'Required reviewers': 'fd2167ab-b0be-447a-8ec8-39368250530e',
 };
-
-function isSuccess(status: number): boolean {
-  return status >= 200 && status < 300;
-}
-
-function isNonNullObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 interface PolicyType {
   id: string;

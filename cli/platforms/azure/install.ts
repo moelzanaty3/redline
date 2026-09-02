@@ -24,6 +24,7 @@ import {
   POLICY_TYPE_NAMES,
   resolvePolicyTypeIds,
 } from './policy-types.ts';
+import { isNonNullObject, isSuccess } from '../shape.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -39,14 +40,6 @@ const ADVSEC = { host: 'advsec', apiVersion: '7.2-preview.1' } as const;
 // Azure error body is a truthy object (e.g. `{ message: "Forbidden" }`), not
 // an array — `?? []` never fires on it, so shape is verified with
 // `Array.isArray`/`isNonNullObject`, not coercion.
-
-function isNonNullObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isSuccess(status: number): boolean {
-  return status >= 200 && status < 300;
-}
 
 interface PolicyConfiguration {
   id: number;

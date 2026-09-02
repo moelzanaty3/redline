@@ -18,6 +18,7 @@ import type {
   SecurityResult,
 } from '../types.ts';
 import type { GitHubClient } from './client.ts';
+import { isNonNullObject, isSuccess } from '../shape.ts';
 
 export const RULESET_NAME = 'Redline';
 export const REQUIRED_CHECK = 'redline-gate / gate';
@@ -43,10 +44,6 @@ const GATE_LABELS = [
 // typed `unknown` and narrowed by an explicit parse function, in the house
 // style of cli/render/manifest.ts and cli/platforms/github/verify.ts.
 
-function isNonNullObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
 interface RulesetSummary {
   id: number;
   name: string;
@@ -69,10 +66,6 @@ function parseCreatedPullRequest(body: unknown): PullRequestRef | null {
     return null;
   }
   return { number: body['number'], url: body['html_url'] };
-}
-
-function isSuccess(status: number): boolean {
-  return status >= 200 && status < 300;
 }
 
 function outcome(
