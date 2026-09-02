@@ -25,10 +25,6 @@ export default function Home() {
         <div className="hero-glow" aria-hidden="true" />
         <div className="hero-lines" aria-hidden="true" />
         <div className="container">
-          <div className="hero-badge">
-            <span className="dot" aria-hidden="true" />
-            <b>Redline v{VERSION}</b>&nbsp;· vendor-neutral · GitHub &amp; Azure DevOps
-          </div>
           <h1>
             AI writes the code.
             <br />
@@ -83,6 +79,7 @@ export default function Home() {
             <span>{stackCount} stack rule sets</span>
             <span>{vendorCount} AI-tool formats</span>
             <span>GitHub &amp; Azure DevOps</span>
+            <span>standards v{VERSION}</span>
           </p>
         </div>
       </section>
@@ -198,8 +195,10 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
               <div className="bento-card">
                 <h3>PRs, never pushes</h3>
                 <p>
-                  Standards reach every repo as reviewable pull requests. Teams
-                  own their gates; telemetry is pulled with a read-only token.
+                  Standards reach a repository as a reviewable pull request when{" "}
+                  <code>redline init</code> runs there — opened on{" "}
+                  <code>redline/onboard</code> for that repository&apos;s own team
+                  to merge. Redline never pushes to your default branch.
                 </p>
               </div>
             </div>

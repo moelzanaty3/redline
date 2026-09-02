@@ -1,5 +1,6 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import Link from "next/link";
 import { repoRoot } from "@/lib/content";
 import { loadManifest, type Manifest } from "@/lib/manifest";
 import { JourneyTerminal, type Line, type Tok } from "@/components/journey-terminal";
@@ -122,6 +123,8 @@ export function Journey() {
         blue(`https://github.com/${EXAMPLE_REPO}/pull/${EXAMPLE_PR}`),
       ],
     },
+    { toks: [] },
+    { toks: [dim(`# the gate workflow has since run on PR #${EXAMPLE_PR}`)] },
     cmd("redline verify"),
     ...findings.map(([check, detail]) => ({
       toks: [green("ok  "), dim("  "), white(check.padEnd(22)), dim(` ${detail}`)],
@@ -132,7 +135,7 @@ export function Journey() {
     {
       k: "Standards in the files your AI tools read",
       before: "not present",
-      beforeDetail: "nothing for Copilot, Claude, Codex-style agents or Cursor to open",
+      beforeDetail: "nothing for Copilot, Claude or Codex-style agents to open",
       after: `${standardsFiles.length + commandFiles.length} files rendered`,
       afterDetail: `standards v${version}, profile ${PROFILE} — regenerated, never hand-edited`,
     },
@@ -176,7 +179,7 @@ export function Journey() {
                 </li>
               ))}
             </ul>
-            <p className="jr-probe">
+            <pre className="jr-probe">
               <span className="tk-prompt">$ </span>
               <span className="tk-white">redline verify</span>
               {"\n"}
@@ -188,7 +191,7 @@ export function Journey() {
                 no /src/checkout-service/.redline.json — run: npx
                 --package=redline-cli@latest redline init
               </span>
-            </p>
+            </pre>
           </div>
 
           <JourneyTerminal lines={lines} title={`terminal — ${EXAMPLE_REPO}`} />
@@ -211,6 +214,13 @@ export function Journey() {
             <code>chore(redline): onboard to standards v{version}</code> on branch{" "}
             <code>{ONBOARD_BRANCH}</code>, labelled <code>{SYNC_LABEL}</code> — for the
             repository&apos;s own team to review and merge.
+          </p>
+          <p className="jr-foot jr-caveat">
+            Run above with an admin-scoped token. Without one it still onboards: the
+            capabilities the token cannot reach come back <code>denied</code>, are recorded
+            in <code>.redline.json</code>, and <code>redline verify</code> reports{" "}
+            <b>partially onboarded</b> until an administrator enables them.{" "}
+            <Link href="/docs/onboarding">That path, step by step →</Link>
           </p>
         </div>
       </div>
