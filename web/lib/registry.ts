@@ -23,9 +23,6 @@ export const STANDARDS: RegistryEntry[] = [
 ];
 
 export const SCRIPTS: RegistryEntry[] = [
-  { slug: "render", title: "render.mjs", file: "scripts/render.mjs", description: "Renders standards/ into Copilot, AGENTS.md, Claude and Cursor artifacts per profile." },
-  { slug: "setup-repo", title: "setup-repo.sh", file: "scripts/setup-repo.sh", description: "One-command onboarding: security floor, ruleset, labels, property, sync, verification." },
-  { slug: "sync", title: "sync.sh", file: "scripts/sync.sh", description: "Distributes standards, gate caller and templates to onboarded repos as PRs." },
   { slug: "validate", title: "validate.mjs", file: "scripts/validate.mjs", description: "Bundle self-check run by CI — check names, approvals, glob portability." },
   { slug: "score-seeds", title: "score-seeds.mjs", file: "scripts/score-seeds.mjs", description: "Scores a seeded-corpus PR: BLOCKER recall and false positives on clean code." },
   { slug: "collect-telemetry", title: "collect-telemetry.mjs", file: "scripts/collect-telemetry.mjs", description: "Nightly central pull of review outcomes across the org." },
