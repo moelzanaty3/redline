@@ -19,7 +19,13 @@ export interface RenderResult {
   stacks: string[];
   written: string[];
   removed: string[];
+  // Check-mode answer, in one list for a human to read: every stale path, with
+  // the prune candidates suffixed. Split across the two lists below for a
+  // caller that has to act on the difference — `redline init --dry-run` prints
+  // a deletion as a deletion, not as a write.
   stale: string[];
+  staleWritten: string[];
+  staleRemovals: string[];
   managed: string[];
 }
 
@@ -48,7 +54,8 @@ export function render(opts: RenderOptions): RenderResult {
 
   const written: string[] = [];
   const removed: string[] = [];
-  const stale: string[] = [];
+  const staleWritten: string[] = [];
+  const staleRemovals: string[] = [];
 
   for (const [relPath, spec] of planned) {
     const target = join(out, relPath);
@@ -56,7 +63,7 @@ export function render(opts: RenderOptions): RenderResult {
     const next = spec.merge ? wrapBlock(current, spec.body) : `${spec.body.trimEnd()}\n`;
     if (current === next) continue;
     if (check) {
-      stale.push(relPath);
+      staleWritten.push(relPath);
       continue;
     }
     mkdirSync(dirname(target), { recursive: true });
@@ -72,7 +79,7 @@ export function render(opts: RenderOptions): RenderResult {
       const relPath = join(rule.dir, file);
       if (planned.has(relPath)) continue;
       if (check) {
-        stale.push(`${relPath} (stale, should be removed)`);
+        staleRemovals.push(relPath);
         continue;
       }
       rmSync(join(abs, file));
@@ -80,5 +87,17 @@ export function render(opts: RenderOptions): RenderResult {
     }
   }
 
-  return { ...resolved, written, removed, stale, managed: [...planned.keys()] };
+  const stale = [
+    ...staleWritten,
+    ...staleRemovals.map((relPath) => `${relPath} (stale, should be removed)`),
+  ];
+  return {
+    ...resolved,
+    written,
+    removed,
+    stale,
+    staleWritten,
+    staleRemovals,
+    managed: [...planned.keys()],
+  };
 }

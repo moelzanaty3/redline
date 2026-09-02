@@ -19,6 +19,22 @@ export function createAzurePlatform(opts: AzurePlatformOptions): Platform {
 
   return {
     host: 'azure',
+    localRef(cwd: string): RepoRef {
+      const git = gitFor(cwd);
+      const identity = parseRemote(git.remoteUrl());
+      if (!identity.project) {
+        throw new RedlineError('usage', 'could not read the Azure DevOps project from the git remote');
+      }
+      // No repoId: it only exists on the host. Nothing that writes may be
+      // handed this ref — see Platform.localRef.
+      return {
+        host: 'azure',
+        org: identity.org,
+        project: identity.project,
+        repo: identity.repo,
+        defaultBranch: git.defaultBranch(),
+      };
+    },
     async repoRef(cwd: string): Promise<RepoRef> {
       const identity = parseRemote(gitFor(cwd).remoteUrl());
       if (!identity.project) {

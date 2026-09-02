@@ -19,6 +19,16 @@ export function createGitHubPlatform(opts: GitHubPlatformOptions): Platform {
 
   return {
     host: 'github',
+    localRef(cwd: string): RepoRef {
+      const git = gitFor(cwd);
+      const identity = parseRemote(git.remoteUrl());
+      return {
+        host: 'github',
+        org: identity.org,
+        repo: identity.repo,
+        defaultBranch: git.defaultBranch(),
+      };
+    },
     async repoRef(cwd: string): Promise<RepoRef> {
       const identity = parseRemote(gitFor(cwd).remoteUrl());
       const path = `/repos/${identity.org}/${identity.repo}`;

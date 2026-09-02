@@ -18,7 +18,7 @@ const USAGE = [
   '',
   '  redline init [--profile <name>] [--blocking] [--no-a11y] [--speckit] [--dry-run]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
-  '      --dry-run   print the plan; writes nothing and changes no repository setting',
+  '      --dry-run   print the plan; writes nothing and makes no request to the host',
   '      --blocking  promote the merge gate from advisory to blocking',
   '      --no-a11y, --speckit  recorded in .redline.json for later phases; changes nothing in Phase 1',
   '      omitted flags keep whatever .redline.json already recorded',
@@ -104,24 +104,32 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (report.migratedFrom) log.info(`migrated from ${report.migratedFrom}`);
 
       if (report.dryRun) {
-        log.info('dry run — nothing was written and no repository setting was changed');
+        log.info('dry run — nothing was written, read or changed on the host');
         if (report.alreadyOnboarded) {
-          log.info('already onboarded — nothing to change');
+          log.info('already onboarded — no file would change (host settings were not read)');
           return 0;
         }
-        for (const file of report.files) log.info(`  would write  ${file}`);
-        for (const step of report.hostPlan) log.info(`  would apply  ${step}`);
+        for (const file of report.files) {
+          log.info(`  would ${report.removals.includes(file) ? 'remove' : 'write '}  ${file}`);
+        }
+        for (const step of report.hostPlan) log.info(`  would apply   ${step}`);
         for (const [key, value] of Object.entries(report.menu)) log.info(`  menu   ${key}: ${value}`);
         return 0;
       }
 
-      for (const file of report.files) log.info(`  write  ${file}`);
+      for (const file of report.files) {
+        log.info(`  ${report.removals.includes(file) ? 'remove' : 'write '}  ${file}`);
+      }
       for (const outcome of report.outcomes) {
         log.info(`  ${outcome.status.padEnd(11)} ${outcome.capability}  ${outcome.detail}`);
       }
       if (report.pendingAdmin.length > 0) {
+        // On the already-onboarded path this run applied nothing, so the list
+        // is what was recorded — not a finding this run made. Saying so is the
+        // difference between a status and a claim.
         log.warn(
-          `partially onboarded — an administrator must still enable: ${report.pendingAdmin.join(', ')}`
+          `partially onboarded — an administrator must still enable: ${report.pendingAdmin.join(', ')}` +
+            (report.alreadyOnboarded ? ' (as recorded at the last run)' : '')
         );
       }
       // The host settings and .redline.json are already written — only the

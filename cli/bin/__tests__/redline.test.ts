@@ -242,3 +242,43 @@ test('usage names --dry-run and says what --no-a11y and --speckit actually do', 
   assert.ok(usage.includes('--dry-run'));
   assert.ok(usage.includes('changes nothing in Phase 1'));
 });
+
+test('the dry-run plan prints a prune candidate as a removal, not as a write', async () => {
+  const cwd = repo();
+  const first = deps(cwd);
+  await run(['init'], first.opts);
+  const orphan = '.github/instructions/redline-gone-stack.instructions.md';
+  writeFileSync(join(cwd, orphan), 'a stack no longer in this profile\n');
+
+  const { opts, lines } = deps(cwd);
+  assert.equal(await run(['init', '--dry-run'], opts), 0);
+  assert.ok(lines.some((l) => l.includes('would remove') && l.includes(orphan)), lines.join('\n'));
+  assert.ok(!lines.some((l) => l.includes('would write') && l.includes(orphan)));
+});
+
+test('a no-op re-run marks the pending-admin list as recorded, not as this run\'s finding', async () => {
+  const cwd = repo();
+  const denied = {
+    ...deps(cwd).opts,
+    resolvePlatform: async () =>
+      fakePlatform({
+        security: [
+          { capability: 'secret-scanning' as const, status: 'denied' as const, detail: 'needs admin' },
+          { capability: 'push-protection' as const, status: 'applied' as const, detail: '' },
+          { capability: 'dependency-alerts' as const, status: 'applied' as const, detail: '' },
+        ],
+        securityState: [
+          { capability: 'secret-scanning' as const, status: 'denied' as const, detail: 'still off' },
+          { capability: 'push-protection' as const, status: 'applied' as const, detail: '' },
+        ],
+      }),
+  };
+  await run(['init'], denied);
+
+  const second = deps(cwd);
+  assert.equal(await run(['init'], { ...second.opts, resolvePlatform: denied.resolvePlatform }), 0);
+  assert.ok(
+    second.lines.some((l) => l.includes('secret-scanning') && l.includes('at the last run')),
+    second.lines.join('\n')
+  );
+});

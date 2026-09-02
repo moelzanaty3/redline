@@ -129,4 +129,10 @@ export interface PlatformVerify {
 export interface Platform extends PlatformInstall, PlatformVerify {
   readonly host: Host;
   repoRef(cwd: string): Promise<RepoRef>;
+  // The identity that can be derived from the local clone alone — the remote
+  // URL, plus whatever the clone knows about the default branch. No host call,
+  // so `redline init --dry-run` prints a plan offline and with an unscoped
+  // token. It is deliberately not enough to write with: Azure's repoId is a
+  // host fact and is absent here.
+  localRef(cwd: string): RepoRef;
 }

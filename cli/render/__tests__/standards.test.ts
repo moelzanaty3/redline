@@ -71,3 +71,20 @@ test('an unknown vendor is rejected by name', (t) => {
     /unknown vendor "nope"\. Known: copilot, agents, claude, cursor/
   );
 });
+
+// The dry-run plan prints writes and deletions differently, so check mode has
+// to say which is which: `stale` alone reads back as
+// "<path> (stale, should be removed)" and printed as a write it is a lie.
+test('check mode separates the files it would remove from the ones it would write', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'web', out });
+  const orphan = '.github/instructions/redline-gone-stack.instructions.md';
+  writeFileSync(join(out, orphan), 'a stack no longer in this profile\n');
+
+  const r = render({ root, profile: 'web', out, check: true });
+
+  assert.deepEqual(r.staleRemovals, [orphan]);
+  assert.deepEqual(r.staleWritten, []);
+  assert.ok(r.stale.includes(`${orphan} (stale, should be removed)`), 'the combined list is unchanged');
+  assert.ok(existsSync(join(out, orphan)), 'check mode still writes and deletes nothing');
+});

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError } from '../core/errors.ts';
 import { CLI_VERSION } from '../core/version.ts';
@@ -78,14 +78,25 @@ const ACCESSIBILITY_STACKS = ['react', 'react-native', 'kotlin', 'swift'];
 
 // The 2.1 artifact that identifies a repository onboarded by the previous
 // generation. It is NOT in the removal list below: v3's GitHub adapter writes
-// the same path, so removing it would delete the gate this run just installed.
+// the same path, so removing it would delete the gate this run just installed
+// — and for the same reason its presence alone does not prove a 2.1
+// repository. A v3 repository whose .redline.json was deleted has this file
+// too, and mistaking it for 2.1 would run the removals below against it.
 const LEGACY_MARKER = '.github/workflows/redline.yml';
+// What v3's own caller workflow contains and 2.1's shell rollout could not:
+// the reusable-workflow reference that templates/redline.yml installs.
+const V3_CALLER = /\.github\/workflows\/redline-gate\.yml@/;
 
 // Everything 2.1 left behind that v3 does not write. Rendered vendor artifacts
 // (`.github/instructions/redline-*.instructions.md`, `.cursor/rules/redline-*.mdc`)
 // are not here: render() already prunes those as stale.
 const LEGACY_PATHS = ['.github/workflows/redline-sync.yml'];
 const LEGACY_SCRIPT = /^redline-.*\.sh$/;
+// `scripts/redline-*.sh` is a glob, not a path, and a repository that adopted
+// Redline is exactly the kind that has a hand-written `scripts/redline-deploy.sh`.
+// The brownfield rule applies to files as much as to host objects: what carries
+// no Redline marker belongs to a human and is never deleted.
+const REDLINE_OWNED = /(?:managed|generated|installed) by redline|REDLINE:BEGIN/i;
 
 export function sensitivePathRules(org: string): OwnershipRule[] {
   return SENSITIVE_PATHS.map((pattern) => ({ pattern, owners: [`@${org}/${OWNING_TEAM}`] }));
@@ -103,13 +114,28 @@ function removeLegacyArtifacts(cwd: string, dryRun: boolean): string[] {
     if (!dryRun) rmSync(join(cwd, relPath));
     removed.push(relPath);
   };
+  // Exact paths only: `.github/workflows/redline-sync.yml` is a Redline-named
+  // workflow at a Redline-owned path, not something a human names by accident.
   for (const relPath of LEGACY_PATHS) remove(relPath);
   if (existsSync(join(cwd, 'scripts'))) {
     for (const file of readdirSync(join(cwd, 'scripts'))) {
-      if (LEGACY_SCRIPT.test(file)) remove(`scripts/${file}`);
+      if (!LEGACY_SCRIPT.test(file)) continue;
+      if (!REDLINE_OWNED.test(readFileSync(join(cwd, 'scripts', file), 'utf8'))) continue;
+      remove(`scripts/${file}`);
     }
   }
   return removed;
+}
+
+// A 2.1 repository has the caller workflow and no .redline.json. A v3
+// repository whose config was deleted has the caller workflow too — telling
+// them apart is what stops the removals above running on a repository that
+// never saw 2.1.
+function detectMigration(cwd: string, onboarded: boolean): string | null {
+  if (onboarded) return null;
+  const caller = join(cwd, LEGACY_MARKER);
+  if (!existsSync(caller)) return null;
+  return V3_CALLER.test(readFileSync(caller, 'utf8')) ? null : '2.1';
 }
 
 export interface InitOptions {
@@ -126,7 +152,11 @@ export interface InitOptions {
 
 export interface InitReport {
   profile: string;
+  // Everything the pull request has to stage, writes and deletions together.
   files: string[];
+  // The subset of `files` that are deletions — pruned vendor artifacts and 2.1
+  // leftovers. Printing a deletion as a write is how the dry-run plan lied.
+  removals: string[];
   outcomes: CapabilityOutcome[];
   pendingAdmin: AdminCapability[];
   pullRequest: PullRequestRef | null;
@@ -143,6 +173,22 @@ export interface InitReport {
   hostPlan: string[];
 }
 
+// What the recorded pending-admin list looks like against a live read. Only
+// the capabilities the read actually answers for are refreshed — `merge-policy`
+// is settled separately, and nothing reads back `labels`, `review-ownership`,
+// `repo-property` or `gate`, so those stay exactly as recorded.
+function refreshPendingAdmin(
+  recorded: AdminCapability[],
+  security: CapabilityOutcome[]
+): AdminCapability[] {
+  const answered = new Set<AdminCapability>([...security.map((o) => o.capability), 'merge-policy']);
+  const denied = security.filter(isPending).map((o) => o.capability);
+  return [
+    ...recorded.filter((capability) => !answered.has(capability) || denied.includes(capability)),
+    ...denied.filter((capability) => !recorded.includes(capability)),
+  ];
+}
+
 export async function init(platform: Platform, opts: InitOptions): Promise<InitReport> {
   const { cwd, root } = opts;
   const dryRun = opts.dryRun === true;
@@ -155,7 +201,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const { profile, stacks } = resolveProfile(manifest, detected);
 
   const existing = readConfig(cwd);
-  const migratedFrom = existing === null && existsSync(join(cwd, LEGACY_MARKER)) ? '2.1' : null;
+  const migratedFrom = detectMigration(cwd, existing !== null);
 
   // DEFAULT_MENU <- what this repository already chose <- the flags the caller
   // actually typed. Rebuilding the menu from flag defaults alone demoted a
@@ -169,7 +215,9 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ...opts.menu,
   };
 
-  const ref = await platform.repoRef(cwd);
+  // A dry run must work offline and with an unscoped token: repoRef() is a
+  // live GET, so the plan is built from what the local clone already knows.
+  const ref = dryRun ? platform.localRef(cwd) : await platform.repoRef(cwd);
   const vendors =
     opts.vendors ??
     Object.entries(manifest.vendors)
@@ -205,11 +253,11 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   // render() prunes stale vendor files with rmSync; those deletions must ride
   // along in the same file list as the writes, or the PR never reflects them.
+  const removals = [...(dryRun ? rendered.staleRemovals : rendered.removed), ...legacyRemovals];
   const changedFiles = [
-    ...(dryRun ? rendered.stale : rendered.written),
-    ...rendered.removed,
+    ...(dryRun ? rendered.staleWritten : rendered.written),
+    ...removals,
     ...commandFiles,
-    ...legacyRemovals,
     ...gatePlan.files,
     ...ownershipPlan.files,
   ];
@@ -218,7 +266,38 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // settled repository is for: swallowing it as "nothing to change" would drop
   // the promotion silently.
   const menuChanged = existing !== null && MENU_KEYS.some((key) => existing.menu[key] !== menu[key]);
-  const alreadyOnboarded = existing !== null && changedFiles.length === 0 && !menuChanged;
+
+  // "Zero host calls on a settled repository" means zero host *mutations*.
+  // Reading is how the run finds out whether the repository is settled at all:
+  // without it, an operator who loosened the ruleset by hand got "already
+  // onboarded — nothing to change" from `redline init` AND from
+  // `redline init --blocking` (the config already said blocking, so nothing
+  // looked changed), and the only recovery was deleting .redline.json — which
+  // destroys onboardedAt, the recorded menu, and makes this run look like a
+  // 2.1 migration. Two GETs, no writes.
+  const live =
+    existing === null || dryRun
+      ? null
+      : {
+          policy: await platform.readPolicy(ref),
+          // `redline verify` prints "<capability> now granted — rerun redline
+          // init to clear it from .redline.json". A short-circuited re-run
+          // would never clear it, so a recorded list the host now contradicts
+          // is itself work to do.
+          pendingAdmin: refreshPendingAdmin(
+            existing.pendingAdmin,
+            (await platform.readSecurityState(ref)).outcomes
+          ),
+        };
+  const policySettled = live === null || (live.policy !== null && live.policy.blocking === menu.blockingGate);
+  const pendingChanged =
+    live !== null &&
+    existing !== null &&
+    (live.pendingAdmin.length !== existing.pendingAdmin.length ||
+      live.pendingAdmin.some((capability, i) => capability !== existing.pendingAdmin[i]));
+
+  const alreadyOnboarded =
+    existing !== null && changedFiles.length === 0 && !menuChanged && policySettled && !pendingChanged;
 
   const hostPlan = [
     `merge gate machinery on ${platform.host}`,
@@ -232,10 +311,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     return {
       profile,
       files: [],
+      removals: [],
       outcomes: [],
-      // What .redline.json records is the honest answer here: no host call was
-      // made this run, so nothing new could be learned about admin work.
-      pendingAdmin: existing.pendingAdmin,
+      // Refreshed for the capabilities a read can answer (secret scanning,
+      // push protection, the merge policy) and equal to what .redline.json
+      // records for the rest — if it were not equal, this would not be the
+      // settled path. `bin` still marks it as recorded rather than measured.
+      pendingAdmin: live?.pendingAdmin ?? existing.pendingAdmin,
       pullRequest: null,
       pullRequestError: null,
       migratedFrom,
@@ -252,6 +334,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     return {
       profile,
       files,
+      removals,
       // installGate's plan reports no outcome (it made no host call);
       // ensureReviewOwnership's are decided locally and worth printing.
       outcomes: [...gatePlan.outcomes, ...ownershipPlan.outcomes],
@@ -334,6 +417,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   return {
     profile,
     files,
+    removals,
     outcomes,
     pendingAdmin,
     pullRequest,

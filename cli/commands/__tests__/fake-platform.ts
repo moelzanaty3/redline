@@ -22,6 +22,10 @@ export interface FakePlatformOptions {
   policy?: CapabilityOutcome[];
   gateFiles?: string[];
   failPullRequest?: boolean;
+  // What `readSecurityState` reports back off the host, which is not the same
+  // thing as what `enableSecurityFloor` returned when it was applied: an
+  // administrator may have granted a capability since. Defaults to `security`.
+  securityState?: CapabilityOutcome[];
   // Work that only exists once the pull request does — Azure applies its sync
   // labels there. It is report-only: `.redline.json` is part of the pull
   // request and was written before it, so this can never reach pendingAdmin.
@@ -35,6 +39,9 @@ export interface FakePlatform extends Platform {
   // a single host setting.
   applied: string[];
   planned: string[];
+  // Host reads. Separate from `applied` so a test can assert that `--dry-run`
+  // touched the network at all, which "no mutation" alone never proved.
+  reads: string[];
   lastPolicy: MergePolicy | null;
 }
 
@@ -58,6 +65,10 @@ const ok = (capability: CapabilityOutcome['capability']): CapabilityOutcome => (
   detail: capability,
 });
 
+// What the GitHub adapter's caller workflow carries: the reusable-workflow
+// reference, which is also how init tells a v3 repository from a 2.1 one.
+const GATE_BODY = '# Managed by Redline.\nuses: acme/.github/.github/workflows/redline-gate.yml@main\n';
+
 // Mirrors the real adapters' syncFile: a file whose content already matches is
 // not a change, so it never appears in the returned file list.
 function seed(cwd: string, relPath: string, body: string, check: boolean): boolean {
@@ -72,6 +83,7 @@ function seed(cwd: string, relPath: string, body: string, check: boolean): boole
 export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
   const applied: string[] = [];
   const planned: string[] = [];
+  const reads: string[] = [];
   const ref: RepoRef = opts.ref ?? {
     host: 'github',
     org: 'acme',
@@ -82,8 +94,13 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     host: ref.host,
     applied,
     planned,
+    reads,
     lastPolicy: ADVISORY,
+    localRef(): RepoRef {
+      return ref;
+    },
     async repoRef(): Promise<RepoRef> {
+      reads.push('repoRef');
       return ref;
     },
     async installGate(
@@ -94,7 +111,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     ): Promise<InstallResult> {
       (check ? planned : applied).push('installGate');
       const files = (opts.gateFiles ?? ['.github/workflows/redline.yml']).filter((rel) =>
-        seed(cwd, rel, 'managed by redline\n', check)
+        seed(cwd, rel, GATE_BODY, check)
       );
       return { files, outcomes: check ? [] : (opts.gate ?? [ok('labels')]) };
     },
@@ -132,15 +149,22 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       };
     },
     async readPolicy(): Promise<MergePolicy | null> {
+      reads.push('readPolicy');
       return platform.lastPolicy;
     },
     async readReportedCheckNames(): Promise<string[]> {
+      reads.push('readReportedCheckNames');
       return ['redline-gate / gate'];
     },
     async readSecurityState(): Promise<SecurityResult> {
-      return { outcomes: opts.security ?? [ok('secret-scanning'), ok('push-protection')] };
+      reads.push('readSecurityState');
+      return {
+        outcomes: opts.securityState ??
+          opts.security ?? [ok('secret-scanning'), ok('push-protection')],
+      };
     },
     async latestPullRequestNumber(): Promise<number | null> {
+      reads.push('latestPullRequestNumber');
       return 1;
     },
   };

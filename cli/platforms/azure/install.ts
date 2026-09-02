@@ -576,11 +576,6 @@ export function createAzureInstall(
         const humanOwned =
           match === undefined && wantedPolicy.oneSettingPerBranch === true ? sameType[0] : undefined;
         if (humanOwned) {
-          // Backing off a control that is what queues the gate means nothing
-          // Redline registered can publish `redline/gate`, so everything
-          // written after this must drop to advisory — a blocking Status
-          // policy with no publisher blocks every pull request forever.
-          if (wantedPolicy.runsTheGate === true) effectiveBlocking = false;
           results.push({
             capability: 'merge-policy',
             status: 'already',
