@@ -4,6 +4,12 @@
 # the ruleset, renames the caller job, or turns off push protection, and the gate becomes
 # decorative without a single failing build anywhere. This turns that from a thing
 # somebody was supposed to remember into a thing that opens an issue.
+#
+# DISABLED as of redline v3 Phase 1: `redline verify` (unlike scripts/setup-repo.sh
+# --verify) reads .redline.json from a local checkout of the target repo — it has no
+# `--repo owner/name` mode that works purely over the API. Re-enabling this on a schedule
+# needs a clone-then-verify loop, which is control-plane work alongside `redline sync` in
+# Phase 3. See CHANGELOG.md.
 name: Redline Verify Onboarding
 
 on:
@@ -26,6 +32,7 @@ concurrency:
 
 jobs:
   verify:
+    if: false # see the DISABLED note above — no scheduled cross-repo verify until Phase 3
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

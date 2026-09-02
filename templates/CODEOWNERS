@@ -1,4 +1,4 @@
-# Redline CODEOWNERS template. Installed at .github/CODEOWNERS by scripts/setup-repo.sh.
+# Redline CODEOWNERS template. Installed at .github/CODEOWNERS by `redline init`.
 #
 # The branch ruleset sets require_code_owner_review: true. Without this file that rule is
 # a silent no-op, so the platform team must own at minimum the enforcement surface below —

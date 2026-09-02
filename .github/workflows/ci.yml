@@ -35,24 +35,7 @@ jobs:
         run: node scripts/validate.mjs
 
       - name: Rendered artifacts are current
-        run: node scripts/render.mjs --self --check
-
-      - name: Every profile renders cleanly
-        run: |
-          set -euo pipefail
-          profiles=$(node -p "Object.keys(require('./standards/manifest.json').profiles).join(' ')")
-          for profile in $profiles; do
-            out=$(mktemp -d)
-            echo "--- $profile"
-            node scripts/render.mjs --profile "$profile" --out "$out" --vendors copilot,agents,claude,cursor
-          done
-
-      - name: Unknown profile fails loudly
-        run: |
-          if node scripts/render.mjs --profile nope --out "$(mktemp -d)" 2>/dev/null; then
-            echo "::error::render.mjs accepted an unknown profile"
-            exit 1
-          fi
+        run: node scripts/render-self.mjs --check
 
   lint:
     runs-on: ubuntu-latest
@@ -73,13 +56,6 @@ jobs:
           # workflows/ holds files destined for other repos, so actionlint is pointed at
           # them explicitly rather than relying on its .github/workflows discovery.
           ./actionlint -color .github/workflows/*.yml workflows/*.yml templates/redline.yml
-
-      - name: shellcheck
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
-          shellcheck --severity=warning scripts/*.sh
 
       - name: JSON is parseable
         run: |

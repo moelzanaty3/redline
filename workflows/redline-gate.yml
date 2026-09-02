@@ -10,7 +10,7 @@
 #     redline-gate / gate
 #
 # Changing either job id changes the required context and will silently block every PR
-# in every onboarded repo. scripts/setup-repo.sh verifies the real name after onboarding.
+# in every onboarded repo. `npx redline verify` checks the real name after onboarding.
 name: Redline Gate
 
 on:
