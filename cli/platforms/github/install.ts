@@ -232,8 +232,13 @@ export function createGitHubInstall(
         .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`);
       writeFile(cwd, '.github/workflows/redline.yml', caller);
 
+      // Read from templates/, never from this repository's own .github/:
+      // .github/ is deliberately outside package.json "files" (shipping it
+      // would push Redline's own CI workflows into every consumer), so a
+      // template read from there is absent in the published tarball and the
+      // throw lands after the workflow above has already been written.
       const template = readFileSync(
-        join(PACKAGE_ROOT, '.github/pull_request_template.md'),
+        join(PACKAGE_ROOT, 'templates/github/pull_request_template.md'),
         'utf8'
       );
       writeFile(cwd, '.github/pull_request_template.md', template);
