@@ -1,0 +1,52 @@
+# Redline merge gate for Azure DevOps.
+#
+# CONTRACT: the final step publishes a pull-request status with genre `redline`
+# and name `gate`. The branch policy installed by `redline init` requires exactly
+# that status. Renaming either value makes the policy unsatisfiable and every pull
+# request in this repository will sit blocked. `redline verify` checks the live
+# status name against this contract.
+
+trigger: none
+
+pr:
+  branches:
+    include:
+      - '*'
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ADR_DIFF_THRESHOLD: 300
+  SOFT_FAIL_LABELS: redline-exempt,redline-sync
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: NodeTool@0
+    displayName: Node 22
+    inputs:
+      versionSpec: '22.x'
+
+  - script: npx --yes redline@latest verify --gate
+    displayName: Redline gate
+    name: gate
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      ADR_DIFF_THRESHOLD: $(ADR_DIFF_THRESHOLD)
+      SOFT_FAIL_LABELS: $(SOFT_FAIL_LABELS)
+
+  - script: |
+      set -euo pipefail
+      state="succeeded"
+      if [ "$AGENT_JOBSTATUS" != "Succeeded" ]; then state="failed"; fi
+      curl -sS --fail-with-body -X POST \
+        -H "Authorization: Bearer $SYSTEM_ACCESSTOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"state\":\"$state\",\"description\":\"Redline merge gate\",\"context\":{\"name\":\"gate\",\"genre\":\"redline\"},\"targetUrl\":\"$SYSTEM_TEAMFOUNDATIONCOLLECTIONURI$SYSTEM_TEAMPROJECT/_build/results?buildId=$BUILD_BUILDID\"}" \
+        "$SYSTEM_TEAMFOUNDATIONCOLLECTIONURI$SYSTEM_TEAMPROJECT/_apis/git/repositories/$BUILD_REPOSITORY_ID/pullRequests/$SYSTEM_PULLREQUEST_PULLREQUESTID/statuses?api-version=7.1"
+    displayName: Publish redline/gate status
+    condition: always()
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
