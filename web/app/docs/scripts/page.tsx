@@ -8,11 +8,18 @@ export const metadata: Metadata = { title: "Scripts" };
 export default function Page() {
   return (
     <DocsPage
-      crumb="Reference"
+      crumb="Maintaining Redline"
       title="Scripts"
-      intro="Render, sync, onboarding, validation, scoring and telemetry — every script in the bundle, viewable in full and ready to copy."
+      intro="Maintainer tooling for this repository's own CI, telemetry and validation — not something an onboarded repo ever runs. If you're onboarding or checking a product repo, you want redline init and redline verify instead."
       href="/docs/scripts"
     >
+      <p>
+        Every script here runs in one of three places: this repo&apos;s own
+        CI on every pull request, a scheduled workflow in the{" "}
+        <code>redline-metrics</code> repo, or a maintainer&apos;s own
+        terminal. None of them talk to a product repo directly — that&apos;s
+        what the CLI is for.
+      </p>
       <div className="doc-cards" style={{ marginTop: 24 }}>
         {SCRIPTS.map((s) => (
           <Link className="doc-card" href={`/docs/scripts/${s.slug}`} key={s.slug}>
