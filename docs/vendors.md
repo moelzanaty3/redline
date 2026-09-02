@@ -27,8 +27,12 @@ Programmatically, the same entry point is `render({ root, profile, out })` from
 | Claude Code, Claude in GitHub | `CLAUDE.md` (imports `AGENTS.md` with `@AGENTS.md`) | inherits AGENTS.md |
 | Cursor rules | `.cursor/rules/redline-*.mdc` | `globs:` frontmatter |
 
-Select a subset with `--vendors copilot,agents`. Toggle the org-wide default in
-`standards/manifest.json` under `vendors`.
+Vendor selection is driven entirely by `standards/manifest.json` under `vendors` — each
+entry's `enabled` flag decides the org-wide default. `render()` (`cli/render/standards.ts`)
+and `init()` both accept a programmatic `vendors` list that overrides the manifest default,
+but `redline init` has no CLI flag exposing it in Phase 1 (see `cli/bin/redline.ts`); a
+subset can only be selected by calling `render()`/`init()` directly, not from the
+command line.
 
 ## Adding a vendor
 

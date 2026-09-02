@@ -55,7 +55,12 @@ npx --package=redline-cli@latest redline init
    `workflows/verify-onboarding.yml` are disabled (`if: false`), not deleted, so Phase 3
    has a shape to rewire. Between now and Phase 3 the estate has no automated standards
    distribution path — an already-onboarded repo picks up a standards change by
-   re-running `redline init` by hand.
+   re-running `redline init` by hand. `sync-targets.txt` also lost its only writer in this
+   task: `scripts/setup-repo.sh` used to append to it on each onboarding, and `redline init`
+   does not. `workflows/dashboard.yml` still reads it to compute the coverage figure on the
+   telemetry dashboard, so that figure is now frozen at whatever the register held before
+   this task, regardless of how many repos actually onboard — not just paused pending
+   Phase 3, but silently wrong in the meantime.
 3. **No offline single-file executables.** `platforms/azure/gate-template.yml` runs the
    gate via `npx`, so the build agent must reach npm. An air-gapped Azure agent cannot run
    the gate until the Phase-1-deferred single-file executables (spec §16, R3) ship.
@@ -68,6 +73,17 @@ npx --package=redline-cli@latest redline init
    `requiredChecks` in Phase 1, so what this protects against is the required-check name
    drifting out of band from what the host actually reports, not the gate silently
    becoming a no-op while advisory.
+6. **`redline verify` cannot detect drift in the rendered command files.** `renderCommands`
+   (`cli/render/commands.ts`) only ever writes; it has no `check` mode, unlike `render()`
+   for the standards artifacts. It also has no prune step: disabling a vendor in
+   `standards/manifest.json` after a repo has already onboarded leaves that vendor's
+   `commands/*.md` files behind, undetected and unremoved. Both a check mode and a prune
+   step are Phase 2.
+7. **Azure DevOps Server (on-premises) is unreachable.** `cli/platforms/azure/client.ts`
+   hardcodes `dev.azure.com`, with no environment-variable override — unlike
+   `cli/platforms/github/client.ts`, which honours `GITHUB_API_URL` for GitHub Enterprise
+   Server. There is no way to point Redline at an on-premises Azure DevOps Server instance
+   in Phase 1.
 
 ## 0.0.1 — 2026-09-01
 

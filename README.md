@@ -10,7 +10,9 @@ versioned standards, readiness gates, decision log, org-wide inbox — plus the 
 and distribution that let it evolve from data rather than opinion.
 
 **Vendor-neutral.** The rules live once in `standards/` and render to GitHub Copilot,
-OpenAI Codex / `AGENTS.md`, Claude, and Cursor. See [docs/vendors.md](docs/vendors.md).
+OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabled
+(`vendors.cursor.enabled: false` in `standards/manifest.json`). See
+[docs/vendors.md](docs/vendors.md).
 
 ## What's in the box
 
@@ -21,10 +23,10 @@ OpenAI Codex / `AGENTS.md`, Claude, and Cursor. See [docs/vendors.md](docs/vendo
 | `standards/manifest.json` | Stack globs, profiles, vendor toggles, standards version | source of truth |
 | `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx --package=redline-cli@latest redline` |
 | `.github/pull_request_template.md` | Readiness checklist + ADR link | every onboarded repo |
-| `templates/repo-context.md` | Per-repo context template, pasted above the generated block in `AGENTS.md` | every onboarded repo |
-| `templates/CODEOWNERS` | Makes `require_code_owner_review` real and protects the enforcement surface | every onboarded repo |
+| `templates/repo-context.md` | Per-repo context template | reference only — a human copies it above the generated block in `AGENTS.md`; `redline init` never installs it |
+| `templates/CODEOWNERS` | Reference shape of the CODEOWNERS pattern that makes `require_code_owner_review` real and protects the enforcement surface | `redline init` writes `.github/CODEOWNERS` on GitHub repos with equivalent content built in code — it does not read this file |
 | `templates/redline.yml` | Thin caller installed as `.github/workflows/redline.yml` | every onboarded repo |
-| `rulesets/redline-ruleset.json` | Per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | applied by `redline init` |
+| `rulesets/redline-ruleset.json` | Reference shape of the per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | nothing reads this file — `redline init` builds the equivalent ruleset at runtime |
 | `rulesets/redline-org-ruleset.json` | Same rules applied org-wide by custom repository property — no per-repo drift | applied once at org level |
 | `workflows/redline-gate.yml` | Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation | org `.github` repo |
 | `workflows/redline-sync.yml` | Distributes standards, gate caller and template to onboarded repos as PRs — **disabled in Phase 1**, see [CHANGELOG.md](CHANGELOG.md) | this (source) repo |
@@ -74,9 +76,15 @@ The single most common silent failure in a system like this is a required status
 whose name nothing ever reports: every PR sits on "Expected — waiting for status" forever.
 
 Reusable workflows report as `<caller job id> / <called job id>`. Here that is
-**`redline-gate / gate`**, and it is asserted in three places: the ruleset JSON,
-`scripts/validate.mjs` (CI fails if a job is renamed), and `redline verify` (which reads
-the check names GitHub or Azure DevOps actually reports). Run it on every onboarded repo.
+**`redline-gate / gate`**, and the name is pinned in two places: the ruleset JSON's
+reference shape, and `scripts/validate.mjs` (CI fails if the job is renamed).
+`redline verify` surfaces the check names GitHub or Azure DevOps actually reported on the
+latest pull request, for a human to compare against that name. In Phase 1
+`redline init` never marks it as a *required* check (`requiredChecks` starts empty), so
+`verify` cannot yet fail on its own if the check stops reporting — see
+[CHANGELOG.md](CHANGELOG.md) known limitation 5. Run it on every onboarded repo anyway;
+eyeballing the reported name is still the cheapest way to catch the check silently going
+dark.
 
 ## Making a change to the standards
 
@@ -108,8 +116,10 @@ a pull request a team reviews and merges itself.
   code against a pilot repo, scores what came back against 82 seeded BLOCKER defects and
   a corpus of correct code that must draw zero comments, then closes it. "No findings"
   and "nothing to find" are otherwise indistinguishable.
-- **Distribution.** One source of truth, rendered per profile, synced to hundreds of
-  repos as reviewable PRs. Never copy-paste per project, never a stale rule file left
+- **Distribution.** One source of truth, rendered per profile. `redline sync` — syncing
+  standards to already-onboarded repos as reviewable PRs — is Phase 3 (see
+  [CHANGELOG.md](CHANGELOG.md)); until then a repo picks up a standards change by
+  re-running `redline init`. Never copy-paste per project, never a stale rule file left
   behind when a repo changes stack.
 - **Hard enforcement.** Org-level ruleset plus a required check that is name-verified.
   CODEOWNERS on the enforcement surface, so nobody can weaken their own gate unreviewed.
