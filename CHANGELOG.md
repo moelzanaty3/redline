@@ -63,6 +63,11 @@ Record seed scores here. A standards change with no measurement is an opinion.
   policy back as part of the gate check: required checks are derived only from a
   blocking Status policy, and the gate only counts as blocking when the Build
   Validation policy exists.
+- The web home page gained a value-visualization block after the hero: the
+  onboarding mechanism (repo → `init` → floor installed → every PR checked → drift
+  caught) plus a severity split of the rule catalogue and a stat strip. All numbers
+  are loaded from `standards/` at build time via `web/lib` — the hardcoded stats-band
+  counts were rewired to the same loaders, so they can no longer drift.
 
 ## 3.0.0 — 2026-09-02
 

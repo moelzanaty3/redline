@@ -2,12 +2,17 @@ import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { Counter } from "@/components/counter";
 import { Reveal } from "@/components/reveal";
+import { ValueViz } from "@/components/value-viz";
+import { loadManifest } from "@/lib/manifest";
+import { getRules } from "@/lib/rules";
 import { VERSION } from "@/lib/site";
 
 const HERO_CMD = `npx redline-cli init
 npx redline-cli verify`;
 
 export default function Home() {
+  const ruleCount = getRules().length;
+  const stackCount = Object.keys(loadManifest().stacks).length;
   return (
     <main>
       <section className="hero">
@@ -52,6 +57,8 @@ export default function Home() {
           </CodeWindow>
         </div>
       </section>
+
+      <ValueViz />
 
       <section className="works-with">
         <div className="container inner">
@@ -170,11 +177,11 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
       <section className="stats-band">
         <div className="container inner">
           <div className="stat">
-            <span className="num"><Counter value={249} /></span>
+            <span className="num"><Counter value={ruleCount} /></span>
             <span className="lbl">rules, each with a permanent id</span>
           </div>
           <div className="stat">
-            <span className="num"><Counter value={12} /></span>
+            <span className="num"><Counter value={stackCount} /></span>
             <span className="lbl">stack rule sets, composed by profile</span>
           </div>
           <div className="stat">
