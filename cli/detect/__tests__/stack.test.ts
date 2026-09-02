@@ -73,6 +73,11 @@ test('Package.swift means mobile-ios', () => {
   assert.equal(p.profile, 'mobile-ios');
 });
 
+test('an App.xcodeproj directory marker means mobile-ios even without swift sources', () => {
+  const p = proposeProfile({ paths: ['App.xcodeproj', 'App/AppDelegate.m'] });
+  assert.equal(p.profile, 'mobile-ios');
+});
+
 test('terraform alone means infra', () => {
   const p = proposeProfile({ paths: ['main.tf', 'variables.tf'] });
   assert.equal(p.profile, 'infra');

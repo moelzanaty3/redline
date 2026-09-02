@@ -7,6 +7,10 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- Stack detection scans breadth-first, so root-level manifests (`go.mod`, `pom.xml`)
+  are always seen even when one large subtree alone exceeds the 5000-file scan budget.
+  `.xcodeproj` directories are now emitted as path markers, so an Xcode project without
+  Swift sources is detected as `mobile-ios`.
 - The HTTP transport no longer retries a `POST` on a 5xx response: the request may
   already have committed on the host, and a retry could open a duplicate pull request
   or policy. 429 responses retry for every method; 5xx retries are limited to

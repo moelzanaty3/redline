@@ -63,6 +63,38 @@ test('a package.json with dependencies as an array degrades rather than crashing
   assert.equal(scanRepo(dir).packageJson, undefined);
 });
 
+test('a huge first subtree does not starve root-level manifests of the file budget', () => {
+  const dir = tempDir('redline-scan-monorepo-');
+  const big = join(dir, 'aaa-big');
+  mkdirSync(big);
+  for (let i = 0; i < 5001; i++) writeFileSync(join(big, `f${i}.txt`), '');
+  writeFileSync(join(dir, 'go.mod'), 'module acme');
+  writeFileSync(join(dir, 'pom.xml'), '<project/>');
+  const { paths } = scanRepo(dir);
+  assert.ok(paths.includes('go.mod'));
+  assert.ok(paths.includes('pom.xml'));
+});
+
+test('files of a directory are emitted before any of its subdirectories are descended', () => {
+  const dir = tempDir('redline-scan-bfs-');
+  mkdirSync(join(dir, 'sub'));
+  writeFileSync(join(dir, 'sub/nested.txt'), '');
+  writeFileSync(join(dir, 'root-a.txt'), '');
+  writeFileSync(join(dir, 'root-b.txt'), '');
+  const { paths } = scanRepo(dir);
+  const nested = paths.indexOf('sub/nested.txt');
+  assert.ok(paths.indexOf('root-a.txt') < nested);
+  assert.ok(paths.indexOf('root-b.txt') < nested);
+});
+
+test('an .xcodeproj directory is emitted as a path marker', () => {
+  const dir = tempDir('redline-scan-xcodeproj-');
+  mkdirSync(join(dir, 'App.xcodeproj'));
+  writeFileSync(join(dir, 'App.xcodeproj/project.pbxproj'), '');
+  const { paths } = scanRepo(dir);
+  assert.ok(paths.includes('App.xcodeproj'));
+});
+
 test('an unreadable subdirectory is skipped rather than fatal', () => {
   const dir = tempDir('redline-scan-unreadable-');
   const blocked = join(dir, 'blocked');

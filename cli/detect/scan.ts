@@ -35,27 +35,41 @@ function parsePackageManifest(raw: unknown): PackageManifest | undefined {
   return manifest;
 }
 
+interface WalkFrame {
+  dir: string;
+  prefix: string;
+  depth: number;
+}
+
 export function scanRepo(cwd: string): DetectInput {
   const paths: string[] = [];
 
-  const walk = (dir: string, prefix: string, depth: number): void => {
-    if (depth > MAX_DEPTH || paths.length >= MAX_FILES) return;
+  // Breadth-first so root-level manifests (go.mod, pom.xml) always land within
+  // MAX_FILES, even when an early subtree alone would exhaust the budget.
+  const queue: WalkFrame[] = [{ dir: cwd, prefix: '', depth: 0 }];
+  let frame: WalkFrame | undefined;
+  while ((frame = queue.shift()) !== undefined && paths.length < MAX_FILES) {
     let entries;
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(frame.dir, { withFileTypes: true });
     } catch {
-      return;
+      continue;
     }
     for (const entry of entries) {
-      if (paths.length >= MAX_FILES) return;
+      if (paths.length >= MAX_FILES) break;
       if (SKIP.has(entry.name)) continue;
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(join(dir, entry.name), rel, depth + 1);
-      else paths.push(rel);
+      const rel = frame.prefix ? `${frame.prefix}/${entry.name}` : entry.name;
+      if (!entry.isDirectory()) {
+        paths.push(rel);
+      } else if (entry.name.endsWith('.xcodeproj')) {
+        // Xcode projects are directories; emit a marker so the ios signal fires,
+        // and skip their metadata contents.
+        paths.push(rel);
+      } else if (frame.depth < MAX_DEPTH) {
+        queue.push({ dir: join(frame.dir, entry.name), prefix: rel, depth: frame.depth + 1 });
+      }
     }
-  };
-
-  walk(cwd, '', 0);
+  }
 
   let packageJson: PackageManifest | undefined;
   try {
