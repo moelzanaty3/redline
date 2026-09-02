@@ -38,7 +38,10 @@ concurrency:
 
 jobs:
   sync:
-    if: false # see the DISABLED note above — no redline sync until Phase 3
+    # Dead in Phase 1: the "Open sync pull requests" step below still calls the deleted
+    # scripts/sync.sh. Left in place, not deleted, purely as the shape to rewire once
+    # `redline sync` ships in Phase 3 — see the DISABLED note above and CHANGELOG.md.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

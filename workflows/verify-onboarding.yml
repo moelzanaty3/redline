@@ -32,7 +32,11 @@ concurrency:
 
 jobs:
   verify:
-    if: false # see the DISABLED note above — no scheduled cross-repo verify until Phase 3
+    # Dead in Phase 1: the steps below still call the deleted scripts/setup-repo.sh
+    # (twice — the verify loop and the drift-issue body text). Left in place, not
+    # deleted, purely as the shape to rewire once a clone-then-verify loop lands in
+    # Phase 3 — see the DISABLED note above and CHANGELOG.md.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
