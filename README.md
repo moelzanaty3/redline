@@ -19,12 +19,12 @@ OpenAI Codex / `AGENTS.md`, Claude, and Cursor. See [docs/vendors.md](docs/vendo
 | `standards/core.md` | Core standards: security, type safety, error handling, scope, and the severity output contract | source of truth — **the only file a human edits** |
 | `standards/stacks/*.md` | Per-stack rules: javascript, react, react-native, nodejs, microservices, java, go, python, csharp, kotlin, swift, terraform | source of truth |
 | `standards/manifest.json` | Stack globs, profiles, vendor toggles, standards version | source of truth |
-| `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx redline-cli` |
+| `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx --package=redline-cli@latest redline` |
 | `.github/pull_request_template.md` | Readiness checklist + ADR link | every onboarded repo |
 | `templates/repo-context.md` | Per-repo context template, pasted above the generated block in `AGENTS.md` | every onboarded repo |
 | `templates/CODEOWNERS` | Makes `require_code_owner_review` real and protects the enforcement surface | every onboarded repo |
 | `templates/redline.yml` | Thin caller installed as `.github/workflows/redline.yml` | every onboarded repo |
-| `rulesets/redline-ruleset.json` | Per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | applied by the setup script |
+| `rulesets/redline-ruleset.json` | Per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | applied by `redline init` |
 | `rulesets/redline-org-ruleset.json` | Same rules applied org-wide by custom repository property — no per-repo drift | applied once at org level |
 | `workflows/redline-gate.yml` | Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation | org `.github` repo |
 | `workflows/redline-sync.yml` | Distributes standards, gate caller and template to onboarded repos as PRs — **disabled in Phase 1**, see [CHANGELOG.md](CHANGELOG.md) | this (source) repo |
@@ -33,7 +33,7 @@ OpenAI Codex / `AGENTS.md`, Claude, and Cursor. See [docs/vendors.md](docs/vendo
 | `workflows/inbox.yml` + `scripts/build-inbox.mjs` | Org-wide prioritised PR inbox on GitHub Pages | this (source) repo |
 | `workflows/dashboard.yml` + `scripts/build-dashboard.mjs` | Static dashboard on Pages: acted-on rate, trends, seed recall history, the rule tuning queue | `redline-metrics` repo |
 | `workflows/seed-canary.yml` | Weekly regression test of the reviewer itself: opens a seeded PR, scores it, closes it | `redline-metrics` repo |
-| `workflows/verify-onboarding.yml` | Weekly re-verification of every onboarded repo; opens an issue on drift | this (source) repo |
+| `workflows/verify-onboarding.yml` | Weekly re-verification of every onboarded repo; opens an issue on drift — **disabled in Phase 1**, see [CHANGELOG.md](CHANGELOG.md) | this (source) repo |
 | `scripts/validate.mjs` | Bundle self-check, run by this repo's CI | this repo |
 | `scripts/check-pins.mjs` | Re-resolves SHA-pinned actions against their upstream tag | this repo's CI |
 | `scripts/assign-rule-ids.mjs` | Assigns and verifies the stable `<stack>/<slug>` id on every rule | this repo |
@@ -114,8 +114,9 @@ a pull request a team reviews and merges itself.
 - **Hard enforcement.** Org-level ruleset plus a required check that is name-verified.
   CODEOWNERS on the enforcement surface, so nobody can weaken their own gate unreviewed.
 - **A real security floor.** Secret scanning with push protection, Dependabot alerts,
-  dependency review and a diff secret scan — enabled by the onboarding script, not
-  assumed. Security checks in the gate can never be label-exempted.
+  dependency review and a diff secret scan — enabled by `redline init`, not assumed.
+  Security checks in the gate can never be label-exempted. On GitHub, that is; see
+  [CHANGELOG.md](CHANGELOG.md) for what Azure DevOps does not yet get at the gate.
 - **Least privilege.** Telemetry is pulled centrally with a read-only token. Onboarding a
   repo grants Redline no write access to it.
 - **Enterprise shape.** Per-stack rule composition, human approval always required, full
