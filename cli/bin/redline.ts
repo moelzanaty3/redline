@@ -113,10 +113,20 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const platform = await resolve(cwd);
       const report = await verify(platform, { cwd, root });
       log.report(report.findings);
+
+      // verify() short-circuits to exactly one finding when .redline.json is
+      // missing or corrupt (see cli/commands/verify.ts), precisely so this
+      // mapping can tell "never onboarded" (usage, 2) apart from "onboarded
+      // but wrong" (failed, 1) without verify() itself owning exit codes.
+      const notOnboarded = !report.ok && report.findings.length === 1;
+      const exitCode = report.ok ? 0 : notOnboarded ? exitCodeFor('usage') : exitCodeFor('failed');
+
       if (values.gate === true) {
-        log.info(report.ok ? 'Redline gate passed.' : 'Redline gate failed.');
+        if (report.ok) log.info('Redline gate passed.');
+        else if (notOnboarded) log.info('Redline gate: repository not onboarded — run redline init.');
+        else log.info('Redline gate failed.');
       }
-      return report.ok ? 0 : exitCodeFor('failed');
+      return exitCode;
     }
 
     log.error(`unknown command "${command}"`, 'run: redline --help');

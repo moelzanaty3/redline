@@ -78,9 +78,9 @@ test('init --blocking promotes the gate', async () => {
   assert.equal(await run(['init', '--blocking'], opts), 0);
 });
 
-test('verify on a repo that was never onboarded exits 1', async () => {
+test('verify on a repo that was never onboarded exits 2', async () => {
   const { opts } = deps(mkdtempSync(join(tmpdir(), 'redline-bin-bare-')));
-  assert.equal(await run(['verify'], opts), 1);
+  assert.equal(await run(['verify'], opts), 2);
 });
 
 test('verify after init exits 0', async () => {
@@ -88,6 +88,17 @@ test('verify after init exits 0', async () => {
   const { opts } = deps(cwd);
   await run(['init'], opts);
   assert.equal(await run(['verify'], opts), 0);
+});
+
+test('verify on an onboarded repo with drifted artifacts exits 1', async () => {
+  const cwd = repo();
+  const { opts } = deps(cwd);
+  await run(['init'], opts);
+  // Onboarded (.redline.json present and valid) but the rendered artifact no
+  // longer matches the standard — this must produce more than the single
+  // short-circuit finding so it is distinguished from "never onboarded".
+  writeFileSync(join(cwd, 'AGENTS.md'), 'tampered by hand, not by redline\n');
+  assert.equal(await run(['verify'], opts), 1);
 });
 
 test('a RedlineError maps to its own exit code and prints its hint', async () => {
