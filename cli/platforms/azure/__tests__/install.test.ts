@@ -196,14 +196,13 @@ test('advanced security denied by permissions is denied, so it does become pendi
   assert.ok(result.outcomes.every((o) => o.status === 'denied'));
 });
 
-test('installGate writes the azure pipeline and PR template, and labels are unsupported', async () => {
+test('installGate writes the azure pipeline and PR template', async () => {
   const cwd = tmp();
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
   assert.deepEqual(result.files, ['.azuredevops/redline-gate.yml', '.azuredevops/pull_request_template.md']);
   const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
   assert.match(yml, /ADR_DIFF_THRESHOLD: 300/);
   assert.match(yml, /genre[^\n]*redline/);
-  assert.equal(result.outcomes.find((o) => o.capability === 'labels')?.status, 'unsupported');
 
   // Regression guard: Azure Repos ignores YAML `pr:` triggers (GitHub-only
   // feature) — the Build Validation policy is what queues this pipeline, so
@@ -501,6 +500,150 @@ test('an existing Redline-marked build policy is updated in place; human build p
   );
 });
 
+// Brownfield: an onboarded repository already has branch policies a human
+// configured. Azure models "minimum number of reviewers" as one setting per
+// branch, so an unmarked policy of that type on the default branch IS the
+// human's own — PUTting Redline's settings over it silently rewrites how the
+// team reviews code.
+test('a human-owned minimum-reviewers policy on the default branch is reported and never written to', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    'GET /Payments/_apis/policy/configurations': {
+      status: 200,
+      body: {
+        value: [
+          {
+            id: 50,
+            type: { id: 'min-rev-id' },
+            settings: {
+              minimumApproverCount: 3,
+              displayName: 'Two seniors on main',
+              scope: [{ repositoryId: 'repo-guid', refName: 'refs/heads/main', matchKind: 'exact' }],
+            },
+          },
+        ],
+      },
+    },
+  });
+  const result = await createAzureInstall(client, gitFor).applyPolicy(ref, advisory);
+
+  assert.ok(
+    !client.calls.some((c) => c.path === '/Payments/_apis/policy/configurations/50'),
+    'a policy without the Redline: marker is human-owned and is never PUT over'
+  );
+  assert.ok(
+    !client.calls.some(
+      (c) => c.method === 'POST' && (c.body as { type?: { id: string } } | undefined)?.type?.id === 'min-rev-id'
+    ),
+    'nor is a second, conflicting minimum-reviewers policy stacked on the same branch'
+  );
+  const mergePolicy = result.outcomes.find((o) => o.capability === 'merge-policy');
+  assert.equal(mergePolicy?.status, 'already');
+  assert.match(mergePolicy?.detail ?? '', /Two seniors on main/);
+  assert.match(mergePolicy?.detail ?? '', /left untouched/);
+  // An `already` outcome means the branch is governed, not that the run
+  // failed: it must not zero the applied policy.
+  assert.equal(result.policy?.requiredApprovals, advisory.requiredApprovals);
+});
+
+// A Redline-marked policy an operator deliberately scoped to a release branch
+// must not be matched by the default-branch write and silently rescoped.
+test('a Redline-marked policy scoped to another branch is neither matched nor rescoped', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    [`GET ${BUILD_DEFS_PATH}`]: { status: 200, body: { value: [gateDefinition()] } },
+    'GET /Payments/_apis/policy/configurations': {
+      status: 200,
+      body: {
+        value: [
+          {
+            id: 70,
+            type: { id: 'build-id' },
+            settings: {
+              buildDefinitionId: 42,
+              displayName: 'Redline: gate build',
+              scope: [{ repositoryId: 'repo-guid', refName: 'refs/heads/release', matchKind: 'exact' }],
+            },
+          },
+        ],
+      },
+    },
+  });
+  const install = createAzureInstall(client, gitFor);
+  await install.installGate(ref, tmp(), gateOpts);
+  await install.applyPolicy(ref, advisory);
+
+  assert.ok(
+    !client.calls.some((c) => c.path === '/Payments/_apis/policy/configurations/70'),
+    'refs/heads/release is not this run’s branch — that policy is untouched'
+  );
+  const created = client.calls.find(
+    (c) => c.method === 'POST' && (c.body as { type?: { id: string } } | undefined)?.type?.id === 'build-id'
+  );
+  assert.ok(created, 'the default branch still gets its own Build Validation policy');
+  assert.deepEqual((created?.body as { settings: Record<string, unknown> }).settings['scope'], [
+    { repositoryId: 'repo-guid', refName: 'refs/heads/main', matchKind: 'exact' },
+  ]);
+});
+
+// A status policy is identified by the genre/name pair it requires, which is
+// the marker the gate pipeline publishes against. A human status policy
+// requiring a different status is a different object: Azure runs several on
+// one branch, so Redline coexists with it instead of backing off and leaving
+// the repository with no gate at all.
+test('a human status policy requiring a different status is left alone and Redline adds its own', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    'GET /Payments/_apis/policy/configurations': {
+      status: 200,
+      body: {
+        value: [
+          {
+            id: 80,
+            type: { id: 'status-id' },
+            settings: {
+              statusGenre: 'sonarqube',
+              statusName: 'quality-gate',
+              scope: [{ repositoryId: 'repo-guid', refName: 'refs/heads/main', matchKind: 'exact' }],
+            },
+          },
+        ],
+      },
+    },
+  });
+  await createAzureInstall(client, gitFor).applyPolicy(ref, advisory);
+  assert.ok(!client.calls.some((c) => c.path === '/Payments/_apis/policy/configurations/80'));
+  const created = client.calls.find(
+    (c) => c.method === 'POST' && (c.body as { type?: { id: string } } | undefined)?.type?.id === 'status-id'
+  );
+  const settings = (created?.body as { settings: Record<string, unknown> }).settings;
+  assert.equal(settings['statusGenre'], 'redline');
+  assert.equal(settings['statusName'], 'gate');
+});
+
+test('every policy Redline creates carries the Redline: ownership marker', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    ...registrationRoutes,
+    'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } },
+  });
+  const install = createAzureInstall(client, gitFor);
+  await install.installGate(ref, tmp(), gateOpts);
+  await install.applyPolicy(ref, advisory);
+  const written = client.calls.filter(
+    (c) => c.method === 'POST' && c.path === '/Payments/_apis/policy/configurations'
+  );
+  assert.equal(written.length, 4);
+  for (const call of written) {
+    const settings = (call.body as { settings: Record<string, unknown> }).settings;
+    assert.match(
+      String(settings['displayName']),
+      /^Redline: /,
+      'without the marker a later run cannot tell its own policy from a human’s'
+    );
+  }
+});
+
 test('a non-2xx truthy error body on policy/configurations degrades to denied, never throws', async () => {
   // Azure error bodies are truthy objects, not arrays — `?? []` would never
   // fire on this shape. This drives that exact path.
@@ -622,6 +765,98 @@ test('openPullRequest uses full ref names and returns the azure pull request id'
     title: 'chore(redline): onboard',
     description: 'body',
   });
+});
+
+// The gate template exempts a pull request carrying a soft-fail label, and it
+// reads those labels off the pull request — so the onboarding PR must actually
+// carry `redline-sync`, or the very first gate run fails on a repository that
+// has not adopted the standard yet.
+test('openPullRequest applies the change labels to the created pull request', async () => {
+  const client = fakeAzure({
+    'POST /Payments/_apis/git/repositories/repo-guid/pullrequests': {
+      status: 201,
+      body: { pullRequestId: 31 },
+    },
+  });
+  const repo = fakeRepoGit();
+  const pr = await createAzureInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
+    branch: 'redline/onboard',
+    title: 'chore(redline): onboard',
+    body: 'body',
+    labels: ['redline-sync'],
+    files: ['.azuredevops/redline-gate.yml'],
+  });
+  const labelCall = client.calls.find(
+    (c) => c.path === '/Payments/_apis/git/repositories/repo-guid/pullRequests/31/labels'
+  );
+  assert.equal(labelCall?.method, 'POST');
+  assert.deepEqual(labelCall?.body, { name: 'redline-sync' });
+  assert.equal(pr?.outcomes?.find((o) => o.capability === 'labels')?.status, 'applied');
+});
+
+test('a rejected label write degrades to a labels outcome and still returns the pull request', async () => {
+  const client = fakeAzure({
+    'POST /Payments/_apis/git/repositories/repo-guid/pullrequests': {
+      status: 201,
+      body: { pullRequestId: 31 },
+    },
+    'POST /Payments/_apis/git/repositories/repo-guid/pullRequests/31/labels': {
+      status: 403,
+      body: { message: 'TF401027: You need Contribute permission to perform this action.' },
+    },
+  });
+  const repo = fakeRepoGit();
+  const pr = await createAzureInstall(client, repo.gitFor).openPullRequest(ref, tmp(), {
+    branch: 'redline/onboard',
+    title: 'chore(redline): onboard',
+    body: 'body',
+    labels: ['redline-sync'],
+    files: ['.azuredevops/redline-gate.yml'],
+  });
+  assert.equal(pr?.number, 31, 'the pull request is open — a label is not worth losing it over');
+  assert.equal(pr?.outcomes?.find((o) => o.capability === 'labels')?.status, 'denied');
+});
+
+// `redline-cli@latest` in a template installed into hundreds of repositories
+// means any npm publish changes org-wide gate behaviour without a pull
+// request anywhere. The version is pinned at install time instead.
+test('installGate pins the npx version in the rendered pipeline', async () => {
+  const cwd = tmp();
+  await createAzureInstall(fakeAzure(registrationRoutes), gitFor, '3.1.4').installGate(ref, cwd, gateOpts);
+  const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
+  assert.match(yml, /--package=redline-cli@3\.1\.4 redline verify --gate/);
+  assert.doesNotMatch(yml, /redline-cli@latest/);
+});
+
+test('an unpublished development build leaves @latest in place rather than pinning a version npm has never seen', async () => {
+  const cwd = tmp();
+  await createAzureInstall(fakeAzure(registrationRoutes), gitFor, '0.0.0-development').installGate(
+    ref,
+    cwd,
+    gateOpts
+  );
+  const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
+  assert.match(yml, /--package=redline-cli@latest redline verify --gate/);
+});
+
+// GitHub implements the redline-exempt / redline-sync escape hatch in the
+// gate workflow's shell (workflows/redline-gate.yml). Without the same thing
+// on Azure a blocking gate has no reviewer-accepted override at all.
+test('the gate template exempts a pull request carrying a soft-fail label', async () => {
+  const cwd = tmp();
+  await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, {
+    ...gateOpts,
+    softFailLabels: ['redline-exempt', 'redline-sync'],
+  });
+  const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
+  assert.match(yml, /SOFT_FAIL_LABELS: redline-exempt,redline-sync/);
+  assert.match(yml, /pullRequests\/\$SYSTEM_PULLREQUEST_PULLREQUESTID/);
+  assert.match(yml, /curl_authed -sS "\$pr_url\/labels/, 'the labels come off the pull request itself');
+  assert.match(yml, /SOFT_FAIL_LABELS\/\/,\/ /, 'the configured labels are what the shell loops over');
+  // The exemption may only ever turn a failure into a success, never the
+  // reverse — and the token still stays out of argv on the extra call.
+  assert.match(yml, /state="succeeded"/);
+  assert.doesNotMatch(yml, /Authorization: Bearer \$SYSTEM_ACCESSTOKEN/);
 });
 
 test('an unrelated pre-staged file refuses onboarding before any branch is created', async () => {

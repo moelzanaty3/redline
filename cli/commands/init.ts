@@ -197,6 +197,10 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
         labels: ['redline-sync'],
         files,
       });
+  // Work that only exists once the pull request does — labelling it. It is
+  // reported, but it cannot reach pendingAdmin: .redline.json records that
+  // list and is itself part of the pull request, so it was written above.
+  if (pullRequest?.outcomes) outcomes.push(...pullRequest.outcomes);
 
   return { profile, files, outcomes, pendingAdmin, pullRequest, migratedFrom, alreadyOnboarded };
 }

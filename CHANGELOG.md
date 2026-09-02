@@ -95,6 +95,28 @@ Record seed scores here. A standards change with no measurement is an opinion.
   rule and id totals, standards version) is read from `standards/` at build time through
   `web/lib/manifest.ts` and `web/lib/rules.ts`. No time-saved, defect-reduction or
   adoption figure appears, because Phase 1 ships no telemetry to support one.
+- Azure DevOps onboarding is now brownfield-safe and at parity with the GitHub gate.
+  Branch policies are matched by ownership, not by type: every policy Redline writes
+  carries a `Redline:` `displayName` marker (the `redline/gate` genre/name pair serves
+  the same purpose for the Status policy), and a policy of the same type without one is
+  a human's — it is reported and left untouched, never PUT over. Matching also honours
+  the scope's `refName`, so a `Redline:`-marked policy an operator scoped to a release
+  branch is no longer adopted by the default-branch write and silently rescoped. Where
+  Azure models a control as one setting per branch (minimum reviewers, comment
+  resolution) Redline adds nothing beside a human's policy; where Azure runs several
+  side by side (Status, Build Validation) it installs its own and leaves the neighbours
+  alone. An `already` outcome — a settled branch — no longer reads as failure and zeroes
+  the policy the run reports.
+  The onboarding pull request now actually gets its `redline-sync` label (Azure has no
+  label field on the create call, so it is a second request); a refused label degrades
+  into a `labels` outcome instead of costing the pull request. The gate template gained
+  the soft-fail escape hatch GitHub already had: it reads the pull request's labels and,
+  when one is in `SOFT_FAIL_LABELS`, publishes `redline/gate` as succeeded with a warning
+  instead of blocking — one-way, and with the access token still off argv. The template's
+  `redline-cli@latest` is pinned to the installing CLI's version at write time, so an npm
+  publish can no longer change gate behaviour across the org without a pull request
+  anywhere; an unpublished `0.0.0-development` build keeps `@latest`, since that version
+  does not exist on the registry.
 
 ## 3.0.0 — 2026-09-02
 

@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RedlineError } from '../../core/errors.ts';
 import type { Git } from '../../core/git.ts';
+import { CLI_VERSION } from '../../core/version.ts';
 import type {
   AdminCapability,
   CapabilityOutcome,
@@ -82,6 +83,11 @@ const GATE_YAML_FILENAME = '.azuredevops/redline-gate.yml';
 // repository's Build Validation policy at a pipeline that checks out a
 // sibling repository and publishes redline/gate against the sibling's id.
 const GATE_DEFINITION_FOLDER = '\\Redline';
+
+// semantic-release replaces package.json's version only on a published build,
+// so this is what an unpublished checkout reports. Pinning it into a gate
+// template would install a version the registry has never seen.
+const UNPUBLISHED_VERSION = '0.0.0-development';
 
 interface BuildDefinition {
   id: number;
@@ -199,7 +205,8 @@ function writeFile(cwd: string, relPath: string, contents: string): void {
 
 export function createAzureInstall(
   client: AzureClient,
-  gitFor: (cwd: string) => Git
+  gitFor: (cwd: string) => Git,
+  cliVersion: string = CLI_VERSION
 ): PlatformInstall {
   const project = (ref: RepoRef): string => {
     if (!ref.project) throw new RedlineError('usage', 'an Azure DevOps repository needs a project');
@@ -331,21 +338,59 @@ export function createAzureInstall(
       const proj = project(ref);
       const repo = repoId(ref);
       const types = await resolvePolicyTypeIds(client, proj);
-      const scope = [
-        { repositoryId: repo, refName: `refs/heads/${ref.defaultBranch}`, matchKind: 'exact' },
-      ];
+      const defaultRef = `refs/heads/${ref.defaultBranch}`;
+      const scope = [{ repositoryId: repo, refName: defaultRef, matchKind: 'exact' }];
 
       const buildTypeId = requiredTypeId(types, POLICY_TYPE_NAMES.build);
-      // Build policies are matched by the Redline: displayName marker, not by
-      // type alone: a repository routinely carries human-owned build policies
-      // of the same type, and those are never written to.
-      const isRedlineBuildPolicy = (config: PolicyConfiguration): boolean => {
+      const statusTypeId = requiredTypeId(types, POLICY_TYPE_NAMES.status);
+
+      // Brownfield ownership, the rule the whole of this function turns on.
+      // Redline writes REDLINE_POLICY_MARKER into settings.displayName on
+      // every policy it creates; a policy of the same type WITHOUT it belongs
+      // to a human and is never updated, rescoped or deleted — matching on
+      // the type id alone would PUT a team's own review rules away.
+      const isRedlineOwned = (config: PolicyConfiguration): boolean => {
         const displayName = config.settings['displayName'];
-        return (
-          config.type.id === buildTypeId &&
-          typeof displayName === 'string' &&
-          displayName.startsWith(REDLINE_POLICY_MARKER)
-        );
+        return typeof displayName === 'string' && displayName.startsWith(REDLINE_POLICY_MARKER);
+      };
+      const isRedlineBuildPolicy = (config: PolicyConfiguration): boolean =>
+        config.type.id === buildTypeId && isRedlineOwned(config);
+      // Status policies carry a second marker: the genre/name pair the gate
+      // pipeline publishes, which is what makes one Status policy a different
+      // object from another on the same branch. It also predates the
+      // displayName marker, so a repository onboarded by an earlier release
+      // is still recognised as Redline's own instead of being mistaken for a
+      // human's and abandoned.
+      const isRedlineStatusPolicy = (config: PolicyConfiguration): boolean =>
+        config.type.id === statusTypeId &&
+        config.settings['statusGenre'] === AZURE_STATUS_GENRE &&
+        config.settings['statusName'] === AZURE_STATUS_NAME;
+
+      // Only policies that govern the branch this run writes are candidates.
+      // A scope entry naming another ref belongs to a branch an operator
+      // chose deliberately: matching it would rewrite it with the
+      // default-branch scope and silently move it.
+      const coversDefaultBranch = (config: PolicyConfiguration): boolean => {
+        const configScope = config.settings['scope'];
+        if (!Array.isArray(configScope)) return false;
+        return configScope.some((entry) => {
+          if (!isNonNullObject(entry) || entry['repositoryId'] !== repo) return false;
+          const refName = entry['refName'];
+          // No ref at all means the whole repository, which includes the
+          // default branch.
+          if (refName === undefined || refName === null) return true;
+          if (typeof refName !== 'string') return false;
+          return entry['matchKind'] === 'prefix'
+            ? defaultRef.startsWith(refName)
+            : refName === defaultRef;
+        });
+      };
+
+      const describe = (config: PolicyConfiguration): string => {
+        const displayName = config.settings['displayName'];
+        return typeof displayName === 'string'
+          ? `"${displayName}" (policy ${config.id})`
+          : `policy ${config.id}`;
       };
 
       const repoPropertyOutcome: CapabilityOutcome = {
@@ -368,13 +413,7 @@ export function createAzureInstall(
       if (configs === null) {
         throw new RedlineError('host', 'Azure DevOps returned an unexpected shape for policy configurations');
       }
-      const mine = configs.filter((c) => {
-        const configScope = c.settings['scope'];
-        return (
-          Array.isArray(configScope) &&
-          configScope.some((s) => isNonNullObject(s) && s['repositoryId'] === repo)
-        );
-      });
+      const onBranch = configs.filter(coversDefaultBranch);
 
       const gate = gateBuild;
       const registeredGate = gate !== null && gate.registered ? gate : null;
@@ -387,7 +426,7 @@ export function createAzureInstall(
       // carries a Redline Build Validation policy from an earlier run. That
       // last case is what keeps a token which cannot read build definitions
       // from silently downgrading a working, enforcing gate to advisory.
-      const gateAlreadyEnforcing = mine.some(isRedlineBuildPolicy);
+      const gateAlreadyEnforcing = onBranch.some(isRedlineBuildPolicy);
       const blocking =
         policy.blocking && (gate === null || registeredGate !== null || gateAlreadyEnforcing);
 
@@ -398,26 +437,44 @@ export function createAzureInstall(
         settings: Record<string, unknown>;
       }
       interface WantedPolicy {
-        matches: (config: PolicyConfiguration) => boolean;
+        typeId: string;
+        // Recognises Redline's own object among the policies of that type on
+        // the branch. Never `true` for a policy a human created.
+        mine: (config: PolicyConfiguration) => boolean;
         // Read at write time, not up front: a rejected Build Validation write
         // has to reach the Status policy that is written after it.
         config: (blocking: boolean) => PolicyBody;
         // True for the write the blocking gate depends on: if it fails,
         // everything written after it drops to advisory.
         runsTheGate?: boolean;
+        // Azure models this policy type as a single setting per branch (one
+        // toggle in the UI), so an unmarked policy of this type on the branch
+        // is not a neighbour — it is the same control, already configured by
+        // a human. Redline reports it and adds nothing rather than stacking a
+        // second, conflicting copy.
+        //
+        // Status and Build policies are deliberately NOT marked this way:
+        // Azure keys them by (genre, name) and by buildDefinitionId, several
+        // coexist natively on one branch, and backing off there would leave a
+        // repository with a human's unrelated status policy and no Redline
+        // gate at all.
+        oneSettingPerBranch?: boolean;
+        // Names the control in the outcome an operator reads.
+        what: string;
       }
-      const ofType =
-        (id: string) =>
-        (config: PolicyConfiguration): boolean =>
-          config.type.id === id;
+      const minimumReviewersTypeId = requiredTypeId(types, POLICY_TYPE_NAMES.minimumReviewers);
+      const commentsTypeId = requiredTypeId(types, POLICY_TYPE_NAMES.comments);
 
       // types is guaranteed to carry every POLICY_TYPE_NAMES entry:
       // resolvePolicyTypeIds always seeds it from POLICY_TYPE_FALLBACK first.
       const wanted: WantedPolicy[] = [
         {
-          matches: ofType(requiredTypeId(types, POLICY_TYPE_NAMES.minimumReviewers)),
+          typeId: minimumReviewersTypeId,
+          mine: isRedlineOwned,
+          oneSettingPerBranch: true,
+          what: 'the minimum reviewer count',
           config: () => ({
-            type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.minimumReviewers) },
+            type: { id: minimumReviewersTypeId },
             isEnabled: true,
             isBlocking: true,
             settings: {
@@ -425,17 +482,21 @@ export function createAzureInstall(
               creatorVoteCounts: false,
               resetOnSourcePush: policy.dismissStaleReviews,
               blockLastPusherVote: true,
+              displayName: `${REDLINE_POLICY_MARKER} minimum reviewers`,
               scope,
             },
           }),
         },
         {
-          matches: ofType(requiredTypeId(types, POLICY_TYPE_NAMES.comments)),
+          typeId: commentsTypeId,
+          mine: isRedlineOwned,
+          oneSettingPerBranch: true,
+          what: 'comment resolution',
           config: () => ({
-            type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.comments) },
+            type: { id: commentsTypeId },
             isEnabled: policy.requireThreadResolution,
             isBlocking: policy.requireThreadResolution,
-            settings: { scope },
+            settings: { displayName: `${REDLINE_POLICY_MARKER} comment resolution`, scope },
           }),
         },
         // The Build Validation policy is what actually queues the gate
@@ -447,8 +508,10 @@ export function createAzureInstall(
           ? []
           : [
               {
-                matches: isRedlineBuildPolicy,
+                typeId: buildTypeId,
+                mine: isRedlineBuildPolicy,
                 runsTheGate: true,
+                what: 'the gate build',
                 config: (blocking: boolean): PolicyBody => ({
                   type: { id: buildTypeId },
                   isEnabled: true,
@@ -464,9 +527,11 @@ export function createAzureInstall(
               },
             ]),
         {
-          matches: ofType(requiredTypeId(types, POLICY_TYPE_NAMES.status)),
+          typeId: statusTypeId,
+          mine: isRedlineStatusPolicy,
+          what: `the ${AZURE_STATUS_GENRE}/${AZURE_STATUS_NAME} status`,
           config: (blocking: boolean) => ({
-            type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.status) },
+            type: { id: statusTypeId },
             isEnabled: true,
             // Advisory is native on Azure: isBlocking mirrors the (possibly
             // degraded) blocking choice directly, no rule needs omitting the
@@ -477,6 +542,7 @@ export function createAzureInstall(
               statusGenre: AZURE_STATUS_GENRE,
               authorId: null,
               invalidateOnSourceUpdate: true,
+              displayName: `${REDLINE_POLICY_MARKER} gate status`,
               scope,
             },
           }),
@@ -486,7 +552,21 @@ export function createAzureInstall(
       let effectiveBlocking = blocking;
       const results: CapabilityOutcome[] = [];
       for (const wantedPolicy of wanted) {
-        const match = mine.find(wantedPolicy.matches);
+        const sameType = onBranch.filter((c) => c.type.id === wantedPolicy.typeId);
+        const match = sameType.find(wantedPolicy.mine);
+        const humanOwned =
+          match === undefined && wantedPolicy.oneSettingPerBranch === true ? sameType[0] : undefined;
+        if (humanOwned) {
+          results.push({
+            capability: 'merge-policy',
+            status: 'already',
+            detail:
+              `branch policies — ${describe(humanOwned)} already sets ${wantedPolicy.what} on ` +
+              `${defaultRef} and carries no "${REDLINE_POLICY_MARKER}" marker, so it is human-owned ` +
+              `and was left untouched; Redline wrote none of its own`,
+          });
+          continue;
+        }
         const config = wantedPolicy.config(effectiveBlocking);
         const res = match
           ? await client.request('PUT', `/${proj}/_apis/policy/configurations/${match.id}`, config)
@@ -495,13 +575,17 @@ export function createAzureInstall(
         if (wantedPolicy.runsTheGate === true && !isSuccess(res.status)) effectiveBlocking = false;
       }
       const mergePolicy = worstOutcome(results);
+      // "Nothing was refused", not "every write was a create". `already` is
+      // how a settled branch reports — a human-owned policy Redline
+      // deliberately left alone — and reading it as failure zeroed the policy
+      // the run reports, which then read back as no policy at all.
+      const nothingRefused = results.every((o) => o.status === 'applied' || o.status === 'already');
 
       return {
         outcomes: [mergePolicy, repoPropertyOutcome],
         // The applied policy reports what was actually written: when nothing
         // could queue the gate, blocking was degraded to advisory.
-        policy:
-          mergePolicy.status === 'applied' ? { ...policy, blocking: effectiveBlocking } : null,
+        policy: nothingRefused ? { ...policy, blocking: effectiveBlocking } : null,
       };
     },
 
@@ -513,7 +597,15 @@ export function createAzureInstall(
           `FAIL_ON_DEPENDENCY_SEVERITY: ${opts.failOnDependencySeverity}`
         )
         .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`);
-      writeFile(cwd, '.azuredevops/redline-gate.yml', pipeline);
+      // `redline-cli@latest` inside a template installed across every
+      // onboarded repository means any npm publish changes org-wide gate
+      // behaviour with no pull request anywhere. Pin the version that wrote
+      // the file, so a CLI upgrade arrives as a reviewable sync PR.
+      const pinned =
+        cliVersion === UNPUBLISHED_VERSION
+          ? pipeline
+          : pipeline.replace('redline-cli@latest', `redline-cli@${cliVersion}`);
+      writeFile(cwd, '.azuredevops/redline-gate.yml', pinned);
 
       const template = readFileSync(
         join(PACKAGE_ROOT, 'templates/azure/pull_request_template.md'),
@@ -528,14 +620,10 @@ export function createAzureInstall(
 
       return {
         files: ['.azuredevops/redline-gate.yml', '.azuredevops/pull_request_template.md'],
-        outcomes: [
-          gate,
-          {
-            capability: 'labels',
-            status: 'unsupported',
-            detail: 'Azure DevOps pull request labels are created on use, not pre-declared',
-          },
-        ],
+        // No `labels` outcome here: Azure creates pull request labels on use
+        // rather than pre-declaring them, so the capability is only exercised
+        // when openPullRequest applies them — and it reports it there.
+        outcomes: [gate],
       };
     },
 
@@ -623,9 +711,25 @@ export function createAzureInstall(
       if (id === null) {
         throw new RedlineError('host', `could not open a pull request (HTTP ${created.status})`);
       }
+      // Labels come after creation on Azure (there is no field on the create
+      // body), and the gate reads them: the onboarding pull request must
+      // carry `redline-sync` or the first gate run fails on a repository that
+      // has not adopted the standard yet. A refused label is still not worth
+      // losing the pull request over — it degrades into an outcome.
+      const labelOutcomes: CapabilityOutcome[] = [];
+      for (const label of change.labels) {
+        const applied = await client.request(
+          'POST',
+          `/${project(ref)}/_apis/git/repositories/${repoId(ref)}/pullRequests/${id}/labels`,
+          { name: label }
+        );
+        labelOutcomes.push(outcome('labels', applied.status, `pull request label "${label}"`));
+      }
+
       return {
         number: id,
         url: `https://dev.azure.com/${ref.org}/${project(ref)}/_git/${ref.repo}/pullrequest/${id}`,
+        ...(labelOutcomes.length > 0 ? { outcomes: [worstOutcome(labelOutcomes)] } : {}),
       };
     },
   };

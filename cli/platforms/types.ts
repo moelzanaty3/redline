@@ -77,6 +77,12 @@ export interface Change {
 export interface PullRequestRef {
   number: number;
   url: string;
+  // Work that happens after the pull request exists and can be refused on its
+  // own — applying the sync labels. It degrades into an outcome rather than
+  // costing the pull request, and the caller folds it into its report. It
+  // cannot reach `.redline.json`'s pendingAdmin: that file is part of the
+  // pull request and is therefore written before the pull request is opened.
+  outcomes?: CapabilityOutcome[];
 }
 
 export interface InstallResult {
