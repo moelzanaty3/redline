@@ -15,6 +15,25 @@ Record seed scores here. A standards change with no measurement is an opinion.
   already have committed on the host, and a retry could open a duplicate pull request
   or policy. 429 responses retry for every method; 5xx retries are limited to
   idempotent methods (GET, PUT, PATCH, DELETE, HEAD).
+- Release flow hardened. `semantic-release` is pinned exactly (25.0.9) in
+  `devDependencies`, so the publish job runs the lockfile-resolved version instead of
+  whatever `npx --yes` fetches that day. The release job now fails loudly if no `v*`
+  tag exists — the history must be seeded with `v2.1.0` once so the first computed
+  release is 3.0.0, matching this file — and prints the exact seed command. Same-repo
+  pull requests rehearse the release with `semantic-release --dry-run` (fork PRs are
+  skipped, so secrets never reach unreviewed code), and a manual `workflow_dispatch`
+  publishes a throwaway build to the npm `canary` dist-tag without moving `latest`.
+  The two version axes (CLI vs standards) are now documented in the README.
+- GitHub admin **write** endpoints (repo PATCH, ruleset create/update,
+  vulnerability-alerts, automated-security-fixes) now report a 404 as `denied`, so it
+  reaches the pending-admin list — fine-grained tokens without the administration scope
+  get 404, not 403, on a repository they can otherwise read. Read endpoints keep
+  404 = unsupported.
+- A 422 from the ruleset create/update now fails loudly as a host error naming the
+  endpoint, instead of leaving the repository silently policy-less with exit 0.
+- A 401/403 while resolving the repository (both GitHub and Azure DevOps) now exits 3
+  (permission, with a token hint) instead of 4 (host), so CI can tell "token lacks
+  scope" from "the host is down".
 
 ## 3.0.0 — 2026-09-02
 

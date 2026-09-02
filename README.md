@@ -108,6 +108,30 @@ Distribution to already-onboarded repos (`redline sync`) is Phase 3 — see
 re-running `redline init`. Redline never pushes to a default branch; every change lands as
 a pull request a team reviews and merges itself.
 
+## Two version axes
+
+Redline carries two versions that move independently. Do not conflate them.
+
+| Axis | Lives in | Bumped by | Example |
+| --- | --- | --- | --- |
+| **CLI version** | `redline-cli` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `3.0.0` |
+| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.1` |
+
+The CLI version is the tool's release line: [CHANGELOG.md](CHANGELOG.md) tracks it, and
+semantic-release computes the next one from commit messages — never edit
+`package.json`'s `version` by hand. The standards version is the rules' release line:
+sync PRs and rendered artifacts quote it, so a repo always knows which ruleset it is
+running. A CLI release does not imply a standards change, and vice versa.
+
+Each onboarded repo's `.redline.json` records both — `cliVersion` (the tool that
+onboarded it) and `standardsVersion` (the ruleset it was rendered from) — so `redline
+verify` can tell "old tool" apart from "old rules".
+
+Releases publish from `.github/workflows/release.yml`: every same-repo PR rehearses
+with `semantic-release --dry-run`, a manual `workflow_dispatch` publishes a throwaway
+build to the npm `canary` dist-tag without touching `latest`, and the real publish on
+`main` runs the exact semantic-release version pinned in the lockfile.
+
 ## Why this works at enterprise scale
 
 - **Feedback loop that measures the right thing.** Every rule carries a permanent id,
