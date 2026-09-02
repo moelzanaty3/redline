@@ -4,10 +4,10 @@ This is the **Redline source repository** — the single source of truth for the
 organisation's AI-assisted-development oversight layer. It contains no product code.
 
 - `standards/` — vendor-neutral rules. **The only files a human edits.**
-- `scripts/render.mjs` — renders `standards/` into Copilot, AGENTS.md, Claude and
+- `cli/render/` — renders `standards/` into Copilot, AGENTS.md, Claude and
   Cursor artifacts. Everything under `.github/copilot-instructions.md`,
   `.github/instructions/redline-*.instructions.md` and the marker block below is
-  **generated**. Run `node scripts/render.mjs --self` after editing `standards/`.
+  **generated**. Run `node scripts/render-self.mjs` after editing `standards/`.
 - `workflows/` — reusable and per-repo workflows, distributed to onboarded repos.
 - `rulesets/` — org and repo branch rulesets.
 - `seeded/` — validation corpus. Never merged.

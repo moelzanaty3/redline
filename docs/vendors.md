@@ -8,17 +8,17 @@ Redline is not a Copilot system. It is a standards system with a Copilot adapter
 | --- | --- | --- |
 | The rules themselves | No | `standards/core.md`, `standards/stacks/*.md` |
 | Which rules a repo gets | No | `standards/manifest.json` profiles |
-| File format and glob syntax | **Yes** | `scripts/render.mjs` vendor adapters |
+| File format and glob syntax | **Yes** | `cli/render/vendors.ts` vendor adapters |
 | Readiness gate, ruleset, CODEOWNERS | No | `workflows/`, `rulesets/`, `templates/` |
 | Telemetry and scoring | No | attribute findings by reviewer login |
 
-Only the third row is vendor-aware, and it is about 60 lines of `render.mjs`.
+Only the third row is vendor-aware, and it is about 60 lines of `cli/render/vendors.ts`.
 
 ## What renders where
 
-```
-node scripts/render.mjs --profile web --out ./target-repo
-```
+`npx --package=redline-cli@latest redline init` renders the detected profile for you.
+Programmatically, the same entry point is `render({ root, profile, out })` from
+`cli/render/standards.ts` — see `scripts/render-self.mjs` for the smallest working caller.
 
 | Vendor | Artifact | Path scoping mechanism |
 | --- | --- | --- |
@@ -32,8 +32,9 @@ Select a subset with `--vendors copilot,agents`. Toggle the org-wide default in
 
 ## Adding a vendor
 
-Add one function to the `vendors` object in `scripts/render.mjs`. It receives
-`{ profile, stacks }` and returns `{ files: Map<path, { body, merge? }>, prune? }`.
+Add one function to the `VENDORS` object in `cli/render/vendors.ts`. It receives a
+`RenderContext` (`{ manifest, root, profile, stacks }`) and returns
+`{ files: Map<path, { body, merge? }>, prune? }`.
 
 - `merge: true` wraps the body in `<!-- REDLINE:BEGIN -->` markers and preserves
   everything outside them, so a repo's own context survives every sync.
