@@ -189,14 +189,18 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
       // Advanced Security is a separately licensed feature: a tenant without
       // it returns 404 here — that is `unsupported`, never `denied`, the
       // same distinction install.ts's enableSecurityFloor draws. A 401/403
-      // is a real permission denial. Any other non-2xx degrades to `denied`
-      // rather than throwing: this method feeds a report, not a gate.
-      const body = isSuccess(res.status) ? parseEnablement(res.body, 'a repository enablement') : null;
-      const statusFor = (on: boolean | undefined): CapabilityOutcome['status'] => {
-        if (res.status === 404) return 'unsupported';
-        if (isSuccess(res.status)) return on === true ? 'applied' : 'denied';
-        return 'denied';
-      };
+      // is a real permission denial and also degrades into a capability
+      // outcome. Any other non-2xx (500, 502, a gateway timeout) is a host
+      // error, not a finding about the repository, and must not be dressed
+      // up as `denied` — that is exactly the status that files pending
+      // admin work against a problem that does not exist. Throw, same as
+      // assertOk everywhere else in this file.
+      const refusal: CapabilityOutcome['status'] | null =
+        res.status === 404 ? 'unsupported' : res.status === 401 || res.status === 403 ? 'denied' : null;
+      if (refusal === null) assertOk(res.status, path);
+      const body = refusal === null ? parseEnablement(res.body, 'a repository enablement') : null;
+      const statusFor = (on: boolean | undefined): CapabilityOutcome['status'] =>
+        refusal ?? (on === true ? 'applied' : 'denied');
 
       return {
         outcomes: [

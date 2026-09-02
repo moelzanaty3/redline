@@ -179,6 +179,23 @@ test('readSecurityState treats an explicit 403 as denied, not unsupported', asyn
   assert.ok(state.outcomes.every((o) => o.status === 'denied'));
 });
 
+// A transient host error (500, a gateway timeout) must not read as "an
+// administrator turned this off" — `denied` is exactly the status that
+// files pending admin work, so mapping a 500 to it would send an
+// administrator looking for a problem that does not exist.
+test('readSecurityState surfaces a 500 as a host error, not as capabilities being denied', async () => {
+  const client = fakeAzure({
+    'GET /Payments/_apis/management/repositories/repo-guid/enablement': {
+      status: 500,
+      body: { message: 'internal error' },
+    },
+  });
+  await assert.rejects(
+    createAzureVerify(client).readSecurityState(ref),
+    (err: unknown) => isRedlineError(err) && err.kind === 'host'
+  );
+});
+
 test('latestPullRequestNumber returns null when the repository has no pull requests', async () => {
   const client = fakeAzure({
     'GET /Payments/_apis/git/repositories/repo-guid/pullrequests?searchCriteria.status=all&$top=1': {
