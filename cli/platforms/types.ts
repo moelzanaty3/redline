@@ -54,6 +54,11 @@ export interface MergePolicy {
   // reports, which is what verify compares against the reported checks.
   requiredChecks: string[];
   blocking: boolean;
+  // Read side only, and set only when the host can say something the boolean
+  // cannot: why a gate that looks configured to block does not actually
+  // block. `redline verify` prints it with the merge-policy finding, so an
+  // operator debugging stuck pull requests is pointed at the real cause.
+  advisoryReason?: string;
 }
 
 export interface OwnershipRule {

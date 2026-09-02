@@ -75,10 +75,19 @@ function parseCreatedPullRequestId(body: unknown): number | null {
 // the Build Validation policy in applyPolicy queues.
 const GATE_DEFINITION_NAME = 'redline-gate';
 const GATE_YAML_FILENAME = '.azuredevops/redline-gate.yml';
+// Definition names are unique per folder, and the `name=` list filter is
+// project-wide. Registering Redline's definitions in their own folder is what
+// keeps two repositories in the same project from colliding on the name
+// `redline-gate` — and adopting each other's definitions, which would point a
+// repository's Build Validation policy at a pipeline that checks out a
+// sibling repository and publishes redline/gate against the sibling's id.
+const GATE_DEFINITION_FOLDER = '\\Redline';
 
 interface BuildDefinition {
   id: number;
   name: string;
+  path: string | null;
+  repositoryId: string | null;
   yamlFilename: string | null;
 }
 
@@ -94,7 +103,16 @@ function parseBuildDefinitions(body: unknown): BuildDefinition[] | null {
       isNonNullObject(process) && typeof process['yamlFilename'] === 'string'
         ? process['yamlFilename']
         : null;
-    defs.push({ id: item['id'], name: item['name'], yamlFilename });
+    const repository = item['repository'];
+    const repositoryId =
+      isNonNullObject(repository) && typeof repository['id'] === 'string' ? repository['id'] : null;
+    defs.push({
+      id: item['id'],
+      name: item['name'],
+      path: typeof item['path'] === 'string' ? item['path'] : null,
+      repositoryId,
+      yamlFilename,
+    });
   }
   return defs;
 }
@@ -202,9 +220,11 @@ export function createAzureInstall(
 
   async function ensureGateBuildDefinition(ref: RepoRef): Promise<CapabilityOutcome> {
     const proj = project(ref);
+    const repo = repoId(ref);
     const listed = await client.request<unknown>(
       'GET',
-      `/${proj}/_apis/build/definitions?name=${GATE_DEFINITION_NAME}&includeAllProperties=true`
+      `/${proj}/_apis/build/definitions?name=${GATE_DEFINITION_NAME}` +
+        `&path=${encodeURIComponent(GATE_DEFINITION_FOLDER)}&includeAllProperties=true`
     );
     if (!isSuccess(listed.status)) {
       gateBuild = { registered: false };
@@ -215,8 +235,13 @@ export function createAzureInstall(
       throw new RedlineError('host', 'Azure DevOps returned an unexpected shape for build definitions');
     }
 
-    const named = defs.filter((d) => d.name === GATE_DEFINITION_NAME);
-    const mine = named.find((d) => d.yamlFilename === GATE_YAML_FILENAME);
+    // The `path` filter is re-applied locally: the list endpoint's own
+    // filtering is not something to trust a repository's merge gate to.
+    const named = defs.filter(
+      (d) => d.name === GATE_DEFINITION_NAME && d.path === GATE_DEFINITION_FOLDER
+    );
+    const forThisRepo = named.filter((d) => d.repositoryId === repo);
+    const mine = forThisRepo.find((d) => d.yamlFilename === GATE_YAML_FILENAME);
     if (mine) {
       gateBuild = { registered: true, definitionId: mine.id };
       return {
@@ -225,7 +250,7 @@ export function createAzureInstall(
         detail: `gate pipeline definition "${GATE_DEFINITION_NAME}" (id ${mine.id}) already registered`,
       };
     }
-    const foreign = named[0];
+    const foreign = forThisRepo[0];
     if (foreign) {
       // Brownfield: a definition Redline did not create is human-owned and is
       // never updated — and a second definition with the same name cannot be
@@ -242,11 +267,29 @@ export function createAzureInstall(
           `until an administrator points it at ${GATE_YAML_FILENAME} or renames it`,
       };
     }
+    const otherRepo = named[0];
+    if (otherRepo) {
+      // Same name, same folder, a different repository — reusing it would
+      // point this repository's Build Validation policy at a pipeline that
+      // builds the other repository and publishes redline/gate against the
+      // other repository's id, blocking every pull request here. The name is
+      // also taken, so a POST cannot succeed either.
+      gateBuild = { registered: false };
+      return {
+        capability: 'gate',
+        status: 'denied',
+        detail:
+          `build definition "${GATE_DEFINITION_FOLDER}\\${GATE_DEFINITION_NAME}" (id ${otherRepo.id}) is ` +
+          `bound to repository ${otherRepo.repositoryId ?? 'unknown'}, not ${repo} — it was left untouched ` +
+          `and the name is unavailable, so the merge gate stays advisory until an administrator renames it`,
+      };
+    }
 
     const created = await client.request<unknown>('POST', `/${proj}/_apis/build/definitions`, {
       name: GATE_DEFINITION_NAME,
+      path: GATE_DEFINITION_FOLDER,
       process: { type: 2, yamlFilename: GATE_YAML_FILENAME },
-      repository: { id: repoId(ref), type: 'TfsGit' },
+      repository: { id: repo, type: 'TfsGit' },
     });
     if (!isSuccess(created.status)) {
       gateBuild = { registered: false };
@@ -292,37 +335,88 @@ export function createAzureInstall(
         { repositoryId: repo, refName: `refs/heads/${ref.defaultBranch}`, matchKind: 'exact' },
       ];
 
+      const buildTypeId = requiredTypeId(types, POLICY_TYPE_NAMES.build);
+      // Build policies are matched by the Redline: displayName marker, not by
+      // type alone: a repository routinely carries human-owned build policies
+      // of the same type, and those are never written to.
+      const isRedlineBuildPolicy = (config: PolicyConfiguration): boolean => {
+        const displayName = config.settings['displayName'];
+        return (
+          config.type.id === buildTypeId &&
+          typeof displayName === 'string' &&
+          displayName.startsWith(REDLINE_POLICY_MARKER)
+        );
+      };
+
+      const repoPropertyOutcome: CapabilityOutcome = {
+        capability: 'repo-property',
+        status: 'unsupported',
+        detail: 'Azure DevOps has no repository properties — the central registry tracks this repo instead',
+      };
+
+      const existing = await client.request<unknown>('GET', `/${proj}/_apis/policy/configurations`);
+      if (!isSuccess(existing.status)) {
+        // Denied or unsupported — never guess whether a Redline policy
+        // already exists, and never crash on it. Skip the write entirely;
+        // onboarding still continues below.
+        return {
+          outcomes: [outcome('merge-policy', existing.status, 'branch policies'), repoPropertyOutcome],
+          policy: null,
+        };
+      }
+      const configs = parsePolicyConfigurations(existing.body);
+      if (configs === null) {
+        throw new RedlineError('host', 'Azure DevOps returned an unexpected shape for policy configurations');
+      }
+      const mine = configs.filter((c) => {
+        const configScope = c.settings['scope'];
+        return (
+          Array.isArray(configScope) &&
+          configScope.some((s) => isNonNullObject(s) && s['repositoryId'] === repo)
+        );
+      });
+
       const gate = gateBuild;
       const registeredGate = gate !== null && gate.registered ? gate : null;
       // Security property: a blocking redline/gate Status policy with no
       // pipeline able to publish that status blocks every pull request
-      // forever. When installGate ran and could not register the gate build
-      // definition, the whole gate degrades to advisory — the gate capability
-      // outcome from installGate already reads pending with the reason. When
-      // installGate has not run in this process the caller's choice stands.
-      const blocking = policy.blocking && !(gate !== null && registeredGate === null);
+      // forever, so blocking survives only when something can actually queue
+      // the gate. Three ways it can: installGate has not run in this process
+      // (applyPolicy called standalone — the caller's choice stands), this
+      // run registered or confirmed the definition, or the repository already
+      // carries a Redline Build Validation policy from an earlier run. That
+      // last case is what keeps a token which cannot read build definitions
+      // from silently downgrading a working, enforcing gate to advisory.
+      const gateAlreadyEnforcing = mine.some(isRedlineBuildPolicy);
+      const blocking =
+        policy.blocking && (gate === null || registeredGate !== null || gateAlreadyEnforcing);
 
+      interface PolicyBody {
+        type: { id: string };
+        isEnabled: boolean;
+        isBlocking: boolean;
+        settings: Record<string, unknown>;
+      }
       interface WantedPolicy {
         matches: (config: PolicyConfiguration) => boolean;
-        config: {
-          type: { id: string };
-          isEnabled: boolean;
-          isBlocking: boolean;
-          settings: Record<string, unknown>;
-        };
+        // Read at write time, not up front: a rejected Build Validation write
+        // has to reach the Status policy that is written after it.
+        config: (blocking: boolean) => PolicyBody;
+        // True for the write the blocking gate depends on: if it fails,
+        // everything written after it drops to advisory.
+        runsTheGate?: boolean;
       }
       const ofType =
         (id: string) =>
         (config: PolicyConfiguration): boolean =>
           config.type.id === id;
-      const buildTypeId = requiredTypeId(types, POLICY_TYPE_NAMES.build);
 
       // types is guaranteed to carry every POLICY_TYPE_NAMES entry:
       // resolvePolicyTypeIds always seeds it from POLICY_TYPE_FALLBACK first.
       const wanted: WantedPolicy[] = [
         {
           matches: ofType(requiredTypeId(types, POLICY_TYPE_NAMES.minimumReviewers)),
-          config: {
+          config: () => ({
             type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.minimumReviewers) },
             isEnabled: true,
             isBlocking: true,
@@ -333,20 +427,45 @@ export function createAzureInstall(
               blockLastPusherVote: true,
               scope,
             },
-          },
+          }),
         },
         {
           matches: ofType(requiredTypeId(types, POLICY_TYPE_NAMES.comments)),
-          config: {
+          config: () => ({
             type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.comments) },
             isEnabled: policy.requireThreadResolution,
             isBlocking: policy.requireThreadResolution,
             settings: { scope },
-          },
+          }),
         },
+        // The Build Validation policy is what actually queues the gate
+        // pipeline on a pull request (Azure Repos ignores YAML `pr:`
+        // triggers) — written only against a definition installGate confirmed
+        // or registered, never against a guess, and written BEFORE the Status
+        // policy so that a rejected write can still hold the gate advisory.
+        ...(registeredGate === null
+          ? []
+          : [
+              {
+                matches: isRedlineBuildPolicy,
+                runsTheGate: true,
+                config: (blocking: boolean): PolicyBody => ({
+                  type: { id: buildTypeId },
+                  isEnabled: true,
+                  isBlocking: blocking,
+                  settings: {
+                    buildDefinitionId: registeredGate.definitionId,
+                    displayName: AZURE_BUILD_POLICY_DISPLAY_NAME,
+                    validDuration: 0,
+                    queueOnSourceUpdateOnly: true,
+                    scope,
+                  },
+                }),
+              },
+            ]),
         {
           matches: ofType(requiredTypeId(types, POLICY_TYPE_NAMES.status)),
-          config: {
+          config: (blocking: boolean) => ({
             type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.status) },
             isEnabled: true,
             // Advisory is native on Azure: isBlocking mirrors the (possibly
@@ -360,90 +479,29 @@ export function createAzureInstall(
               invalidateOnSourceUpdate: true,
               scope,
             },
-          },
+          }),
         },
-        // The Build Validation policy is what actually queues the gate
-        // pipeline on a pull request (Azure Repos ignores YAML `pr:`
-        // triggers) — written only against a definition installGate confirmed
-        // or registered, never against a guess. Build policies are matched by
-        // the Redline: displayName marker, not by type alone: a repository
-        // routinely carries human-owned build policies of the same type, and
-        // those are never written to.
-        ...(registeredGate === null
-          ? []
-          : [
-              {
-                matches: (config: PolicyConfiguration): boolean => {
-                  const displayName = config.settings['displayName'];
-                  return (
-                    config.type.id === buildTypeId &&
-                    typeof displayName === 'string' &&
-                    displayName.startsWith(REDLINE_POLICY_MARKER)
-                  );
-                },
-                config: {
-                  type: { id: buildTypeId },
-                  isEnabled: true,
-                  isBlocking: blocking,
-                  settings: {
-                    buildDefinitionId: registeredGate.definitionId,
-                    displayName: AZURE_BUILD_POLICY_DISPLAY_NAME,
-                    validDuration: 0,
-                    queueOnSourceUpdateOnly: true,
-                    scope,
-                  },
-                },
-              },
-            ]),
       ];
 
-      const existing = await client.request<unknown>('GET', `/${proj}/_apis/policy/configurations`);
-
-      let mergePolicy: CapabilityOutcome;
-      let policyApplied = false;
-
-      if (!isSuccess(existing.status)) {
-        // Denied or unsupported — never guess whether a Redline policy
-        // already exists, and never crash on it. Skip the write entirely;
-        // onboarding still continues below.
-        mergePolicy = outcome('merge-policy', existing.status, 'branch policies');
-      } else {
-        const configs = parsePolicyConfigurations(existing.body);
-        if (configs === null) {
-          throw new RedlineError('host', 'Azure DevOps returned an unexpected shape for policy configurations');
-        }
-        const mine = configs.filter((c) => {
-          const configScope = c.settings['scope'];
-          return (
-            Array.isArray(configScope) &&
-            configScope.some((s) => isNonNullObject(s) && s['repositoryId'] === repo)
-          );
-        });
-
-        const results: CapabilityOutcome[] = [];
-        for (const { matches, config } of wanted) {
-          const match = mine.find(matches);
-          const res = match
-            ? await client.request('PUT', `/${proj}/_apis/policy/configurations/${match.id}`, config)
-            : await client.request('POST', `/${proj}/_apis/policy/configurations`, config);
-          results.push(outcome('merge-policy', res.status, 'branch policies'));
-        }
-        mergePolicy = worstOutcome(results);
-        policyApplied = mergePolicy.status === 'applied';
+      let effectiveBlocking = blocking;
+      const results: CapabilityOutcome[] = [];
+      for (const wantedPolicy of wanted) {
+        const match = mine.find(wantedPolicy.matches);
+        const config = wantedPolicy.config(effectiveBlocking);
+        const res = match
+          ? await client.request('PUT', `/${proj}/_apis/policy/configurations/${match.id}`, config)
+          : await client.request('POST', `/${proj}/_apis/policy/configurations`, config);
+        results.push(outcome('merge-policy', res.status, 'branch policies'));
+        if (wantedPolicy.runsTheGate === true && !isSuccess(res.status)) effectiveBlocking = false;
       }
+      const mergePolicy = worstOutcome(results);
 
       return {
-        outcomes: [
-          mergePolicy,
-          {
-            capability: 'repo-property',
-            status: 'unsupported',
-            detail: 'Azure DevOps has no repository properties — the central registry tracks this repo instead',
-          },
-        ],
-        // The applied policy reports what was actually written: when the gate
-        // build definition is missing, blocking was degraded to advisory.
-        policy: policyApplied ? { ...policy, blocking } : null,
+        outcomes: [mergePolicy, repoPropertyOutcome],
+        // The applied policy reports what was actually written: when nothing
+        // could queue the gate, blocking was degraded to advisory.
+        policy:
+          mergePolicy.status === 'applied' ? { ...policy, blocking: effectiveBlocking } : null,
       };
     },
 

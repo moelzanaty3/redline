@@ -70,7 +70,7 @@ export async function verify(
       ? 'no Redline merge policy found on the host'
       : `policy is ${policy.blocking ? 'blocking' : 'advisory'}, config says ${
           config.menu.blockingGate ? 'blocking' : 'advisory'
-        }`
+        }${policy.advisoryReason ? ` — ${policy.advisoryReason}` : ''}`
   );
 
   // The check-name comparison is the highest-value check in the product: an

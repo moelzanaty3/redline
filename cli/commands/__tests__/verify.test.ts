@@ -81,6 +81,30 @@ test('a required check the host has never reported is a failure', async () => {
   assert.match(find(report, 'check-name-reported')?.detail ?? '', /never reported/);
 });
 
+// A host that knows WHY the gate reads advisory must be able to say so:
+// "policy is advisory, config says blocking" alone sends the operator looking
+// at the Status policy, which is the one part that is configured correctly.
+test('a host-supplied advisory reason reaches the merge-policy finding', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: true } });
+
+  const platform = fakePlatform();
+  await platform.applyPolicy(await platform.repoRef(cwd), {
+    requiredApprovals: 1,
+    dismissStaleReviews: true,
+    requireCodeOwnerReview: true,
+    requireThreadResolution: true,
+    requiredChecks: [],
+    blocking: false,
+    advisoryReason: 'no "Redline: gate build" Build Validation policy queues the gate pipeline',
+  });
+
+  const report = await verify(() => platform, { cwd, root });
+  assert.equal(find(report, 'merge-policy')?.ok, false);
+  assert.match(find(report, 'merge-policy')?.detail ?? '', /Build Validation policy queues/);
+});
+
 test('a repository with no pull request yet skips the check-name check rather than failing', async () => {
   const cwd = await onboarded();
   const platform = fakePlatform();

@@ -7,7 +7,14 @@ import type {
   SecurityResult,
 } from '../types.ts';
 import type { AzureClient } from './client.ts';
-import { POLICY_TYPE_NAMES, REDLINE_POLICY_MARKER, resolvePolicyTypeIds } from './policy-types.ts';
+import {
+  AZURE_BUILD_POLICY_DISPLAY_NAME,
+  AZURE_STATUS_GENRE,
+  AZURE_STATUS_NAME,
+  POLICY_TYPE_NAMES,
+  REDLINE_POLICY_MARKER,
+  resolvePolicyTypeIds,
+} from './policy-types.ts';
 import { createHostShapeError, isNonNullObject, isSuccess } from '../shape.ts';
 
 // Azure response bodies are untrusted external input, same house style as
@@ -167,6 +174,19 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
 
       const minimumApproverCount = reviewers?.settings['minimumApproverCount'];
 
+      // A blocking Status policy with nothing to queue the pipeline reads as
+      // advisory above, which on its own tells an operator the opposite of
+      // what they need: the Status policy is the part that is right, and the
+      // missing Build Validation policy is why no pull request can ever
+      // satisfy it.
+      const advisoryReason =
+        status?.isBlocking === true && gateBuild === undefined
+          ? `the ${AZURE_STATUS_GENRE}/${AZURE_STATUS_NAME} status policy is blocking, but no ` +
+            `"${AZURE_BUILD_POLICY_DISPLAY_NAME}" Build Validation policy queues the gate pipeline ` +
+            `(Azure Repos ignores the YAML pr: trigger), so the status is never published and every ` +
+            `pull request will sit blocked — re-run redline init with build administrator rights`
+          : null;
+
       return {
         requiredApprovals: typeof minimumApproverCount === 'number' ? minimumApproverCount : 0,
         dismissStaleReviews: reviewers?.settings['resetOnSourcePush'] === true,
@@ -177,6 +197,7 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
         // and redline/gate is never published — a blocking status policy on
         // its own is a misconfiguration, not an enforcing gate.
         blocking: status?.isBlocking === true && gateBuild !== undefined,
+        ...(advisoryReason !== null ? { advisoryReason } : {}),
       };
     },
 

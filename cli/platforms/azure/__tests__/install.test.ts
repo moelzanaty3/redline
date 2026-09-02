@@ -55,7 +55,20 @@ const typesRoute = {
   },
 };
 
-const BUILD_DEFS_PATH = '/Payments/_apis/build/definitions?name=redline-gate&includeAllProperties=true';
+// Redline definitions live in their own `\Redline` folder: definition names
+// are unique per folder, which is what keeps two repositories in the same
+// project from colliding on the name `redline-gate`.
+const BUILD_DEFS_PATH =
+  '/Payments/_apis/build/definitions?name=redline-gate&path=%5CRedline&includeAllProperties=true';
+
+const gateDefinition = (over: Record<string, unknown> = {}) => ({
+  id: 42,
+  name: 'redline-gate',
+  path: '\\Redline',
+  process: { type: 2, yamlFilename: '.azuredevops/redline-gate.yml' },
+  repository: { id: 'repo-guid' },
+  ...over,
+});
 
 // installGate's registration path: no definition yet, creation succeeds.
 const registrationRoutes = {
@@ -237,33 +250,52 @@ test('installGate registers the gate pipeline definition when none exists', asyn
   );
   assert.deepEqual(create?.body, {
     name: 'redline-gate',
+    // Definition names are unique per folder, so registering in `\Redline`
+    // removes the cross-repository name collision at its source.
+    path: '\\Redline',
     process: { type: 2, yamlFilename: '.azuredevops/redline-gate.yml' },
     repository: { id: 'repo-guid', type: 'TfsGit' },
   });
   assert.equal(result.outcomes.find((o) => o.capability === 'gate')?.status, 'applied');
 });
 
-test('installGate reuses a definition matching name and yamlFilename instead of duplicating it', async () => {
+test('installGate reuses a definition matching name, folder, repository and yamlFilename', async () => {
   const client = fakeAzure({
-    [`GET ${BUILD_DEFS_PATH}`]: {
-      status: 200,
-      body: {
-        value: [
-          { id: 7, name: 'redline-gate', process: { type: 2, yamlFilename: '.azuredevops/redline-gate.yml' } },
-        ],
-      },
-    },
+    [`GET ${BUILD_DEFS_PATH}`]: { status: 200, body: { value: [gateDefinition({ id: 7 })] } },
   });
   const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
   assert.ok(!client.calls.some((c) => c.method === 'POST' && c.path === '/Payments/_apis/build/definitions'));
   assert.equal(result.outcomes.find((o) => o.capability === 'gate')?.status, 'already');
 });
 
+// The `name=` filter is project-wide, so a sibling repository onboarded first
+// comes back from this GET. Adopting its definition id would point this
+// repository's Build Validation policy at a pipeline that checks out the
+// sibling and publishes redline/gate against the sibling's id — with
+// --blocking, every pull request here would sit blocked forever.
+test('a definition of the same name bound to another repository is never adopted', async () => {
+  const client = fakeAzure({
+    [`GET ${BUILD_DEFS_PATH}`]: {
+      status: 200,
+      body: { value: [gateDefinition({ id: 7, repository: { id: 'other-repo-guid' } })] },
+    },
+  });
+  const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
+  assert.ok(
+    !client.calls.some((c) => c.method === 'POST' && c.path === '/Payments/_apis/build/definitions'),
+    'the name is taken in this folder — POSTing would fail or duplicate'
+  );
+  const gate = result.outcomes.find((o) => o.capability === 'gate');
+  assert.equal(gate?.status, 'denied');
+  assert.match(gate?.detail ?? '', /id 7/);
+  assert.match(gate?.detail ?? '', /other-repo-guid/);
+});
+
 test('a human-owned redline-gate definition with a different yamlFilename is reported and left untouched', async () => {
   const client = fakeAzure({
     [`GET ${BUILD_DEFS_PATH}`]: {
       status: 200,
-      body: { value: [{ id: 7, name: 'redline-gate', process: { type: 2, yamlFilename: 'pipelines/ci.yml' } }] },
+      body: { value: [gateDefinition({ id: 7, process: { type: 2, yamlFilename: 'pipelines/ci.yml' } })] },
     },
   });
   const result = await createAzureInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
@@ -360,18 +392,84 @@ test('when the definition could not be registered the status policy is written a
   assert.match(gate?.detail ?? '', /advisory/);
 });
 
+// Realistic split: a PAT with Edit-policies but no build read registers the
+// definition, then has its Build Validation policy write rejected. If the
+// Status policy had already gone out blocking, the repository would be left
+// requiring redline/gate with nothing queuing the pipeline.
+test('a rejected Build Validation policy write leaves the status policy advisory', async () => {
+  // Routes key on method+path, and both policy writes share a path — the
+  // Build Validation policy is identified by the type id in its body.
+  const base = fakeAzure({
+    ...typesRoute,
+    ...registrationRoutes,
+    'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } },
+  });
+  const client = {
+    calls: base.calls,
+    async request<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>> {
+      const res = await base.request<T>(method, path, body);
+      const isBuildPolicy = (body as { type?: { id: string } } | undefined)?.type?.id === 'build-id';
+      return isBuildPolicy ? { status: 403, body: null } : res;
+    },
+  };
+
+  const install = createAzureInstall(client, gitFor);
+  await install.installGate(ref, tmp(), gateOpts);
+  const result = await install.applyPolicy(ref, { ...advisory, blocking: true });
+
+  const statusPolicy = client.calls.find(
+    (c) => c.path === '/Payments/_apis/policy/configurations' &&
+      (c.body as { type?: { id: string } } | undefined)?.type?.id === 'status-id'
+  );
+  assert.equal((statusPolicy?.body as { isBlocking: boolean }).isBlocking, false);
+  // A partially rejected write reports no applied policy at all.
+  assert.equal(result.policy, null);
+});
+
+// A working, enforcing repository must not be silently downgraded because
+// this run's token cannot read build definitions.
+test('an existing Redline build policy keeps the gate blocking when the definitions lookup is denied', async () => {
+  const scope = [{ repositoryId: 'repo-guid' }];
+  const client = fakeAzure({
+    ...typesRoute,
+    [`GET ${BUILD_DEFS_PATH}`]: { status: 403, body: { message: 'Forbidden' } },
+    'GET /Payments/_apis/policy/configurations': {
+      status: 200,
+      body: {
+        value: [
+          {
+            id: 60,
+            type: { id: 'status-id' },
+            settings: { statusGenre: 'redline', statusName: 'gate', scope },
+          },
+          {
+            id: 61,
+            type: { id: 'build-id' },
+            settings: { buildDefinitionId: 42, displayName: 'Redline: gate build', scope },
+          },
+        ],
+      },
+    },
+  });
+  const install = createAzureInstall(client, gitFor);
+  const gateResult = await install.installGate(ref, tmp(), gateOpts);
+  const result = await install.applyPolicy(ref, { ...advisory, blocking: true });
+
+  const statusPolicy = client.calls.find((c) => c.path === '/Payments/_apis/policy/configurations/60');
+  assert.equal((statusPolicy?.body as { isBlocking: boolean }).isBlocking, true);
+  assert.equal(result.policy?.blocking, true);
+  assert.ok(
+    !client.calls.some((c) => c.path === '/Payments/_apis/policy/configurations/61'),
+    'the existing build policy is left alone — this run never learned its definition id'
+  );
+  assert.equal(gateResult.outcomes.find((o) => o.capability === 'gate')?.status, 'denied');
+});
+
 test('an existing Redline-marked build policy is updated in place; human build policies coexist untouched', async () => {
   const scope = [{ repositoryId: 'repo-guid' }];
   const client = fakeAzure({
     ...typesRoute,
-    [`GET ${BUILD_DEFS_PATH}`]: {
-      status: 200,
-      body: {
-        value: [
-          { id: 42, name: 'redline-gate', process: { type: 2, yamlFilename: '.azuredevops/redline-gate.yml' } },
-        ],
-      },
-    },
+    [`GET ${BUILD_DEFS_PATH}`]: { status: 200, body: { value: [gateDefinition()] } },
     'GET /Payments/_apis/policy/configurations': {
       status: 200,
       body: {

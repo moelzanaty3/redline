@@ -125,6 +125,21 @@ test('a blocking status policy without the Build Validation policy reads back as
   assert.equal(policy?.blocking, false);
 });
 
+// "policy is advisory, config says blocking" is the opposite of what an
+// operator debugging stuck pull requests needs to read: the Status policy IS
+// blocking, and the missing Build Validation policy is why nothing satisfies
+// it. That cause has to reach the finding.
+test('a blocking status policy with no Build Validation policy names the missing policy as the cause', async () => {
+  const policy = await createAzureVerify(fakeAzure(configurations(true, null))).readPolicy(ref);
+  assert.match(policy?.advisoryReason ?? '', /Build Validation/);
+  assert.match(policy?.advisoryReason ?? '', /blocked/);
+});
+
+test('an enforcing gate carries no advisory reason', async () => {
+  const policy = await createAzureVerify(fakeAzure(configurations(true))).readPolicy(ref);
+  assert.equal(policy?.advisoryReason, undefined);
+});
+
 test('a human build policy without the Redline marker does not count as the gate build', async () => {
   const policy = await createAzureVerify(
     fakeAzure(configurations(true, buildValidation('Nightly CI')))

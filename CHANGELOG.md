@@ -63,6 +63,21 @@ Record seed scores here. A standards change with no measurement is an opinion.
   policy back as part of the gate check: required checks are derived only from a
   blocking Status policy, and the gate only counts as blocking when the Build
   Validation policy exists.
+  Gate definitions are registered in their own `\Redline` pipeline folder, and a
+  definition is only ever reused when its folder, name, YAML file *and* repository all
+  match: build-definition names are unique per folder but the lookup filter is
+  project-wide, so without this a second repository in the same project would have
+  adopted the first repository's `redline-gate` definition and pointed its Build
+  Validation policy at a pipeline building the wrong repository. A same-named
+  definition bound to another repository is reported and left untouched.
+  Two more ways the gate can fail to run are now handled without leaving a repository
+  requiring a status nothing publishes: a rejected Build Validation policy write (the
+  policy is written before the Status policy, and the Status policy then goes out
+  advisory), and a token that cannot read build definitions on a re-run — an existing
+  `Redline: gate build` policy keeps the gate blocking instead of silently downgrading
+  an enforcing repository to advisory. When a blocking Status policy has no Build
+  Validation policy behind it, `redline verify` now names that as the cause in the
+  merge-policy finding rather than only reporting the gate as advisory.
 - The web home page gained a value-visualization block after the hero: the
   onboarding mechanism (repo → `init` → floor installed → every PR checked → drift
   caught) plus a severity split of the rule catalogue and a stat strip. All numbers
