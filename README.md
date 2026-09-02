@@ -78,13 +78,16 @@ whose name nothing ever reports: every PR sits on "Expected — waiting for stat
 Reusable workflows report as `<caller job id> / <called job id>`. Here that is
 **`redline-gate / gate`**, and the name is pinned in two places: the ruleset JSON's
 reference shape, and `scripts/validate.mjs` (CI fails if the job is renamed).
-`redline verify` surfaces the check names GitHub or Azure DevOps actually reported on the
-latest pull request, for a human to compare against that name. In Phase 1
-`redline init` never marks it as a *required* check (`requiredChecks` starts empty), so
-`verify` cannot yet fail on its own if the check stops reporting — see
-[CHANGELOG.md](CHANGELOG.md) known limitation 5. Run it on every onboarded repo anyway;
-eyeballing the reported name is still the cheapest way to catch the check silently going
-dark.
+On GitHub, whether `redline init` makes it a *required* check depends on `--blocking`:
+the default advisory install adds no `required_status_checks` rule at all, but
+`redline init --blocking` writes `redline-gate / gate` into the ruleset
+(`cli/platforms/github/install.ts`'s `REQUIRED_CHECK` constant, not a caller-supplied
+value). `redline verify` reads back whatever the host currently has required and compares
+it to what actually reported on the latest pull request: on a blocking install this is a
+real assertion, failing if the check is required but never reported; on the default
+advisory install nothing is required yet, so `verify` only surfaces the reported name for
+a human to eyeball. See [CHANGELOG.md](CHANGELOG.md) known limitation 5. Run it on every
+onboarded repo either way.
 
 ## Making a change to the standards
 

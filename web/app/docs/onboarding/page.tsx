@@ -87,14 +87,26 @@ export default function Page() {
         Six checks: the repo is onboarded at all; the required check name has
         actually been reported on a real pull request (skipped, not failed, on
         a repo with no PR yet — a fresh repo isn&apos;t drifted, it&apos;s
-        just new — and in Phase 1 nothing is marked <em>required</em> yet, so
-        this only confirms the name is being reported at all); the live merge
-        policy matches the menu; the security floor is still on; rendered
-        artifacts aren&apos;t stale; and nothing is still waiting on an
-        administrator. Run it on demand, or wire{" "}
+        just new); the live merge policy matches the menu; the security floor
+        is still on; rendered artifacts aren&apos;t stale; and nothing is
+        still waiting on an administrator. Run it on demand, or wire{" "}
         <code>redline verify --gate</code> into CI — it&apos;s the same
         checks, exiting non-zero on failure.
       </p>
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          The sample above is the default <b>advisory</b> install, where
+          nothing is marked required yet, so{" "}
+          <code>check-name-reported</code> only confirms the check is being
+          reported at all. Onboard with <code>--blocking</code> and GitHub
+          gets a real required check named <code>redline-gate / gate</code>{" "}
+          — from then on this line reads{" "}
+          <code>required checks reported on PR #42: redline-gate / gate</code>{" "}
+          on success, and fails outright if that check is required but never
+          reported.
+        </p>
+      </div>
 
       <h2>Exit codes</h2>
       <div className="table-scroll">

@@ -67,12 +67,15 @@ npx --package=redline-cli@latest redline init
 4. **A self-hosted GitHub Enterprise Server on a hostname not containing "github" is not
    auto-detected.** `redline init` fails cleanly and names the recognised URL shapes;
    there is no `--host` override in Phase 1.
-5. **Check-name verification catches a mismatch whenever the host reports required
-   checks, independent of blocking state — no stronger claim than that.** It is not a
-   guarantee against drift during every advisory soak: `redline init` never populates
-   `requiredChecks` in Phase 1, so what this protects against is the required-check name
-   drifting out of band from what the host actually reports, not the gate silently
-   becoming a no-op while advisory.
+5. **Check-name verification only asserts on GitHub when `redline init` was run
+   `--blocking`.** `cli/platforms/github/install.ts` adds `redline-gate / gate` to the
+   ruleset's `required_status_checks` only `if (policy.blocking)`; the default advisory
+   install writes no required-check rule at all. `redline verify`'s `check-name-reported`
+   finding reads `requiredChecks` back off the host and only fails when that list is
+   non-empty and unsatisfied — so on a blocking install it is a real guarantee against the
+   check silently going unreported, but on the (default) advisory install there is nothing
+   required yet, and `verify` can only surface what the host is currently reporting, not
+   assert against it.
 6. **`redline verify` cannot detect drift in the rendered command files.** `renderCommands`
    (`cli/render/commands.ts`) only ever writes; it has no `check` mode, unlike `render()`
    for the standards artifacts. It also has no prune step: disabling a vendor in
