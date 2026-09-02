@@ -16,7 +16,8 @@ export default function Page() {
       <p>
         These are the files a human edits. Everything else — Copilot
         instructions, AGENTS.md, CLAUDE.md, Cursor rules — is generated from
-        them by <code>scripts/render.mjs</code>.
+        them by the CLI&apos;s renderer, and written to a repo by{" "}
+        <code>redline init</code>.
       </p>
       <div className="doc-cards" style={{ marginTop: 24 }}>
         {STANDARDS.map((s) => (

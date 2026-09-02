@@ -15,25 +15,26 @@ export default function Page() {
       <h2>The contract</h2>
       <p>
         Add one function to the <code>vendors</code> object in{" "}
-        <code>scripts/render.mjs</code>. It receives{" "}
-        <code>{"{ profile, stacks }"}</code> and returns the files to write:
+        <code>cli/render/vendors.ts</code> — the renderer moved into the CLI
+        as TypeScript. It receives <code>{"{ profile, stacks }"}</code> and
+        returns the files to write:
       </p>
-      <CodeWindow title="scripts/render.mjs — vendor function shape">
+      <CodeWindow title="cli/render/vendors.ts — vendor function shape">
         <span className="tk-white">myvendor</span>: ({"{ profile, stacks }"}) =&gt; ({"{"}{"\n"}
         {"  "}files: <span className="tk-blue">Map</span>&lt;path, {"{ body, merge? }"}&gt;,  <span className="tk-dim">// merge: true wraps in REDLINE markers</span>{"\n"}
-        {"  "}prune: [<span className="tk-green">&quot;.myvendor/redline-*.rules&quot;</span>]   <span className="tk-dim">// generated files sync may delete</span>{"\n"}
+        {"  "}prune: [<span className="tk-green">&quot;.myvendor/redline-*.rules&quot;</span>]   <span className="tk-dim">// generated files redline init may delete</span>{"\n"}
         {"}"})
       </CodeWindow>
       <ul>
-        <li><code>merge: true</code> wraps the body in <code>&lt;!-- REDLINE:BEGIN --&gt;</code> markers and preserves everything outside them — a repo&apos;s own context survives every sync.</li>
-        <li><code>prune</code> lets sync delete generated files a profile no longer includes. Generated files are prefixed <code>redline-</code> precisely so pruning can never touch a file a team wrote.</li>
+        <li><code>merge: true</code> wraps the body in <code>&lt;!-- REDLINE:BEGIN --&gt;</code> markers and preserves everything outside them — a repo&apos;s own context survives every re-render.</li>
+        <li><code>prune</code> lets <code>redline init</code> delete generated files a profile no longer includes. Generated files are prefixed <code>redline-</code> precisely so pruning can never touch a file a team wrote.</li>
       </ul>
 
       <h2>Register and ship</h2>
       <ol>
         <li>Add the vendor to <code>vendors</code> in <code>standards/manifest.json</code> with <code>enabled: true</code>.</li>
         <li>CI renders it for every profile on the next PR — the render-drift check keeps output honest.</li>
-        <li>Merge. The next sync distributes the new artifacts to every onboarded repo as PRs.</li>
+        <li>Merge. Every repo that runs <code>redline init</code> next picks up the new artifacts as part of its pull request. There is no push-based distribution to already-onboarded repos yet — <code>redline verify</code> reports them as stale until they re-run <code>init</code>.</li>
       </ol>
 
       <h2>Measurement comes free</h2>
