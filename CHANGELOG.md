@@ -20,8 +20,10 @@ Record seed scores here. A standards change with no measurement is an opinion.
   whatever `npx --yes` fetches that day. The release job now fails loudly if no `v*`
   tag exists — the history must be seeded with `v2.1.0` once so the first computed
   release is 3.0.0, matching this file — and prints the exact seed command. Same-repo
-  pull requests rehearse the release with `semantic-release --dry-run` (fork PRs are
-  skipped, so secrets never reach unreviewed code), and a manual `workflow_dispatch`
+  pull requests run `semantic-release --dry-run` with no secrets in the job: because
+  semantic-release exits early on PR context before verifying credentials, this proves
+  the pinned toolchain resolves from the lockfile, no more (fork PRs are skipped
+  entirely). The full publish path is rehearsed by a manual `workflow_dispatch` that
   publishes a throwaway build to the npm `canary` dist-tag without moving `latest`.
   The two version axes (CLI vs standards) are now documented in the README.
 - GitHub admin **write** endpoints (repo PATCH, ruleset create/update,

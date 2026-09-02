@@ -127,10 +127,12 @@ Each onboarded repo's `.redline.json` records both — `cliVersion` (the tool th
 onboarded it) and `standardsVersion` (the ruleset it was rendered from) — so `redline
 verify` can tell "old tool" apart from "old rules".
 
-Releases publish from `.github/workflows/release.yml`: every same-repo PR rehearses
-with `semantic-release --dry-run`, a manual `workflow_dispatch` publishes a throwaway
-build to the npm `canary` dist-tag without touching `latest`, and the real publish on
-`main` runs the exact semantic-release version pinned in the lockfile.
+Releases publish from `.github/workflows/release.yml`: every same-repo PR checks that
+the pinned release toolchain still resolves from the lockfile (`semantic-release
+--dry-run`, which exits early on PR context — no secrets in the job), a manual
+`workflow_dispatch` rehearses the real publish path with a throwaway build on the npm
+`canary` dist-tag without touching `latest`, and the real publish on `main` runs the
+exact semantic-release version pinned in the lockfile.
 
 ## Why this works at enterprise scale
 

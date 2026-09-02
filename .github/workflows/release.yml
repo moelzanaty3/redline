@@ -10,8 +10,11 @@ permissions:
   contents: read
 
 jobs:
-  # Rehearses the release on every same-repo PR. Fork PRs are skipped entirely so
-  # repository secrets never reach code the org has not reviewed.
+  # Proves the pinned release toolchain resolves from the lockfile on every
+  # same-repo PR. It proves no more than that: semantic-release detects the PR
+  # context and exits 0 before verifyConditions, so no credentials are checked and
+  # none are provided. Fork PRs are skipped entirely. The full publish path is
+  # rehearsed by the workflow_dispatch canary job below.
   dry-run:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -26,10 +29,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Release dry run
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Resolve pinned release toolchain (dry run, exits early on PRs)
         run: npx semantic-release --dry-run
 
   release:
@@ -98,5 +98,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          npm version --no-git-tag-version "0.0.0-canary.${GITHUB_RUN_ID}.$(git rev-parse --short HEAD)"
+          # `g` prefix keeps an all-digit sha from becoming a numeric prerelease
+          # identifier with a leading zero (invalid semver); run attempt keeps a
+          # re-run from colliding with the version its first attempt published.
+          npm version --no-git-tag-version "0.0.0-canary.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}.g$(git rev-parse --short HEAD)"
           npm publish --tag canary
