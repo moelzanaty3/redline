@@ -106,26 +106,31 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Standards",
         href: "/docs/standards",
-        description: "The full rule set — core plus 12 stacks — ready to copy.",
-        keywords: "standards rules source copy core stacks markdown",
-      },
-      {
-        title: "Scripts",
-        href: "/docs/scripts",
-        description: "Render, sync, onboarding, validation and telemetry scripts.",
-        keywords: "scripts source render sync setup validate score collect digest inbox dashboard",
+        description: "What a standard is, what a developer actually sees, and a rule reference per stack.",
+        keywords: "standards rules source copy core stacks markdown severity output contract rule id profile",
       },
       {
         title: "Workflows",
         href: "/docs/workflows",
-        description: "Reusable GitHub Actions workflows, ready to install.",
-        keywords: "workflows github actions gate sync collect digest inbox canary",
+        description: "What each workflow does, what triggers it, where it lives, and whether it works in Phase 1.",
+        keywords: "workflows github actions gate sync collect digest inbox canary phase 1 disabled azure",
       },
       {
         title: "Templates & rulesets",
         href: "/docs/templates",
-        description: "Repo templates, CODEOWNERS and branch rulesets.",
-        keywords: "templates codeowners caller ruleset branch protection json",
+        description: "What each template is, who installs it and where, and what's a live ruleset vs. a reference shape.",
+        keywords: "templates codeowners caller ruleset branch protection json azure pull request checklist",
+      },
+    ],
+  },
+  {
+    label: "Maintaining Redline",
+    links: [
+      {
+        title: "Scripts",
+        href: "/docs/scripts",
+        description: "Internal maintainer tooling for this repo's own CI, telemetry and validation — not something an onboarded repo runs.",
+        keywords: "scripts maintainer ci validate score collect digest inbox dashboard assign-rule-ids check-pins render-self internal redline-metrics",
       },
     ],
   },
@@ -160,7 +165,7 @@ export const SEARCH_INDEX: SearchEntry[] = [
   })),
   ...TEMPLATES.map((e) => ({
     title: e.title,
-    href: `/docs/templates#${e.slug}`,
+    href: `/docs/templates/${e.slug}`,
     description: e.description,
     keywords: `template ruleset ${e.file} ${e.slug}`,
     group: "Templates",

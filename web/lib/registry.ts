@@ -23,33 +23,37 @@ export const STANDARDS: RegistryEntry[] = [
 ];
 
 export const SCRIPTS: RegistryEntry[] = [
-  { slug: "validate", title: "validate.mjs", file: "scripts/validate.mjs", description: "Bundle self-check run by CI — check names, approvals, glob portability." },
-  { slug: "score-seeds", title: "score-seeds.mjs", file: "scripts/score-seeds.mjs", description: "Scores a seeded-corpus PR: BLOCKER recall and false positives on clean code." },
-  { slug: "collect-telemetry", title: "collect-telemetry.mjs", file: "scripts/collect-telemetry.mjs", description: "Nightly central pull of review outcomes across the org." },
-  { slug: "build-digest", title: "build-digest.mjs", file: "scripts/build-digest.mjs", description: "Builds the Monday Teams digest as an Adaptive Card." },
+  { slug: "validate", title: "validate.mjs", file: "scripts/validate.mjs", description: "Bundle self-check run by this repo's CI — manifest integrity, rule ids, ruleset/workflow files, the seed corpus." },
+  { slug: "assign-rule-ids", title: "assign-rule-ids.mjs", file: "scripts/assign-rule-ids.mjs", description: "Assigns a permanent id to every rule missing one, and rewrites standards/ in place." },
+  { slug: "render-self", title: "render-self.mjs", file: "scripts/render-self.mjs", description: "Renders this repo's own standards artifacts with the CLI's TypeScript renderer, profile tooling." },
+  { slug: "check-pins", title: "check-pins.mjs", file: "scripts/check-pins.mjs", description: "Re-resolves SHA-pinned third-party actions against the tag they claim." },
+  { slug: "score-seeds", title: "score-seeds.mjs", file: "scripts/score-seeds.mjs", description: "Scores a reviewer's PR comments against the seeded corpus: BLOCKER recall, false positives, rule attribution." },
+  { slug: "collect-telemetry", title: "collect-telemetry.mjs", file: "scripts/collect-telemetry.mjs", description: "Nightly central pull of review outcomes across the org — runs in the redline-metrics repo." },
+  { slug: "build-digest", title: "build-digest.mjs", file: "scripts/build-digest.mjs", description: "Builds the Monday Teams digest as an Adaptive Card — runs in the redline-metrics repo." },
   { slug: "build-inbox", title: "build-inbox.mjs", file: "scripts/build-inbox.mjs", description: "Builds the org-wide prioritised PR inbox for GitHub Pages." },
-  { slug: "build-dashboard", title: "build-dashboard.mjs", file: "scripts/build-dashboard.mjs", description: "Builds the telemetry dashboard." },
-  { slug: "assign-rule-ids", title: "assign-rule-ids.mjs", file: "scripts/assign-rule-ids.mjs", description: "Assigns stable rule ids to standards entries." },
-  { slug: "check-pins", title: "check-pins.mjs", file: "scripts/check-pins.mjs", description: "Verifies third-party actions are pinned to full commit SHAs." },
+  { slug: "build-dashboard", title: "build-dashboard.mjs", file: "scripts/build-dashboard.mjs", description: "Builds the telemetry dashboard — runs in the redline-metrics repo." },
 ];
 
 export const WORKFLOWS: RegistryEntry[] = [
-  { slug: "redline-gate", title: "redline-gate.yml", file: "workflows/redline-gate.yml", description: "Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation." },
-  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Distributes standards and gate callers to onboarded repos as PRs." },
-  { slug: "redline-collect", title: "redline-collect.yml", file: "workflows/redline-collect.yml", description: "Nightly telemetry collection across the org." },
-  { slug: "weekly-digest", title: "weekly-digest.yml", file: "workflows/weekly-digest.yml", description: "Monday Teams digest workflow." },
-  { slug: "inbox", title: "inbox.yml", file: "workflows/inbox.yml", description: "Org-wide prioritised PR inbox on GitHub Pages." },
-  { slug: "dashboard", title: "dashboard.yml", file: "workflows/dashboard.yml", description: "Telemetry dashboard build and publish." },
-  { slug: "seed-canary", title: "seed-canary.yml", file: "workflows/seed-canary.yml", description: "Canary run against the seeded corpus." },
-  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Verifies onboarded repos still report the required check." },
+  { slug: "redline-gate", title: "redline-gate.yml", file: "workflows/redline-gate.yml", description: "Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation. Active." },
+  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Would distribute standards and gate callers to onboarded repos as PRs. Inactive in Phase 1 (if: false) — automated standards distribution returns in Phase 3." },
+  { slug: "redline-collect", title: "redline-collect.yml", file: "workflows/redline-collect.yml", description: "Nightly telemetry collection across the org. Lives in the redline-metrics repo." },
+  { slug: "weekly-digest", title: "weekly-digest.yml", file: "workflows/weekly-digest.yml", description: "Monday Teams digest workflow. Lives in the redline-metrics repo." },
+  { slug: "inbox", title: "inbox.yml", file: "workflows/inbox.yml", description: "Org-wide prioritised PR inbox on GitHub Pages. Lives in this (source) repo." },
+  { slug: "dashboard", title: "dashboard.yml", file: "workflows/dashboard.yml", description: "Telemetry dashboard build and publish. Lives in the redline-metrics repo." },
+  { slug: "seed-canary", title: "seed-canary.yml", file: "workflows/seed-canary.yml", description: "Weekly regression test against the seeded corpus. Lives in the redline-metrics repo." },
+  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Would re-verify onboarded repos still report the required check. Inactive in Phase 1 (if: false) — returns in Phase 3." },
 ];
 
 export const TEMPLATES: RegistryEntry[] = [
-  { slug: "repo-context", title: "repo-context.md", file: "templates/repo-context.md", description: "Per-repo context template, pasted above the generated block in AGENTS.md." },
-  { slug: "codeowners", title: "CODEOWNERS", file: "templates/CODEOWNERS", description: "Protects the enforcement surface so nobody weakens their own gate unreviewed." },
-  { slug: "redline-caller", title: "redline.yml", file: "templates/redline.yml", description: "Thin caller installed as .github/workflows/redline.yml in every onboarded repo." },
-  { slug: "repo-ruleset", title: "redline-ruleset.json", file: "rulesets/redline-ruleset.json", description: "Per-repo branch ruleset: 1 human approval, thread resolution, required gate check." },
-  { slug: "org-ruleset", title: "redline-org-ruleset.json", file: "rulesets/redline-org-ruleset.json", description: "Org-wide ruleset applied by custom repository property — no per-repo drift." },
+  { slug: "repo-context", title: "repo-context.md", file: "templates/repo-context.md", description: "Per-repo context template — a human copies it above the generated block in AGENTS.md." },
+  { slug: "codeowners", title: "CODEOWNERS", file: "templates/CODEOWNERS", description: "Reference shape of the CODEOWNERS pattern redline init seeds — the CLI generates the real content in code, it doesn't read this file." },
+  { slug: "redline-caller", title: "redline.yml", file: "templates/redline.yml", description: "Thin caller installed verbatim as .github/workflows/redline.yml in every onboarded GitHub repo." },
+  { slug: "pr-template", title: "pull_request_template.md", file: ".github/pull_request_template.md", description: "GitHub PR template — the gated Launch readiness checklist, installed verbatim by redline init." },
+  { slug: "azure-pr-template", title: "azure/pull_request_template.md", file: "templates/azure/pull_request_template.md", description: "The same checklist, worded for Azure DevOps, installed verbatim by redline init." },
+  { slug: "azure-gate-template", title: "azure/gate-template.yml", file: "platforms/azure/gate-template.yml", description: "The Azure Pipelines gate — materially weaker than GitHub's: no dependency review, no secret scan." },
+  { slug: "repo-ruleset", title: "redline-ruleset.json", file: "rulesets/redline-ruleset.json", description: "Reference shape only — nothing reads this file; redline init builds the equivalent ruleset at runtime." },
+  { slug: "org-ruleset", title: "redline-org-ruleset.json", file: "rulesets/redline-org-ruleset.json", description: "Reference shape for a one-time manual org-level import — not applied by any code here." },
 ];
 
 export function findBySlug(list: RegistryEntry[], slug: string): RegistryEntry | undefined {
