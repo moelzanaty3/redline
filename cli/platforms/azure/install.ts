@@ -270,37 +270,33 @@ export function createAzureInstall(
       };
     },
 
-    // Phase 1 boundary: GitHub takes team *slugs* in a CODEOWNERS file; Azure
-    // takes reviewer *identity GUIDs* in a policy. Resolving a team name to
-    // an Azure identity GUID is out of scope here (Task 17) — rule.owners is
-    // trusted to already carry whatever identity ids the operator supplied.
+    // Phase 1 boundary, reported honestly instead of half-done. GitHub takes
+    // team *slugs* in a CODEOWNERS file; Azure takes reviewer *identity
+    // GUIDs* in a policy. cli/commands/init.ts has only slugs, so every
+    // policy this used to POST named a reviewer id that does not exist on
+    // Azure — and it POSTed unconditionally, with no filter on the existing
+    // configurations, so each re-run of `redline init` added another blocking
+    // required-reviewer policy per rule. Until an identity lookup exists
+    // (Task 17) this reports `unsupported`: the capability does not exist on
+    // this host yet, which is not pending administrator work.
     async ensureReviewOwnership(
-      ref: RepoRef,
+      _ref: RepoRef,
       _cwd: string,
       rules: OwnershipRule[]
     ): Promise<InstallResult> {
       if (rules.length === 0) return { files: [], outcomes: [] };
-
-      const proj = project(ref);
-      const repo = repoId(ref);
-      const types = await resolvePolicyTypeIds(client, proj);
-      const results: CapabilityOutcome[] = [];
-      for (const rule of rules) {
-        const res = await client.request('POST', `/${proj}/_apis/policy/configurations`, {
-          type: { id: requiredTypeId(types, POLICY_TYPE_NAMES.requiredReviewers) },
-          isEnabled: true,
-          isBlocking: true,
-          settings: {
-            requiredReviewerIds: rule.owners,
-            filenamePatterns: [rule.pattern],
-            scope: [
-              { repositoryId: repo, refName: `refs/heads/${ref.defaultBranch}`, matchKind: 'exact' },
-            ],
+      return {
+        files: [],
+        outcomes: [
+          {
+            capability: 'review-ownership',
+            status: 'unsupported',
+            detail:
+              'Azure DevOps required-reviewer policies take identity GUIDs, not team slugs — ' +
+              'set them by hand under Project settings > Repositories > Policies',
           },
-        });
-        results.push(outcome('review-ownership', res.status, `required reviewer policy for "${rule.pattern}"`));
-      }
-      return { files: [], outcomes: [worstOutcome(results)] };
+        ],
+      };
     },
 
     async openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef> {

@@ -1,6 +1,6 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGit, type GitRunner } from '../../../core/git.ts';
@@ -70,7 +70,16 @@ const gateOpts: GateOptions = {
 
 const noopGit: GitRunner = () => '';
 const gitFor = (cwd: string) => createGit(cwd, noopGit);
-const tmp = (): string => mkdtempSync(join(tmpdir(), 'redline-azure-'));
+const createdDirs: string[] = [];
+after(() => {
+  for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+const tmp = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-azure-'));
+  createdDirs.push(dir);
+  return dir;
+};
 
 test('policy type ids come from the live lookup when it succeeds', async () => {
   const client = fakeAzure({ ...typesRoute, 'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } } });
@@ -309,4 +318,20 @@ test('openPullRequest uses full ref names and returns the azure pull request id'
     title: 'chore(redline): onboard',
     description: 'body',
   });
+});
+
+// It used to POST one blocking required-reviewer policy per rule, every run,
+// with no filter on the existing configurations — five more blocking
+// policies on every re-run of `redline init` — and it named GitHub team
+// slugs where Azure requires identity GUIDs.
+test('ensureReviewOwnership reports unsupported on Azure and writes no policy', async () => {
+  const client = fakeAzure();
+  const result = await createAzureInstall(client, gitFor).ensureReviewOwnership(ref, tmp(), [
+    { pattern: '/AGENTS.md', owners: ['@acme/platform-engineering'] },
+    { pattern: '/infra/', owners: ['@acme/platform-engineering'] },
+  ]);
+  assert.deepEqual(result.files, []);
+  assert.equal(result.outcomes.length, 1);
+  assert.equal(result.outcomes[0]?.status, 'unsupported');
+  assert.deepEqual(client.calls, [], 'no host call, so nothing accumulates across re-runs');
 });
