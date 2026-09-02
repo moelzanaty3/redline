@@ -28,6 +28,11 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # The published package runs from dist/: Node refuses to type-strip .ts
+      # under node_modules, so a broken emit means a broken install.
+      - name: Build the published output
+        run: npm run build
+
       - name: Every rule carries an id
         run: node scripts/assign-rule-ids.mjs --check
 

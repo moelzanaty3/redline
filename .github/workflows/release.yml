@@ -22,24 +22,18 @@ jobs:
 
       - run: npm ci
 
+      # standards/manifest.json is NOT stamped from the npm version here: the
+      # standards line and the npm package line are separate, and AGENTS.md
+      # requires a human to bump the manifest in the same PR as the rule change.
       - name: Gate before publish
         run: |
           set -euo pipefail
           npm run typecheck
           npm test
+          npm run build
           node scripts/assign-rule-ids.mjs --check
           node scripts/validate.mjs
           node scripts/render-self.mjs --check
-
-      - name: Stamp the standards version
-        run: |
-          node -e "
-            const fs = require('node:fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            const manifest = JSON.parse(fs.readFileSync('standards/manifest.json', 'utf8'));
-            manifest.version = pkg.version;
-            fs.writeFileSync('standards/manifest.json', JSON.stringify(manifest, null, 2) + '\n');
-          "
 
       - name: Release
         env:

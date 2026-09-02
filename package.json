@@ -6,9 +6,11 @@
   "license": "UNLICENSED",
   "private": false,
   "engines": { "node": ">=22" },
-  "bin": { "redline": "./cli/bin/redline.ts", "redline-cli": "./cli/bin/redline.ts" },
-  "files": ["cli/", "standards/", "commands/", "templates/", "platforms/", "workflows/", "rulesets/"],
+  "bin": { "redline": "./dist/bin/redline.js", "redline-cli": "./dist/bin/redline.js" },
+  "files": ["dist/", "standards/", "commands/", "templates/", "platforms/", "workflows/", "rulesets/"],
   "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "test": "node --test 'cli/**/__tests__/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
