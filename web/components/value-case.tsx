@@ -57,8 +57,8 @@ export function ValueCase() {
         <>
           <b>Three levels, one fixed meaning each.</b> BLOCKER — don&apos;t merge.
           HIGH — merge only if a reviewer says so out loud. SUGGESTION — take it
-          or leave it. Every rule has a permanent id, so you can count which
-          ones keep firing.
+          or leave it. Every rule has a permanent id, so a finding always names
+          the exact rule behind it.
         </>
       ),
       facts: [
@@ -97,13 +97,18 @@ export function ValueCase() {
       answer: (
         <>
           Change it once, in one place.{" "}
-          <b>Every repository using Redline gets a pull request</b> its own team
-          reviews and merges.
+          <b>
+            A repository picks the change up the next time someone runs{" "}
+            <code>redline init</code> there
+          </b>{" "}
+          — as a pull request its own team reviews, never a direct push. Sending
+          that change out across the estate automatically is later-phase work.
         </>
       ),
       facts: [
         `standards v${manifest.version}`,
         "one place to edit",
+        "arrives as a pull request",
         "never a direct push",
       ],
     },
@@ -125,6 +130,10 @@ export function ValueCase() {
             </p>
           </div>
           <div className="vc-card">
+            <div className="vc-cols">
+              <span>Today</span>
+              <span className="vc-cols-fix">With Redline</span>
+            </div>
             {pairs.map((p) => (
               <article className="vc-row" key={p.n}>
                 <div className="vc-problem">

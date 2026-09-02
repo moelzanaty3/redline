@@ -6,10 +6,12 @@ export function CopyButton({
   text,
   label,
   dark = false,
+  ariaLabel,
 }: {
   text: string;
   label: string;
   dark?: boolean;
+  ariaLabel?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -24,7 +26,12 @@ export function CopyButton({
   };
 
   return (
-    <button type="button" className={`copy-btn${dark ? " dark" : ""}`} onClick={onCopy}>
+    <button
+      type="button"
+      className={`copy-btn${dark ? " dark" : ""}`}
+      onClick={onCopy}
+      {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+    >
       {copied ? "COPIED ✓" : label}
     </button>
   );

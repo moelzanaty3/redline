@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { CodeWindow } from "@/components/code-window";
+import { CopyButton } from "@/components/copy-button";
 import { Counter } from "@/components/counter";
+import { Journey } from "@/components/journey";
 import { Reveal } from "@/components/reveal";
 import { ValueCase } from "@/components/value-case";
 import { ValueViz } from "@/components/value-viz";
@@ -9,12 +10,14 @@ import { getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
 import { VERSION } from "@/lib/site";
 
-const HERO_CMD = `npx redline-cli init
-npx redline-cli verify`;
+const INSTALL_CMD = "npm i -g redline-cli";
+const ONBOARD_CMD = "redline init";
 
 export default function Home() {
   const ruleCount = getRules().length;
-  const stackCount = Object.keys(loadManifest().stacks).length;
+  const manifest = loadManifest();
+  const stackCount = Object.keys(manifest.stacks).length;
+  const vendorCount = Object.keys(manifest.vendors).length;
   const seedCount = seededFindingCount();
   return (
     <main>
@@ -32,14 +35,41 @@ export default function Home() {
             <span className="grad">Redline holds the line.</span>
           </h1>
           <p className="sub">
-            The engineering oversight layer for AI-assisted development:
-            versioned standards rendered straight into your AI tooling, and a
-            merge-readiness gate — installed and verified by one command, on
-            GitHub and Azure DevOps. Automated review against a measurable
-            output contract, and org-wide telemetry across both hosts, are
-            later-phase work.{" "}
-            <b>No servers. No SaaS. No per-seat fee.</b>
+            Your team&apos;s engineering standards, written once and rendered into
+            the files your AI coding tools already read — with a merge gate the
+            CLI installs and re-checks on GitHub and Azure DevOps.
           </p>
+          <p className="hero-claim">
+            <span>No servers</span>
+            <span>No SaaS</span>
+            <span>No per-seat fee</span>
+          </p>
+          <div className="hero-cmd">
+            <div className="hc-row">
+              <span className="hc-step">once</span>
+              <code>
+                <span className="tk-prompt">$ </span>
+                {INSTALL_CMD}
+              </code>
+              <CopyButton
+                text={INSTALL_CMD}
+                label="Copy"
+                ariaLabel={`Copy ${INSTALL_CMD}`}
+              />
+            </div>
+            <div className="hc-row">
+              <span className="hc-step">per repo</span>
+              <code>
+                <span className="tk-prompt">$ </span>
+                {ONBOARD_CMD}
+              </code>
+              <CopyButton
+                text={ONBOARD_CMD}
+                label="Copy"
+                ariaLabel={`Copy ${ONBOARD_CMD}`}
+              />
+            </div>
+          </div>
           <div className="ctas">
             <Link className="btn btn-red" href="/docs/installation">
               Get Started
@@ -48,18 +78,16 @@ export default function Home() {
               Read the Docs
             </Link>
           </div>
-          <CodeWindow title="terminal — onboard a repository" copyText={HERO_CMD}>
-            <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli init</span>{"\n"}
-            <span className="tk-green">✓</span> <span className="tk-dim">standards rendered</span>   profile: web → copilot · AGENTS.md · claude{"\n"}
-            <span className="tk-green">✓</span> <span className="tk-dim">security floor</span>       secret scanning · push protection · dependency review{"\n"}
-            <span className="tk-green">✓</span> <span className="tk-dim">merge gate installed</span> <span className="tk-blue">redline-gate / gate</span> — advisory{"\n"}
-            <span className="tk-amber">⚠</span> <span className="tk-dim">pending admin</span>        branch settings need a repo admin — recorded in .redline.json{"\n"}
-            <span className="tk-dim">  pull request: https://github.com/acme/checkout-service/pull/42</span>{"\n"}
-            <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli verify</span>{"\n"}
-            <span className="tk-green">ok</span>  <span className="tk-dim">check-name-reported</span>  <span className="tk-blue">redline-gate / gate</span> reported on a real PR — the gate is live
-          </CodeWindow>
+          <p className="hero-proof">
+            <span>{ruleCount} rules, each with a permanent id</span>
+            <span>{stackCount} stack rule sets</span>
+            <span>{vendorCount} AI-tool formats</span>
+            <span>GitHub &amp; Azure DevOps</span>
+          </p>
         </div>
       </section>
+
+      <Journey />
 
       <ValueViz />
 
@@ -174,6 +202,18 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
                   own their gates; telemetry is pulled with a read-only token.
                 </p>
               </div>
+            </div>
+          </Reveal>
+          <Reveal>
+            <div className="roadmap-note">
+              <h3>What is not built yet</h3>
+              <p>
+                Automated review against a measurable output contract, and
+                org-wide telemetry across both hosts, are later-phase work. There
+                is no <code>redline sync</code> either — until it ships, an
+                already-onboarded repository picks up a standards change by
+                re-running <code>redline init</code>.
+              </p>
             </div>
           </Reveal>
         </div>

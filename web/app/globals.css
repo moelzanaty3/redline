@@ -222,7 +222,7 @@ kbd {
 /* ================= hero ================= */
 .hero {
   position: relative;
-  padding: 110px 0 90px;
+  padding: 62px 0 46px;
   text-align: center;
   overflow: hidden;
 }
@@ -255,7 +255,7 @@ kbd {
   background: rgba(255, 255, 255, 0.03);
   border-radius: 999px;
   padding: 6px 16px;
-  margin-bottom: 34px;
+  margin-bottom: 22px;
 }
 .hero-badge .dot {
   width: 7px;
@@ -275,7 +275,7 @@ kbd {
   line-height: 1.04;
   letter-spacing: -0.045em;
   max-width: 880px;
-  margin: 0 auto 24px;
+  margin: 0 auto 18px;
   background: linear-gradient(180deg, #ffffff 55%, #9a9a9a);
   -webkit-background-clip: text;
   background-clip: text;
@@ -291,8 +291,8 @@ kbd {
   position: relative;
   color: var(--muted);
   font-size: 17px;
-  max-width: 620px;
-  margin: 0 auto 40px;
+  max-width: 640px;
+  margin: 0 auto 16px;
 }
 .hero .sub b {
   color: var(--text);
@@ -304,7 +304,87 @@ kbd {
   justify-content: center;
   gap: 14px;
   flex-wrap: wrap;
-  margin-bottom: 74px;
+  margin-bottom: 22px;
+}
+
+/* the differentiator line — its own strip, not the tail of a paragraph */
+.hero-claim {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 0 0 22px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.hero-claim span + span::before {
+  content: "·";
+  margin: 0 12px;
+  color: var(--red-soft);
+}
+
+/* the two commands, in the form a reader should remember them */
+.hero-cmd {
+  position: relative;
+  max-width: 520px;
+  margin: 0 auto 22px;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.hc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+}
+.hc-row + .hc-row {
+  border-top: 1px solid var(--border);
+}
+.hc-step {
+  flex: none;
+  width: 62px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.hc-row code {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.hc-row .copy-btn {
+  flex: none;
+}
+
+/* live proof rail — every number comes from the loaders in web/lib */
+.hero-proof {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.hero-proof span + span::before {
+  content: "·";
+  margin: 0 10px;
+  color: var(--faint);
 }
 
 /* ================= code window ================= */
@@ -635,9 +715,47 @@ kbd {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(230, 0, 0, 0.7), transparent);
 }
+.vc-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.vc-cols span {
+  padding: 12px 30px;
+  color: var(--faint);
+}
+.vc-cols-fix {
+  color: var(--red-soft);
+  border-left: 1px solid var(--border);
+  background: rgba(230, 0, 0, 0.04);
+}
+/* the column headers say it once; the per-row badges only return when the
+   two columns stack and the headers no longer sit above them */
+.vc-tag,
+.vc-answer .vc-meta {
+  display: none;
+}
 .vc-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
+}
+/* 01 leads: it is the thesis the section head states, so it gets the weight */
+.vc-row:first-of-type .vc-problem,
+.vc-row:first-of-type .vc-answer {
+  padding-top: 30px;
+  padding-bottom: 32px;
+}
+.vc-row:first-of-type h3 {
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+.vc-row:first-of-type p {
+  font-size: 14.5px;
 }
 .vc-row + .vc-row {
   border-top: 1px solid var(--border);
@@ -714,7 +832,7 @@ kbd {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 0;
+  gap: 6px;
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--border);
@@ -722,10 +840,14 @@ kbd {
   font-size: 11px;
   color: var(--muted);
 }
-.vc-facts li + li::before {
-  content: "·";
-  margin: 0 9px;
-  color: var(--faint);
+/* chips grow to fill the row instead of leaving a gutter at wide widths */
+.vc-facts li {
+  flex: 1 1 auto;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.03);
 }
 .vc-foot {
   border-top: 1px solid var(--border);
@@ -741,6 +863,219 @@ kbd {
   background: rgba(255, 255, 255, 0.07);
   border-radius: 5px;
   padding: 2px 7px;
+}
+
+/* ================= journey ================= */
+.section.journey {
+  padding: 0 0 76px;
+}
+.jr-head {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.jr-lead {
+  max-width: 660px;
+  margin: 10px auto 0;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.jr-lead b {
+  color: var(--text);
+  font-weight: 600;
+}
+.jr-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.jr-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(230, 0, 0, 0.7), transparent);
+}
+.jr-band {
+  padding: 22px 30px 24px;
+}
+.jr-band-after {
+  background: rgba(230, 0, 0, 0.04);
+}
+.jr-band-h {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 14px;
+}
+.jr-band-after .jr-band-h {
+  color: var(--red-soft);
+}
+/* before and after share this grid so the same three rows line up */
+.jr-rows {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px 26px;
+}
+.jr-rows li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.jr-k {
+  font-size: 12px;
+  color: var(--faint);
+}
+.jr-v {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.jr-v-none {
+  color: var(--muted);
+}
+.jr-v-set {
+  color: var(--red-soft);
+}
+.jr-d {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.jr-probe {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #202020;
+  border-radius: 10px;
+  background: #0b0b0b;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #c9c9c9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jr-term {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: #0b0b0b;
+}
+.jr-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #202020;
+  background: #0f0f0f;
+}
+.jr-bar i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2c2c2c;
+}
+.jr-bar i:first-child {
+  background: rgba(230, 0, 0, 0.8);
+}
+.jr-title {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: #6f6f6f;
+}
+.jr-replay {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #a1a1a1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.jr-replay:hover {
+  color: #f2f2f2;
+  border-color: #4a4a4a;
+}
+.jr-pre {
+  padding: 18px 22px 22px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.72;
+  color: #c9c9c9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.jr-l {
+  transition: opacity 0.18s ease;
+}
+.jr-l.off {
+  opacity: 0;
+}
+.jr-l.cur::after {
+  content: "\25AE";
+  margin-left: 2px;
+  color: #ff5b5b;
+  animation: jr-blink 1s steps(1) infinite;
+}
+@keyframes jr-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.jr-foot {
+  padding: 16px 30px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.jr-foot code {
+  font-size: 12.5px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+
+/* ================= roadmap note ================= */
+.roadmap-note {
+  margin-top: 28px;
+  border: 1px solid var(--border);
+  border-left: 2px solid rgba(230, 0, 0, 0.5);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 18px 22px;
+}
+.roadmap-note h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--red-soft);
+  margin-bottom: 8px;
+}
+.roadmap-note p {
+  font-size: 13.5px;
+  color: var(--muted);
+  max-width: 780px;
+}
+.roadmap-note code {
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  padding: 1px 5px;
 }
 
 /* ================= sections ================= */
@@ -1560,8 +1895,22 @@ kbd {
 [data-theme="light"] .how-card p code,
 [data-theme="light"] .vc-row code,
 [data-theme="light"] .vc-foot code,
+[data-theme="light"] .jr-foot code,
+[data-theme="light"] .roadmap-note code,
 [data-theme="light"] .callout code {
   background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .vc-facts li {
+  background: rgba(0, 0, 0, 0.03);
+}
+[data-theme="light"] .vc-cols-fix,
+[data-theme="light"] .jr-band-after {
+  background: rgba(230, 0, 0, 0.03);
+}
+/* the transcript panels stay dark in light mode, like .bento-code above —
+   so the red inside them needs the dark-surface value, not the light one */
+[data-theme="light"] .jr-probe .tk-red {
+  color: #ff6b6b;
 }
 [data-theme="light"] .vc-answer {
   background: rgba(230, 0, 0, 0.03);
@@ -1689,8 +2038,38 @@ kbd {
   .vv-rules {
     padding: 24px 26px 26px;
   }
+  .vc-cols {
+    display: none;
+  }
+  .vc-tag,
+  .vc-answer .vc-meta {
+    display: flex;
+  }
+  .vc-tag {
+    display: inline-block;
+  }
   .vc-row {
     grid-template-columns: 1fr;
+  }
+  .vc-row:first-of-type h3 {
+    font-size: 18px;
+  }
+  .vc-row:first-of-type p {
+    font-size: 13.5px;
+  }
+  .jr-rows {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .jr-band {
+    padding: 20px 22px 22px;
+  }
+  .jr-pre {
+    padding: 16px 18px 20px;
+    font-size: 11px;
+  }
+  .jr-foot {
+    padding: 16px 22px 18px;
   }
   .vc-problem,
   .vc-answer {
@@ -1761,5 +2140,11 @@ kbd {
   }
   .docs-pager a {
     max-width: 100%;
+  }
+  .jr-pre {
+    font-size: 10.5px;
+  }
+  .hc-step {
+    width: 54px;
   }
 }

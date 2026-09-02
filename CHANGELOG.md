@@ -117,6 +117,23 @@ Record seed scores here. A standards change with no measurement is an opinion.
   publish can no longer change gate behaviour across the org without a pull request
   anywhere; an unpublished `0.0.0-development` build keeps `@latest`, since that version
   does not exist on the registry.
+- The site's home page now leads with the product instead of a caveat. The fold carries
+  the headline, one sentence, `No servers. No SaaS. No per-seat fee.` on its own strip,
+  the two commands a reader should remember (`npm i -g redline-cli`, then `redline init`,
+  each with its own copy button) and a live proof rail; the roadmap disclaimer it used to
+  contain moved to a "what is not built yet" note beside the feature grid, where it now
+  also names the missing `redline sync`. A new before → command → after section replays a
+  real onboarding: every terminal line and file name in it is a literal string from
+  `cli/core/log.ts`, `cli/bin/redline.ts`, `cli/render/vendors.ts`, `cli/render/commands.ts`,
+  `cli/commands/init.ts`, `cli/commands/verify.ts` and `cli/platforms/github/install.ts`,
+  and the rendered artifact list is derived from `standards/manifest.json` at build time.
+  The transcript is real text in the server-rendered HTML — the replay is an enhancement
+  that never gates reading it, and `prefers-reduced-motion` gets it whole and static.
+  The value section was tightened (column headers replace the badge repeated on every row,
+  row 01 leads, fact strips fill their width), and its fourth claim was corrected: it said
+  every repository using Redline gets a pull request when a standard changes, which is
+  Phase 3 work — it now says a repository picks the change up the next time someone runs
+  `redline init` there. "Count which ones keep firing" lost its implied built-in report.
 
 ## 3.0.0 — 2026-09-02
 
