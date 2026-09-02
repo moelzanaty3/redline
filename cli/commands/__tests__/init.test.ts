@@ -136,6 +136,31 @@ test('.redline.json records the versions that produced it', async () => {
   assert.equal(typeof config.cliVersion, 'string');
 });
 
+test('pruned stale vendor files are staged for deletion, not left orphaned out of the pull request', async () => {
+  const stale = '.github/instructions/redline-stale-stack.instructions.md';
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    [stale]: 'stale content from a stack no longer in this profile\n',
+  });
+
+  const report = await init(fakePlatform(), { cwd, root, now });
+
+  assert.ok(!existsSync(join(cwd, stale)), 'render() must have pruned the stale file from disk');
+  assert.ok(report.files.includes(stale), 'the pruned deletion must ride along in the committed file list');
+});
+
+test('a second init on an unchanged repo leaves .redline.json byte-identical (real clock)', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root });
+  const before = readFileSync(join(cwd, '.redline.json'), 'utf8');
+
+  const second = await init(fakePlatform(), { cwd, root });
+  const after = readFileSync(join(cwd, '.redline.json'), 'utf8');
+
+  assert.equal(after, before, 'a no-op re-run must not rewrite .redline.json with a fresh onboardedAt');
+  assert.equal(second.alreadyOnboarded, true);
+});
+
 // --- Degradation paths -----------------------------------------------------
 //
 // Partial permission failure is the NORMAL path for this command (the typical

@@ -111,22 +111,32 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // unlicensed) and must never be reported as permanently half-onboarded.
   const outcomes = [...gate.outcomes, ...ownership.outcomes, ...security.outcomes, ...policy.outcomes];
   const pendingAdmin = outcomes.filter(isPending).map((o) => o.capability);
-  const files = [...rendered.written, ...gate.files, ...ownership.files, CONFIG_FILE];
+  // render() prunes stale vendor files with rmSync; those deletions must ride
+  // along in the same file list as the writes, or the PR never reflects them.
+  const files = [...rendered.written, ...rendered.removed, ...gate.files, ...ownership.files, CONFIG_FILE];
 
-  writeConfig(cwd, {
-    standardsVersion: manifest.version,
-    cliVersion: CLI_VERSION,
-    host: platform.host,
-    profile,
-    vendors,
-    menu,
-    pendingAdmin,
-    onboardedAt: now().toISOString(),
-  });
+  // Determined before writeConfig, and covering prunes too: a no-op re-run
+  // (nothing rendered, nothing pruned, already onboarded) must not dirty the
+  // working tree with a fresh onboardedAt/pendingAdmin it will then have
+  // nothing to commit.
+  const alreadyOnboarded =
+    existing !== null && rendered.written.length === 0 && rendered.removed.length === 0;
+
+  if (!alreadyOnboarded) {
+    writeConfig(cwd, {
+      standardsVersion: manifest.version,
+      cliVersion: CLI_VERSION,
+      host: platform.host,
+      profile,
+      vendors,
+      menu,
+      pendingAdmin,
+      onboardedAt: now().toISOString(),
+    });
+  }
 
   // Re-running on an already-onboarded repository with nothing new to render
   // is a no-op report, not a second pull request: never push an empty diff.
-  const alreadyOnboarded = existing !== null && rendered.written.length === 0;
   const pullRequest = alreadyOnboarded
     ? null
     : await platform.openPullRequest(ref, cwd, {
