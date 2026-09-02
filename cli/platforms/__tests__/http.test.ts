@@ -63,6 +63,30 @@ test('retries a 429 and succeeds', async () => {
   assert.equal(seen.length, 2);
 });
 
+test('a POST that hits a 502 is not retried and the status surfaces', async () => {
+  const { fetch, seen } = stub([json(502, {}), json(201, { ok: true })]);
+  const http = createHttp('https://api.example', {}, { fetch, sleep: noSleep, retries: 3 });
+  const res = await http.request('POST', '/repos/acme/web/pulls', { title: 'x' });
+  assert.equal(res.status, 502);
+  assert.equal(seen.length, 1);
+});
+
+test('a GET that hits a 502 is retried', async () => {
+  const { fetch, seen } = stub([json(502, {}), json(200, { ok: true })]);
+  const http = createHttp('https://api.example', {}, { fetch, sleep: noSleep, retries: 2 });
+  const res = await http.request<{ ok: boolean }>('GET', '/x');
+  assert.equal(res.status, 200);
+  assert.equal(seen.length, 2);
+});
+
+test('a POST that hits a 429 is retried', async () => {
+  const { fetch, seen } = stub([json(429, {}), json(201, { ok: true })]);
+  const http = createHttp('https://api.example', {}, { fetch, sleep: noSleep, retries: 2 });
+  const res = await http.request('POST', '/repos/acme/web/pulls', { title: 'x' });
+  assert.equal(res.status, 201);
+  assert.equal(seen.length, 2);
+});
+
 test('an exhausted retry budget on 500 is a host error', async () => {
   const { fetch } = stub([json(500, {})]);
   const http = createHttp('https://api.example', {}, { fetch, sleep: noSleep, retries: 2 });

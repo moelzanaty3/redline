@@ -17,7 +17,13 @@ export interface Http {
   request<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>>;
 }
 
-const RETRYABLE = (status: number): boolean => status === 429 || status >= 500;
+const IDEMPOTENT = new Set(['GET', 'PUT', 'PATCH', 'DELETE', 'HEAD']);
+
+// 429 is pre-execution (rate limiting), so any method may retry; a 5xx may have
+// committed the request server-side, so only idempotent methods retry — a retried
+// POST would duplicate the PR/policy it created.
+const RETRYABLE = (method: string, status: number): boolean =>
+  status === 429 || (status >= 500 && IDEMPOTENT.has(method.toUpperCase()));
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -52,7 +58,7 @@ export function createHttp(
           continue;
         }
 
-        if (RETRYABLE(response.status)) {
+        if (RETRYABLE(method, response.status)) {
           lastStatus = response.status;
           if (attempt === retries - 1) break;
           await sleep(2 ** attempt * 200);

@@ -5,6 +5,13 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
+## Unreleased — hardening
+
+- The HTTP transport no longer retries a `POST` on a 5xx response: the request may
+  already have committed on the host, and a retry could open a duplicate pull request
+  or policy. 429 responses retry for every method; 5xx retries are limited to
+  idempotent methods (GET, PUT, PATCH, DELETE, HEAD).
+
 ## 3.0.0 — 2026-09-02
 
 The shell rollout is retired. Onboarding a repository is one command:
