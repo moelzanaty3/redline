@@ -31,12 +31,30 @@ export interface ResolveDeps extends ResolvePlatformOptions {
   makeAzureClient?: (org: string) => AzureClient;
 }
 
-// One memoised construction, behind the same interface. Deliberately written
-// out per client rather than proxied: `rest`/`request` are generic, and a
-// generic proxy cannot forward a type parameter without an escape hatch.
+// One construction per process, success or failure. Memoising the failure
+// matters as much as memoising the success: `createGitHubClient()` shells out
+// to `gh auth token`, so a client that failed to build would otherwise
+// re-spawn it on every single request.
+function once<T>(make: () => T): () => T {
+  let result: { ok: true; value: T } | { ok: false; error: unknown } | null = null;
+  return (): T => {
+    if (result === null) {
+      try {
+        result = { ok: true, value: make() };
+      } catch (error) {
+        result = { ok: false, error };
+      }
+    }
+    if (!result.ok) throw result.error;
+    return result.value;
+  };
+}
+
+// Deliberately written out per client rather than proxied: `rest`/`request` are
+// generic, and a generic proxy cannot forward a type parameter without an
+// escape hatch.
 function lazyGitHubClient(make: () => GitHubClient): GitHubClient {
-  let real: GitHubClient | null = null;
-  const client = (): GitHubClient => (real ??= make());
+  const client = once(make);
   return {
     rest<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>> {
       return client().rest<T>(method, path, body);
@@ -48,8 +66,7 @@ function lazyGitHubClient(make: () => GitHubClient): GitHubClient {
 }
 
 function lazyAzureClient(make: () => AzureClient): AzureClient {
-  let real: AzureClient | null = null;
-  const client = (): AzureClient => (real ??= make());
+  const client = once(make);
   return {
     request<T>(
       method: string,

@@ -106,10 +106,12 @@ function parseCheckRunNames(body: unknown): string[] {
   });
 }
 
-function parseSecurityAnalysisStatuses(body: unknown): Record<string, string> {
+// null means GitHub did not report the block at all, which is not the same
+// thing as reporting it empty — see readSecurityState.
+function parseSecurityAnalysisStatuses(body: unknown): Record<string, string> | null {
   if (!isNonNullObject(body)) throw hostShapeError('a repository');
   const analysis = body['security_and_analysis'];
-  if (analysis === undefined) return {};
+  if (analysis === undefined) return null;
   if (!isNonNullObject(analysis)) throw hostShapeError('security_and_analysis');
 
   const statuses: Record<string, string> = {};
@@ -178,17 +180,30 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       const path = repoPath(ref);
       const repo = await client.rest<unknown>('GET', path);
       assertOk(repo.status, path);
+      // GitHub omits security_and_analysis entirely for a requester without
+      // admin permission. "This token cannot see it" is not "it is off", and
+      // the difference matters: `denied` is the status that files pending-admin
+      // work and rewrites .redline.json, so reading an invisible setting as a
+      // refusal let a write-but-not-admin re-run overwrite a correct record
+      // with a false one. Absent block -> unsupported, which isPending
+      // excludes; present but not enabled -> denied, as before.
       const statuses = parseSecurityAnalysisStatuses(repo.body);
+      const invisible = statuses === null;
       const stateFor = (key: string): CapabilityOutcome['status'] =>
-        statuses[key] === 'enabled' ? 'applied' : 'denied';
+        invisible ? 'unsupported' : statuses[key] === 'enabled' ? 'applied' : 'denied';
+      const note = invisible ? ' (not visible to this token)' : '';
 
       return {
         outcomes: [
-          { capability: 'secret-scanning', status: stateFor('secret_scanning'), detail: 'secret scanning' },
+          {
+            capability: 'secret-scanning',
+            status: stateFor('secret_scanning'),
+            detail: `secret scanning${note}`,
+          },
           {
             capability: 'push-protection',
             status: stateFor('secret_scanning_push_protection'),
-            detail: 'secret scanning push protection',
+            detail: `secret scanning push protection${note}`,
           },
         ],
       };

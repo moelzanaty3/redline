@@ -575,7 +575,9 @@ test('a capability the host still denies keeps the repository settled and is rep
 
   assert.equal(report.alreadyOnboarded, true);
   assert.deepEqual(second.applied, [], 'reading the host is not mutating it');
-  assert.ok(second.reads.includes('readSecurityState'));
+  // repoRef is the identity read every real run needs; the plan phase adds
+  // exactly two more, and no more. A third would go unnoticed without this.
+  assert.deepEqual(second.reads, ['repoRef', 'readPolicy', 'readSecurityState']);
   assert.deepEqual(report.pendingAdmin, ['secret-scanning']);
 });
 
@@ -639,4 +641,98 @@ test('a hand-written redline-named script is never deleted by the 2.1 migration'
   );
   assert.equal(existsSync(join(cwd, 'scripts/redline-install.sh')), false);
   assert.ok(!report.files.includes('scripts/redline-deploy.sh'));
+});
+
+// --- Partial permission is the normal path, and must converge ---------------
+
+test('a repository onboarded without admin rights settles instead of re-running forever', async () => {
+  const noAdmin = {
+    policy: [
+      { capability: 'merge-policy' as const, status: 'denied' as const, detail: 'needs repository admin' },
+      { capability: 'repo-property' as const, status: 'applied' as const, detail: '' },
+    ],
+  };
+  const cwd = repo();
+  await init(fakePlatform(noAdmin), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['merge-policy']);
+
+  // A refused ruleset was never created, so the host has none to read back.
+  // That is the recorded state, not drift.
+  const second = fakePlatform(noAdmin);
+  second.lastPolicy = null;
+  const report = await init(second, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, true, 'the normal partial-permission path must converge');
+  assert.deepEqual(second.applied, [], 'and must not rewrite four host settings on every re-run');
+  assert.deepEqual(report.pendingAdmin, ['merge-policy']);
+});
+
+test('a merge policy an administrator created since the last run clears the recorded refusal', async () => {
+  const cwd = repo();
+  await init(
+    fakePlatform({
+      policy: [
+        { capability: 'merge-policy', status: 'denied', detail: 'needs repository admin' },
+        { capability: 'repo-property', status: 'applied', detail: '' },
+      ],
+    }),
+    { cwd, root, now }
+  );
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['merge-policy']);
+
+  // The fake reads its own ADVISORY policy back, which is what an administrator
+  // creating the ruleset looks like.
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, false, 'a stale refusal is work to do');
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, []);
+});
+
+test('a read that cannot see a capability leaves the recorded state exactly as recorded', async () => {
+  const cwd = repo();
+  await init(
+    fakePlatform({
+      security: [
+        { capability: 'secret-scanning', status: 'denied', detail: 'needs admin' },
+        { capability: 'push-protection', status: 'applied', detail: '' },
+        { capability: 'dependency-alerts', status: 'applied', detail: '' },
+      ],
+    }),
+    { cwd, root, now }
+  );
+  const before = readFileSync(join(cwd, '.redline.json'), 'utf8');
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['secret-scanning']);
+
+  // What a write-but-not-admin token sees: GitHub omits the security block
+  // entirely, so the adapter reports `unsupported`. That is not an answer
+  // about whether an administrator still has to act, in either direction — it
+  // must neither clear the recorded entry nor add one.
+  const second = fakePlatform({
+    securityState: [
+      { capability: 'secret-scanning', status: 'unsupported', detail: 'secret scanning (not visible to this token)' },
+      { capability: 'push-protection', status: 'unsupported', detail: 'push protection (not visible to this token)' },
+    ],
+  });
+  const report = await init(second, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, true);
+  assert.deepEqual(second.applied, []);
+  assert.deepEqual(report.pendingAdmin, ['secret-scanning']);
+  assert.equal(readFileSync(join(cwd, '.redline.json'), 'utf8'), before, 'a correct record must not be overwritten');
+});
+
+test('a run that already has work to do never reads the host', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  writeFileSync(join(cwd, 'AGENTS.md'), 'drifted by hand\n');
+
+  const second = fakePlatform();
+  await init(second, { cwd, root, now });
+
+  assert.deepEqual(
+    second.reads,
+    ['repoRef'],
+    'the drift reads only decide a run with nothing else to do — a read-side outage must not abort a real run'
+  );
 });

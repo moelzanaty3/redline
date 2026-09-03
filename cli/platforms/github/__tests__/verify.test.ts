@@ -6,7 +6,7 @@ import { createGitHubPlatform } from '../index.ts';
 import { createGit, type GitRunner } from '../../../core/git.ts';
 import { isRedlineError } from '../../../core/errors.ts';
 import { REQUIRED_CHECK } from '../install.ts';
-import type { RepoRef } from '../../types.ts';
+import { isPending, type RepoRef } from '../../types.ts';
 
 const ref: RepoRef = { host: 'github', org: 'acme', repo: 'web', defaultBranch: 'main' };
 
@@ -251,4 +251,34 @@ test('a 403 on a verify read is reported as an HTTP status, not a shape error', 
       (err: unknown) => isRedlineError(err) && err.kind === 'host' && err.message.includes('HTTP 403'),
     );
   }
+});
+
+// GitHub omits `security_and_analysis` entirely for a requester without admin
+// permission. "This token cannot see it" is not "it is off": `denied` is the
+// status that files pending-admin work and rewrites `.redline.json`, so
+// reading an invisible setting as a refusal let a write-but-not-admin re-run
+// overwrite a correct record with a false one.
+test('a security block the token cannot see reads as unsupported, never as denied', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': { status: 200, body: { name: 'web', default_branch: 'main' } },
+  });
+  const state = await createGitHubVerify(client).readSecurityState(ref);
+
+  assert.deepEqual(
+    state.outcomes.map((o) => o.status),
+    ['unsupported', 'unsupported']
+  );
+  assert.ok(!state.outcomes.some(isPending), 'an unobservable setting must never become pending admin work');
+  assert.match(state.outcomes[0]?.detail ?? '', /not visible/);
+});
+
+test('a security block that is present but off still reads as denied', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': {
+      status: 200,
+      body: { security_and_analysis: { secret_scanning: { status: 'disabled' } } },
+    },
+  });
+  const state = await createGitHubVerify(client).readSecurityState(ref);
+  assert.equal(state.outcomes.find((o) => o.capability === 'secret-scanning')?.status, 'denied');
 });

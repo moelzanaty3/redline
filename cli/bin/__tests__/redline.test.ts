@@ -9,7 +9,7 @@ import { run } from '../redline.ts';
 import { CLI_VERSION } from '../../core/version.ts';
 import { createGit, type GitRunner } from '../../core/git.ts';
 import { RedlineError } from '../../core/errors.ts';
-import { resolvePlatform } from '../../platforms/resolve.ts';
+import { resolvePlatform, type ResolvePlatformOptions } from '../../platforms/resolve.ts';
 import { fakePlatform, type FakePlatform } from '../../commands/__tests__/fake-platform.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -309,44 +309,64 @@ const noCredentials = (): never => {
   );
 };
 
+// The exit code alone cannot tell an eager client from a leaked lazy one: with
+// a lazy client `init`'s first host touch is `repoRef`, which throws the same
+// permission error at the same moment with nothing on disk. So these tests
+// observe the decision itself — the options `bin` hands to resolvePlatform —
+// and, for the dry run, whether a client was ever constructed at all.
 function unauthenticated(cwd: string) {
   const lines: string[] = [];
+  const resolveOptions: (ResolvePlatformOptions | undefined)[] = [];
+  let constructions = 0;
   return {
     lines,
+    resolveOptions,
+    constructions: (): number => constructions,
     opts: {
       cwd,
       root,
       sink: { out: (l: string) => lines.push(l), err: (l: string) => lines.push(l) },
       // The real resolvePlatform, so the lazy wiring is exercised end to end.
-      resolvePlatform: (dir: string, options?: { lazyCredentials?: boolean }) =>
-        resolvePlatform(dir, {
+      resolvePlatform: (dir: string, options?: ResolvePlatformOptions) => {
+        resolveOptions.push(options);
+        return resolvePlatform(dir, {
           ...options,
           gitFor: (d: string) => createGit(d, CREDENTIALLESS_GIT),
-          makeGitHubClient: noCredentials,
-        }),
+          makeGitHubClient: () => {
+            constructions += 1;
+            return noCredentials();
+          },
+        });
+      },
     },
   };
 }
 
-test('init --dry-run prints the plan with no credential in the environment', async () => {
-  const { opts, lines } = unauthenticated(repo());
-  assert.equal(await run(['init', '--dry-run'], opts), 0, lines.join('\n'));
-  assert.ok(lines.some((l) => l.includes('would write')), lines.join('\n'));
-  assert.ok(lines.some((l) => l.includes('dry run')));
+test('init --dry-run asks for a lazy client and never constructs one', async () => {
+  const u = unauthenticated(repo());
+  assert.equal(await run(['init', '--dry-run'], u.opts), 0, u.lines.join('\n'));
+  assert.deepEqual(u.resolveOptions, [{ lazyCredentials: true }]);
+  assert.equal(u.constructions(), 0, 'a preview must not resolve a credential at all');
+  assert.ok(u.lines.some((l) => l.includes('would write')), u.lines.join('\n'));
+  assert.ok(u.lines.some((l) => l.includes('dry run')));
 });
 
-test('a real init with no credential still exits 3 at the same chokepoint, with nothing on disk', async () => {
+test('a real init never asks for a lazy client, and still exits 3 with nothing on disk', async () => {
   const cwd = repo();
-  const { opts, lines } = unauthenticated(cwd);
-  assert.equal(await run(['init'], opts), 3);
-  assert.ok(lines.some((l) => l.includes('gh auth login')), lines.join('\n'));
+  const u = unauthenticated(cwd);
+  assert.equal(await run(['init'], u.opts), 3);
+  assert.deepEqual(u.resolveOptions, [{}], 'the laziness must not leak off the --dry-run path');
+  assert.equal(u.constructions(), 1, 'the credential is resolved up front, exactly as before');
+  assert.ok(u.lines.some((l) => l.includes('gh auth login')), u.lines.join('\n'));
   assert.equal(existsSync(join(cwd, 'AGENTS.md')), false);
   assert.equal(existsSync(join(cwd, '.redline.json')), false);
 });
 
-test('verify with no credential still exits 3 — the laziness does not leak past --dry-run', async () => {
+test('verify never asks for a lazy client either', async () => {
   const cwd = repo();
   await run(['init'], deps(cwd).opts);
-  const { opts } = unauthenticated(cwd);
-  assert.equal(await run(['verify'], opts), 3);
+  const u = unauthenticated(cwd);
+  assert.equal(await run(['verify'], u.opts), 3);
+  assert.deepEqual(u.resolveOptions, [undefined]);
+  assert.equal(u.constructions(), 1);
 });

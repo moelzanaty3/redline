@@ -147,18 +147,33 @@ Record seed scores here. A standards change with no measurement is an opinion.
   and leaving a modified tracked file behind: `installGate` and `ensureReviewOwnership`
   compare content before writing and report only the files that actually changed, and a
   menu change alone is a real run.
-- "Settled" is now decided against the host, not only against the working tree. The plan
-  phase makes two reads — the merge policy and the security state — and no writes. A
-  ruleset an administrator loosened or deleted by hand no longer reads as "already
-  onboarded — nothing to change" from `redline init` *or* from `redline init --blocking`
-  (the recorded menu already said blocking, so nothing looked changed); it is re-applied.
-  The only recovery that used to exist was deleting `.redline.json`, which destroys
-  `onboardedAt`, silently reverts every unrecorded menu selection, and makes the next run
-  look like a 2.1 migration. `redline verify` also tells the operator "<capability> now
-  granted — rerun redline init to clear it from `.redline.json`"; a recorded pending-admin
-  list the host now contradicts is treated as work to do, so that instruction is true.
-  Where the re-run does short-circuit, the pending-admin line is marked
-  "(as recorded at the last run)" rather than asserted as this run's finding.
+- "Settled" is now decided against the host, not only against the working tree. When a run
+  has no file and no menu change of its own, the plan phase makes two reads — the merge
+  policy and the security state — and no writes; a run that already has work to do makes
+  neither, so a read-side outage cannot abort it. A ruleset an administrator loosened or
+  deleted by hand no longer reads as "already onboarded — nothing to change" from
+  `redline init` *or* from `redline init --blocking` (the recorded menu already said
+  blocking, so nothing looked changed); it is re-applied. The only recovery that used to
+  exist was deleting `.redline.json`, which destroys `onboardedAt`, silently reverts every
+  unrecorded menu selection, and makes the next run look like a 2.1 migration.
+  `redline verify` also tells the operator "<capability> now granted — rerun redline init
+  to clear it from `.redline.json`"; a recorded pending-admin list the host now contradicts
+  is treated as work to do, so that instruction is true. Where the re-run does
+  short-circuit, the pending-admin line is marked "(as recorded at the last run)" rather
+  than asserted as this run's finding.
+- A read only changes what `.redline.json` records about a capability when it says
+  something definite about that capability. Two consequences. `redline init` on a
+  repository onboarded *without* repository-admin rights — the normal partial-permission
+  path — now converges: the refused ruleset it never created reads back as absent, which
+  is the recorded state rather than drift, so the re-run settles instead of rewriting four
+  host settings, and from the second re-run a non-fast-forward push to `redline/onboard`
+  no longer made `redline init` exit 1 forever. And GitHub omits `security_and_analysis`
+  entirely for a requester without admin permission, which was being read as "both
+  capabilities are off": a write-but-not-admin re-run overwrote a correct `.redline.json`
+  with a false `pendingAdmin` list and opened a pull request, exiting 0. An absent block is
+  now reported `unsupported` — "not visible to this token" — which neither files
+  pending-admin work nor clears what is already recorded. A block that is present and not
+  enabled is still `denied`.
 - `redline init --dry-run` prints the plan — the files it would write, the files it would
   remove, the repository settings it would change and the resolved menu — and exits 0
   having written nothing, contacted no host and required no credential. The repository

@@ -126,3 +126,24 @@ test('lazy credentials work the same way on azure', async () => {
   });
   assert.equal(made, 1);
 });
+
+// `real ??= make()` leaves the slot null when construction throws, so every
+// later request retries it — for GitHub that re-spawns `gh auth token` per
+// request. The failure is memoised like the success.
+test('a client whose construction failed is not rebuilt on every later request', async () => {
+  let made = 0;
+  const platform = await resolvePlatform('/repo', {
+    gitFor: gitWith('git@github.com:acme/web.git'),
+    lazyCredentials: true,
+    makeGitHubClient: () => {
+      made += 1;
+      throw new RedlineError('permission', 'no GitHub credentials found');
+    },
+    makeAzureClient: () => fakeAzureClient,
+  });
+  const ref = { host: 'github' as const, org: 'acme', repo: 'web', defaultBranch: 'main' };
+
+  await assert.rejects(platform.readSecurityState(ref), /no GitHub credentials/);
+  await assert.rejects(platform.readSecurityState(ref), /no GitHub credentials/);
+  assert.equal(made, 1);
+});

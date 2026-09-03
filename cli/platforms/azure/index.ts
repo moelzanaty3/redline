@@ -19,6 +19,11 @@ export function createAzurePlatform(opts: AzurePlatformOptions): Platform {
 
   return {
     host: 'azure',
+    // `git.defaultBranch()` falls back to the literal 'main' when
+    // refs/remotes/origin/HEAD is not set (a shallow or freshly-created
+    // clone), so the branch below is a guess, not a fact. Nothing on the
+    // dry-run path reads it today; anything added that does must resolve it
+    // properly or report that it could not, rather than inherit the fiction.
     localRef(cwd: string): RepoRef {
       const git = gitFor(cwd);
       const identity = parseRemote(git.remoteUrl());
