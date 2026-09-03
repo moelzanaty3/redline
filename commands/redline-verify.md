@@ -18,10 +18,12 @@ Each line is a check. For any `FAIL`, explain what it means and what fixes it:
   configured menu says. Re-run `redline init` to reapply it. Settings the host cannot attribute
   to Redline are listed as "not compared here" rather than held against the repository.
 - `gate-machinery` — the file that runs the gate is missing from this repository, the job that
-  publishes the required check has been renamed, or the file is present and correctly named but
-  no pull request will ever trigger it. Nothing will ever report the gate, so a blocking policy
-  blocks every pull request forever. Re-run `redline init`, or rename the job back to match the
-  policy.
+  publishes the required check has been renamed, the file is present and correctly named but no
+  pull request will ever trigger it, or the job is unchanged but the merge policy now requires a
+  different check name. Nothing will ever report the gate, so a blocking policy blocks every pull
+  request forever. Re-run `redline init` to restore the file or reapply the policy. Only rename
+  the job back if the workflow itself was the thing that changed — if the policy is what moved,
+  the job is already correct, and renaming it is the wrong fix.
 - `check-name-reported` — a check ran on the pull request but the required name was never among
   the ones reported. Where the policy blocks, this blocks every pull request in the repository.
   Fix the caller job id, or the policy. "No gate run observed yet" is not a failure: no Redline

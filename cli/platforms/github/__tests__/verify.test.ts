@@ -455,6 +455,36 @@ for (const [form, body] of Object.entries(CALLER_FORMS)) {
   });
 }
 
+// Every CALLER_FORMS fixture above puts `uses:` immediately after the job-id
+// line, so callerJobId returns before its job-id-column guard
+// (`if (indent === jobIdIndent) jobId = name;`) is ever tested against a
+// competing key — the guard could be deleted and every test above would still
+// pass. Real caller workflows routinely put other keys in the job body first
+// (`needs:`, `runs-on:`, `permissions:`, a `with:` block), one of them nested
+// deeper than the job id itself. Without the column check, the scan would
+// keep overwriting jobId with each of those keys in turn and report the last
+// one seen before `uses:` — here `adr-diff-threshold` — instead of the job id.
+const CALLER_WITH_JOB_BODY_KEYS = [
+  'name: Redline',
+  'on:',
+  '  pull_request:',
+  'jobs:',
+  '  redline-gate:',
+  '    needs: []',
+  '    runs-on: ubuntu-latest',
+  '    permissions:',
+  '      contents: read',
+  '    with:',
+  '      adr-diff-threshold: 300',
+  '    uses: acme/.github/.github/workflows/redline-gate.yml@main',
+  '',
+].join('\n');
+
+test('a job body with runs-on, permissions and a with: block before uses: still reports the job id, not a nested key', () => {
+  const cwd = repoWith({ '.github/workflows/redline.yml': CALLER_WITH_JOB_BODY_KEYS });
+  assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).publishes, REQUIRED_CHECK);
+});
+
 // A key from anywhere else in the file is never a job id.
 test('a workflow with no jobs block reports no job rather than a key from another block', () => {
   const cwd = repoWith({
