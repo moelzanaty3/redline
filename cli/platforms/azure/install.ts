@@ -29,6 +29,7 @@ import {
 } from './policy-types.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
 import { BEGIN_PREFIX, END, findBlock, wrapBlock } from '../../render/markers.ts';
+import { TEMPLATE_DIRS as PULL_REQUEST_TEMPLATE_DIRS } from '../pull-request-templates.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -182,8 +183,15 @@ function outcome(capability: AdminCapability, status: number, detail: string): C
 // outcome, ranked by how actionable the status is rather than by comparing
 // raw HTTP status numbers — a 404 "unsupported" on one call must never mask
 // a 403 "denied" on another just because 404 > 403.
+// `unknown` never appears here today — nothing this file writes degrades a
+// status into it, only verify.ts's readSecurityState does — but the status
+// union requires every member ranked. It sits between `denied` and
+// `unsupported`: a genuine denial must never be masked by an indeterminate
+// read, and an indeterminate read must never be masked by a definite "not
+// available here" or a definite success either.
 const OUTCOME_RANK: Record<CapabilityOutcome['status'], number> = {
-  denied: 3,
+  denied: 4,
+  unknown: 3,
   unsupported: 2,
   already: 1,
   applied: 0,
@@ -266,7 +274,9 @@ const TEMPLATE_NAMES = ['pull_request_template.md', 'pull_request_template.txt']
 
 // Azure DevOps documents these four folders, searched in this order, first
 // match wins — `.azuredevops/`, the legacy `.vsts/`, `docs/` and the root.
-const TEMPLATE_DIRS = ['.azuredevops', '.vsts', 'docs', ''];
+// The order itself lives in pull-request-templates.ts, the one source shared
+// with `redline verify` — see the comment there.
+const TEMPLATE_DIRS = PULL_REQUEST_TEMPLATE_DIRS.azure;
 
 interface Candidate {
   abs: string;

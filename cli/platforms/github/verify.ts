@@ -338,12 +338,20 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       // the difference matters: `denied` is the status that files pending-admin
       // work and rewrites .redline.json, so reading an invisible setting as a
       // refusal let a write-but-not-admin re-run overwrite a correct record
-      // with a false one. Absent block -> unsupported, which isPending
-      // excludes; present but not enabled -> denied, as before.
+      // with a false one. This is an INDETERMINATE read, not a definite one —
+      // GitHub does not say the feature is absent, only that this token
+      // cannot see it — so it degrades to `unknown`, not `unsupported`.
+      // `unsupported` is reserved for a definite "this does not exist here"
+      // answer (Azure's Advanced Security-unlicensed 404 is the one adapter
+      // that has one); conflating the two would let a plain `redline verify`
+      // pass a repository nobody has actually confirmed, since `unsupported`
+      // no longer fails it on its own (see cli/commands/verify.ts). Absent
+      // block -> unknown, which isPending excludes exactly like unsupported;
+      // present but not enabled -> denied, as before.
       const statuses = parseSecurityAnalysisStatuses(repo.body);
       const invisible = statuses === null;
       const stateFor = (key: string): CapabilityOutcome['status'] =>
-        invisible ? 'unsupported' : statuses[key] === 'enabled' ? 'applied' : 'denied';
+        invisible ? 'unknown' : statuses[key] === 'enabled' ? 'applied' : 'denied';
       const note = invisible ? ' (not visible to this token)' : '';
 
       // Dependabot alerts live on their own endpoint, and it answers with a
@@ -351,13 +359,15 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       // read above already proved the repository itself resolves, so a 404
       // here is about the feature, not the path). 403 is the one case where
       // nothing was learned — an indeterminate read is not an answer, and
-      // `denied` is the status that files work against an administrator. Any
-      // other non-2xx is a host failure, same as everywhere else in this file.
+      // `denied` is the status that files work against an administrator. Same
+      // reasoning as the block above: this is indeterminate, not a definite
+      // "not available here", so it degrades to `unknown`. Any other non-2xx
+      // is a host failure, same as everywhere else in this file.
       const alertsPath = `${path}/vulnerability-alerts`;
       const alerts = await client.rest<unknown>('GET', alertsPath);
       if (alerts.status !== 404 && alerts.status !== 403) assertOk(alerts.status, alertsPath);
       const alertsStatus: CapabilityOutcome['status'] =
-        alerts.status === 403 ? 'unsupported' : alerts.status === 404 ? 'denied' : 'applied';
+        alerts.status === 403 ? 'unknown' : alerts.status === 404 ? 'denied' : 'applied';
 
       return {
         outcomes: [
@@ -375,7 +385,7 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
             capability: 'dependency-alerts',
             status: alertsStatus,
             detail: `dependabot alerts (vulnerability alerts)${
-              alertsStatus === 'unsupported' ? ' (not visible to this token)' : ''
+              alertsStatus === 'unknown' ? ' (not visible to this token)' : ''
             }`,
           },
         ],

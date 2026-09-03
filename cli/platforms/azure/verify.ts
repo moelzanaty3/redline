@@ -302,16 +302,28 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
       });
 
       // Advanced Security is a separately licensed feature: a tenant without
-      // it returns 404 here — that is `unsupported`, never `denied`, the
-      // same distinction install.ts's enableSecurityFloor draws. A 401/403
-      // is a real permission denial and also degrades into a capability
-      // outcome. Any other non-2xx (500, 502, a gateway timeout) is a host
-      // error, not a finding about the repository, and must not be dressed
-      // up as `denied` — that is exactly the status that files pending
-      // admin work against a problem that does not exist. Throw, same as
-      // assertOk everywhere else in this file.
+      // it returns 404 here — that is `unsupported`, a DEFINITE answer ("this
+      // capability does not exist on this repository"), never `denied`, the
+      // same distinction install.ts's enableSecurityFloor draws.
+      //
+      // A 401/403 is a different thing: Azure DevOps does not document this
+      // endpoint distinguishing "you lack permission to see this" from a
+      // well-formed refusal, so it degrades to `unknown` — the read gave no
+      // answer — rather than `denied`. Mapping it to `denied` was the exact
+      // defect Task 6 closed on GitHub and Task 17 closes here: a token that
+      // can WRITE the enablement setting but cannot READ it back made a
+      // re-run overwrite a correct `.redline.json` with a false pendingAdmin
+      // list, open a pull request, and exit 0. `isPending` treats `unknown`
+      // exactly like `unsupported` — neither enters pendingAdmin, and neither
+      // clears an entry already recorded there — so this is the conservative
+      // direction: an indeterminate read leaves the record exactly as it was.
+      //
+      // Any other non-2xx (500, 502, a gateway timeout) is a host error, not
+      // a finding about the repository, and must not be dressed up as any
+      // capability outcome — throw, same as assertOk everywhere else in this
+      // file.
       const refusal: CapabilityOutcome['status'] | null =
-        res.status === 404 ? 'unsupported' : res.status === 401 || res.status === 403 ? 'denied' : null;
+        res.status === 404 ? 'unsupported' : res.status === 401 || res.status === 403 ? 'unknown' : null;
       if (refusal === null) assertOk(res.status, path);
       const body = refusal === null ? parseEnablement(res.body, 'a repository enablement') : null;
       const statusFor = (on: boolean | undefined): CapabilityOutcome['status'] =>

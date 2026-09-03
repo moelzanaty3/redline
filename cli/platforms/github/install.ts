@@ -20,6 +20,7 @@ import type {
 import type { GitHubClient } from './client.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
 import { BEGIN_PREFIX, END, findBlock, wrapBlock } from '../../render/markers.ts';
+import { TEMPLATE_DIRS as PULL_REQUEST_TEMPLATE_DIRS } from '../pull-request-templates.ts';
 
 export const RULESET_NAME = 'Redline';
 export const REQUIRED_CHECK = 'redline-gate / gate';
@@ -105,8 +106,15 @@ function writeOutcome(
 // so a real permission denial on one sub-call is never masked by a merely
 // larger HTTP status number on another (a 404 "unsupported" must not hide a
 // 403 "denied", and an "already exists" 422 must not hide a 403 "denied").
+// `unknown` never appears here today — nothing installGate/applyPolicy/
+// enableSecurityFloor writes degrades a status into it, only verify.ts's
+// readSecurityState does — but the status union requires every member ranked.
+// It sits between `denied` and `unsupported`: a genuine denial must never be
+// masked by an indeterminate read, and an indeterminate read must never be
+// masked by a definite "not available here" or a definite success either.
 const OUTCOME_RANK: Record<CapabilityOutcome['status'], number> = {
-  denied: 3,
+  denied: 4,
+  unknown: 3,
   unsupported: 2,
   already: 1,
   applied: 0,
@@ -186,9 +194,10 @@ function gatedSections(template: string, headings: string[]): string {
 const TEMPLATE_NAMES = ['pull_request_template.md'];
 
 // GitHub resolves the default template from `.github/`, the repository root
-// and `docs/` — its documentation names the three folders but no precedence,
-// so this mirrors the candidate order this adapter already uses for CODEOWNERS.
-const TEMPLATE_DIRS = ['.github', '', 'docs'];
+// and `docs/` — its documentation names the three folders but no precedence.
+// The order itself lives in pull-request-templates.ts, the one source shared
+// with `redline verify` — see the comment there.
+const TEMPLATE_DIRS = PULL_REQUEST_TEMPLATE_DIRS.github;
 
 interface Candidate {
   abs: string;

@@ -22,6 +22,10 @@ test('only a denied outcome is pending admin action', () => {
     ['already', false],
     ['denied', true],
     ['unsupported', false],
+    // An indeterminate read (a 401/403 a host cannot tell apart from a
+    // genuine refusal) is not an answer, and must not enter pendingAdmin any
+    // more than `unsupported` does.
+    ['unknown', false],
   ];
   for (const [status, expected] of cases) {
     const outcome: CapabilityOutcome = { capability: 'secret-scanning', status, detail: '' };

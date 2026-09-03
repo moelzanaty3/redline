@@ -21,7 +21,14 @@ const TEMPLATE_NAMES: Record<Host, string[]> = {
   azure: ['pull_request_template.md', 'pull_request_template.txt'],
 };
 
-const TEMPLATE_DIRS: Record<Host, string[]> = {
+// Exported for cli/platforms/github/install.ts and cli/platforms/azure/
+// install.ts: the folder order is the one thing that must never disagree
+// between what `redline init` writes and what `redline verify` reads back —
+// three private copies of the same order used to exist here, and a copy left
+// behind by an edit to the other two would report a template `init` does not
+// write. The per-host discovery and merge logic stays private to each
+// adapter; only this order is shared.
+export const TEMPLATE_DIRS: Record<Host, string[]> = {
   github: ['.github', '', 'docs'],
   azure: ['.azuredevops', '.vsts', 'docs', ''],
 };

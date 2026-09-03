@@ -28,10 +28,25 @@ export interface RepoRef {
 
 export interface CapabilityOutcome {
   capability: AdminCapability;
-  status: 'applied' | 'already' | 'denied' | 'unsupported';
+  // `applied`/`already`/`denied` are definite: the read (or write) gave a real
+  // answer. `unsupported` is ALSO definite — the capability does not exist on
+  // this repository at all (Advanced Security unlicensed on an Azure tenant) —
+  // so nothing an administrator can do makes it appear. `unknown` is the odd
+  // one out: the read gave NO answer (a 401/403 that this host cannot tell
+  // apart from a genuine, well-formed refusal, or a token structurally unable
+  // to see the setting). Conflating `unknown` with `denied` files false work
+  // against an administrator; conflating it with `unsupported` reports a
+  // licensed-but-unreadable repository as unlicensed. Both are wrong for the
+  // same reason: an indeterminate read is not an answer.
+  status: 'applied' | 'already' | 'denied' | 'unsupported' | 'unknown';
   detail: string;
 }
 
+// Exactly `denied`. `unknown` must behave like `unsupported` here — neither
+// ever reaches pendingAdmin, and neither ever clears an entry already
+// recorded there (cli/commands/init.ts's refreshPendingAdmin keys off this
+// same function) — because an indeterminate read has told nobody anything
+// they can act on.
 export function isPending(outcome: CapabilityOutcome): boolean {
   return outcome.status === 'denied';
 }

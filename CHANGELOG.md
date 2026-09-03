@@ -7,6 +7,25 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- `CapabilityOutcome` gained a fourth status, `unknown`, closing the Azure half of a defect
+  fixed for GitHub earlier: Azure's Advanced Security enablement read mapped a 401/403 to
+  `denied`, so a token that could WRITE the setting but not READ it back made a re-run
+  overwrite a correct `.redline.json` with a false `pendingAdmin` list, open a pull request,
+  and exit 0. It now maps to `unknown` — Azure DevOps does not document this endpoint telling
+  "you cannot see this" apart from a genuine refusal — and `isPending` treats it exactly like
+  `unsupported`: never entering `pendingAdmin`, never clearing an entry already recorded
+  there. The same audit on GitHub found its own `unsupported` mappings (an invisible
+  `security_and_analysis` block, a 403 on `vulnerability-alerts`) were the same indeterminate
+  case wearing the wrong label — genuinely unlicensed and merely unobserved used to share one
+  status — so both now read as `unknown` too, and `unsupported` is reserved for a definite
+  "this does not exist here" (only Azure's Advanced Security-unlicensed 404 has one today).
+  `redline verify`'s `security-floor` finding splits accordingly: an `unknown` capability still
+  fails a plain run and reports without failing under `--gate`, exactly as `unsupported` used
+  to; a genuinely `unsupported` one — no administrator remedy exists, so failing it forever was
+  the bug — now passes a plain run outright. The pull-request-template candidate-folder order,
+  previously three private copies in both `install.ts` files and
+  `cli/platforms/pull-request-templates.ts`, now has one source; only the order moved, not the
+  per-adapter discovery or merge logic.
 - Stack detection scans breadth-first, so root-level manifests (`go.mod`, `pom.xml`)
   are always seen even when one large subtree alone exceeds the 5000-file scan budget.
   `.xcodeproj` directories are now emitted as path markers, so an Xcode project without

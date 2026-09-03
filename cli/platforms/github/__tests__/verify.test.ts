@@ -260,8 +260,11 @@ test('a 403 on a verify read is reported as an HTTP status, not a shape error', 
 // permission. "This token cannot see it" is not "it is off": `denied` is the
 // status that files pending-admin work and rewrites `.redline.json`, so
 // reading an invisible setting as a refusal let a write-but-not-admin re-run
-// overwrite a correct record with a false one.
-test('a security block the token cannot see reads as unsupported, never as denied', async () => {
+// overwrite a correct record with a false one. It is not `unsupported`
+// either: that status is a DEFINITE "this does not exist on this
+// repository", and GitHub has told this token nothing that definite — only
+// that it cannot see the block. Task 17 gives that its own status: `unknown`.
+test('a security block the token cannot see reads as unknown, never as denied or unsupported', async () => {
   const client = fakeGitHubClient({
     'GET /repos/acme/web': { status: 200, body: { name: 'web', default_branch: 'main' } },
   });
@@ -269,7 +272,7 @@ test('a security block the token cannot see reads as unsupported, never as denie
 
   assert.deepEqual(
     state.outcomes.filter((o) => o.capability !== 'dependency-alerts').map((o) => o.status),
-    ['unsupported', 'unsupported']
+    ['unknown', 'unknown']
   );
   assert.ok(!state.outcomes.some(isPending), 'an unobservable setting must never become pending admin work');
   assert.match(state.outcomes[0]?.detail ?? '', /not visible/);
@@ -310,15 +313,17 @@ test('dependency alerts GitHub reports as on read back as applied', async () => 
 
 // An indeterminate read is not an answer: a token refused the endpoint has
 // learned nothing about the repository, and `denied` is the status that files
-// work against an administrator.
-test('a token refused the vulnerability-alerts endpoint leaves dependency alerts unobserved, not denied', async () => {
+// work against an administrator. Not `unsupported` either — that would claim
+// the definite answer "dependabot alerts do not exist here", which a 403
+// never establishes.
+test('a token refused the vulnerability-alerts endpoint leaves dependency alerts unknown, not denied or unsupported', async () => {
   const client = fakeGitHubClient({
     'GET /repos/acme/web': { status: 200, body: { security_and_analysis: {} } },
     'GET /repos/acme/web/vulnerability-alerts': { status: 403, body: { message: 'Forbidden' } },
   });
   const state = await createGitHubVerify(client).readSecurityState(ref);
   const alerts = state.outcomes.find((o) => o.capability === 'dependency-alerts');
-  assert.equal(alerts?.status, 'unsupported');
+  assert.equal(alerts?.status, 'unknown');
   assert.ok(alerts !== undefined && !isPending(alerts));
 });
 

@@ -9,7 +9,7 @@ import { createGit, type GitRunner } from '../../../core/git.ts';
 import { isRedlineError } from '../../../core/errors.ts';
 import type { AzureClient } from '../client.ts';
 import type { HttpResponse } from '../../http.ts';
-import type { RepoRef } from '../../types.ts';
+import { isPending, type RepoRef } from '../../types.ts';
 
 const ref: RepoRef = {
   host: 'azure',
@@ -257,15 +257,33 @@ test('readReportedCheckNames surfaces a non-2xx statuses response as a host erro
   );
 });
 
-test('readSecurityState treats an explicit 403 as denied, not unsupported', async () => {
-  const client = fakeAzure({
-    'GET /Payments/_apis/management/repositories/repo-guid/enablement': {
-      status: 403,
-      body: { message: 'Forbidden' },
-    },
-  });
-  const state = await createAzureVerify(client).readSecurityState(ref);
-  assert.ok(state.outcomes.every((o) => o.status === 'denied'));
+// Azure DevOps does not document this endpoint distinguishing "you lack
+// permission to see this" from a well-formed refusal, so a 401/403 here gives
+// no answer about the repository — same governing principle as GitHub's
+// invisible security_and_analysis block. Reading it as `denied` was the exact
+// defect Task 6 closed on GitHub: a token that can WRITE the enablement
+// setting but cannot READ it back made a re-run overwrite a correct
+// `.redline.json` with a false pendingAdmin list, open a pull request, and
+// exit 0. `unsupported` is wrong too — that status means Advanced Security is
+// definitely unlicensed, and this token has learned nothing that definite.
+test('readSecurityState treats a 401/403 as unknown, never denied and never unsupported', async () => {
+  for (const status of [401, 403]) {
+    const client = fakeAzure({
+      'GET /Payments/_apis/management/repositories/repo-guid/enablement': {
+        status,
+        body: { message: 'Forbidden' },
+      },
+    });
+    const state = await createAzureVerify(client).readSecurityState(ref);
+    assert.ok(
+      state.outcomes.every((o) => o.status === 'unknown'),
+      `status ${status}: ${JSON.stringify(state.outcomes)}`
+    );
+    assert.ok(
+      !state.outcomes.some(isPending),
+      `status ${status}: an indeterminate read must never become pending admin work`
+    );
+  }
 });
 
 // A transient host error (500, a gateway timeout) must not read as "an
