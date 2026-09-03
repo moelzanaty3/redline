@@ -196,6 +196,20 @@ Record seed scores here. A standards change with no measurement is an opinion.
   it back with the casing the object was created with, so a human's `refs/heads/`-prefix
   policy created in the portal comes back as `Prefix`, was not recognised as covering the
   default branch, and got a second Redline policy stacked beside it.
+- The home page's before/after demo now explains what the run does to a repository that
+  already has files. The after-band names each written path by what happens to it:
+  `CLAUDE.md`, `AGENTS.md` and `.github/copilot-instructions.md` are merged (Redline owns
+  only the span between its `REDLINE:BEGIN`/`END` markers, the rest of the file is kept);
+  the `redline-` prefixed artifacts and `.github/workflows/redline.yml` are Redline's own
+  and rewritten whole; `.github/CODEOWNERS` is seeded only when the repository has none;
+  `.github/pull_request_template.md` is the one shared-name file that is replaced, because
+  the gate reads its `## Launch readiness` section out of the pull request description.
+  `.redline.json` is described as the record `redline verify` reads back, and the two
+  installed slash commands are listed with the descriptions parsed out of `commands/` at
+  build time. Also: the lead no longer claims every transcript line is CLI output (one is
+  a `#` annotation, now named), the honesty caveat moved off `--faint` onto `--muted` for
+  AA contrast, and the hero proof rail reads `manifest.version` instead of a hardcoded
+  site constant that could drift from it.
 
 ## 3.0.0 — 2026-09-02
 

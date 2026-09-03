@@ -8,7 +8,6 @@ import { ValueViz } from "@/components/value-viz";
 import { loadManifest } from "@/lib/manifest";
 import { getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
-import { VERSION } from "@/lib/site";
 
 const INSTALL_CMD = "npm i -g redline-cli";
 const ONBOARD_CMD = "redline init";
@@ -79,7 +78,7 @@ export default function Home() {
             <span>{stackCount} stack rule sets</span>
             <span>{vendorCount} AI-tool formats</span>
             <span>GitHub &amp; Azure DevOps</span>
-            <span>standards v{VERSION}</span>
+            <span>standards v{manifest.version}</span>
           </p>
         </div>
       </section>

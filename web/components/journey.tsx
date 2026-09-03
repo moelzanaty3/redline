@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import Link from "next/link";
 import { repoRoot } from "@/lib/content";
@@ -15,7 +15,10 @@ import { JourneyTerminal, type Line, type Tok } from "@/components/journey-termi
 //                                REQUIRED_CHECK, the seeded CODEOWNERS message
 //   cli/commands/init.ts       — ONBOARD_BRANCH, the PR title, the `redline-sync` label
 //   cli/commands/verify.ts     — every `redline verify` finding detail
-// Nothing here is invented. If the CLI does not print it, it is not on this page.
+// Nothing here is invented: every command and every line of output is a literal
+// CLI string. The single exception is the `# ...` line before `redline verify`,
+// a shell comment narrating the gap between the two runs — the lead paragraph
+// below names it rather than letting the page claim more than it delivers.
 
 const PROFILE = "web";
 const EXAMPLE_REPO = "acme/checkout-service";
@@ -48,17 +51,34 @@ function resolveStacks(manifest: Manifest, profile: string): string[] {
   return out;
 }
 
-function commandNames(): string[] {
-  return readdirSync(join(repoRoot(), "commands"))
+interface CommandDoc {
+  name: string;
+  description: string;
+}
+
+// Mirrors cli/render/commands.ts loadCommands: the name is the filename, the
+// description is the frontmatter line that renderer copies into every vendor's
+// file. Read from commands/ at build time so the page cannot describe a command
+// that is not on disk.
+function loadCommandDocs(): CommandDoc[] {
+  const dir = join(repoRoot(), "commands");
+  return readdirSync(dir)
     .filter((f) => f.endsWith(".md"))
-    .map((f) => f.replace(/\.md$/, ""));
+    .map((file) => {
+      const raw = readFileSync(join(dir, file), "utf8");
+      const front = /^---\n([\s\S]*?)\n---/.exec(raw)?.[1] ?? "";
+      return {
+        name: file.replace(/\.md$/, ""),
+        description: /description:\s*(.+)/.exec(front)?.[1]?.trim() ?? "",
+      };
+    });
 }
 
 export function Journey() {
   const manifest = loadManifest();
   const version = manifest.version;
   const stacks = resolveStacks(manifest, PROFILE);
-  const commands = commandNames();
+  const commands = loadCommandDocs();
 
   // cli/render/vendors.ts — copilot, agents and claude are the manifest's enabled vendors.
   const standardsFiles = [
@@ -69,8 +89,8 @@ export function Journey() {
   ];
   // cli/render/commands.ts — COMMAND_HOSTS entries for the enabled vendors.
   const commandFiles = [
-    ...commands.map((c) => `.github/prompts/${c}.prompt.md`),
-    ...commands.map((c) => `.claude/commands/${c}.md`),
+    ...commands.map((c) => `.github/prompts/${c.name}.prompt.md`),
+    ...commands.map((c) => `.claude/commands/${c.name}.md`),
   ];
   // cli/platforms/github/install.ts installGate + ensureReviewOwnership,
   // then cli/config/redline-json.ts CONFIG_FILE.
@@ -162,8 +182,13 @@ export function Journey() {
           <h2 className="vv-lbl">Before, one command, after</h2>
           <p className="jr-lead">
             One repository, start to finish.{" "}
-            <b>Every line of the transcript is a string the CLI actually prints</b> — the
-            file names are the ones it writes, the findings are the ones it reports.
+            <b>
+              Every command and every line of output below is a string the CLI actually
+              prints
+            </b>{" "}
+            — the file names are the ones it writes, the findings are the ones it
+            reports. The one <code>#</code> line is ours, marking the gap between the
+            two runs.
           </p>
         </div>
 
@@ -207,6 +232,97 @@ export function Journey() {
                 </li>
               ))}
             </ul>
+
+            <h4 className="jr-sub-h">What it did to files you already had</h4>
+            <ul className="jr-files">
+              <li>
+                <span className="jr-fk">Merged — your file keeps its content</span>
+                <span className="jr-fp">
+                  <code>CLAUDE.md</code>
+                  <code>AGENTS.md</code>
+                  <code>.github/copilot-instructions.md</code>
+                </span>
+                <span className="jr-fd">
+                  Redline writes only between{" "}
+                  <code>&lt;!-- REDLINE:BEGIN --&gt;</code> and{" "}
+                  <code>&lt;!-- REDLINE:END --&gt;</code>. A file that already exists
+                  without those markers keeps everything in it and gets the block
+                  appended; a file that has them keeps everything outside them. Redline
+                  owns its marked block and nothing else in the file.{" "}
+                  <Link href="/docs/adaptors/agents-md">How the markers work →</Link>
+                </span>
+              </li>
+              <li>
+                <span className="jr-fk">Redline&apos;s own — rewritten in full</span>
+                <span className="jr-fp">
+                  <code>.github/instructions/redline-*.instructions.md</code>
+                  <code>.github/prompts/redline-*.prompt.md</code>
+                  <code>.claude/commands/redline-*.md</code>
+                  <code>.github/workflows/redline.yml</code>
+                </span>
+                <span className="jr-fd">
+                  Each is named for Redline and generated, never hand-authored, so a
+                  run replaces it whole and an edit made in place does not survive one.
+                  An instructions file for a stack the profile no longer resolves is
+                  deleted rather than left behind.
+                </span>
+              </li>
+              <li>
+                <span className="jr-fk">Seeded only if you have none</span>
+                <span className="jr-fp">
+                  <code>.github/CODEOWNERS</code>
+                </span>
+                <span className="jr-fd">
+                  A CODEOWNERS already in <code>.github/</code>, the repository root or{" "}
+                  <code>docs/</code> is left untouched, and the run reports{" "}
+                  <code>already</code> against it instead of <code>applied</code>.
+                </span>
+              </li>
+              <li>
+                <span className="jr-fk">Replaced — the one file that is</span>
+                <span className="jr-fp">
+                  <code>.github/pull_request_template.md</code>
+                </span>
+                <span className="jr-fd">
+                  The gate reads the <code>## Launch readiness</code> section out of the
+                  pull request description and fails when it is missing, so this
+                  template has to be Redline&apos;s. An existing one is replaced — inside
+                  the onboarding pull request, where the diff is reviewable before
+                  anything merges.
+                </span>
+              </li>
+              <li>
+                <span className="jr-fk">The record the next run reads</span>
+                <span className="jr-fp">
+                  <code>.redline.json</code>
+                </span>
+                <span className="jr-fd">
+                  What this repository chose and what the host was asked for: profile,
+                  vendors, the menu options selected, and the capabilities the host
+                  refused. It is what <code>redline verify</code> reads back — without
+                  it the run above is a one-off, and with it every later check is scored
+                  against what this repository actually agreed to.
+                </span>
+              </li>
+            </ul>
+
+            <h4 className="jr-sub-h">The slash commands it installs</h4>
+            <ul className="jr-cmds">
+              {commands.map((c) => (
+                <li key={c.name}>
+                  <code>/{c.name}</code>
+                  <span>{c.description}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="jr-note">
+              Each is rendered once per AI tool from a single source —{" "}
+              <code>.github/prompts/</code> for Copilot Chat,{" "}
+              <code>.claude/commands/</code> for Claude Code — so the same{" "}
+              <code>/name</code> is there in whichever one a developer already uses. Each
+              tells the agent to run the real CLI and report what it printed; the files
+              carry no logic of their own.
+            </p>
           </div>
 
           <p className="jr-foot">
