@@ -10,6 +10,12 @@
   --red: #e60000;
   --red-soft: #ff4d4d;
   --green: #45de83;
+  /* value-case "with redline" accent only — do not reuse --green here, its
+     dark-only value is too pale once the light theme's chip sits on a light
+     surface; light theme redefines all three steps */
+  --ok-ink: #45de83;
+  --ok-line: rgba(69, 222, 131, 0.35);
+  --ok-bg: rgba(69, 222, 131, 0.1);
   --amber: #f5b93e;
   --blue: #52a8ff;
   /* severity ramp: one hue, monotone lightness — most severe reads strongest
@@ -730,9 +736,9 @@ kbd {
   color: var(--faint);
 }
 .vc-cols-fix {
-  color: var(--red-soft);
+  color: var(--ok-ink);
   border-left: 1px solid var(--border);
-  background: rgba(230, 0, 0, 0.04);
+  background: var(--ok-bg);
 }
 /* the column headers say it once; the per-row badges only return when the
    two columns stack and the headers no longer sit above them */
@@ -802,9 +808,9 @@ kbd {
   padding: 3px 9px;
 }
 .vc-tag-fix {
-  color: var(--red-soft);
-  border-color: rgba(230, 0, 0, 0.35);
-  background: rgba(230, 0, 0, 0.08);
+  color: var(--ok-ink);
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
 }
 .vc-row h3 {
   font-size: 16px;
@@ -844,10 +850,11 @@ kbd {
 .vc-facts li {
   flex: 1 1 auto;
   text-align: center;
-  border: 1px solid var(--border);
+  color: var(--ok-ink);
+  border: 1px solid var(--ok-line);
   border-radius: 6px;
   padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--ok-bg);
 }
 .vc-foot {
   border-top: 1px solid var(--border);
@@ -1960,6 +1967,10 @@ kbd {
   --sev-blocker: #a30000;
   --sev-high: #e04f4f;
   --sev-suggestion: #ff8f8f;
+  /* #45de83 is too pale on this light surface (< 4.5:1); darkened to hold contrast */
+  --ok-ink: #0e6b35;
+  --ok-line: rgba(14, 107, 53, 0.32);
+  --ok-bg: rgba(14, 107, 53, 0.08);
   color-scheme: light;
 }
 [data-theme="light"] ::selection {
@@ -2020,10 +2031,6 @@ kbd {
 [data-theme="light"] .callout code {
   background: rgba(0, 0, 0, 0.05);
 }
-[data-theme="light"] .vc-facts li {
-  background: rgba(0, 0, 0, 0.03);
-}
-[data-theme="light"] .vc-cols-fix,
 [data-theme="light"] .jr-band-after {
   background: rgba(230, 0, 0, 0.03);
 }

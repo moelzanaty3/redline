@@ -7,6 +7,13 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- The value-case card's "With Redline" column — proof chips, column header, per-row
+  tag — now carries a restrained green accent instead of reading identically to the
+  "Today" column. New `--ok-ink`/`--ok-line`/`--ok-bg` tokens carry it, defined in both
+  `:root` and `[data-theme="light"]`: `--green` (`#45de83`) is not reused directly, since
+  it is tuned for the dark surfaces `.tk-green` and `.gate-check .st.ok` never leave, and
+  reads too pale once the light theme puts a chip on a light background. Chip text holds
+  9.2:1 on the dark surface and 5.6:1 on the light one.
 - `CapabilityOutcome` gained a fourth status, `unknown`, closing the Azure half of a defect
   fixed for GitHub earlier: Azure's Advanced Security enablement read mapped a 401/403 to
   `denied`, so a token that could WRITE the setting but not READ it back made a re-run
