@@ -20,6 +20,7 @@ const USAGE = [
   'redline — engineering control plane',
   '',
   '  redline init [--profile <name>] [--vendors <list>] [--blocking] [--no-a11y] [--speckit] [--dry-run] [--repair]',
+  '               [--adopt-caller]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
   '      --vendors <list>  comma-separated vendor ids (copilot,agents,claude,cursor) to render for —',
@@ -30,6 +31,10 @@ const USAGE = [
   '      --repair    re-apply every capability even if this repository looks already onboarded — for',
   '                  labels, review-ownership, repo-property, gate and merge-policy, whose recorded',
   '                  pendingAdmin entry a plain re-run can never clear on its own; composes with --dry-run',
+  '      --adopt-caller  let Redline take over the gate machinery file (.github/workflows/redline.yml,',
+  '                  .azuredevops/redline-gate.yml) when what is already there carries nothing that',
+  '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
+  '                  rather than overwrite a file that may be the repository\'s own',
   '      omitted flags keep whatever .redline.json already recorded',
   '',
   '  redline verify [--gate]',
@@ -94,6 +99,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             speckit: { type: 'boolean' },
             'dry-run': { type: 'boolean' },
             repair: { type: 'boolean' },
+            'adopt-caller': { type: 'boolean' },
           },
           allowPositionals: false,
         })
@@ -117,6 +123,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
       const dryRun = values['dry-run'] === true;
       const repair = values.repair === true;
+      const adoptCaller = values['adopt-caller'] === true;
       // A dry run sends no request, so it must not require a credential —
       // see ResolvePlatformOptions.lazyCredentials. Every other path here
       // resolves one up front, exactly as before.
@@ -128,6 +135,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(vendors ? { vendors } : {}),
         ...(dryRun ? { dryRun: true } : {}),
         ...(repair ? { repair: true } : {}),
+        ...(adoptCaller ? { adoptCaller: true } : {}),
         menu,
       });
 

@@ -27,6 +27,11 @@ export interface RenderResult {
   staleWritten: string[];
   staleRemovals: string[];
   managed: string[];
+  // The managed artifacts the repository-local rules section is rendered into.
+  // `redline verify` needs the boundary: a stale artifact that can never carry
+  // the section cannot be explained by a change to `.redline/local.md`, and
+  // excusing one is a drift bypass in the oversight product itself.
+  localRuleFiles: string[];
 }
 
 // The rest of a shared file once its Redline block is cut out, or `null` when
@@ -178,5 +183,8 @@ export function render(opts: RenderOptions): RenderResult {
     staleWritten,
     staleRemovals,
     managed: [...planned.keys()],
+    localRuleFiles: [...planned]
+      .filter(([, file]) => file.localRules === true)
+      .map(([relPath]) => relPath),
   };
 }

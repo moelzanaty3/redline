@@ -1634,3 +1634,65 @@ test('a template with a balanced fence still merges and is byte-stable across th
   assert.ok(first.files.includes('.azuredevops/pull_request_template.md'));
   assert.ok(!second.files.includes('.azuredevops/pull_request_template.md'));
 });
+
+// --- the gate pipeline file is refused, never clobbered ----------------------
+//
+// Same defect class and same two honest answers as GitHub's caller workflow:
+// the file is YAML, so the marker-block merge the shared markdown artifacts
+// take is impossible here for the same reason. Azure has no 2.1 caller to
+// accommodate — `detectMigration`'s marker is GitHub-only — so attribution can
+// be, and is, strict: the ownership line the template opens with, or the
+// variable block only Redline's own gate template produces.
+const THEIR_GATE = '# our own gate\ntrigger: none\nsteps:\n  - script: make check\n';
+
+test("a repository's own .azuredevops/redline-gate.yml is refused, not overwritten", async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/redline-gate.yml'), THEIR_GATE);
+
+  await assert.rejects(
+    createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts),
+    /\.azuredevops\/redline-gate\.yml/
+  );
+  assert.equal(readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8'), THEIR_GATE);
+});
+
+test('the azure plan phase refuses the same foreign gate file rather than promising a write', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/redline-gate.yml'), THEIR_GATE);
+
+  await assert.rejects(
+    createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts, true),
+    /\.azuredevops\/redline-gate\.yml/
+  );
+});
+
+test('--adopt-caller lets a human hand the azure gate path to Redline', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/redline-gate.yml'), THEIR_GATE);
+
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(
+    ref,
+    cwd,
+    { ...gateOpts, adoptCaller: true }
+  );
+
+  assert.ok(result.files.includes('.azuredevops/redline-gate.yml'));
+  assert.match(readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8'), /ADR_DIFF_THRESHOLD/);
+});
+
+test("a gate pipeline Redline wrote earlier is its own and is refreshed", async () => {
+  const cwd = tmp();
+  const install = createAzureInstall(fakeAzure(registrationRoutes), gitFor);
+  await install.installGate(ref, cwd, gateOpts);
+  const path = join(cwd, '.azuredevops/redline-gate.yml');
+  assert.match(readFileSync(path, 'utf8'), /^# Managed by Redline\b/m);
+
+  writeFileSync(path, readFileSync(path, 'utf8').replace('ADR_DIFF_THRESHOLD: 300', 'ADR_DIFF_THRESHOLD: 1'));
+  const second = await install.installGate(ref, cwd, gateOpts);
+
+  assert.ok(second.files.includes('.azuredevops/redline-gate.yml'));
+  assert.match(readFileSync(path, 'utf8'), /ADR_DIFF_THRESHOLD: 300/);
+});

@@ -254,6 +254,21 @@ test('usage names --dry-run and says what --no-a11y and --speckit actually do', 
   assert.ok(usage.includes('changes nothing in Phase 1'));
 });
 
+// The escape hatch for a gate machinery file Redline cannot attribute to
+// itself. An operator who is never told it exists is one who reaches for
+// `rm .redline.json`, so it has to be both parseable and documented.
+test('init accepts --adopt-caller and the usage says what it is for', async () => {
+  const cwd = repo();
+  const { opts, lines } = deps(cwd);
+  assert.equal(await run(['init', '--adopt-caller'], opts), 0, lines.join('\n'));
+
+  const help = deps(repo());
+  await run(['--help'], help.opts);
+  const usage = help.lines.join('\n');
+  assert.ok(usage.includes('--adopt-caller'));
+  assert.ok(usage.includes('attributes it to Redline'));
+});
+
 test('the dry-run plan prints a prune candidate as a removal, not as a write', async () => {
   const cwd = repo();
   const first = deps(cwd);

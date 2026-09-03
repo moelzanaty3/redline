@@ -173,3 +173,122 @@ test('check mode reports the command files it would merge and writes none of the
   assert.ok(planned.written.includes(relPath));
   assert.equal(readFileSync(join(out, relPath), 'utf8'), 'ours\n');
 });
+
+// The reviewer's Critical 2 input. Every repository already onboarded has a
+// marker-less command file that Redline itself wrote. Merge-or-create is the
+// right answer for a HUMAN's file and the wrong one for Redline's own earlier
+// output: appending a block carrying the same body makes `/<name>` run the
+// prompt twice.
+const legacyRendering = (name: string, header: string): string => {
+  const command = loadCommands(root).find((c) => c.name === name)!;
+  const composed = header === '' ? command.body : `${header}\n${command.body}`;
+  return `${composed.trimEnd()}\n`;
+};
+
+test('a command file left by an earlier CLI is replaced, not appended to, so the prompt is not doubled', () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  const command = loadCommands(root).find((c) => c.name === 'redline-init')!;
+  const legacy = legacyRendering('redline-init', `---\ndescription: ${command.description}\n---\n`);
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(join(out, relPath), legacy);
+
+  const result = renderCommands({ root, out, hosts: ['claude'] });
+
+  const merged = readFileSync(join(out, relPath), 'utf8');
+  const phrase = command.body.split('\n').find((line) => line.trim().length > 40)!.trim();
+  assert.ok(result.written.includes(relPath));
+  assert.equal(merged.split(phrase).length - 1, 1, 'the body must appear exactly once');
+  assert.ok(merged.length < legacy.length * 1.8, `${merged.length} vs legacy ${legacy.length}: doubled`);
+  assert.match(merged, HAS_BLOCK);
+});
+
+test('a copilot prompt left by an earlier CLI is replaced rather than doubled', () => {
+  const out = tmp();
+  const relPath = '.github/prompts/redline-verify.prompt.md';
+  const command = loadCommands(root).find((c) => c.name === 'redline-verify')!;
+  const legacy = legacyRendering(
+    'redline-verify',
+    `---\nmode: agent\ndescription: ${command.description}\n---\n`
+  );
+  mkdirSync(join(out, '.github/prompts'), { recursive: true });
+  writeFileSync(join(out, relPath), legacy);
+
+  renderCommands({ root, out, hosts: ['copilot'] });
+
+  const merged = readFileSync(join(out, relPath), 'utf8');
+  const phrase = command.body.split('\n').find((line) => line.trim().length > 40)!.trim();
+  assert.equal(merged.split(phrase).length - 1, 1, 'the body must appear exactly once');
+});
+
+// The migration is a one-off: once the block owns the file, the next run is a
+// no-op, and the file is a normal marker-managed one from then on.
+test('the migrated command file is stable on the very next render', () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  const command = loadCommands(root).find((c) => c.name === 'redline-init')!;
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(
+    join(out, relPath),
+    legacyRendering('redline-init', `---\ndescription: ${command.description}\n---\n`)
+  );
+
+  renderCommands({ root, out, hosts: ['claude'] });
+  const second = renderCommands({ root, out, hosts: ['claude'] });
+
+  assert.deepEqual(second, { written: [], removed: [] });
+});
+
+// A team's own command file can carry a lone `description:` key, which is
+// shape-identical to the header Redline writes. Shape is therefore not an
+// answer: only Redline's own attribution line in the header is.
+test("a repository's own frontmatter is not claimed as Redline's, even once its prose is gone", () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  const theirs = "---\ndescription: our team's PR review\n---\n\nOur own prompt.\n";
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(join(out, relPath), theirs);
+  renderCommands({ root, out, hosts: ['claude'] });
+
+  // They keep the frontmatter and drop their prose, leaving a remainder that
+  // looks exactly like a header Redline could have written.
+  const merged = readFileSync(join(out, relPath), 'utf8');
+  writeFileSync(join(out, relPath), merged.replace('Our own prompt.\n', ''));
+  renderCommands({ root, out, hosts: ['claude'] });
+
+  assert.match(readFileSync(join(out, relPath), 'utf8'), /description: our team's PR review/);
+});
+
+// The exact round trip, pinned rather than described. `wrapBlock` inserts a
+// paragraph separator on the append path, and once written those bytes sit on
+// disk exactly like anything the human typed — `stripBlock` documents that it
+// keeps them rather than guessing which newline was whose, so a deselect
+// returns a human's file plus at most that one separator newline and never
+// less than what they wrote.
+test('a deselect returns the human bytes plus at most the separator newline wrapBlock added', () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  const ours = 'Run the internal onboarding script.\n';
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(join(out, relPath), ours);
+
+  renderCommands({ root, out, hosts: ['claude'] });
+  renderCommands({ root, out, hosts: [] });
+
+  const back = readFileSync(join(out, relPath), 'utf8');
+  assert.equal(back, `${ours}\n`);
+  assert.ok(back.startsWith(ours), 'not one byte the human wrote may be lost');
+});
+
+test('a file that already ended in a blank line round-trips a deselect byte-for-byte', () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  const ours = 'Run the internal onboarding script.\n\n';
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(join(out, relPath), ours);
+
+  renderCommands({ root, out, hosts: ['claude'] });
+  renderCommands({ root, out, hosts: [] });
+
+  assert.equal(readFileSync(join(out, relPath), 'utf8'), ours);
+});

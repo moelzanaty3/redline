@@ -55,6 +55,13 @@ export interface GateOptions {
   adrDiffThreshold: number;
   failOnDependencySeverity: 'low' | 'moderate' | 'high' | 'critical';
   softFailLabels: string[];
+  // `redline init --adopt-caller`. The gate machinery file is YAML, so it can
+  // never take the marker-block merge the shared markdown artifacts take, and a
+  // file at that path Redline cannot attribute to itself stops the run rather
+  // than being overwritten. This is the human decision that unblocks it — a 2.1
+  // caller carries nothing that attributes it, and guessing from the word
+  // "redline" is what destroyed a repository's own workflow.
+  adoptCaller?: boolean;
 }
 
 export interface MergePolicy {

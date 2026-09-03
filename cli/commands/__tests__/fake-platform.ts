@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { RedlineError } from '../../core/errors.ts';
 import { isPending } from '../../platforms/types.ts';
 import type {
   CapabilityOutcome,
@@ -35,6 +36,11 @@ export interface FakePlatformOptions {
   pullRequestOutcomes?: CapabilityOutcome[];
   // What the local checkout says about the gate: absent, renamed, or healthy.
   gateMachinery?: GateMachinery;
+  // Both real adapters refuse rather than clobber a gate machinery file they
+  // cannot attribute to Redline, in the plan phase as well as the real run.
+  // This models that refusal so `init`'s ordering can be tested: nothing may be
+  // on disk by the time it fires.
+  refuseGate?: string;
 }
 
 export interface FakePlatform extends Platform {
@@ -153,6 +159,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       check = false
     ): Promise<InstallResult> {
       (check ? planned : applied).push('installGate');
+      if (opts.refuseGate !== undefined) throw new RedlineError('failed', opts.refuseGate);
       const files = (opts.gateFiles ?? ['.github/workflows/redline.yml']).filter((rel) =>
         seed(cwd, rel, GATE_BODY, check)
       );

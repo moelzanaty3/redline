@@ -4,7 +4,7 @@ import { isRedlineError } from '../core/errors.ts';
 import { readConfig, type RedlineConfig } from '../config/redline-json.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { render } from '../render/standards.ts';
-import { LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
+import { LOCAL_HEADING, LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
 import {
   observePullRequestTemplates,
   type TemplateObservation,
@@ -339,20 +339,31 @@ export async function verify(
   const stale = rendered.stale;
   // A repository's own rules file is not something the repository can be
   // failing at: the artifacts trail it until the next render, which is work to
-  // do. It is only the cause of the staleness when an artifact does not
-  // already carry the section this run would give it — otherwise the local
-  // rules are already rendered and whatever is stale is a hand edit, which
-  // still fails. A file that has appeared or gone since the last run is the
-  // other half, and only the recorded flag can see that one.
+  // do. The excuse is bounded three ways, because an unbounded one is a drift
+  // bypass in the oversight product itself — the local section is rendered into
+  // four artifacts, and every other managed file (each
+  // `.github/instructions/redline-*.instructions.md`, each per-stack
+  // `.cursor/rules/redline-*.mdc`) can never carry it, so "some stale artifact
+  // lacks the section" excused hand edits the local file had nothing to do
+  // with. It has to be per-path, it has to cover the WHOLE stale set, and a
+  // removal is never explained by a rules file at all.
   const local = readLocalRules(opts.cwd);
   const section = local === null ? null : localSection(local);
+  const explainedByLocalRules = (relPath: string): boolean => {
+    if (!rendered.localRuleFiles.includes(relPath)) return false;
+    const path = join(opts.cwd, relPath);
+    if (!existsSync(path)) return false; // a missing artifact is stale for its own reason
+    const body = readFileSync(path, 'utf8');
+    // With a rules file present: the artifact does not yet carry the section
+    // this render would give it. With none: it still carries a section this
+    // render would take away — and only when the last run recorded one, which
+    // is what tells "had one and it went away" from a heading a human typed.
+    return section === null ? config.localRules && body.includes(LOCAL_HEADING) : !body.includes(section);
+  };
   const localStale =
-    config.localRules !== (local !== null) ||
-    (section !== null &&
-      rendered.staleWritten.some((relPath) => {
-        const path = join(opts.cwd, relPath);
-        return existsSync(path) && !readFileSync(path, 'utf8').includes(section);
-      }));
+    stale.length > 0 &&
+    rendered.staleRemovals.length === 0 &&
+    rendered.staleWritten.every(explainedByLocalRules);
   // Two different things look identical to render(): a repository someone
   // edited by hand, and a repository the org has moved past. `render()` uses
   // the *installed* CLI's standards, so every publish of standards/** made

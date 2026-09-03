@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Manifest } from './manifest.ts';
-import { BEGIN, END, findBlock } from './markers.ts';
+import { BEGIN, BEGIN_PREFIX, END, findBlock } from './markers.ts';
 
 export const PREFIX = 'redline-';
 
@@ -26,6 +26,11 @@ export interface RenderContext {
 export interface RenderedFile {
   body: string;
   merge?: boolean;
+  // This artifact is where the repository-local rules section is rendered.
+  // Structural, not conditional on the file existing: `redline verify` needs to
+  // know which artifacts the section can explain staleness in, including on the
+  // run where the local file has just been deleted and the section is gone.
+  localRules?: boolean;
 }
 
 export interface PruneRule {
@@ -58,8 +63,10 @@ const PRECEDENCE = [
   'here. Everything above that they do not contradict still applies.',
 ].join('\n');
 
+export const LOCAL_HEADING = '# Repository-local rules';
+
 export function localSection(local: string): string {
-  return `---\n\n# Repository-local rules\n\n${PRECEDENCE}\n\n${local}`;
+  return `---\n\n${LOCAL_HEADING}\n\n${PRECEDENCE}\n\n${local}`;
 }
 
 const withLocal = (ctx: RenderContext, body: string): string =>
@@ -73,7 +80,16 @@ const withLocal = (ctx: RenderContext, body: string): string =>
 // characters it renders as, and whether what is left can still be read back is
 // asked of markers.ts itself rather than of a second parser here — anything it
 // cannot read is quoted, which no fence and no marker survives.
-const MARKER_LINE = /^([ \t]*)<!--(\s*REDLINE:(?:BEGIN|END))/gm;
+//
+// Built from markers.ts's own literals rather than restating the marker shape:
+// BEGIN_PREFIX exists because the marker wording changes, and a second copy of
+// it here would stop escaping the day it does — which is the one direction
+// that costs a run.
+const escapeRegExp = (literal: string): string => literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const MARKER_LINE = new RegExp(
+  `^([ \\t]*)(${[BEGIN_PREFIX, END].map(escapeRegExp).join('|')})`,
+  'gm'
+);
 
 const readable = (candidate: string): boolean => {
   try {
@@ -94,7 +110,10 @@ export function readLocalRules(out: string): string | null {
   if (!existsSync(path)) return null;
   const raw = readFileSync(path, 'utf8').trim();
   if (raw === '') return null;
-  const escaped = raw.replace(MARKER_LINE, '$1&lt;!--$2');
+  const escaped = raw.replace(
+    MARKER_LINE,
+    (_match: string, indent: string, marker: string): string => `${indent}&lt;${marker.slice(1)}`
+  );
   return readable(escaped) ? escaped : quote(escaped);
 }
 
@@ -102,6 +121,7 @@ const copilot: VendorRenderer = (ctx) => {
   const files = new Map<string, RenderedFile>();
   files.set('.github/copilot-instructions.md', {
     merge: true,
+    localRules: true,
     body: withLocal(ctx, `${header(ctx, ctx.stacks)}\n\n${read(ctx.root, ctx.manifest.core.source)}`),
   });
   for (const id of ctx.stacks) {
@@ -141,7 +161,10 @@ const agents: VendorRenderer = (ctx) => {
     '',
     sections.join('\n\n---\n\n'),
   ].join('\n');
-  return { files: new Map([['AGENTS.md', { merge: true, body: withLocal(ctx, body) }]]), prune: [] };
+  return {
+    files: new Map([['AGENTS.md', { merge: true, localRules: true, body: withLocal(ctx, body) }]]),
+    prune: [],
+  };
 };
 
 const claude: VendorRenderer = (ctx) => ({
@@ -150,6 +173,7 @@ const claude: VendorRenderer = (ctx) => ({
       'CLAUDE.md',
       {
         merge: true,
+        localRules: true,
         body: withLocal(
           ctx,
           [
@@ -168,6 +192,7 @@ const claude: VendorRenderer = (ctx) => ({
 const cursor: VendorRenderer = (ctx) => {
   const files = new Map<string, RenderedFile>();
   files.set(`.cursor/rules/${PREFIX}core.mdc`, {
+    localRules: true,
     body:
       `---\ndescription: Redline core standards\nalwaysApply: true\n---\n\n` +
       withLocal(ctx, `${header(ctx, ctx.stacks)}\n\n${read(ctx.root, ctx.manifest.core.source)}`),

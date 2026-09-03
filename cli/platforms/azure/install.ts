@@ -225,6 +225,38 @@ function syncFile(cwd: string, relPath: string, contents: string, check: boolean
   return true;
 }
 
+// The same defect and the same two honest answers as GitHub's caller workflow
+// (cli/platforms/github/install.ts): the gate pipeline is YAML, so appending a
+// REDLINE marker block would give it a second `trigger:`/`steps:` key and it
+// would run nothing at all. So the file is either Redline's to replace or
+// nobody's to touch, and the check runs at the top of installGate so the plan
+// phase refuses identically — a plan must not promise a write the run refuses.
+//
+// Attribution is strict here, where GitHub's has to leave room for a 2.1
+// caller: `detectMigration`'s marker is `.github/workflows/redline.yml`, a
+// GitHub path, so no legacy Azure gate file exists that a loose match would
+// have to adopt. Either the ownership line the template opens with, or the
+// variable block only Redline's own gate template produces.
+const GATE_PATH = '.azuredevops/redline-gate.yml';
+const MANAGED_BY_REDLINE = /^#[ \t]*Managed by Redline\b/m;
+const REDLINE_GATE_VARIABLES = /^[ \t]*ADR_DIFF_THRESHOLD:/m;
+
+function refuseForeignGateFile(cwd: string, opts: GateOptions): void {
+  if (opts.adoptCaller === true) return;
+  const target = join(cwd, GATE_PATH);
+  if (!existsSync(target)) return;
+  const existing = readFileSync(target, 'utf8');
+  if (MANAGED_BY_REDLINE.test(existing) || REDLINE_GATE_VARIABLES.test(existing)) return;
+  throw new RedlineError(
+    'failed',
+    `${GATE_PATH} already exists in this repository and carries nothing that attributes it to ` +
+      'Redline, so installing the merge gate there would destroy it. Nothing was written',
+    'Move or rename that pipeline and re-run redline init, or re-run with --adopt-caller to hand ' +
+      'that path to Redline. Redline cannot merge into it the way it merges into a markdown file: ' +
+      'a second `trigger:` and `steps:` key would stop the pipeline running at all.'
+  );
+}
+
 // The two sections workflows/redline-gate.yml actually reads out of a pull
 // request body, and the reason it is these two and not the others: the
 // `checklist` job fails the pull request outright when `## Launch readiness`
@@ -886,6 +918,7 @@ export function createAzureInstall(
       check = false
     ): Promise<InstallResult> {
       const files: string[] = [];
+      refuseForeignGateFile(cwd, opts);
       const pipeline = readFileSync(join(PACKAGE_ROOT, 'platforms/azure/gate-template.yml'), 'utf8')
         .replace(/ADR_DIFF_THRESHOLD: \d+/, `ADR_DIFF_THRESHOLD: ${opts.adrDiffThreshold}`)
         .replace(

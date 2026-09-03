@@ -808,3 +808,34 @@ test('a hand-edited artifact still fails a repository that has repository-local 
   assert.equal(finding?.ok, false, 'the local rules are unchanged, so this is drift');
   assert.match(finding?.detail ?? '', /stale: /);
 });
+
+// The reviewer's Critical 1 input. The local-rules section is rendered into
+// four artifacts only; every per-stack instructions file can never carry it, so
+// an excuse phrased as "some stale artifact lacks the section" excused a hand
+// edit to a file the section has nothing to do with.
+test('a hand-edited stack instructions file is drift even in a repository that has local rules', async () => {
+  const cwd = await onboarded();
+  writeLocal(cwd, 'We allow console.log in the CLI.\n');
+  await init(fakePlatform(), { cwd, root, now });
+
+  const stackFile = join(cwd, '.github/instructions/redline-javascript.instructions.md');
+  writeFileSync(stackFile, readFileSync(stackFile, 'utf8').replaceAll('BLOCKER', 'HAND EDITED'));
+
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'artifacts-current');
+
+  assert.equal(finding?.ok, false, 'a file the local section is never rendered into cannot excuse itself');
+  assert.match(finding?.detail ?? '', /stale: /);
+});
+
+// The same hole through the other clause: creating the local file used to be an
+// unconditional excuse for every stale path on that run, whatever caused it.
+test('creating the local rules file does not excuse a hand edit made in the same window', async () => {
+  const cwd = await onboarded();
+  const stackFile = join(cwd, '.github/instructions/redline-javascript.instructions.md');
+  writeFileSync(stackFile, readFileSync(stackFile, 'utf8').replaceAll('BLOCKER', 'HAND EDITED'));
+  writeLocal(cwd, 'We allow console.log in the CLI.\n');
+
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'artifacts-current');
+
+  assert.equal(finding?.ok, false);
+});

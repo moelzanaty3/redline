@@ -187,6 +187,11 @@ export interface InitOptions {
   // below), because this still reads the existing config rather than starting
   // from nothing.
   repair?: boolean;
+  // `--adopt-caller`. Hands the host's gate machinery path to Redline when the
+  // file already there carries nothing that attributes it to Redline — a 2.1
+  // caller, in practice. It is a flag rather than a guess because guessing is
+  // what overwrote a repository's own workflow.
+  adoptCaller?: boolean;
   now?: () => Date;
 }
 
@@ -294,7 +299,30 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     .map(([k]) => k);
   const vendors = opts.vendors ?? existing?.vendors ?? detectVendors(cwd, orgVendors);
 
-  // Files first, host settings after: a denied host call must never cost the
+  const gateOptions: GateOptions = {
+    ...FLOOR_GATE,
+    ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
+    ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
+  };
+  const ownershipRules = sensitivePathRules(ref.org);
+
+  // The gate and ownership file diffs are computed in check mode FIRST, before
+  // a single host setting is touched. Without it there was no way to know a
+  // re-run had nothing to do until four host objects had already been
+  // rewritten — and the answer itself was wrong, because alreadyOnboarded read
+  // only the rendered files and never these two.
+  //
+  // It also runs before the first byte reaches the working tree. `installGate`
+  // refuses rather than clobber a gate machinery file it cannot attribute to
+  // Redline, and its message says nothing was written; planning after the
+  // render made that untrue, leaving every vendor artifact and command file on
+  // disk with no .redline.json, no branch and no pull request to carry them.
+  const gatePlan = await platform.installGate(ref, cwd, gateOptions, true);
+  const ownershipPlan = menu.sensitivePathReviewers
+    ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules, true)
+    : { files: [], outcomes: [] };
+
+  // Files next, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
   const rendered = render({ root, profile, out: cwd, vendors, check: dryRun });
   const commands = renderCommands({
@@ -304,22 +332,6 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     check: dryRun,
   });
   const legacyRemovals = migratedFrom === '2.1' ? removeLegacyArtifacts(cwd, dryRun) : [];
-
-  const gateOptions: GateOptions = {
-    ...FLOOR_GATE,
-    ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
-  };
-  const ownershipRules = sensitivePathRules(ref.org);
-
-  // The gate and ownership file diffs are computed in check mode FIRST, before
-  // a single host setting is touched. Without it there was no way to know a
-  // re-run had nothing to do until four host objects had already been
-  // rewritten — and the answer itself was wrong, because alreadyOnboarded read
-  // only the rendered files and never these two.
-  const gatePlan = await platform.installGate(ref, cwd, gateOptions, true);
-  const ownershipPlan = menu.sensitivePathReviewers
-    ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules, true)
-    : { files: [], outcomes: [] };
 
   // render() prunes stale vendor files with rmSync; those deletions must ride
   // along in the same file list as the writes, or the PR never reflects them.

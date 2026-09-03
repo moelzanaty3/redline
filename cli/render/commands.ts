@@ -33,20 +33,31 @@ export function loadCommands(root: string): CommandSource[] {
 // Everything the block carries is `body`.
 type HostRenderer = (cmd: CommandSource) => { path: string; header: string; body: string };
 
+// The header says whose it is. Nothing about the SHAPE of a frontmatter block
+// tells Redline's apart from a human's — a team's own command file can carry an
+// identical lone `description:` key — so recognising it by shape claimed their
+// bytes. Marking what Redline owns is the answer markers.ts already gives for
+// the body: an indeterminate read is not an answer, so this makes it
+// determinate. It goes below the keys, not above them, because the tools read
+// the first key of the block.
+const MANAGED_BY = '# Managed by Redline; regenerate with `redline init` rather than editing here.';
+const MANAGED_HEADER = /^# Managed by Redline\b/m;
+const MANAGED_LINE = /^# Managed by Redline\b[^\n]*\n/m;
+
 export const COMMAND_HOSTS: Record<string, HostRenderer> = {
   copilot: (cmd) => ({
     path: `.github/prompts/${cmd.name}.prompt.md`,
-    header: `---\nmode: agent\ndescription: ${cmd.description}\n---\n`,
+    header: `---\nmode: agent\ndescription: ${cmd.description}\n${MANAGED_BY}\n---\n`,
     body: cmd.body,
   }),
   claude: (cmd) => ({
     path: `.claude/commands/${cmd.name}.md`,
-    header: `---\ndescription: ${cmd.description}\n---\n`,
+    header: `---\ndescription: ${cmd.description}\n${MANAGED_BY}\n---\n`,
     body: cmd.body,
   }),
   opencode: (cmd) => ({
     path: `.opencode/command/${cmd.name}.md`,
-    header: `---\ndescription: ${cmd.description}\n---\n`,
+    header: `---\ndescription: ${cmd.description}\n${MANAGED_BY}\n---\n`,
     body: cmd.body,
   }),
   cursor: (cmd) => ({ path: `.cursor/commands/${cmd.name}.md`, header: '', body: cmd.body }),
@@ -66,11 +77,19 @@ export interface RenderCommandsResult {
   removed: string[];
 }
 
-// Everything outside Redline's block in a file Redline itself created: the
-// frontmatter header above, and nothing else. Recognising it is what lets a
-// changed `description:` in `commands/<name>.md` reach a file Redline already
-// wrote, while a header — or any prose — a human put there is never rewritten.
-const HEADER_ONLY = /^---\n[\s\S]*?\n---$/;
+// What the renderer before the marker block wrote at this path: the header and
+// the body with one blank line between them, and no attribution line, because
+// there was none to write. Every repository already onboarded has exactly these
+// bytes on disk, put there by Redline itself — merge-or-create is the right
+// answer for a HUMAN's file and the wrong one for Redline's own earlier output,
+// which would get its prompt appended to itself and run twice. Recomputed
+// rather than pattern-matched, so it can only ever recognise a file Redline
+// actually produced.
+function previouslyRendered(header: string, body: string): string {
+  const legacyHeader = header.replace(MANAGED_LINE, '');
+  const composed = legacyHeader === '' ? body : `${legacyHeader}\n${body}`;
+  return `${composed.trimEnd()}\n`;
+}
 
 // `<name>` is only the filename in `commands/`, and nothing reserves that name
 // in a consumer repository — `commands/review-pr.md` here would land on a
@@ -105,8 +124,14 @@ export function renderCommands(opts: RenderCommandsOptions): RenderCommandsResul
       // Throws rather than guessing on a half-edited marker pair or a block
       // hidden under an unclosed fence — see markers.ts. Nothing is written.
       const outside = current === null ? null : stripBlock(current, path);
+      // Redline's to rewrite whole: the file is nothing but its block, or what
+      // sits outside the block carries Redline's own attribution line, or the
+      // file predates the block entirely and is byte-for-byte what Redline
+      // last rendered there.
       const ownedWhole =
-        outside === null || (outside !== current && HEADER_ONLY.test(outside.trim()));
+        outside === null ||
+        (outside !== current && MANAGED_HEADER.test(outside)) ||
+        (outside === current && current === previouslyRendered(header, body));
 
       if (!selected) {
         if (current === null || outside === current) continue; // never Redline's — brownfield rule

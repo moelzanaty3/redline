@@ -1075,3 +1075,21 @@ test('--repair does not mistake a stale pre-v3 caller workflow for a migration o
     'removeLegacyArtifacts must never run against a repository --repair never treated as migrating'
   );
 });
+
+// The gate machinery file is the one path both adapters refuse rather than
+// clobber, and the refusal says "Nothing was written". That has to be true:
+// planning happens before the first byte reaches the working tree, which is
+// this branch's whole discipline. It used to fire after render() and
+// renderCommands() had already written, leaving a half-onboarded tree under a
+// message saying nothing had happened.
+test('a refused gate file leaves no half-onboarded tree behind', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}' });
+  const platform = fakePlatform({ refuseGate: 'the caller workflow is not Redline\'s' });
+
+  await assert.rejects(init(platform, { cwd, root, now }), /not Redline/);
+
+  assert.equal(existsSync(join(cwd, 'AGENTS.md')), false, 'no rendered artifact may survive the refusal');
+  assert.equal(existsSync(join(cwd, 'CLAUDE.md')), false);
+  assert.equal(existsSync(join(cwd, '.claude/commands')), false, 'no command file either');
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});

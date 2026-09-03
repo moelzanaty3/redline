@@ -346,17 +346,31 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
 // false-positive direction only replaces something that already carries
 // Redline's name at Redline's path.
 const CALLER_PATH = '.github/workflows/redline.yml';
-const REDLINE_AUTHORED = /redline/i;
+// Positive attribution, not a substring test. Almost every workflow a human
+// writes at a path called `redline.yml` says "redline" somewhere — in `name:`,
+// in a job id, in a `run:` line — so matching the word protected only the
+// repository that never mentioned it, and clobbered the ones that did. Two
+// things are Redline's own: the reusable-workflow reference every v3 caller
+// carries (the same contract cli/commands/init.ts's V3_CALLER reads to tell a
+// v3 repository from a 2.1 one), and the ownership line templates/redline.yml
+// now opens with. A 2.1 caller carries neither, and no fixture of the real
+// thing exists to pin, so it is refused rather than guessed at — `adoptCaller`
+// is where that decision belongs.
+const MANAGED_BY_REDLINE = /^#[ \t]*Managed by Redline\b/m;
+const USES_REDLINE_GATE = /\.github\/workflows\/redline-gate\.yml@/;
 
-function refuseForeignCaller(cwd: string): void {
+function refuseForeignCaller(cwd: string, opts: GateOptions): void {
+  if (opts.adoptCaller === true) return;
   const target = join(cwd, CALLER_PATH);
   if (!existsSync(target)) return;
-  if (REDLINE_AUTHORED.test(readFileSync(target, 'utf8'))) return;
+  const existing = readFileSync(target, 'utf8');
+  if (MANAGED_BY_REDLINE.test(existing) || USES_REDLINE_GATE.test(existing)) return;
   throw new RedlineError(
     'failed',
-    `${CALLER_PATH} already exists in this repository and was not written by Redline, so ` +
-      'installing the merge gate there would destroy it. Nothing was written',
-    `Move or rename that workflow and re-run redline init. Redline cannot merge into it the way ` +
+    `${CALLER_PATH} already exists in this repository and carries nothing that attributes it to ` +
+      'Redline, so installing the merge gate there would destroy it. Nothing was written',
+    'Move or rename that workflow and re-run redline init — or, if it is a Redline 2.1 caller ' +
+      'this run should replace, re-run with --adopt-caller. Redline cannot merge into it the way ' +
       'it merges into a markdown file: a second `name:` and `on:` key would stop the workflow ' +
       'running at all.'
   );
@@ -508,7 +522,7 @@ export function createGitHubInstall(
       check = false
     ): Promise<InstallResult> {
       const files: string[] = [];
-      refuseForeignCaller(cwd);
+      refuseForeignCaller(cwd, opts);
       const caller = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
         .replaceAll('<org>', ref.org)
         .replace(/adr-diff-threshold: \d+/, `adr-diff-threshold: ${opts.adrDiffThreshold}`)
