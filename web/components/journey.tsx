@@ -6,9 +6,13 @@ import { loadManifest, type Manifest } from "@/lib/manifest";
 import { JourneyTerminal, type Line, type Tok } from "@/components/journey-terminal";
 
 // Everything printed in this transcript is a literal string from the CLI. Sources:
-//   cli/core/log.ts            — the `  write  `, `  <status> <capability>  <detail>`
-//                                and `ok    <check> <detail>` line formats
-//   cli/bin/redline.ts         — `profile <name>`, `pull request: <url>`
+//   cli/bin/redline.ts:130     — the write line: `  ` + `write ` (padded to the
+//                                width of `remove`) + `  ` + the path
+//   cli/bin/redline.ts:133     — the capability line: `  ` + status.padEnd(11) +
+//                                ` ` + capability + `  ` + detail
+//   cli/core/log.ts:34-35      — report(): `ok  ` / `FAIL` + `  ` +
+//                                check.padEnd(22) + ` ` + detail
+//   cli/bin/redline.ts:112,157 — `profile <name>`, `pull request: <url>`
 //   cli/render/vendors.ts      — the rendered artifact paths
 //   cli/render/commands.ts     — the slash-command paths
 //   cli/platforms/github/install.ts — capability details, `.github/…` paths,
@@ -59,19 +63,27 @@ interface CommandDoc {
 // Mirrors cli/render/commands.ts loadCommands: the name is the filename, the
 // description is the frontmatter line that renderer copies into every vendor's
 // file. Read from commands/ at build time so the page cannot describe a command
-// that is not on disk.
+// that is not on disk — and throws rather than degrading, because a heading and
+// an explanatory note rendered over an empty list is worse than a failed build.
 function loadCommandDocs(): CommandDoc[] {
   const dir = join(repoRoot(), "commands");
-  return readdirSync(dir)
+  const docs = readdirSync(dir)
     .filter((f) => f.endsWith(".md"))
     .map((file) => {
       const raw = readFileSync(join(dir, file), "utf8");
       const front = /^---\n([\s\S]*?)\n---/.exec(raw)?.[1] ?? "";
-      return {
-        name: file.replace(/\.md$/, ""),
-        description: /description:\s*(.+)/.exec(front)?.[1]?.trim() ?? "",
-      };
+      const description = /description:\s*(.+)/.exec(front)?.[1]?.trim();
+      if (description === undefined || description === "") {
+        throw new Error(
+          `commands/${file} has no frontmatter description; the home page renders it verbatim`
+        );
+      }
+      return { name: file.replace(/\.md$/, ""), description };
     });
+  if (docs.length === 0) {
+    throw new Error("commands/ holds no .md files; the home page renders a section describing them");
+  }
+  return docs;
 }
 
 export function Journey() {
@@ -80,14 +92,28 @@ export function Journey() {
   const stacks = resolveStacks(manifest, PROFILE);
   const commands = loadCommandDocs();
 
-  // cli/render/vendors.ts — copilot, agents and claude are the manifest's enabled vendors.
-  const standardsFiles = [
+  // cli/render/vendors.ts — the three `merge: true` renderers: copilot
+  // (.github/copilot-instructions.md), agents (AGENTS.md), claude (CLAUDE.md).
+  // They are also the manifest's three enabled vendors.
+  const mergedStandardsFiles = [
     ".github/copilot-instructions.md",
-    ...stacks.map((s) => `.github/instructions/redline-${s}.instructions.md`),
     "AGENTS.md",
     "CLAUDE.md",
   ];
-  // cli/render/commands.ts — COMMAND_HOSTS entries for the enabled vendors.
+  // cli/render/vendors.ts PREFIX — the one filename glob the renderer enforces,
+  // and the one its prune rule matches on.
+  const instructionFiles = stacks.map(
+    (s) => `.github/instructions/redline-${s}.instructions.md`
+  );
+  const standardsFiles = [
+    ".github/copilot-instructions.md",
+    ...instructionFiles,
+    "AGENTS.md",
+    "CLAUDE.md",
+  ];
+  // cli/render/commands.ts — COMMAND_HOSTS entries for the enabled vendors. The
+  // renderer takes the name straight from the filename, so these are derived
+  // rather than globbed: nothing constrains a command file to a redline- prefix.
   const commandFiles = [
     ...commands.map((c) => `.github/prompts/${c.name}.prompt.md`),
     ...commands.map((c) => `.claude/commands/${c.name}.md`),
@@ -101,6 +127,13 @@ export function Journey() {
     ".redline.json",
   ];
   const writes = [...standardsFiles, ...commandFiles, ...hostFiles];
+  // Written whole on every run: the non-merge branch of cli/render/standards.ts,
+  // cli/render/commands.ts, and syncFile on the gate caller workflow.
+  const ownedFiles = [
+    ...instructionFiles,
+    ...commandFiles,
+    ".github/workflows/redline.yml",
+  ];
 
   const outcomes: [string, string, string][] = [
     ["applied", "labels", 'label "no-adr"'],
@@ -128,7 +161,9 @@ export function Journey() {
     cmd("npm i -g redline-cli"),
     cmd("redline init"),
     { toks: [dim("profile "), white(PROFILE)] },
-    ...writes.map((f) => ({ toks: [dim("  write  "), white(f)] })),
+    // cli/bin/redline.ts:130 — `write ` is padded to the width of `remove`, so
+    // three spaces separate it from the path, not two.
+    ...writes.map((f) => ({ toks: [dim("  write   "), white(f)] })),
     ...outcomes.map(([status, capability, detail]) => ({
       toks: [
         green(`  ${status.padEnd(11)} `),
@@ -238,33 +273,52 @@ export function Journey() {
               <li>
                 <span className="jr-fk">Merged — your file keeps its content</span>
                 <span className="jr-fp">
-                  <code>CLAUDE.md</code>
-                  <code>AGENTS.md</code>
-                  <code>.github/copilot-instructions.md</code>
+                  {mergedStandardsFiles.map((f) => (
+                    <code key={f}>{f}</code>
+                  ))}
                 </span>
                 <span className="jr-fd">
-                  Redline writes only between{" "}
-                  <code>&lt;!-- REDLINE:BEGIN --&gt;</code> and{" "}
+                  Redline writes only between its{" "}
+                  <code>&lt;!-- REDLINE:BEGIN</code> marker line and{" "}
                   <code>&lt;!-- REDLINE:END --&gt;</code>. A file that already exists
-                  without those markers keeps everything in it and gets the block
-                  appended; a file that has them keeps everything outside them. Redline
-                  owns its marked block and nothing else in the file.{" "}
+                  without them keeps everything in it and gets the block appended; a file
+                  that has them keeps everything outside them. Redline owns its marked
+                  block and nothing else in the file.{" "}
                   <Link href="/docs/adaptors/agents-md">How the markers work →</Link>
+                </span>
+              </li>
+              <li>
+                <span className="jr-fk">
+                  Merged into the template the host actually serves
+                </span>
+                <span className="jr-fp">
+                  <code>.github/pull_request_template.md</code>
+                </span>
+                <span className="jr-fd">
+                  The gate fails a pull request whose description has no{" "}
+                  <code>## Launch readiness</code> section, so the run merges that
+                  section and <code>## Architecture decision</code> in — inside the same
+                  markers, leaving everything outside them alone. It merges into the
+                  first template GitHub would resolve, searching <code>.github/</code>,
+                  the repository root and <code>docs/</code>, and writes the path above
+                  only where the host would resolve none. The template it writes there
+                  carries the markers too, so one rule holds everywhere. A template that
+                  already has its own <code>## Launch readiness</code> heading is left
+                  alone entirely.
                 </span>
               </li>
               <li>
                 <span className="jr-fk">Redline&apos;s own — rewritten in full</span>
                 <span className="jr-fp">
-                  <code>.github/instructions/redline-*.instructions.md</code>
-                  <code>.github/prompts/redline-*.prompt.md</code>
-                  <code>.claude/commands/redline-*.md</code>
-                  <code>.github/workflows/redline.yml</code>
+                  {ownedFiles.map((f) => (
+                    <code key={f}>{f}</code>
+                  ))}
                 </span>
                 <span className="jr-fd">
-                  Each is named for Redline and generated, never hand-authored, so a
-                  run replaces it whole and an edit made in place does not survive one.
-                  An instructions file for a stack the profile no longer resolves is
-                  deleted rather than left behind.
+                  Each is generated, never hand-authored, so a run replaces it whole and
+                  an edit made in place does not survive one. An instructions file for a
+                  stack the profile no longer resolves is deleted rather than left
+                  behind.
                 </span>
               </li>
               <li>
@@ -279,19 +333,6 @@ export function Journey() {
                 </span>
               </li>
               <li>
-                <span className="jr-fk">Replaced — the one file that is</span>
-                <span className="jr-fp">
-                  <code>.github/pull_request_template.md</code>
-                </span>
-                <span className="jr-fd">
-                  The gate reads the <code>## Launch readiness</code> section out of the
-                  pull request description and fails when it is missing, so this
-                  template has to be Redline&apos;s. An existing one is replaced — inside
-                  the onboarding pull request, where the diff is reviewable before
-                  anything merges.
-                </span>
-              </li>
-              <li>
                 <span className="jr-fk">The record the next run reads</span>
                 <span className="jr-fp">
                   <code>.redline.json</code>
@@ -299,8 +340,8 @@ export function Journey() {
                 <span className="jr-fd">
                   What this repository chose and what the host was asked for: profile,
                   vendors, the menu options selected, and the capabilities the host
-                  refused. It is what <code>redline verify</code> reads back — without
-                  it the run above is a one-off, and with it every later check is scored
+                  refused. It is what <code>redline verify</code> reads back — without it
+                  the run above is a one-off, and with it every later check is scored
                   against what this repository actually agreed to.
                 </span>
               </li>

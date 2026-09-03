@@ -215,16 +215,22 @@ Record seed scores here. A standards change with no measurement is an opinion.
   already has files. The after-band names each written path by what happens to it:
   `CLAUDE.md`, `AGENTS.md` and `.github/copilot-instructions.md` are merged (Redline owns
   only the span between its `REDLINE:BEGIN`/`END` markers, the rest of the file is kept);
-  the `redline-` prefixed artifacts and `.github/workflows/redline.yml` are Redline's own
-  and rewritten whole; `.github/CODEOWNERS` is seeded only when the repository has none;
-  `.github/pull_request_template.md` is the one shared-name file that is replaced, because
-  the gate reads its `## Launch readiness` section out of the pull request description.
-  `.redline.json` is described as the record `redline verify` reads back, and the two
-  installed slash commands are listed with the descriptions parsed out of `commands/` at
-  build time. Also: the lead no longer claims every transcript line is CLI output (one is
-  a `#` annotation, now named), the honesty caveat moved off `--faint` onto `--muted` for
-  AA contrast, and the hero proof rail reads `manifest.version` instead of a hardcoded
-  site constant that could drift from it.
+  `.github/pull_request_template.md` is merged the same way, into the first template the
+  host would resolve, with a template that already carries its own `## Launch readiness`
+  section left untouched; the generated artifacts and `.github/workflows/redline.yml` are
+  Redline's own and rewritten whole; `.github/CODEOWNERS` is seeded only when the
+  repository has none. `.redline.json` is described as the record `redline verify` reads
+  back, and the installed slash commands are listed with the descriptions parsed out of
+  `commands/` at build time — which now fails the build rather than rendering a heading
+  over an empty list. The transcript's `write` prefix is re-derived from
+  `cli/bin/redline.ts:130`: `write ` is padded to the width of `remove`, so three spaces
+  separate it from the path, not two, and 13 of the 33 transcript lines were previously
+  one space short of what the CLI prints. The file lists in the after-band are derived
+  from the same arrays the transcript is built from rather than written as `redline-*`
+  globs the renderer does not enforce. Also: the lead no longer claims every transcript
+  line is CLI output (one is a `#` annotation, now named), the honesty caveat moved off
+  `--faint` onto `--muted` so it passes AA in both themes, and the hero proof rail reads
+  `manifest.version` instead of a hardcoded site constant that could drift from it.
 - A repository's own pull request template is no longer destroyed. `installGate` wrote
   `.github/pull_request_template.md` / `.azuredevops/pull_request_template.md` through a
   plain content compare, so the first `redline init` on a repository that already had a
