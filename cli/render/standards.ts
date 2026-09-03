@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path';
 import { loadManifest } from './manifest.ts';
 import { resolveProfile } from './profile.ts';
-import { wrapBlock } from './markers.ts';
+import { END, findBlock, wrapBlock } from './markers.ts';
 import { VENDORS, type PruneRule, type RenderedFile } from './vendors.ts';
 import { RedlineError } from '../core/errors.ts';
 
@@ -29,27 +29,78 @@ export interface RenderResult {
   managed: string[];
 }
 
+// The rest of a shared file once its Redline block is cut out, or `null` when
+// nothing but the block — and the blank-line separator wrapBlock inserted
+// before it — remains, so the caller deletes the file rather than writing
+// back a blank one. `findBlock` (markers.ts) owns the marker scan and its
+// refusal on an ambiguous marker state; this only decides the byte range to
+// keep, reusing that scan rather than re-parsing the file itself. Returns
+// `existing` unchanged when there is no block to find, so a caller can tell
+// "nothing here was ever Redline's" from "the block was removed" by identity.
+function stripBlock(existing: string, label: string): string | null {
+  const span = findBlock(existing, label);
+  if (span === null) return existing;
+  const before = existing.slice(0, span.start).replace(/\s+$/, '');
+  const after = existing
+    .slice(span.stop + END.length)
+    .replace(/^\s+/, '')
+    .trimEnd();
+  if (before === '' && after === '') return null;
+  if (before === '') return `${after}\n`;
+  if (after === '') return `${before}\n`;
+  return `${before}\n\n${after}\n`;
+}
+
 export function render(opts: RenderOptions): RenderResult {
   const { root, out, check = false } = opts;
   const manifest = loadManifest(root);
   const resolved = resolveProfile(manifest, opts.profile);
 
-  const selected =
+  const requested =
     opts.vendors ??
     Object.entries(manifest.vendors)
       .filter(([, v]) => v.enabled)
       .map(([k]) => k);
-
-  const planned = new Map<string, RenderedFile>();
-  const prunes: PruneRule[] = [];
-  for (const name of selected) {
-    const renderer = VENDORS[name];
-    if (!renderer) {
+  for (const name of requested) {
+    if (!VENDORS[name]) {
       throw new RedlineError('usage', `unknown vendor "${name}". Known: ${Object.keys(VENDORS).join(', ')}`);
     }
-    const result = renderer({ manifest, root, profile: resolved.profile, stacks: resolved.stacks });
-    for (const [path, file] of result.files) planned.set(path, file);
+  }
+  // The org manifest is the ceiling, enforced here rather than by whoever
+  // built `opts.vendors`: a repository's recorded selection can predate an
+  // org-wide disablement, and a stale record must not resurrect a vendor the
+  // org has since switched off.
+  const orgEnabled = new Set(
+    Object.entries(manifest.vendors)
+      .filter(([, v]) => v.enabled)
+      .map(([k]) => k)
+  );
+  const selected = requested.filter((name) => orgEnabled.has(name));
+
+  const ctx = { manifest, root, profile: resolved.profile, stacks: resolved.stacks };
+  const planned = new Map<string, RenderedFile>();
+  const prunes: PruneRule[] = [];
+  // A shared (`merge: true`) file belonging to a vendor that is not currently
+  // selected — by repository choice or because the org ceiling just dropped
+  // it. Only the block inside it is Redline's, so it needs the removal path
+  // below rather than the directory-scan PruneRule uses for owned files.
+  const deselectedMergeFiles: string[] = [];
+
+  // Every vendor's renderer runs, not just the selected ones: a PruneRule's
+  // directory scan is how a vendor's own generated files get cleaned up once
+  // it is no longer selected at all, and that only happens if its rule is in
+  // `prunes` regardless of selection.
+  for (const name of Object.keys(VENDORS)) {
+    const renderer = VENDORS[name]!;
+    const result = renderer(ctx);
     prunes.push(...result.prune);
+    if (selected.includes(name)) {
+      for (const [path, file] of result.files) planned.set(path, file);
+    } else {
+      for (const [path, file] of result.files) {
+        if (file.merge) deselectedMergeFiles.push(path);
+      }
+    }
   }
 
   const written: string[] = [];
@@ -69,6 +120,24 @@ export function render(opts: RenderOptions): RenderResult {
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, next);
     written.push(relPath);
+  }
+
+  // Deselected vendors' shared files: strip the block, deleting the file
+  // outright when nothing else is left. Always a removal, never a write — a
+  // deselect is not content Redline is choosing to keep.
+  for (const relPath of deselectedMergeFiles) {
+    const target = join(out, relPath);
+    if (!existsSync(target)) continue;
+    const current = readFileSync(target, 'utf8');
+    const stripped = stripBlock(current, relPath);
+    if (stripped === current) continue; // no Redline block here — brownfield rule
+    if (check) {
+      staleRemovals.push(relPath);
+      continue;
+    }
+    if (stripped === null) rmSync(target);
+    else writeFileSync(target, stripped);
+    removed.push(relPath);
   }
 
   for (const rule of prunes) {

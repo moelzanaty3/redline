@@ -238,6 +238,14 @@ test('a pull request that could not be opened exits 1 and says where the branch 
   assert.ok(lines.some((l) => l.includes('redline/onboard') && l.includes('manually')), lines.join('\n'));
 });
 
+test('init --vendors overrides detection and skips a deselected vendor', async () => {
+  const cwd = repo();
+  const { opts } = deps(cwd);
+  assert.equal(await run(['init', '--vendors', 'copilot,agents'], opts), 0);
+  assert.equal(existsSync(join(cwd, 'CLAUDE.md')), false);
+  assert.ok(existsSync(join(cwd, 'AGENTS.md')));
+});
+
 test('usage names --dry-run and says what --no-a11y and --speckit actually do', async () => {
   const { opts, lines } = deps(repo());
   await run(['--help'], opts);

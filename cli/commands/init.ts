@@ -33,10 +33,16 @@ export const DEFAULT_MENU: MenuSelections = {
   sensitivePathReviewers: true,
 };
 
+// Named once so the label FLOOR_GATE soft-fails on and the label
+// openPullRequest applies below share one literal instead of two that could
+// drift apart, and so web/components/journey.tsx's hardcoded SYNC_LABEL can
+// be pinned against the real source (cli/render/__tests__/vendors.test.ts).
+export const SYNC_LABEL = 'redline-sync';
+
 export const FLOOR_GATE: GateOptions = {
   adrDiffThreshold: 300,
   failOnDependencySeverity: 'high',
-  softFailLabels: ['redline-exempt', 'redline-sync'],
+  softFailLabels: ['redline-exempt', SYNC_LABEL],
 };
 
 // Mirrors templates/CODEOWNERS. Two things are load-bearing here.
@@ -136,6 +142,28 @@ function detectMigration(cwd: string, onboarded: boolean): string | null {
   const caller = join(cwd, LEGACY_MARKER);
   if (!existsSync(caller)) return null;
   return V3_CALLER.test(readFileSync(caller, 'utf8')) ? null : '2.1';
+}
+
+// Detect-before-ask: a repository's existing tooling files pick the default
+// vendor selection, so a Copilot-only team is not handed AGENTS.md and
+// CLAUDE.md on day one. Only used when nothing else has decided already — see
+// the precedence comment on `vendors` in init() below.
+const VENDOR_MARKERS: { vendor: string; paths: string[] }[] = [
+  { vendor: 'copilot', paths: ['.github/copilot-instructions.md', '.github/instructions'] },
+  { vendor: 'claude', paths: ['CLAUDE.md', '.claude'] },
+  { vendor: 'agents', paths: ['AGENTS.md'] },
+  { vendor: 'cursor', paths: ['.cursor/rules'] },
+];
+
+// A repository with none of these markers gets `orgDefault` (every
+// org-enabled vendor) rather than an empty selection — that is the greenfield
+// case the standard is written for, not a repository that opted out of all of
+// them.
+function detectVendors(cwd: string, orgDefault: string[]): string[] {
+  const found = VENDOR_MARKERS.filter((marker) =>
+    marker.paths.some((relPath) => existsSync(join(cwd, relPath)))
+  ).map((marker) => marker.vendor);
+  return found.length > 0 ? found : orgDefault;
 }
 
 export interface InitOptions {
@@ -255,11 +283,15 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // A dry run must work offline and with an unscoped token: repoRef() is a
   // live GET, so the plan is built from what the local clone already knows.
   const ref = dryRun ? platform.localRef(cwd) : await platform.repoRef(cwd);
-  const vendors =
-    opts.vendors ??
-    Object.entries(manifest.vendors)
-      .filter(([, v]) => v.enabled)
-      .map(([k]) => k);
+  // detected <- what this repository already recorded <- what the caller
+  // typed, the same precedence the menu resolves under. The org ceiling is
+  // deliberately not applied here: render() enforces it on every call it
+  // makes (including verify's), so a recorded selection can outlive an
+  // org-side disablement without this function needing to track that.
+  const orgVendors = Object.entries(manifest.vendors)
+    .filter(([, v]) => v.enabled)
+    .map(([k]) => k);
+  const vendors = opts.vendors ?? existing?.vendors ?? detectVendors(cwd, orgVendors);
 
   // Files first, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
@@ -303,6 +335,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // settled repository is for: swallowing it as "nothing to change" would drop
   // the promotion silently.
   const menuChanged = existing !== null && MENU_KEYS.some((key) => existing.menu[key] !== menu[key]);
+  // Same shape as menuChanged: a vendor deselect that has nothing left on
+  // disk to remove (the file was already gone) moves no file of its own, and
+  // swallowing it as "nothing to change" would leave .redline.json recording
+  // a selection this run was explicitly told to drop.
+  const vendorsChanged =
+    existing !== null &&
+    (existing.vendors.length !== vendors.length ||
+      [...existing.vendors].sort().join(' ') !== [...vendors].sort().join(' '));
 
   // "Zero host calls on a settled repository" means zero host *mutations*.
   // Reading is how the run finds out whether the repository is settled at all:
@@ -323,7 +363,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // computing it here would spend two host GETs whose answer nothing then
   // reads: `alreadyOnboarded` is forced false for a repair run further down,
   // never mind what these reads would have said.
-  const settledOnFiles = existing !== null && changedFiles.length === 0 && !menuChanged;
+  const settledOnFiles = existing !== null && changedFiles.length === 0 && !menuChanged && !vendorsChanged;
   let livePendingAdmin: AdminCapability[] | null = null;
   let settledOnHost = true;
   if (existing !== null && settledOnFiles && !dryRun && !repair) {
@@ -451,7 +491,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       branch: ONBOARD_BRANCH,
       title: `chore(redline): onboard to standards v${manifest.version}`,
       body: onboardBody(profile, manifest.version, pendingAdmin),
-      labels: ['redline-sync'],
+      labels: [SYNC_LABEL],
       files,
     });
   } catch (error) {

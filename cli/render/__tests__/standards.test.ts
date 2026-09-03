@@ -173,3 +173,100 @@ test('a well-formed file still renders and is byte-stable across three runs', (t
   assert.match(first, /^# Team notes/);
   assert.equal(first.split(BEGIN_PREFIX).length - 1, 1);
 });
+
+// --- Task 14: per-repository vendor selection --------------------------------
+
+// The org manifest is the ceiling at render time, not merely at selection
+// time: `standards/manifest.json` disables `cursor` today, so a caller asking
+// for it anyway — standing in for a stale .redline.json recorded before an
+// org-wide disablement — must still get nothing. A wrong implementation that
+// only filters at the CLI layer (cli/commands/init.ts) rather than inside
+// render() itself would let this through.
+test('a vendor the org manifest has disabled is dropped even when explicitly requested', (t) => {
+  const out = tmp(t);
+  const r = render({ root, profile: 'web', out, vendors: ['copilot', 'cursor'] });
+  assert.ok(!r.managed.some((p) => p.startsWith('.cursor/')));
+  assert.equal(existsSync(join(out, '.cursor/rules')), false);
+});
+
+// Prune rules used to be collected only from the currently *selected*
+// vendors, so a vendor dropped from the selection entirely (as opposed to
+// merely losing a stack within an active vendor) left its own generated
+// files behind forever — nothing ever asked to remove them again. Planting
+// the leftover by hand stands in for a repository whose config once selected
+// a vendor the org has since disabled.
+test('artifacts left over from a vendor no longer selected at all are pruned on the next render', (t) => {
+  const out = tmp(t);
+  mkdirSync(join(out, '.cursor/rules'), { recursive: true });
+  writeFileSync(join(out, '.cursor/rules/redline-core.mdc'), 'stale cursor content\n');
+
+  const r = render({ root, profile: 'web', out });
+
+  assert.ok(r.removed.includes(join('.cursor/rules', 'redline-core.mdc')));
+  assert.equal(existsSync(join(out, '.cursor/rules/redline-core.mdc')), false);
+});
+
+test('deselecting a vendor deletes a shared file that holds nothing but the Redline block', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'web', out, vendors: ['claude'] });
+  assert.ok(existsSync(join(out, 'CLAUDE.md')));
+
+  const r = render({ root, profile: 'web', out, vendors: [] });
+
+  assert.ok(r.removed.includes('CLAUDE.md'));
+  assert.equal(existsSync(join(out, 'CLAUDE.md')), false);
+});
+
+// The counterpart: a shared file that carries the team's own content around
+// the block keeps that content byte-for-byte, and only the block (plus the
+// separator wrapBlock inserted before it) disappears.
+test("deselecting a vendor strips only its own block, leaving the team's content byte-identical", (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'web', out, vendors: ['agents'] });
+  const withOwnContent =
+    'Team-owned intro.\n\n' + readFileSync(join(out, 'AGENTS.md'), 'utf8') + '\n## Repo notes\n\nkeep me\n';
+  writeFileSync(join(out, 'AGENTS.md'), withOwnContent);
+
+  const r = render({ root, profile: 'web', out, vendors: [] });
+
+  assert.ok(r.removed.includes('AGENTS.md'));
+  assert.equal(readFileSync(join(out, 'AGENTS.md'), 'utf8'), 'Team-owned intro.\n\n## Repo notes\n\nkeep me\n');
+});
+
+test('deselecting copilot removes both its per-stack instruction files and its merged file', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'web', out, vendors: ['copilot'] });
+  assert.ok(existsSync(join(out, '.github/copilot-instructions.md')));
+  assert.ok(existsSync(join(out, '.github/instructions/redline-react.instructions.md')));
+
+  const r = render({ root, profile: 'web', out, vendors: [] });
+
+  assert.equal(existsSync(join(out, '.github/copilot-instructions.md')), false);
+  assert.equal(existsSync(join(out, '.github/instructions/redline-react.instructions.md')), false);
+  assert.ok(r.removed.includes('.github/copilot-instructions.md'));
+  assert.ok(r.removed.includes(join('.github/instructions', 'redline-react.instructions.md')));
+});
+
+// A file Redline never wrote for this vendor — no block to find — is left
+// alone. The brownfield rule applies to a deselected vendor's file exactly as
+// it does to any other file Redline did not generate.
+test('a hand-written file with no Redline block is never touched by a deselect', (t) => {
+  const out = tmp(t);
+  writeFileSync(join(out, 'CLAUDE.md'), "# Our own CLAUDE.md\n\nWe never ran redline init for Claude.\n");
+
+  const r = render({ root, profile: 'web', out, vendors: ['agents'] });
+
+  assert.equal(readFileSync(join(out, 'CLAUDE.md'), 'utf8'), "# Our own CLAUDE.md\n\nWe never ran redline init for Claude.\n");
+  assert.ok(!r.removed.includes('CLAUDE.md'));
+});
+
+test('check mode reports a deselected vendor block as a removal, not a write, and deletes nothing', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'web', out, vendors: ['claude'] });
+
+  const r = render({ root, profile: 'web', out, vendors: [], check: true });
+
+  assert.deepEqual(r.staleWritten, []);
+  assert.ok(r.staleRemovals.includes('CLAUDE.md'));
+  assert.ok(existsSync(join(out, 'CLAUDE.md')), 'check mode must delete nothing');
+});

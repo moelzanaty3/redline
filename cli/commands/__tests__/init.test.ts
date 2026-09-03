@@ -839,6 +839,138 @@ test('a repository with no ruleset and a recorded merge-policy refusal converges
   );
 });
 
+// --- Task 14: per-repository vendor selection --------------------------------
+
+test('detects copilot from an existing .github/copilot-instructions.md', async () => {
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/copilot-instructions.md': 'ours\n',
+  });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot']);
+});
+
+test('detects copilot from an existing .github/instructions directory alone', async () => {
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/instructions/team.instructions.md': 'ours\n',
+  });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot']);
+});
+
+test('detects claude from an existing CLAUDE.md', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', 'CLAUDE.md': 'ours\n' });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['claude']);
+});
+
+test('detects claude from an existing .claude directory alone', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', '.claude/settings.json': '{}' });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['claude']);
+});
+
+test('detects agents from an existing AGENTS.md', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', 'AGENTS.md': 'ours\n' });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['agents']);
+});
+
+test('detects cursor from an existing .cursor/rules directory', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', '.cursor/rules/team.mdc': 'ours\n' });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['cursor']);
+});
+
+test('detects every vendor whose markers are present at once', async () => {
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/copilot-instructions.md': 'ours\n',
+    'CLAUDE.md': 'ours\n',
+  });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'claude']);
+});
+
+test('a repository with none of the markers gets the org default, every enabled vendor', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'agents', 'claude']);
+});
+
+test('an explicit vendor selection overrides detection', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', 'CLAUDE.md': 'ours\n' });
+  await init(fakePlatform(), { cwd, root, now, vendors: ['agents'] });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['agents']);
+});
+
+test('a re-run preserves the recorded vendor selection rather than re-detecting', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', 'CLAUDE.md': 'ours\n' });
+  await init(fakePlatform(), { cwd, root, now, vendors: ['agents'] });
+
+  // Force a real second run so the precedence logic is actually exercised
+  // rather than short-circuited before it runs.
+  writeFileSync(join(cwd, 'AGENTS.md'), 'drifted by hand\n');
+  await init(fakePlatform(), { cwd, root, now });
+
+  assert.deepEqual(readConfig(cwd)?.vendors, ['agents'], 'CLAUDE.md on disk must not re-trigger detection');
+});
+
+// A vendor the org manifest disables (cursor, in standards/manifest.json)
+// must never render even when it is what the repository detected, or typed.
+test('an org-disabled vendor is recorded but never rendered', async () => {
+  const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', '.cursor/rules/team.mdc': 'ours\n' });
+  await init(fakePlatform(), { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.vendors, ['cursor']);
+  assert.equal(existsSync(join(cwd, '.cursor/rules/redline-core.mdc')), false);
+});
+
+test('deselecting a vendor removes what it wrote and makes a settled repository not settled', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.ok(existsSync(join(cwd, 'CLAUDE.md')));
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now, vendors: ['copilot', 'agents'] });
+
+  assert.equal(report.alreadyOnboarded, false, 'deselecting a vendor is work to do');
+  assert.equal(existsSync(join(cwd, 'CLAUDE.md')), false);
+  assert.ok(report.removals.includes('CLAUDE.md'));
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'agents']);
+  assert.ok(second.applied.includes('openPullRequest'));
+});
+
+// A deselect that has nothing left on disk to remove (a human already
+// deleted the file) still moves .redline.json — vendorsChanged, not the file
+// diff, is what has to catch it. A wrong implementation that folds vendor
+// selection into changedFiles alone would report this as already onboarded
+// and never update the recorded selection.
+test('a vendor deselect with nothing left to remove on disk is still a real run, not a no-op', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  rmSync(join(cwd, 'CLAUDE.md'));
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now, vendors: ['copilot', 'agents'] });
+
+  assert.equal(report.alreadyOnboarded, false, 'a vendor selection change must not be swallowed as nothing to change');
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'agents']);
+  assert.ok(second.applied.includes('openPullRequest'));
+});
+
+test('--dry-run reports a deselected vendor as a removal, not a write, and deletes nothing', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.ok(existsSync(join(cwd, 'CLAUDE.md')));
+
+  const report = await init(fakePlatform(), { cwd, root, now, vendors: ['copilot', 'agents'], dryRun: true });
+
+  assert.ok(report.removals.includes('CLAUDE.md'), 'a deselected vendor is a removal, not a write');
+  assert.ok(report.files.includes('CLAUDE.md'));
+  assert.ok(existsSync(join(cwd, 'CLAUDE.md')), 'a dry run deletes nothing');
+});
+
 test(
   'a settled repository under --repair re-applies host settings, reports already everywhere, ' +
     'and changes only lastRunAt in .redline.json',

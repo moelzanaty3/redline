@@ -19,9 +19,12 @@ const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const USAGE = [
   'redline — engineering control plane',
   '',
-  '  redline init [--profile <name>] [--blocking] [--no-a11y] [--speckit] [--dry-run] [--repair]',
+  '  redline init [--profile <name>] [--vendors <list>] [--blocking] [--no-a11y] [--speckit] [--dry-run] [--repair]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
+  '      --vendors <list>  comma-separated vendor ids (copilot,agents,claude,cursor) to render for —',
+  '                  overrides both detection and whatever .redline.json already recorded; a vendor',
+  '                  the org has not enabled never renders no matter what this list names',
   '      --blocking  promote the merge gate from advisory to blocking',
   '      --no-a11y, --speckit  recorded in .redline.json for later phases; changes nothing in Phase 1',
   '      --repair    re-apply every capability even if this repository looks already onboarded — for',
@@ -85,6 +88,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           // plain re-run.
           options: {
             profile: { type: 'string' },
+            vendors: { type: 'string' },
             blocking: { type: 'boolean' },
             'no-a11y': { type: 'boolean' },
             speckit: { type: 'boolean' },
@@ -100,6 +104,17 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values['no-a11y'] !== undefined) menu.accessibility = !values['no-a11y'];
       if (values.speckit !== undefined) menu.speckit = values.speckit;
 
+      // Same "no default" reasoning as the menu flags above: undefined is how
+      // init() tells "nothing typed, keep detection or the recorded
+      // selection" from "the caller typed an empty list".
+      const vendors =
+        values.vendors !== undefined
+          ? values.vendors
+              .split(',')
+              .map((v) => v.trim())
+              .filter((v) => v !== '')
+          : undefined;
+
       const dryRun = values['dry-run'] === true;
       const repair = values.repair === true;
       // A dry run sends no request, so it must not require a credential —
@@ -110,6 +125,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         cwd,
         root,
         ...(values.profile ? { profile: values.profile } : {}),
+        ...(vendors ? { vendors } : {}),
         ...(dryRun ? { dryRun: true } : {}),
         ...(repair ? { repair: true } : {}),
         menu,

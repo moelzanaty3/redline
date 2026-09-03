@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -728,6 +728,22 @@ test('a policy that no longer requires the gate is not reported as a renamed job
 // be imported. A comment naming the contract is not the contract: raising
 // init's count left the whole suite green, and a repository sitting at the old
 // count would have reported clean.
+// --- Task 14: per-repository vendor selection --------------------------------
+
+// Deselecting a vendor must actually clear the drift it leaves behind: the
+// `artifacts-current` check compares against the repository's own recorded
+// selection, so a vendor no longer selected must not show up as something
+// still to remove.
+test('verify is clean after a vendor is deselected and its block actually removed', async () => {
+  const cwd = await onboarded();
+  await init(fakePlatform(), { cwd, root, now, vendors: ['copilot', 'agents'] });
+  assert.equal(existsSync(join(cwd, 'CLAUDE.md')), false);
+
+  const report = await verify(() => fakePlatform(), { cwd, root });
+  assert.equal(report.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.equal(find(report, 'artifacts-current')?.ok, true);
+});
+
 test('the merge policy init applies is the one verify holds a repository to', async () => {
   const cwd = tempRepo('redline-verify-contract-');
   writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');

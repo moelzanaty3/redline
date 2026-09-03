@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { loadManifest } from '../manifest.ts';
 import { resolveProfile } from '../profile.ts';
 import { VENDORS, type RenderContext } from '../vendors.ts';
+import { ONBOARD_BRANCH, SYNC_LABEL } from '../../commands/init.ts';
+import { REQUIRED_CHECK } from '../../platforms/github/install.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const manifest = loadManifest(root);
@@ -59,6 +61,30 @@ test('claude emits a fixed pointer at AGENTS.md', () => {
       '\n' +
       '@AGENTS.md'
   );
+});
+
+// web/components/journey.tsx hardcodes several CLI constants with source
+// comments, because cli/'s .ts specifiers do not resolve through Next's
+// bundler and the page cannot import them. This pins the source side of that
+// mirror, so a change here fails CI instead of silently falsifying the page.
+// A wrong implementation that renders a fourth vendor with `merge: true` —
+// or changes any of the other three literals — trips this without anyone
+// having to notice the drift by eye in the rendered page.
+test('web/components/journey.tsx mirrors these CLI constants verbatim', () => {
+  const PROFILE = 'web';
+  // Pins that PROFILE stays a profile the manifest can actually resolve —
+  // resolveProfile throws otherwise, exactly as it would for the page's own
+  // build-time resolveStacks(manifest, PROFILE).
+  assert.doesNotThrow(() => resolveProfile(manifest, PROFILE));
+
+  const mergedVendors = Object.keys(VENDORS)
+    .filter((name) => [...VENDORS[name]!(ctx(PROFILE)).files.values()].some((f) => f.merge === true))
+    .sort();
+  assert.deepEqual(mergedVendors, ['agents', 'claude', 'copilot']);
+
+  assert.equal(REQUIRED_CHECK, 'redline-gate / gate');
+  assert.equal(ONBOARD_BRANCH, 'redline/onboard');
+  assert.equal(SYNC_LABEL, 'redline-sync');
 });
 
 test('cursor globs are unquoted and per-stack files carry no header comment', () => {

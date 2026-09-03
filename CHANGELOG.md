@@ -7,6 +7,36 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- Per-repository vendor selection. `redline init` used to render every org-enabled vendor
+  (`standards/manifest.json` → `copilot`, `agents`, `claude`) into every repository, so a
+  Copilot-only team was handed `AGENTS.md` and `CLAUDE.md` it never asked for. It now
+  detects a default from what the repository already contains (`.github/copilot-instructions.md`
+  or `.github/instructions/` → copilot; `CLAUDE.md` or `.claude/` → claude; `AGENTS.md` →
+  agents; `.cursor/rules/` → cursor; none of them → the org default), a repository's
+  recorded `.redline.json` selection overrides detection on a re-run, and a typed
+  `--vendors copilot,agents` overrides both. `render()` (`cli/render/standards.ts`) enforces
+  the org manifest as a ceiling on every call it makes, including `redline verify`'s: a
+  repository may select a subset of what the org enables, never a superset, and a vendor the
+  org later disables stops rendering regardless of what was recorded — a stale selection
+  cannot resurrect it. Deselecting a vendor removes exactly what it wrote: a `redline-`-owned
+  file is deleted outright (reusing the existing prune machinery, now run for every vendor
+  rather than only the currently-selected ones, so a vendor dropped entirely is cleaned up
+  too, not just a stack dropped within one still selected); a shared `merge: true` file
+  (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) has only its
+  `REDLINE:BEGIN`…`REDLINE:END` block cut out, reusing `cli/render/markers.ts`'s `findBlock`
+  rather than a second marker parser, and is deleted only when nothing but the block (and the
+  separator `wrapBlock` inserted before it) remains — a file carrying the team's own content
+  keeps it byte-identical. The removal rides out through the existing rendered-file diffing,
+  so it lands in a pull request like any other change and prints as a removal, not a write,
+  under `--dry-run`. A vendor selection change that has nothing left on disk to remove no
+  longer reads as "nothing to change" on a settled repository — the same failure mode a menu
+  change already had to be guarded against. `cli/render/__tests__/vendors.test.ts` now pins,
+  at the source, the CLI constants `web/components/journey.tsx` hardcodes with source
+  comments because its `.ts` specifiers do not resolve through Next's bundler: exactly which
+  vendors render `merge: true`, that `PROFILE` stays a profile the manifest can resolve, and
+  the literal values of `GATE_CHECK`, `ONBOARD_BRANCH` and `SYNC_LABEL` (newly exported from
+  `cli/commands/init.ts`, replacing a duplicated literal) — so a fourth merged vendor, an
+  unresolvable profile, or a changed literal fails CI instead of silently falsifying the page.
 - The value-case card's "With Redline" column — proof chips, column header, per-row
   tag — now carries a restrained green accent instead of reading identically to the
   "Today" column. New `--ok-ink`/`--ok-line`/`--ok-bg` tokens carry it, defined in both
