@@ -549,6 +549,13 @@ Record seed scores here. A standards change with no measurement is an opinion.
   `merge-policy` finding and the `pending-admin` finding now name `redline init --repair` as the
   remedy for the capabilities a read can never answer, instead of pointing at a plain `redline init`
   that would not have retried them.
+- The home page's "What it did to files you already had" rows were tightened: each now
+  leads with a plain sentence answering "does this touch my file", with the mechanism
+  trimmed to one or two short sentences after it rather than a single dense paragraph.
+  The "Redline's own — rewritten in full" row now says plainly that every instructions
+  file it writes carries the `redline-` prefix (`cli/render/vendors.ts` `PREFIX`), so a
+  repository's own `.github/instructions/*.instructions.md` file is never written or
+  pruned by it — the prune rule matches only that prefix and extension.
 
 ## 3.0.0 — 2026-09-02
 

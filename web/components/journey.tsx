@@ -310,14 +310,12 @@ export function Journey() {
                   ))}
                 </span>
                 <span className="jr-fd">
-                  Redline writes only between its{" "}
-                  <code>&lt;!-- REDLINE:BEGIN</code> marker line and{" "}
-                  <code>&lt;!-- REDLINE:END --&gt;</code>. A file that already exists
-                  without them keeps everything in it and gets the block appended; a file
-                  that has them keeps everything outside them. Redline owns its marked
-                  block and nothing else in the file, and a file whose markers are
-                  malformed — unpaired, duplicated, out of order — is refused and left
-                  untouched rather than guessed at.{" "}
+                  Your content stays — Redline writes only between its{" "}
+                  <code>&lt;!-- REDLINE:BEGIN</code> and{" "}
+                  <code>&lt;!-- REDLINE:END --&gt;</code> markers. A file without them
+                  gets the block appended; one that has them keeps everything outside
+                  untouched, and malformed markers — unpaired, duplicated, out of order —
+                  are left alone rather than guessed at.{" "}
                   <Link href="/docs/adaptors/agents-md">How the markers work →</Link>
                 </span>
               </li>
@@ -329,17 +327,12 @@ export function Journey() {
                   <code>.github/pull_request_template.md</code>
                 </span>
                 <span className="jr-fd">
-                  The gate fails a pull request whose description has no{" "}
-                  <code>## Launch readiness</code> section, so the run adds the gated
-                  sections the template does not already answer — that one, and{" "}
+                  Merges into the template your host already serves — it never creates a
+                  second one. It adds only the sections the gate checks for —{" "}
+                  <code>## Launch readiness</code>, and{" "}
                   <code>## Architecture decision</code> unless the file already links a{" "}
-                  <code>docs/adr/</code> — inside the same markers, leaving everything
-                  outside them alone. A template that answers both is left untouched. It
-                  merges into the first template GitHub would resolve, searching{" "}
-                  <code>.github/</code>, the repository root and <code>docs/</code>, and
-                  writes the path above only where the host would resolve none. The
-                  template Redline writes there carries the markers too, so one rule
-                  holds everywhere.
+                  <code>docs/adr/</code> — inside the same markers as above. A template
+                  that already answers both is left untouched.
                 </span>
               </li>
               <li>
@@ -350,10 +343,11 @@ export function Journey() {
                   ))}
                 </span>
                 <span className="jr-fd">
-                  Each is generated, never hand-authored, so a run replaces it whole and
-                  an edit made in place does not survive one. An instructions file for a
-                  stack the profile no longer resolves is deleted rather than left
-                  behind.
+                  Generated, never hand-authored — an edit made in place does not survive
+                  the next run, and a stack no longer in the profile has its instructions
+                  file removed rather than left behind. Every instructions file it writes
+                  carries the <code>redline-</code> prefix, so a custom instructions file
+                  of your own is never touched.
                 </span>
               </li>
               <li>
