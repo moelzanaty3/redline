@@ -179,3 +179,52 @@ test('a CRLF file keeps its line endings outside the block on both the append an
 test('findBlock reports no block for a file that has never been touched', () => {
   assert.equal(findBlock('# Repo\n\nnothing here\n', LABEL), null);
 });
+
+// --- unresolvable fencing. CommonMark: "If the end of the document is reached
+// and no closing code fence has been found, the code block contains all of the
+// lines after the opening code fence." So an unclosed fence is valid markdown,
+// not a mangled file — and it hides every marker below it from the scan. Reading
+// those markers as absent appends a second block on every run; reading them as
+// real splices inside what renders as a code block. Both are guesses about a
+// human-owned file.
+
+test('an unclosed code fence hiding the block is refused, not appended to on every run', () => {
+  const existing = `# Docs\n\nOur convention:\n\n\`\`\`md\n${BEGIN}\n\nOLD\n\n${END}\n`;
+  const { message, exitCode } = malformed(existing);
+  assert.match(message, /pull_request_template\.md/);
+  assert.match(message, /unclosed code fence/);
+  assert.equal(exitCode, 1);
+});
+
+test('the unclosed-fence refusal points at the line that opened the fence', () => {
+  try {
+    wrap(`one\ntwo\n\`\`\`\n${BEGIN}\n${END}\n`, 'NEW');
+    throw new Error('expected a refusal');
+  } catch (error) {
+    assert.ok(isRedlineError(error));
+    assert.match(error.hint ?? '', /line 3/);
+    assert.match(error.hint ?? '', /Redline made no change to that file/);
+  }
+});
+
+// Precision: with no marker in the undecidable region the two readings agree, so
+// nothing is being guessed and there is nothing to refuse. Unclosed fences are
+// common enough by accident that refusing every one would be gratuitous.
+test('an unclosed fence with no markers below it is not a refusal and the real block still replaces', () => {
+  const existing = `${BEGIN}\n\nOLD\n\n${END}\n\n# Notes\n\n\`\`\`sh\nnever closed\n`;
+  const out = wrap(existing, 'NEW');
+  assert.equal(out, `${BEGIN}\n\nNEW\n\n${END}\n\n# Notes\n\n\`\`\`sh\nnever closed\n`);
+  assert.equal(wrap(out, 'NEW'), out, 'and it is stable across a second run');
+});
+
+test('a fence opened inside the marked block is refused rather than silently swallowing the END', () => {
+  const { message } = malformed(`${BEGIN}\n\n\`\`\`\nOLD\n\n${END}\n\nafter\n`);
+  assert.match(message, /unclosed code fence/);
+});
+
+// CommonMark: "The closing code fence ... may not have an info string." A
+// ```md line inside an open ``` fence is content, not the close.
+test('a closing fence carrying an info string does not close the fence', () => {
+  const { message } = malformed(`\`\`\`\nexample:\n\`\`\`md\n${BEGIN}\nX\n${END}\n`);
+  assert.match(message, /unclosed code fence/);
+});

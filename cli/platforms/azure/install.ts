@@ -244,8 +244,6 @@ const GATED_SECTIONS = [
   },
 ];
 
-const ALL_GATED = GATED_SECTIONS.map((section) => section.heading);
-
 function gatedSections(template: string, headings: string[]): string {
   const kept: string[] = [];
   let inside = false;
@@ -391,10 +389,28 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
     return { path: relPath, changed: syncFile(cwd, relPath, packaged, check), detail: `wrote ${relPath}` };
   }
 
-  // Throws on a half-edited marker pair rather than guessing which span is
-  // Redline's — see cli/render/markers.ts. Nothing is written on that path.
-  if (findBlock(existing, relPath) !== null) {
-    const contents = wrapBlock(existing, gatedSections(packaged, ALL_GATED), relPath);
+  // Throws on a half-edited marker pair, or on markers hidden below an unclosed
+  // code fence, rather than guessing which span is Redline's — see
+  // cli/render/markers.ts. Nothing is written on that path.
+  const span = findBlock(existing, relPath);
+  if (span !== null) {
+    // Measured against what the template provides OUTSIDE the block, never the
+    // whole file. Refreshing with every gated section unconditionally put
+    // Redline's own `## Launch readiness` inside the block while the
+    // repository's stayed outside it, and the gate's awk enforces both — so the
+    // second run broke a repository the first run had merged correctly.
+    const outside = existing.slice(0, span.start) + existing.slice(span.stop + END.length);
+    const wanted = GATED_SECTIONS.filter((section) => !section.satisfied(outside)).map(
+      (section) => section.heading
+    );
+    if (wanted.length === 0) {
+      return {
+        path: relPath,
+        changed: false,
+        detail: `${relPath} satisfies the gate outside the Redline block — left untouched`,
+      };
+    }
+    const contents = wrapBlock(existing, gatedSections(packaged, wanted), relPath);
     const changed = syncFile(cwd, relPath, contents, check);
     return {
       path: relPath,

@@ -402,6 +402,32 @@ Record seed scores here. A standards change with no measurement is an opinion.
   the same capability twice was a trap for any caller that folds outcomes per capability —
   `worstOutcome` keeps one and drops the other's detail. They are folded at the source now,
   where both details survive.
+- An unclosed code fence no longer hides the Redline block. CommonMark says an unterminated
+  fence runs to the end of the document, so it is valid markdown rather than a mangled
+  file — but it made every marker below it invisible to the fence-aware marker scan added
+  above, `findBlock` reported no block, and `wrapBlock` appended a second one. Measured
+  through the real renderer on an `AGENTS.md`: 10042 → 20018 → 29994 bytes, one → two →
+  three marker pairs, unbounded and silent, in the same three files written in every
+  onboarded repository. Reading the hidden markers as absent grows the file; reading them
+  as real splices inside what renders as a code block. Both are guesses about a
+  human-owned file, so the run refuses (exit 1) and names the line the fence was opened
+  on. Refusal is limited to the case that is actually undecidable: when the unterminated
+  region holds no marker the two readings agree, nothing is being guessed, and the file is
+  written normally.
+- A closing code fence carrying an info string no longer closes the fence, per CommonMark
+  ("The closing code fence ... may not have an info string"). A ```` ```md ```` line inside
+  an open ``` fence is content, so treating it as the close exposed markers that are really
+  inside a code block, and was one of the ways a document could end in an unterminated
+  fence.
+- A brownfield template no longer gains a second `## Launch readiness` on the second run.
+  The marked branch refreshed the block with every gated section unconditionally, so a
+  template that kept its own checklist outside the block got Redline's inside it on the
+  next run — and the gate's awk enforces both, meaning the repository could no longer pass
+  its own gate, and `redline init` opened a second onboarding pull request for a change
+  nobody asked for. The marked branch now applies the same `satisfied()` test the append
+  path uses, measured against the content *outside* the block; when the file satisfies both
+  gate jobs on its own, the block is left exactly as it is. Verified stable across three
+  consecutive runs.
 
 ## 3.0.0 — 2026-09-02
 

@@ -21,38 +21,58 @@ export interface MarkerSpan {
 // the splice point, and everything between it and the next END would be
 // deleted. Anchoring alone is not enough — a fence is exactly where a document
 // puts a marker on a line of its own to show what one looks like.
-function scanMarkers(text: string): { begins: number[]; ends: number[] } {
+//
+// `unterminatedFence` is the offset of a fence that never closed. CommonMark
+// allows that ("If the end of the document is reached and no closing code fence
+// has been found, the code block contains all of the lines after the opening
+// code fence"), so it is valid markdown rather than a mangled file — but it
+// makes every marker below it invisible to this scan, which findBlock has to
+// answer for rather than silently accept.
+interface Scan {
+  begins: number[];
+  ends: number[];
+  unterminatedFence: number | null;
+}
+
+function scanMarkers(text: string, trackFences: boolean): Scan {
   const begins: number[] = [];
   const ends: number[] = [];
   let offset = 0;
-  let fence: { char: string; length: number } | null = null;
+  let fence: { char: string; length: number; offset: number } | null = null;
 
   for (const line of text.split('\n')) {
     const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
-    // CommonMark: a fence may be indented up to three spaces, and a closing
-    // fence must use the same character and be at least as long as the opening.
-    const fenced = /^ {0,3}(`{3,}|~{3,})/.exec(bare);
+    // CommonMark: a fence may be indented up to three spaces; a closing fence
+    // must use the same character, be at least as long as the opening one, and
+    // carry no info string — so a ```md line inside an open ``` fence is
+    // content, not the close.
+    const fenced = trackFences ? /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(bare) : null;
     const rail = fenced?.[1];
     if (rail !== undefined) {
       const char = rail.slice(0, 1);
-      if (fence === null) fence = { char, length: rail.length };
-      else if (char === fence.char && rail.length >= fence.length) fence = null;
+      if (fence === null) fence = { char, length: rail.length, offset };
+      else if (char === fence.char && rail.length >= fence.length && (fenced?.[2] ?? '').trim() === '') {
+        fence = null;
+      }
     } else if (fence === null) {
       if (bare.startsWith(BEGIN_PREFIX)) begins.push(offset);
       else if (bare.startsWith(END)) ends.push(offset);
     }
     offset += line.length + 1;
   }
-  return { begins, ends };
+  return { begins, ends, unterminatedFence: fence === null ? null : fence.offset };
 }
 
-function refuse(label: string, problem: string): never {
+const MARKER_HINT =
+  'Restore a single REDLINE:BEGIN … REDLINE:END pair around the generated block, or delete both ' +
+  'marker lines and let the next run append a fresh block below your content. Redline made no ' +
+  'change to that file.';
+
+function refuse(label: string, problem: string, hint = MARKER_HINT): never {
   throw new RedlineError(
     'failed',
     `${label} ${problem}, so Redline cannot tell which part of it is its own and will not write to it`,
-    'Restore a single REDLINE:BEGIN … REDLINE:END pair around the generated block, or delete both ' +
-      'marker lines and let the next run append a fresh block below your content. Redline made no ' +
-      'change to that file.'
+    hint
   );
 }
 
@@ -62,7 +82,27 @@ function refuse(label: string, problem: string): never {
 // slice arithmetic would duplicate the span on every run, or delete every byte
 // between a stray marker and the real block.
 export function findBlock(existing: string, label: string): MarkerSpan | null {
-  const { begins, ends } = scanMarkers(existing);
+  const { begins, ends, unterminatedFence } = scanMarkers(existing, true);
+  if (unterminatedFence !== null) {
+    // Reading the hidden markers as absent appends a second block on every run
+    // — unbounded, silent growth in exactly the files this guard exists for.
+    // Reading them as real splices inside what renders as a code block. Both
+    // are guesses about a human-owned file, so refuse. Only when the
+    // undecidable region actually holds a marker, though: with none, the two
+    // readings agree and nothing is being guessed.
+    const hidden = scanMarkers(existing.slice(unterminatedFence), false);
+    if (hidden.begins.length > 0 || hidden.ends.length > 0) {
+      const line = existing.slice(0, unterminatedFence).split('\n').length;
+      refuse(
+        label,
+        `has an unclosed code fence with REDLINE markers below it`,
+        `Close the code fence opened on line ${line}, or move the REDLINE block above it. An ` +
+          'unclosed fence runs to the end of the document, so Redline cannot tell whether the ' +
+          'markers below it are its own block or an illustration inside the code. Redline made no ' +
+          'change to that file.'
+      );
+    }
+  }
   if (begins.length === 0 && ends.length === 0) return null;
   if (begins.length > 1 || ends.length > 1) {
     refuse(label, `has ${begins.length} REDLINE:BEGIN and ${ends.length} REDLINE:END markers where exactly one of each is expected`);

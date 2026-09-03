@@ -88,3 +88,45 @@ test('check mode separates the files it would remove from the ones it would writ
   assert.ok(r.stale.includes(`${orphan} (stale, should be removed)`), 'the combined list is unchanged');
   assert.ok(existsSync(join(out, orphan)), 'check mode still writes and deletes nothing');
 });
+
+// render() writes AGENTS.md, CLAUDE.md and .github/copilot-instructions.md in
+// every onboarded repository through wrapBlock, so a file whose markers cannot
+// be located unambiguously is an estate-wide corruption, not a local one. These
+// drive the real renderer rather than wrapBlock, because that is the path the
+// growth was observed on.
+
+const humanFileWith = (tail: string): string =>
+  `# Our repo\n\nHand-written guidance the team owns.\n\n${tail}`;
+
+test('an unclosed code fence above the block refuses instead of appending a second block on every render', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'tooling', out });
+  const target = join(out, 'AGENTS.md');
+  const withFence = `${humanFileWith('```md\nan illustration whose fence was never closed\n')}${readFileSync(target, 'utf8')}`;
+  writeFileSync(target, withFence);
+
+  for (let run = 1; run <= 3; run += 1) {
+    assert.throws(
+      () => render({ root, profile: 'tooling', out }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /AGENTS\.md/);
+        assert.match(error.message, /unclosed code fence/);
+        return true;
+      },
+      `render ${run} must refuse`
+    );
+    assert.equal(readFileSync(target, 'utf8'), withFence, `render ${run} must not change a byte`);
+  }
+});
+
+test('a file carrying two marker pairs refuses the render rather than picking one', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'tooling', out });
+  const target = join(out, 'AGENTS.md');
+  const doubled = readFileSync(target, 'utf8').repeat(2);
+  writeFileSync(target, doubled);
+
+  assert.throws(() => render({ root, profile: 'tooling', out }), /AGENTS\.md/);
+  assert.equal(readFileSync(target, 'utf8'), doubled);
+});

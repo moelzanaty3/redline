@@ -915,3 +915,78 @@ test('a .txt template is not adopted as the merge target on GitHub, and the serv
   assert.equal(templateAt(cwd), PACKAGED_TEMPLATE);
   assert.ok(result.files.includes('.github/pull_request_template.md'));
 });
+
+// N2: `mergeTemplate` decides the marked branch first, and refreshing it with
+// every gated section would put Redline's own `## Launch readiness` inside the
+// block while the repository's stayed outside — and the gate's awk enforces
+// both, so run 2 would break a repository run 1 merged correctly. Every other
+// second-run test in this file starts from a greenfield or fully-marked
+// template, which is why this went unseen.
+test('a brownfield template with its own Launch readiness never gains a second one on a later run', async () => {
+  const cwd = tmp();
+  const own = `# Ours\n\n## Launch readiness\n\n- [ ] our own gate item\n`;
+  seedTemplate(cwd, own);
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+
+  await install.installGate(ref, cwd, gateOpts);
+  const afterFirst = templateAt(cwd);
+  const second = await install.installGate(ref, cwd, gateOpts);
+  const third = await install.installGate(ref, cwd, gateOpts);
+
+  assert.equal(
+    (templateAt(cwd).match(/^## Launch readiness/gm) ?? []).length,
+    1,
+    'the repository must not be made to tick two checklists to pass its own gate'
+  );
+  assert.equal(templateAt(cwd), afterFirst, 'the merge must be stable from the first run');
+  assert.ok(!second.files.includes('.github/pull_request_template.md'), 'a stable run must not open a second onboarding PR');
+  assert.ok(!third.files.includes('.github/pull_request_template.md'));
+  assert.ok(templateAt(cwd).startsWith(own));
+});
+
+test('a marked template whose own content later satisfies both gate jobs is left alone', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  seedTemplate(cwd, `# Ours\n\n## Launch readiness\n\n- [ ] ours\n`);
+  await install.installGate(ref, cwd, gateOpts);
+
+  // The team adds their own ADR line outside the block, which is what the adr
+  // job actually greps for. Redline's block has nothing left to contribute.
+  const withAdr = templateAt(cwd).replace('# Ours', '# Ours\n\nADR: docs/adr/0007-x.md');
+  seedTemplate(cwd, withAdr);
+
+  const result = await install.installGate(ref, cwd, gateOpts);
+
+  assert.equal(templateAt(cwd), withAdr);
+  assert.ok(!result.files.includes('.github/pull_request_template.md'));
+});
+
+test('a template carrying two Redline blocks is refused rather than one of them silently winning', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  await install.installGate(ref, cwd, gateOpts);
+  const doubled = templateAt(cwd).repeat(2);
+  seedTemplate(cwd, doubled);
+
+  await assert.rejects(
+    () => install.installGate(ref, cwd, gateOpts),
+    (error: unknown) => {
+      assert.ok(isRedlineError(error));
+      assert.equal(error.exitCode, 1);
+      assert.match(error.message, /pull_request_template\.md/);
+      return true;
+    }
+  );
+  assert.equal(templateAt(cwd), doubled);
+});
+
+test('a template hidden below an unclosed code fence is refused, not appended to on every run', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  await install.installGate(ref, cwd, gateOpts);
+  const fenced = `# Ours\n\n\`\`\`md\nnever closed\n${templateAt(cwd)}`;
+  seedTemplate(cwd, fenced);
+
+  await assert.rejects(() => install.installGate(ref, cwd, gateOpts), isRedlineError);
+  assert.equal(templateAt(cwd), fenced);
+});
