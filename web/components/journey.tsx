@@ -253,8 +253,9 @@ export function Journey() {
               prints
             </b>{" "}
             — the file names are the ones it writes, the findings are the ones it
-            reports. The one <code>#</code> line is ours, marking the gap between the
-            two runs.
+            reports, for a repository onboarding fresh with{" "}
+            <code>redline init</code>&rsquo;s own defaults. The one <code>#</code> line
+            is ours, marking the gap between the two runs.
           </p>
         </div>
 
