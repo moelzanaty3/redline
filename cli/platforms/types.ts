@@ -59,6 +59,12 @@ export interface MergePolicy {
   // block. `redline verify` prints it with the merge-policy finding, so an
   // operator debugging stuck pull requests is pointed at the real cause.
   advisoryReason?: string;
+  // Read side only, and set only when the host says the policy exists but is
+  // not in force — a GitHub ruleset switched out of `active` enforcement keeps
+  // every field above readable while none of its rules apply. `redline verify`
+  // treats it as drift: without it, the cheapest loosening on GitHub is
+  // invisible to every comparison this policy supports.
+  notEnforcedReason?: string;
   // Read side only. Settings whose live value this host cannot attribute to
   // Redline — either the adapter never applies them (Azure has no
   // CODEOWNERS-driven required reviewers) or the policy carrying them is a
@@ -72,6 +78,7 @@ export interface MergePolicy {
 
 export type PolicySetting =
   | 'requiredApprovals'
+  | 'dismissStaleReviews'
   | 'requireCodeOwnerReview'
   | 'requireThreadResolution';
 
@@ -133,8 +140,27 @@ export interface PlatformInstall {
   openPullRequest(ref: RepoRef, cwd: string, change: Change): Promise<PullRequestRef | null>;
 }
 
+// What makes the gate run on this host, read from the local checkout. The
+// distinction it exists to draw: a required check missing from a pull request
+// is meaningless on its own — the gate may simply not have run yet — but it is
+// an outage when nothing in the repository can ever publish that check.
+export interface GateMachinery {
+  // Repository-relative path of the file that runs the gate, whether or not it
+  // is there.
+  path: string;
+  present: boolean;
+  // The check name this file would publish, read out of the file itself. null
+  // when the file is absent, or when it no longer carries the contract that
+  // produces a name — a renamed caller job, an edited status step.
+  publishes: string | null;
+}
+
 export interface PlatformVerify {
   readPolicy(ref: RepoRef): Promise<MergePolicy | null>;
+  // Local only: no host call, no credential, same as Platform.localRef. It
+  // reads the file `installGate` wrote, so it is sync and cannot fail the run
+  // the way a host read can.
+  readGateMachinery(cwd: string): GateMachinery;
   readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]>;
   readSecurityState(ref: RepoRef): Promise<SecurityResult>;
   latestPullRequestNumber(ref: RepoRef): Promise<number | null>;

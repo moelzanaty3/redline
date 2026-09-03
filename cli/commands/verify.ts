@@ -8,6 +8,33 @@ import {
 } from '../platforms/pull-request-templates.ts';
 import type { Platform, PolicySetting } from '../platforms/types.ts';
 
+// Which way the two standards versions run. Neither direction is local drift —
+// the repository is in the state its own `redline init` left it in — but the
+// operator's next move differs, so the finding must not tell someone running a
+// pinned older CLI to re-run init and render the repository backwards.
+//
+// Deliberately forgiving: `standardsVersion` is whatever some earlier CLI
+// wrote, so a segment that will not parse compares as 0 rather than throwing,
+// and versions that differ only outside the numbers (a prerelease or build
+// suffix) are reported as the upstream direction — different, and still not
+// local drift.
+function versionOrder(installed: string, recorded: string): 'same' | 'newer' | 'older' {
+  if (installed === recorded) return 'same';
+  const parts = (version: string): number[] =>
+    version.split('.').map((segment) => {
+      const value = Number.parseInt(segment, 10);
+      return Number.isNaN(value) ? 0 : value;
+    });
+  const left = parts(installed);
+  const right = parts(recorded);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const a = left[i] ?? 0;
+    const b = right[i] ?? 0;
+    if (a !== b) return a > b ? 'newer' : 'older';
+  }
+  return 'newer';
+}
+
 export interface VerifyFinding {
   check: string;
   ok: boolean;
@@ -73,11 +100,14 @@ export async function verify(
   // Every setting `redline init` applies, not just the blocking flag: an
   // administrator who turns off code-owner review or approvals leaves the gate
   // reporting green while the review requirements it was installed for are
-  // gone. Compared against what init applies (cli/commands/init.ts:
-  // requiredApprovals 1, requireCodeOwnerReview from the menu,
-  // requireThreadResolution true), and compared as a floor, not for equality:
-  // a team that requires three approvals is stricter than the standard, and
-  // failing them would fail their own gate on every pull request.
+  // gone. CONTRACT with cli/commands/init.ts's applyPolicy call: it applies
+  // requiredApprovals 1, dismissStaleReviews true, requireCodeOwnerReview from
+  // the menu and requireThreadResolution true. Those are literals there and
+  // cannot be imported, so raising init's approval count without raising
+  // MINIMUM_APPROVALS here would leave a repository sitting at the old count
+  // reporting clean. Compared as a floor, not for equality: a team that
+  // requires three approvals is stricter than the standard, and failing them
+  // would fail their own gate on every pull request.
   const MINIMUM_APPROVALS = 1;
   const weakened: string[] = [];
   // Settings the host says it cannot attribute to Redline are reported and
@@ -85,6 +115,9 @@ export async function verify(
   const unowned = policy?.unownedSettings ?? [];
   const owned = (setting: PolicySetting): boolean => !unowned.includes(setting);
   if (policy !== null) {
+    // First, because it makes every comparison below moot: a policy the host
+    // says is not applying is a policy whose settings are readable and inert.
+    if (policy.notEnforcedReason !== undefined) weakened.push(policy.notEnforcedReason);
     if (policy.blocking !== config.menu.blockingGate) {
       weakened.push(
         `policy is ${policy.blocking ? 'blocking' : 'advisory'}, config says ${
@@ -95,6 +128,12 @@ export async function verify(
     if (owned('requiredApprovals') && policy.requiredApprovals < MINIMUM_APPROVALS) {
       weakened.push(
         `it requires ${policy.requiredApprovals} approval(s), below the ${MINIMUM_APPROVALS} redline init applied`
+      );
+    }
+    if (owned('dismissStaleReviews') && !policy.dismissStaleReviews) {
+      weakened.push(
+        'approvals are no longer dismissed when new commits are pushed, so a review of code that is ' +
+          'no longer in the pull request can carry the merge'
       );
     }
     if (
@@ -132,12 +171,41 @@ export async function verify(
   // of whether the live policy currently lists required checks — an
   // advisory (non-blocking) gate has no required checks by design, but the
   // check name still needs confirming before anyone promotes it to blocking.
+  // Read from the local checkout, not the host: the file `init` wrote is the
+  // only evidence that separates "the gate has not run on this pull request
+  // yet" — which is not drift, and used to fail healthy repositories daily —
+  // from "the gate is gone or renamed", which is an outage nothing else in
+  // this command observes. render() covers rendered standards artifacts only,
+  // so before this the deletion was invisible.
+  const machinery = platform.readGateMachinery(opts.cwd);
+  const requiredChecks = policy?.requiredChecks ?? [];
+  const machineryHealthy =
+    machinery.present &&
+    machinery.publishes !== null &&
+    (requiredChecks.length === 0 || requiredChecks.includes(machinery.publishes));
+  add(
+    'gate-machinery',
+    machineryHealthy,
+    !machinery.present
+      ? `${machinery.path} is not in this repository, so nothing will ever publish the gate` +
+        `${requiredChecks.length > 0 ? ` — the policy requires ${requiredChecks.join(', ')}` : ''}` +
+        '; re-run redline init'
+      : machinery.publishes === null
+        ? `${machinery.path} no longer declares the job that publishes the gate check, so nothing ` +
+          'will report it; re-run redline init'
+        : requiredChecks.length > 0 && !requiredChecks.includes(machinery.publishes)
+          ? `${machinery.path} publishes ${machinery.publishes}, but the policy requires ${requiredChecks.join(
+              ', '
+            )} — no pull request can ever satisfy it; rename the job back or fix the policy`
+          : `${machinery.path} publishes ${machinery.publishes}`
+  );
+
   const pr = await platform.latestPullRequestNumber(ref);
   if (pr === null) {
     add('check-name-reported', true, 'no pull request yet — open one to confirm the check reports');
   } else {
     const reported = await platform.readReportedCheckNames(ref, pr);
-    const required = policy?.requiredChecks ?? [];
+    const required = requiredChecks;
     const missing = required.filter((name) => !reported.includes(name));
     // The host is asked about the newest pull request of any state, which on a
     // healthy repository is routinely one that predates the gate — merged
@@ -150,13 +218,21 @@ export async function verify(
     // AZURE_STATUS_GENRE), so a reported name under that prefix is a gate run
     // — including one published under a name the policy does not require,
     // which is exactly the misconfiguration worth failing for.
+    //
+    // This path is only safe because the gate-machinery finding below fails
+    // when nothing in the repository can publish the check at all. Soften one
+    // without the other and a deleted or renamed gate reports green while
+    // every pull request in the repository is blocked forever.
     const gateRan = reported.some((name) => name.toLowerCase().startsWith('redline'));
     if (required.length > 0 && missing.length > 0 && !gateRan) {
       add(
         'check-name-reported',
         true,
-        `no gate run observed yet on PR #${pr} — open or update a pull request to see the gate report ` +
-          `(the policy requires ${required.join(', ')})`
+        machineryHealthy
+          ? `no gate run observed yet on PR #${pr} — open or update a pull request to see the gate report ` +
+            `(the policy requires ${required.join(', ')})`
+          : `no Redline gate run has published anything on PR #${pr}'s head commit — see the ` +
+            'gate-machinery finding for why'
       );
     } else if (required.length > 0 && missing.length > 0) {
       add(
@@ -235,15 +311,21 @@ export async function verify(
   // every onboarded repository stale at once — exit 1 everywhere, and a failed
   // Azure gate on every open pull request, for work only `redline init` can
   // do. The recorded standardsVersion is what tells them apart.
-  const upstream = manifest.version !== config.standardsVersion;
+  // Direction matters to the operator even though neither direction is drift:
+  // a newer version is a release to adopt, an older one is a pinned CLI
+  // rendering rules this repository has already moved past, and telling the
+  // second operator to re-run init would render the repository backwards.
+  const drift = versionOrder(manifest.version, config.standardsVersion);
   add(
     'artifacts-current',
-    stale.length === 0 || upstream,
+    stale.length === 0 || drift !== 'same',
     stale.length === 0
       ? `rendered artifacts match standards v${manifest.version}`
-      : upstream
+      : drift === 'newer'
         ? `standards updated upstream (v${config.standardsVersion} → v${manifest.version}) — re-run redline init to adopt: ${stale.join(', ')}`
-        : `stale: ${stale.join(', ')}`
+        : drift === 'older'
+          ? `this CLI renders standards v${manifest.version}, older than the v${config.standardsVersion} this repository recorded — update the CLI rather than re-running init here: ${stale.join(', ')}`
+          : `stale: ${stale.join(', ')}`
   );
 
   // The pull request template is the one thing `redline init` writes that
@@ -284,23 +366,45 @@ export async function verify(
   // capability that has since been granted is called out in the detail (so
   // the operator knows to re-run `redline init` and clear it), but the
   // finding still reports not-fully-onboarded while the record is stale.
-  const observable = new Set(security.outcomes.map((o) => o.capability));
+  // Only a read that answered can produce work for an administrator, and the
+  // same three-state rule the security-floor finding runs on applies here.
+  // `applied`/`already`/`denied` are answers; `unsupported` is the status both
+  // adapters use for "nothing was observed" — the feature is not licensed on
+  // this repository, or the token cannot see it — and no administrator action
+  // changes either. Naming one of those as work to do sent operators to check
+  // settings that were already correct, or that do not exist to be checked.
+  // (A later CLI splits `unsupported` into unlicensed and unobserved; the two
+  // land in this same clause today and the split refines its wording, it does
+  // not move a capability between the buckets below.)
+  const answered = new Set(
+    security.outcomes
+      .filter((o) => o.status === 'applied' || o.status === 'already' || o.status === 'denied')
+      .map((o) => o.capability)
+  );
   const grantedSince = config.pendingAdmin.filter((capability) => {
     const current = security.outcomes.find((o) => o.capability === capability);
     return current !== undefined && (current.status === 'applied' || current.status === 'already');
   });
-  // Only what a read can answer is work an administrator can be chased for.
-  // Nothing reads back labels, review-ownership, repo-property, gate or
-  // merge-policy, so a record of one is exactly as true as the day it was
-  // written and no verify run will ever clear it — naming those in the same
-  // breath as a capability observed to be off sent operators to check settings
-  // that were already correct.
   const stillPending = config.pendingAdmin.filter(
-    (capability) => observable.has(capability) && !grantedSince.includes(capability)
+    (capability) => answered.has(capability) && !grantedSince.includes(capability)
   );
-  const unverifiable = config.pendingAdmin.filter((capability) => !observable.has(capability));
+  // Observed, but the answer was "not here to enable".
+  const unavailable = config.pendingAdmin.filter(
+    (capability) =>
+      !answered.has(capability) && security.outcomes.some((o) => o.capability === capability)
+  );
+  // Never read back at all: labels, review-ownership, repo-property, gate and
+  // merge-policy have no read side, so a record of one is exactly as true as
+  // the day it was written and no verify run will ever clear it.
+  const unverifiable = config.pendingAdmin.filter(
+    (capability) => !answered.has(capability) && !unavailable.includes(capability)
+  );
   const clauses = [
     stillPending.length > 0 ? `an administrator must still enable: ${stillPending.join(', ')}` : null,
+    unavailable.length > 0
+      ? `recorded as pending, but not available on this repository or not visible to this token, ` +
+        `so no administrator action would clear it: ${unavailable.join(', ')}`
+      : null,
     unverifiable.length > 0
       ? `recorded as pending; not verifiable with this token: ${unverifiable.join(', ')}`
       : null,
@@ -310,7 +414,12 @@ export async function verify(
   ].filter((s): s is string => s !== null);
   add(
     'pending-admin',
-    config.pendingAdmin.length === 0,
+    // The security-floor shape, for the same reason: `--gate` has one caller,
+    // the Azure gate template, running as a build service identity that cannot
+    // enable anything. Failing every pull request forever over a record only
+    // `redline init` can clear is a gate nobody keeps. An operator who asks
+    // whether onboarding finished is still told no, in both directions.
+    opts.gate === true ? stillPending.length === 0 : config.pendingAdmin.length === 0,
     config.pendingAdmin.length === 0
       ? 'nothing awaiting an administrator'
       : `partially onboarded — ${clauses.length > 0 ? clauses.join('. ') : 'nothing left outstanding'}`

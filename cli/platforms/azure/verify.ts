@@ -1,6 +1,9 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { RedlineError } from '../../core/errors.ts';
 import type {
   CapabilityOutcome,
+  GateMachinery,
   MergePolicy,
   PlatformVerify,
   PolicySetting,
@@ -27,6 +30,12 @@ import { createHostShapeError, isNonNullObject, isSuccess } from '../shape.ts';
 // not coercion.
 
 const hostShapeError = createHostShapeError('Azure DevOps');
+
+// The pipeline `installGate` writes. Azure Repos ignores YAML `pr:` triggers,
+// so this file plus the Build Validation policy are the whole of what runs the
+// gate: with the file gone, no status is ever published and a blocking Status
+// policy blocks every pull request forever.
+const GATE_PIPELINE = '.azuredevops/redline-gate.yml';
 
 function assertOk(status: number, path: string): void {
   if (!isSuccess(status)) {
@@ -178,18 +187,32 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
       // What this host cannot say is Redline's own. `applyPolicy` writes no
       // required-reviewers policy at all here — Azure has no CODEOWNERS-driven
       // reviewer requirement — so `requireCodeOwnerReview` read off this host
-      // is never evidence about Redline's install. The reviewer count and
-      // comment resolution are Redline's only while the policy carrying them
-      // carries the Redline: marker; where a human already owned that control,
-      // init reported it and wrote nothing, and holding the repository to a
-      // value Redline never set would fail it on every pull request forever.
-      const ownsSetting = (config: PolicyConfiguration | undefined): boolean => {
-        const displayName = config?.settings['displayName'];
-        return typeof displayName === 'string' && displayName.startsWith(REDLINE_POLICY_MARKER);
+      // is never evidence about Redline's install.
+      //
+      // The reviewer count and comment resolution are a three-way split, and
+      // collapsing the last two hid the most obvious way to loosen an Azure
+      // repository. A policy of that type carrying the Redline: marker is
+      // Redline's, and its value is drift when it weakens. An UNMARKED policy
+      // of that type is a human's: `init` reported it and wrote nothing rather
+      // than stacking a second copy of a one-setting-per-branch control, so
+      // holding the repository to a value Redline never set would fail it on
+      // every pull request forever. NO policy of that type at all is neither:
+      // it is the state after someone deleted Redline's, and the values read
+      // back (0 approvers, threads not required) are the real, live weakening.
+      const ownership = (config: PolicyConfiguration | undefined): 'redline' | 'human' | 'absent' => {
+        if (config === undefined) return 'absent';
+        const displayName = config.settings['displayName'];
+        return typeof displayName === 'string' && displayName.startsWith(REDLINE_POLICY_MARKER)
+          ? 'redline'
+          : 'human';
       };
       const unownedSettings: PolicySetting[] = ['requireCodeOwnerReview'];
-      if (!ownsSetting(reviewers)) unownedSettings.push('requiredApprovals');
-      if (!ownsSetting(comments)) unownedSettings.push('requireThreadResolution');
+      // Both of these live in the minimum-reviewers policy's own settings
+      // (minimumApproverCount, resetOnSourcePush), so they share its ownership.
+      if (ownership(reviewers) === 'human') {
+        unownedSettings.push('requiredApprovals', 'dismissStaleReviews');
+      }
+      if (ownership(comments) === 'human') unownedSettings.push('requireThreadResolution');
 
       // A blocking Status policy with nothing to queue the pipeline reads as
       // advisory above, which on its own tells an operator the opposite of
@@ -217,6 +240,22 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
         unownedSettings,
         ...(advisoryReason !== null ? { advisoryReason } : {}),
       };
+    },
+
+    readGateMachinery(cwd: string): GateMachinery {
+      const abs = join(cwd, GATE_PIPELINE);
+      if (!existsSync(abs)) return { path: GATE_PIPELINE, present: false, publishes: null };
+      const body = readFileSync(abs, 'utf8');
+      // CONTRACT with platforms/azure/gate-template.yml: its final step posts
+      // a pull-request status whose context is this genre and name, and the
+      // Status branch policy requires exactly that. Editing either value in
+      // the installed file makes the policy unsatisfiable, which is the same
+      // outage a renamed caller job is on GitHub.
+      const publishes =
+        body.includes(`name: "${AZURE_STATUS_NAME}"`) && body.includes(`genre: "${AZURE_STATUS_GENRE}"`)
+          ? `${AZURE_STATUS_GENRE}/${AZURE_STATUS_NAME}`
+          : null;
+      return { path: GATE_PIPELINE, present: true, publishes };
     },
 
     async readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]> {

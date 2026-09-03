@@ -1,5 +1,8 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { createAzurePlatform } from '../index.ts';
 import { createAzureVerify } from '../verify.ts';
 import { createGit, type GitRunner } from '../../../core/git.ts';
@@ -151,7 +154,7 @@ test('settings Redline does not own on Azure are named rather than reported as i
   const policy = await createAzureVerify(fakeAzure(configurations(true))).readPolicy(ref);
   assert.deepEqual(
     [...(policy?.unownedSettings ?? [])].sort(),
-    ['requireCodeOwnerReview', 'requireThreadResolution', 'requiredApprovals']
+    ['dismissStaleReviews', 'requireCodeOwnerReview', 'requireThreadResolution', 'requiredApprovals']
   );
 });
 
@@ -354,4 +357,69 @@ test('readSecurityState reports advanced security dependency scanning alongside 
   });
   const state = await createAzureVerify(off).readSecurityState(ref);
   assert.equal(state.outcomes.find((o) => o.capability === 'dependency-alerts')?.status, 'denied');
+});
+
+// `unownedSettings` exists for settings Redline never owned — the code-owner
+// requirement it does not apply here, and a one-setting-per-branch policy a
+// human already owned that `init` backed off from. A Redline-owned policy an
+// administrator DELETED is the opposite: it is the most obvious way to loosen
+// an Azure repository, and routing it into the same list reported it clean.
+test('a deleted Redline reviewer policy is drift, not a setting Redline never owned', async () => {
+  const stripped = configurations(true);
+  const body = stripped['GET /Payments/_apis/policy/configurations'].body as {
+    value: { type: { id: string } }[];
+  };
+  body.value = body.value.filter((c) => c.type.id !== 'min-rev-id' && c.type.id !== 'comments-id');
+
+  const policy = await createAzureVerify(fakeAzure(stripped)).readPolicy(ref);
+  assert.deepEqual(policy?.unownedSettings, ['requireCodeOwnerReview']);
+  assert.equal(policy?.requiredApprovals, 0);
+  assert.equal(policy?.requireThreadResolution, false);
+});
+
+// --- the gate machinery on disk --------------------------------------------
+
+const azureDirs: string[] = [];
+after(() => {
+  for (const dir of azureDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+function azureRepoWith(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-azgate-'));
+  azureDirs.push(dir);
+  for (const [rel, contents] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, rel)), { recursive: true });
+    writeFileSync(join(dir, rel), contents);
+  }
+  return dir;
+}
+
+const PIPELINE = [
+  'steps:',
+  '  - script: npx --yes --package=redline-cli@latest redline verify --gate',
+  '  - script: |',
+  '      body=$(jq -n \'{state: $state, context: {name: "gate", genre: "redline"}}\')',
+  '',
+].join('\n');
+
+test('readGateMachinery names the status the installed pipeline would publish', () => {
+  const cwd = azureRepoWith({ '.azuredevops/redline-gate.yml': PIPELINE });
+  const machinery = createAzureVerify(fakeAzure({})).readGateMachinery(cwd);
+  assert.equal(machinery.present, true);
+  assert.equal(machinery.publishes, 'redline/gate');
+});
+
+test('a deleted gate pipeline reports absent', () => {
+  const cwd = azureRepoWith({ 'README.md': '# web\n' });
+  const machinery = createAzureVerify(fakeAzure({})).readGateMachinery(cwd);
+  assert.equal(machinery.path, '.azuredevops/redline-gate.yml');
+  assert.equal(machinery.present, false);
+  assert.equal(machinery.publishes, null);
+});
+
+test('a pipeline edited to publish a different status name publishes nothing the policy requires', () => {
+  const cwd = azureRepoWith({
+    '.azuredevops/redline-gate.yml': PIPELINE.replace('name: "gate"', 'name: "ci"'),
+  });
+  assert.equal(createAzureVerify(fakeAzure({})).readGateMachinery(cwd).publishes, null);
 });

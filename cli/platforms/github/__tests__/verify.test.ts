@@ -1,5 +1,8 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fakeGitHubClient } from '../../__tests__/fake-client.ts';
 import { createGitHubVerify } from '../verify.ts';
 import { createGitHubPlatform } from '../index.ts';
@@ -327,5 +330,98 @@ test('a 500 from the vulnerability-alerts endpoint is a host error, not a disabl
   await assert.rejects(
     createGitHubVerify(client).readSecurityState(ref),
     (err: unknown) => isRedlineError(err) && err.kind === 'host'
+  );
+});
+
+// --- the gate machinery on disk --------------------------------------------
+
+// The required check name is built from the caller job id plus the aggregate
+// job id in the reusable workflow, which is why templates/redline.yml carries
+// a DO NOT RENAME THE JOB warning. Reading the installed file back is the only
+// local evidence that distinguishes "the gate has not run yet" from "nothing
+// will ever run it".
+const CALLER = [
+  'name: Redline',
+  'on:',
+  '  pull_request:',
+  'jobs:',
+  '  redline-gate:',
+  '    uses: acme/.github/.github/workflows/redline-gate.yml@main',
+  '    with:',
+  '      adr-diff-threshold: 300',
+  '',
+].join('\n');
+
+function repoWith(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-gate-'));
+  gateDirs.push(dir);
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, rel)), { recursive: true });
+    writeFileSync(join(dir, rel), body);
+  }
+  return dir;
+}
+
+const gateDirs: string[] = [];
+after(() => {
+  for (const dir of gateDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+test('readGateMachinery names the check the installed caller workflow would publish', () => {
+  const cwd = repoWith({ '.github/workflows/redline.yml': CALLER });
+  const machinery = createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd);
+  assert.equal(machinery.present, true);
+  assert.equal(machinery.publishes, REQUIRED_CHECK);
+});
+
+test('a caller workflow whose job was renamed reports the check it would actually publish', () => {
+  const cwd = repoWith({ '.github/workflows/redline.yml': CALLER.replace('redline-gate:', 'ci-gate:') });
+  const machinery = createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd);
+  assert.equal(machinery.publishes, 'ci-gate / gate');
+});
+
+test('a deleted caller workflow reports absent, not a renamed job', () => {
+  const cwd = repoWith({ 'README.md': '# web\n' });
+  const machinery = createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd);
+  assert.equal(machinery.present, false);
+  assert.equal(machinery.publishes, null);
+  assert.equal(machinery.path, '.github/workflows/redline.yml');
+});
+
+test('a caller workflow that no longer calls the reusable gate publishes nothing', () => {
+  const cwd = repoWith({
+    '.github/workflows/redline.yml': CALLER.replace(/uses: .*/, 'runs-on: ubuntu-latest'),
+  });
+  assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).publishes, null);
+});
+
+// The cheapest loosening available on GitHub: flip the ruleset to Disabled or
+// Evaluate in the UI and every rule Redline installed stops applying, while
+// every field this adapter reads back stays identical.
+test('a ruleset switched out of active enforcement is reported as not in force', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [{ id: 42, name: 'Redline' }] },
+    'GET /repos/acme/web/rulesets/42': {
+      status: 200,
+      body: {
+        enforcement: 'evaluate',
+        rules: [{ type: 'pull_request', parameters: { required_approving_review_count: 1 } }],
+      },
+    },
+  });
+  const policy = await createGitHubVerify(client).readPolicy(ref);
+  assert.match(policy?.notEnforcedReason ?? '', /evaluate/);
+
+  const active = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [{ id: 42, name: 'Redline' }] },
+    'GET /repos/acme/web/rulesets/42': {
+      status: 200,
+      body: { enforcement: 'active', rules: [{ type: 'pull_request', parameters: {} }] },
+    },
+  });
+  assert.equal(
+    (await createGitHubVerify(active).readPolicy(ref))?.notEnforcedReason,
+    undefined,
+    'an active ruleset is in force and must carry no reason'
   );
 });

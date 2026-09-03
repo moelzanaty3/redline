@@ -465,3 +465,149 @@ test('a policy setting the host cannot attribute to Redline is named, not failed
   assert.equal(finding?.ok, true, finding?.detail);
   assert.match(finding?.detail ?? '', /not compared here: requireCodeOwnerReview, requiredApprovals/);
 });
+
+// --- round 2: the gate machinery itself ------------------------------------
+
+// The softened "no gate run observed yet" path swallowed the outage it was
+// meant to leave room for: a blocking repository whose gate workflow someone
+// deleted reported fully green and exited 0, while every pull request in it
+// waits forever on a check nothing will publish.
+test('a blocking repository whose gate workflow was deleted fails instead of being called un-run', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: true } });
+
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: ['redline-gate / gate'], blocking: true }));
+  platform.readReportedCheckNames = async () => ['build', 'unit tests'];
+  platform.readGateMachinery = () => ({
+    path: '.github/workflows/redline.yml',
+    present: false,
+    publishes: null,
+  });
+
+  const report = await verify(() => platform, { cwd, root });
+  assert.equal(report.ok, false, JSON.stringify(report.findings, null, 2));
+  const machinery = find(report, 'gate-machinery');
+  assert.equal(machinery?.ok, false, machinery?.detail);
+  assert.match(machinery?.detail ?? '', /\.github\/workflows\/redline\.yml/);
+  assert.ok(
+    !/open or update a pull request/.test(find(report, 'check-name-reported')?.detail ?? ''),
+    'a repository with no gate must not be told to open a pull request'
+  );
+});
+
+// templates/redline.yml carries a DO NOT RENAME THE JOB warning because the
+// required check name is built from the caller job id. A rename publishes
+// nothing the policy requires, and no reported name starts with `redline`, so
+// it took the soft path too.
+test('a caller job renamed away from the required check name fails', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: true } });
+
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: ['redline-gate / gate'], blocking: true }));
+  platform.readReportedCheckNames = async () => ['build'];
+  platform.readGateMachinery = () => ({
+    path: '.github/workflows/redline.yml',
+    present: true,
+    publishes: 'ci-gate / gate',
+  });
+
+  const report = await verify(() => platform, { cwd, root });
+  const machinery = find(report, 'gate-machinery');
+  assert.equal(machinery?.ok, false, machinery?.detail);
+  assert.match(machinery?.detail ?? '', /ci-gate \/ gate/);
+  assert.match(machinery?.detail ?? '', /redline-gate \/ gate/);
+});
+
+test('a gate that is installed and simply has not run yet keeps the soft report', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: true } });
+
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: ['redline-gate / gate'], blocking: true }));
+  platform.readReportedCheckNames = async () => ['build', 'unit tests'];
+
+  const report = await verify(() => platform, { cwd, root });
+  assert.equal(report.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.equal(find(report, 'gate-machinery')?.ok, true);
+  assert.match(find(report, 'check-name-reported')?.detail ?? '', /no gate run observed yet/);
+});
+
+// --- round 2: pendingAdmin against what a read can actually answer ----------
+
+// An administrator cannot enable Advanced Security on a tenant that is not
+// licensed for it. `unsupported` is this codebase's "nothing was observed",
+// and filing it as administrator work is the same false positive the rest of
+// this command exists to remove.
+test('a capability the host does not offer is never filed as work an administrator must do', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pendingAdmin: ['secret-scanning'] });
+  const platform = fakePlatform({
+    securityState: [
+      { capability: 'secret-scanning', status: 'unsupported', detail: 'Advanced Security unlicensed' },
+      { capability: 'push-protection', status: 'applied', detail: 'on' },
+    ],
+  });
+
+  const detail = find(await verify(() => platform, { cwd, root }), 'pending-admin')?.detail ?? '';
+  assert.ok(!/must still enable/.test(detail), detail);
+  assert.match(detail, /secret-scanning/);
+});
+
+// Same shape as security-floor: the Azure gate runs as the build service
+// identity, so a record nothing there can act on must not block every pull
+// request in the repository forever.
+test('--gate reports pendingAdmin nobody there can act on without failing, and names it', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pendingAdmin: ['labels'] });
+
+  const plain = await verify(() => fakePlatform(), { cwd, root });
+  assert.equal(find(plain, 'pending-admin')?.ok, false, 'an operator asking must still be told no');
+
+  const gated = await verify(() => fakePlatform(), { cwd, root, gate: true });
+  const finding = find(gated, 'pending-admin');
+  assert.equal(finding?.ok, true, finding?.detail);
+  assert.match(finding?.detail ?? '', /labels/);
+
+  // The other half of the ruling, in the same test so neither direction can
+  // be satisfied alone: a capability the host reports as off is work someone
+  // can actually do, and keeps failing in both modes.
+  writeConfig(cwd, { ...config, pendingAdmin: ['secret-scanning'] });
+  const denied = fakePlatform({
+    securityState: [
+      { capability: 'secret-scanning', status: 'denied', detail: 'off' },
+      { capability: 'push-protection', status: 'applied', detail: 'on' },
+    ],
+  });
+  const stillFails = await verify(() => denied, { cwd, root, gate: true });
+  assert.equal(find(stillFails, 'pending-admin')?.ok, false, 'observed and off is work someone can do');
+});
+
+// --- round 2: an older CLI is not local drift either ------------------------
+
+test('a CLI rendering an older standards version than the repository recorded says so, and does not fail', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, standardsVersion: '99.0.0' });
+  writeFileSync(join(cwd, 'AGENTS.md'), 'rendered from a newer version\n');
+
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'artifacts-current');
+  assert.equal(finding?.ok, true, finding?.detail);
+  assert.ok(!/updated upstream/.test(finding?.detail ?? ''), finding?.detail);
+  assert.match(finding?.detail ?? '', /older/);
+});
+
+// The fourth setting `init` applies (init.ts: dismissStaleReviews true) and the
+// one the first round left uncompared. Turning it off lets an approval given
+// before the last push carry the merge, which is the same shape of loosening as
+// the other three and has the same one-click path on both hosts.
+test('a policy that no longer dismisses stale approvals on push is drift', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(cwd, policyOf({ dismissStaleReviews: false }));
+  const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /dismissed when new commits are pushed/);
+});

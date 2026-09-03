@@ -4,7 +4,9 @@ import { isPending } from '../../platforms/types.ts';
 import type {
   CapabilityOutcome,
   Change,
+  GateMachinery,
   GateOptions,
+  Host,
   InstallResult,
   MergePolicy,
   OwnershipRule,
@@ -31,6 +33,8 @@ export interface FakePlatformOptions {
   // labels there. It is report-only: `.redline.json` is part of the pull
   // request and was written before it, so this can never reach pendingAdmin.
   pullRequestOutcomes?: CapabilityOutcome[];
+  // What the local checkout says about the gate: absent, renamed, or healthy.
+  gateMachinery?: GateMachinery;
 }
 
 export interface FakePlatform extends Platform {
@@ -73,8 +77,24 @@ const GATE_BODY = '# Managed by Redline.\nuses: acme/.github/.github/workflows/r
 // Both real adapters sync a pull request template as part of installGate, and
 // `redline verify` observes the one the host would serve. A fake that skipped
 // it left every onboarded fixture looking like a repository whose template had
-// been deleted.
-const TEMPLATE_PATH = '.github/pull_request_template.md';
+// been deleted — and one that wrote GitHub's path on an Azure repository left
+// the Azure fixture looking the same way, because `.github/` is not among the
+// folders Azure serves a template from.
+//
+// CONTRACT with github/install.ts and azure/install.ts: these are the paths
+// those two write, and the gate machinery `verify` reads back off the disk.
+const HOST_FILES: Record<Host, { template: string; gate: string; publishes: string }> = {
+  github: {
+    template: '.github/pull_request_template.md',
+    gate: '.github/workflows/redline.yml',
+    publishes: 'redline-gate / gate',
+  },
+  azure: {
+    template: '.azuredevops/pull_request_template.md',
+    gate: '.azuredevops/redline-gate.yml',
+    publishes: 'redline/gate',
+  },
+};
 const TEMPLATE_BODY = [
   '# Summary',
   '',
@@ -136,7 +156,8 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       const files = (opts.gateFiles ?? ['.github/workflows/redline.yml']).filter((rel) =>
         seed(cwd, rel, GATE_BODY, check)
       );
-      if (seed(cwd, TEMPLATE_PATH, TEMPLATE_BODY, check)) files.push(TEMPLATE_PATH);
+      const templatePath = HOST_FILES[ref.host].template;
+      if (seed(cwd, templatePath, TEMPLATE_BODY, check)) files.push(templatePath);
       return { files, outcomes: check ? [] : (opts.gate ?? [ok('labels')]) };
     },
     async applyPolicy(_ref: RepoRef, policy: MergePolicy): Promise<PolicyResult> {
@@ -178,6 +199,14 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
         url: 'https://example/pr/1',
         ...(opts.pullRequestOutcomes ? { outcomes: opts.pullRequestOutcomes } : {}),
       };
+    },
+    // The real adapters read the installed gate file off the disk; this fake
+    // reports the healthy answer for the host unless a test overrides it, so
+    // the parsing itself is pinned where it lives — in the adapter tests.
+    readGateMachinery(): GateMachinery {
+      reads.push('readGateMachinery');
+      const host = HOST_FILES[ref.host];
+      return opts.gateMachinery ?? { path: host.gate, present: true, publishes: host.publishes };
     },
     async readPolicy(): Promise<MergePolicy | null> {
       reads.push('readPolicy');

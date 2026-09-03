@@ -10,27 +10,40 @@ after the table, such as when running this by hand to mirror what CI's gate chec
 Each line is a check. For any `FAIL`, explain what it means and what fixes it:
 
 - `onboarded` — the repository has no `.redline.json`. Run `redline init`.
-- `merge-policy` — the live branch policy no longer matches `.redline.json`. Re-run
-  `redline init` to reapply it.
-- `check-name-reported` — a gate run published a name the policy does not require. Where the
-  policy blocks, this blocks every pull request in the repository. Fix the caller job id, or
-  the policy. "No gate run observed yet" is not a failure: nothing has run on that pull
-  request's head commit, so there is nothing to compare.
+- `merge-policy` — the live branch policy has been loosened, or the ruleset that carries it is
+  no longer in force. The finding names what changed: the blocking flag, the approval count,
+  dismissing approvals on push, code-owner review, or unresolved-thread resolution. Re-run
+  `redline init` to reapply it. Settings the host cannot attribute to Redline are listed as
+  "not compared here" rather than held against the repository.
+- `gate-machinery` — the file that runs the gate is missing from this repository, or the job
+  that publishes the required check has been renamed. Nothing will ever report the gate, so a
+  blocking policy blocks every pull request forever. Re-run `redline init`, or rename the job
+  back to match the policy.
+- `check-name-reported` — a check ran on the pull request but the required name was never among
+  the ones reported. Where the policy blocks, this blocks every pull request in the repository.
+  Fix the caller job id, or the policy. "No gate run observed yet" is not a failure: no Redline
+  gate run has published anything on that pull request's head commit — other CI may well have —
+  and `gate-machinery` above is what says whether one ever could.
 - `security-floor` — secret scanning, push protection or dependency alerts has been turned off.
   A capability nothing could observe is named as unconfirmed, never counted as enabled.
 - `artifacts-current` — the rendered standards are stale against the version this repository
-  recorded. A newer standards version upstream is reported without failing: adopting it is
-  `redline init`, not drift.
+  recorded. A version difference in either direction is reported without failing, because
+  neither is drift: a newer version upstream is adopted by `redline init`, and an older one
+  means this CLI is behind the repository and wants updating, not re-running.
 - `pull-request-template` — the template the host actually serves is gone, has a broken
   `REDLINE:BEGIN`/`REDLINE:END` pair, or is missing a section the gate checks for, so the gate
   fails pull requests opened from it. Re-run `redline init` — but a mangled marker pair has to
   be repaired by hand first, because `init` refuses to write to it.
-- `pending-admin` — a repository administrator still has work to do. Entries no read can
-  answer (labels, review ownership, the repo property, the gate, the merge policy) are listed
-  separately as recorded-but-unverifiable rather than as work to chase.
+- `pending-admin` — a repository administrator still has work to do. Only capabilities a read
+  came back with an answer for are listed as work to chase. Entries the host reported as
+  unavailable, and entries no read can answer at all (labels, review ownership, the repo
+  property, the gate, the merge policy), are listed separately as recorded-but-unactionable.
+  Under `--gate` only the actionable ones fail, so a record only `redline init` can clear does
+  not block every pull request in the repository.
 
 A capability the host reports as **unsupported** — for example Azure DevOps Advanced Security
-when it isn't licensed on this repository — is not the same as **denied**: it never counts
-against `pending-admin`, because there is no administrator action that would change it.
+when it isn't licensed on this repository — is not the same as **denied**: it is never listed
+as work an administrator must do, because there is no administrator action that would change
+it. It is still named, so nobody mistakes silence for a clean bill.
 
 Do not attempt to fix host settings yourself. Report and stop.

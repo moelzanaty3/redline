@@ -204,8 +204,9 @@ Record seed scores here. A standards change with no measurement is an opinion.
   - Stale rendered artifacts are split by version. Where the installed CLI's standards
     version differs from the one `.redline.json` records, the finding reports "standards
     updated upstream (vX → vY) — re-run redline init to adopt" and does not fail; adopting
-    a release is `init`'s job. Where the versions match, staleness is local drift and still
-    fails. Publishing standards used to fail `verify` in every onboarded repository at once
+    a release is `init`'s job. A CLI pinned to an *older* standards version than the
+    repository recorded is told so instead, rather than sent to re-render the repository
+    backwards. Where the versions match, staleness is local drift and still fails. Publishing standards used to fail `verify` in every onboarded repository at once
     and, through the Azure gate, on every open pull request.
   - The merge-policy finding now compares the approvals count, code-owner review and thread
     resolution as well as the blocking flag, so an administrator loosening the review
@@ -222,6 +223,27 @@ Record seed scores here. A standards change with no measurement is an opinion.
   branch-specific template added after onboarding are all failing findings. A marker-less
   template that answers the gate on its own is reported and left alone, because that is
   exactly what `init` does with it.
+- `redline verify` observes the gate machinery itself, as a `gate-machinery` finding read from
+  the local checkout. Deleting `.github/workflows/redline.yml` (or `.azuredevops/redline-gate.yml`),
+  or renaming the caller job `templates/redline.yml` warns not to rename, leaves a blocking
+  repository where no pull request can ever satisfy the required check — and nothing observed
+  it, because `render()` covers only rendered standards artifacts. It now fails, which is also
+  what makes the softened "no gate run observed yet" report safe: that path may only mean the
+  gate has not run yet once the machinery that would run it is known to be in place.
+- `redline verify`'s `merge-policy` finding also catches a GitHub ruleset switched out of
+  `active` enforcement — the cheapest loosening on that host, and one every field this CLI
+  reads back survives unchanged — and an approvals policy that no longer dismisses stale
+  approvals on push. On Azure, a Redline-owned reviewer or comment policy that has been
+  DELETED is drift and fails; one a human owned all along is still reported without being
+  compared. The difference is whether a policy of that type is present but unmarked (a human's,
+  which `init` deliberately backed off from) or absent altogether (Redline's, removed).
+- `pending-admin` no longer files capabilities nobody can act on as work for an administrator.
+  A capability the host reported as unavailable — Advanced Security on an unlicensed Azure
+  tenant — and one nothing reads back at all are each named in their own clause, and only a
+  capability a read answered with "off" is listed as work to chase. Under `--gate`, which runs
+  as a build service identity that can enable nothing, only that actionable list fails; plain
+  `redline verify` still fails on any recorded entry, because an operator asking whether
+  onboarding finished must be told no.
 - `readSecurityState` covers dependency alerts on both hosts — GitHub through
   `GET /repos/{o}/{r}/vulnerability-alerts` (204 enabled, 404 disabled, 403 unobserved),
   Azure off the same Advanced Security flag its install writes — so the capability can be
