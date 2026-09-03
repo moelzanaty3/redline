@@ -9,6 +9,12 @@ import { loadManifest } from "@/lib/manifest";
 import { getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
 
+// Declared, not inherited from Next's default. Journey's loaders throw when
+// standards/manifest.json or commands/ cannot be resolved, and those throws are
+// a build gate only while this page is prerendered — anything that made it
+// dynamic would move them to request time and disarm them silently.
+export const dynamic = "force-static";
+
 const INSTALL_CMD = "npm i -g redline-cli";
 const ONBOARD_CMD = "redline init";
 

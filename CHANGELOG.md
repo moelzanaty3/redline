@@ -306,6 +306,15 @@ Record seed scores here. A standards change with no measurement is an opinion.
   line is CLI output (one is a `#` annotation, now named), the honesty caveat moved off
   `--faint` onto `--muted` so it passes AA in both themes, and the hero proof rail reads
   `manifest.version` instead of a hardcoded site constant that could drift from it.
+  Re-derived against the current CLI after the pull-request-template and verify work
+  landed: the transcript gained the `gate` capability outcome `installGate` now returns
+  second, and `redline verify`'s findings gained `gate-machinery` and
+  `pull-request-template` and a rewritten `merge-policy` detail — eight findings, two of
+  which read the local checkout rather than the host. The template row says what the
+  code does now (only the gated sections the template does not already answer, and a
+  template that answers both left untouched), and the merged row names the refusal path
+  `wrapBlock` grew for a malformed marker pair. `web/app/page.tsx` declares
+  `dynamic = "force-static"` so the page's build-time throws stay build-time.
 - A repository's own pull request template is no longer destroyed. `installGate` wrote
   `.github/pull_request_template.md` / `.azuredevops/pull_request_template.md` through a
   plain content compare, so the first `redline init` on a repository that already had a

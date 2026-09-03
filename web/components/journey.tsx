@@ -30,6 +30,12 @@ const EXAMPLE_PR = 42;
 
 // cli/platforms/github/install.ts — REQUIRED_CHECK.
 const GATE_CHECK = "redline-gate / gate";
+// cli/platforms/github/verify.ts — CALLER_WORKFLOW, the file readGateMachinery
+// reads the published check name out of; also the path installGate syncs.
+const CALLER_WORKFLOW = ".github/workflows/redline.yml";
+// cli/platforms/github/install.ts — the default template path, written when the
+// host would resolve none.
+const PR_TEMPLATE = ".github/pull_request_template.md";
 // cli/commands/init.ts — ONBOARD_BRANCH and the sync label applied to the onboarding PR.
 const ONBOARD_BRANCH = "redline/onboard";
 const SYNC_LABEL = "redline-sync";
@@ -138,23 +144,18 @@ export function Journey() {
   ];
   // cli/platforms/github/install.ts installGate + ensureReviewOwnership,
   // then cli/config/redline-json.ts CONFIG_FILE.
-  const hostFiles = [
-    ".github/workflows/redline.yml",
-    ".github/pull_request_template.md",
-    ".github/CODEOWNERS",
-    ".redline.json",
-  ];
+  const hostFiles = [CALLER_WORKFLOW, PR_TEMPLATE, ".github/CODEOWNERS", ".redline.json"];
   const writes = [...standardsFiles, ...commandFiles, ...hostFiles];
   // Written whole on every run: the non-merge branch of cli/render/standards.ts,
   // cli/render/commands.ts, and syncFile on the gate caller workflow.
-  const ownedFiles = [
-    ...instructionFiles,
-    ...commandFiles,
-    ".github/workflows/redline.yml",
-  ];
+  const ownedFiles = [...instructionFiles, ...commandFiles, CALLER_WORKFLOW];
 
+  // cli/commands/init.ts — [...gate.outcomes, ...ownership.outcomes,
+  // ...security.outcomes, ...policy.outcomes]. installGate returns two: the
+  // labels outcome and the pull-request-template one, in that order.
   const outcomes: [string, string, string][] = [
     ["applied", "labels", 'label "no-adr"'],
+    ["applied", "gate", `wrote ${PR_TEMPLATE}`],
     ["applied", "review-ownership", "seeded .github/CODEOWNERS"],
     ["applied", "secret-scanning", "secret scanning"],
     ["applied", "push-protection", "secret scanning push protection"],
@@ -163,15 +164,27 @@ export function Journey() {
     ["applied", "repo-property", 'repository property "redline=onboarded"'],
   ];
 
+  // cli/commands/verify.ts, in the order it calls add(). Details are the
+  // healthy branch of each: an advisory gate applied by `redline init` with its
+  // default menu (requiredApprovals 1, requireCodeOwnerReview from
+  // sensitivePathReviewers, which defaults true — cli/commands/init.ts:33,395-397).
   const findings: [string, string][] = [
     ["onboarded", `profile ${PROFILE}, standards v${version}`],
-    ["merge-policy", "policy is advisory, config says advisory"],
+    [
+      "merge-policy",
+      "policy is advisory as configured, 1 approval(s), code-owner review on",
+    ],
+    ["gate-machinery", `${CALLER_WORKFLOW} publishes ${GATE_CHECK}`],
     [
       "check-name-reported",
       `no required check configured yet (advisory gate) — PR #${EXAMPLE_PR} reported: ${GATE_CHECK}`,
     ],
     ["security-floor", "security floor enabled"],
     ["artifacts-current", `rendered artifacts match standards v${version}`],
+    [
+      "pull-request-template",
+      `${PR_TEMPLATE} — maintained inside REDLINE markers`,
+    ],
     ["pending-admin", "nothing awaiting an administrator"],
   ];
 
@@ -223,7 +236,7 @@ export function Journey() {
       k: "Branch policy and security floor",
       before: "never read back",
       beforeDetail: "whatever someone set by hand, whenever that was",
-      after: `${findings.length} checks, read off the host`,
+      after: `${findings.length} checks, read back every run`,
       afterDetail: "redline verify fails the moment one of them stops matching",
     },
   ];
@@ -301,7 +314,9 @@ export function Journey() {
                   <code>&lt;!-- REDLINE:END --&gt;</code>. A file that already exists
                   without them keeps everything in it and gets the block appended; a file
                   that has them keeps everything outside them. Redline owns its marked
-                  block and nothing else in the file.{" "}
+                  block and nothing else in the file, and a file whose markers are
+                  malformed — unpaired, duplicated, out of order — is refused and left
+                  untouched rather than guessed at.{" "}
                   <Link href="/docs/adaptors/agents-md">How the markers work →</Link>
                 </span>
               </li>
@@ -314,15 +329,16 @@ export function Journey() {
                 </span>
                 <span className="jr-fd">
                   The gate fails a pull request whose description has no{" "}
-                  <code>## Launch readiness</code> section, so the run merges that
-                  section and <code>## Architecture decision</code> in — inside the same
-                  markers, leaving everything outside them alone. It merges into the
-                  first template GitHub would resolve, searching <code>.github/</code>,
-                  the repository root and <code>docs/</code>, and writes the path above
-                  only where the host would resolve none. The template it writes there
-                  carries the markers too, so one rule holds everywhere. A template that
-                  already has its own <code>## Launch readiness</code> heading is left
-                  alone entirely.
+                  <code>## Launch readiness</code> section, so the run adds the gated
+                  sections the template does not already answer — that one, and{" "}
+                  <code>## Architecture decision</code> unless the file already links a{" "}
+                  <code>docs/adr/</code> — inside the same markers, leaving everything
+                  outside them alone. A template that answers both is left untouched. It
+                  merges into the first template GitHub would resolve, searching{" "}
+                  <code>.github/</code>, the repository root and <code>docs/</code>, and
+                  writes the path above only where the host would resolve none. The
+                  template Redline writes there carries the markers too, so one rule
+                  holds everywhere.
                 </span>
               </li>
               <li>
