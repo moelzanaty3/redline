@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { fakeGitHubClient } from '../../__tests__/fake-client.ts';
 import { createGit, type GitRunner } from '../../../core/git.ts';
 import { isRedlineError } from '../../../core/errors.ts';
-import { BEGIN, END } from '../../../render/markers.ts';
+import { BEGIN, END, findBlock } from '../../../render/markers.ts';
 import { createGitHubInstall, REQUIRED_CHECK, RULESET_NAME } from '../install.ts';
 import { isPending, type GateOptions, type MergePolicy, type RepoRef } from '../../types.ts';
 
@@ -792,6 +792,13 @@ test('the greenfield template is written with the gated sections inside the mark
     PACKAGED_TEMPLATE.indexOf(BEGIN),
     PACKAGED_TEMPLATE.indexOf(END) + END.length
   );
+  // The one write path that does not go through wrapBlock: the packaged file is
+  // written whole. It has to parse to exactly one well-formed block on its own,
+  // or the run that writes it leaves a file no later run can maintain.
+  assert.deepEqual(findBlock(PACKAGED_TEMPLATE, 'packaged'), {
+    start: PACKAGED_TEMPLATE.indexOf(BEGIN),
+    stop: PACKAGED_TEMPLATE.indexOf(END),
+  });
   assert.ok(PACKAGED_TEMPLATE.includes(BEGIN) && PACKAGED_TEMPLATE.includes(END));
   assert.match(block, /## Launch readiness/);
   assert.match(block, /## Architecture decision/);
@@ -989,4 +996,59 @@ test('a template hidden below an unclosed code fence is refused, not appended to
 
   await assert.rejects(() => install.installGate(ref, cwd, gateOpts), isRedlineError);
   assert.equal(templateAt(cwd), fenced);
+});
+
+// The counterexample that reopened this: a five-line brownfield template ending
+// in an open fence for the author to paste logs into — valid CommonMark, and a
+// common idiom. Run 1 used to write Redline's block INSIDE that code block, and
+// every run after it refused in the plan pass, so `redline init` and even
+// `--dry-run` stopped working on a repository that was fine before Redline
+// touched it.
+test('a template ending in an open code fence is refused, never written into the fence', async () => {
+  const cwd = tmp();
+  const human = '# PR\n\nPaste your logs:\n\n```\n';
+  seedTemplate(cwd, human);
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+
+  for (let run = 1; run <= 3; run += 1) {
+    await assert.rejects(
+      () => install.installGate(ref, cwd, gateOpts),
+      (error: unknown) => {
+        assert.ok(isRedlineError(error));
+        assert.equal(error.exitCode, 1);
+        assert.match(error.message, /pull_request_template\.md/);
+        return true;
+      },
+      `run ${run} must refuse`
+    );
+    assert.equal(templateAt(cwd), human, `run ${run} must not change a byte`);
+  }
+});
+
+test('a dry run refuses the same template rather than reporting a write it could not make', async () => {
+  const cwd = tmp();
+  const human = '# PR\n\nPaste your logs:\n\n```\n';
+  seedTemplate(cwd, human);
+
+  await assert.rejects(() => createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts, true), isRedlineError);
+  assert.equal(templateAt(cwd), human);
+});
+
+test('a template with a balanced fence still merges and is byte-stable across three runs', async () => {
+  const cwd = tmp();
+  const human = '# PR\n\nPaste your logs:\n\n```\n\n```\n';
+  seedTemplate(cwd, human);
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+
+  const first = await install.installGate(ref, cwd, gateOpts);
+  const merged = templateAt(cwd);
+  const second = await install.installGate(ref, cwd, gateOpts);
+  await install.installGate(ref, cwd, gateOpts);
+
+  assert.ok(merged.startsWith(human), 'the human template must survive verbatim');
+  assert.match(merged, /## Launch readiness/);
+  assert.equal(merged.split(BEGIN).length - 1, 1);
+  assert.equal(templateAt(cwd), merged, 'byte-stable from the first run');
+  assert.ok(first.files.includes('.github/pull_request_template.md'));
+  assert.ok(!second.files.includes('.github/pull_request_template.md'));
 });

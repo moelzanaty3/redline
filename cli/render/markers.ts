@@ -34,19 +34,46 @@ interface Scan {
   unterminatedFence: number | null;
 }
 
+// A fenced code block, per CommonMark: a rail of three or more backticks or
+// tildes, indented up to three spaces — or sitting on a list-item line, where
+// the rail is measured from the item's content column rather than the margin.
+// Without that second form, a list whose fence is opened on the bullet line and
+// closed at indent 2 reads as a lone opening rail, and a document that renders
+// perfectly gets refused.
+const FENCE = /^ {0,3}(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/;
+
+// Raw HTML: a comment that spans lines, or a block tag that runs to the next
+// blank line. Inside either, a rail is literal HTML content and not a fence —
+// missing that hid a real block behind a pair of spurious fences and appended a
+// second block beside it. This suppresses FENCE detection only, never marker
+// detection: not seeing a marker is the dangerous direction, and a BEGIN/END
+// line is a single-line comment that opens no block of its own.
+const HTML_COMMENT_OPEN = /^ {0,3}<!--/;
+const HTML_TAG_OPEN = /^ {0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:[ \t/>]|$)/;
+
 function scanMarkers(text: string, trackFences: boolean): Scan {
   const begins: number[] = [];
   const ends: number[] = [];
   let offset = 0;
   let fence: { char: string; length: number; offset: number } | null = null;
+  let html: 'comment' | 'tag' | null = null;
 
   for (const line of text.split('\n')) {
     const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
-    // CommonMark: a fence may be indented up to three spaces; a closing fence
-    // must use the same character, be at least as long as the opening one, and
-    // carry no info string — so a ```md line inside an open ``` fence is
-    // content, not the close.
-    const fenced = trackFences ? /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(bare) : null;
+
+    if (trackFences) {
+      if (html !== null) {
+        if (html === 'comment' ? bare.includes('-->') : bare.trim() === '') html = null;
+      } else if (fence === null) {
+        if (HTML_COMMENT_OPEN.test(bare) && !bare.includes('-->')) html = 'comment';
+        else if (HTML_TAG_OPEN.test(bare)) html = 'tag';
+      }
+    }
+
+    // A closing fence must use the same character, be at least as long as the
+    // opening one, and carry no info string — so a ```md line inside an open
+    // ``` fence is content, not the close.
+    const fenced = trackFences && html === null ? FENCE.exec(bare) : null;
     const rail = fenced?.[1];
     if (rail !== undefined) {
       const char = rail.slice(0, 1);
@@ -67,6 +94,21 @@ const MARKER_HINT =
   'Restore a single REDLINE:BEGIN … REDLINE:END pair around the generated block, or delete both ' +
   'marker lines and let the next run append a fresh block below your content. Redline made no ' +
   'change to that file.';
+
+// Names the line rather than the repair, because the repair depends on where
+// the fence is. Telling the operator to "move the REDLINE block above it" is
+// unfollowable when the fence was opened inside that very block — which is what
+// an unbalanced fence authored into the generated body looks like from here.
+function fenceHint(text: string, fenceOffset: number): string {
+  const line = text.slice(0, fenceOffset).split('\n').length;
+  return (
+    `Close the code fence opened on line ${line}. An unclosed fence runs to the end of the ` +
+    'document, so Redline cannot tell whether the REDLINE markers below it are its own block or ' +
+    'an illustration inside the code. If that line sits inside Redline\'s own generated block, ' +
+    'the generated content is unbalanced — fix its source, not this file. Redline made no change ' +
+    'to that file.'
+  );
+}
 
 function refuse(label: string, problem: string, hint = MARKER_HINT): never {
   throw new RedlineError(
@@ -92,14 +134,10 @@ export function findBlock(existing: string, label: string): MarkerSpan | null {
     // readings agree and nothing is being guessed.
     const hidden = scanMarkers(existing.slice(unterminatedFence), false);
     if (hidden.begins.length > 0 || hidden.ends.length > 0) {
-      const line = existing.slice(0, unterminatedFence).split('\n').length;
       refuse(
         label,
-        `has an unclosed code fence with REDLINE markers below it`,
-        `Close the code fence opened on line ${line}, or move the REDLINE block above it. An ` +
-          'unclosed fence runs to the end of the document, so Redline cannot tell whether the ' +
-          'markers below it are its own block or an illustration inside the code. Redline made no ' +
-          'change to that file.'
+        'has an unclosed code fence with REDLINE markers below it',
+        fenceHint(existing, unterminatedFence)
       );
     }
   }
@@ -115,16 +153,43 @@ export function findBlock(existing: string, label: string): MarkerSpan | null {
   return { start, stop };
 }
 
+// Validates the file it is about to WRITE, not only the one it read. `findBlock`
+// returning null is not a neutral observation — it is the instruction "append at
+// end of file", and end of file can be inside an unterminated fence, or inside a
+// region some future parser gap hides. Re-scanning the result and requiring the
+// block to come back as the one well-formed block, at the offset it was placed
+// at, checks the decision that was actually made rather than the one input it
+// was made from.
+function verifyWritten(result: string, expectedStart: number, label: string): string {
+  const { begins, ends, unterminatedFence } = scanMarkers(result, true);
+  const start = begins[0];
+  const stop = ends[0];
+  if (begins.length === 1 && ends.length === 1 && start === expectedStart && stop !== undefined && stop > start) {
+    return result;
+  }
+  throw new RedlineError(
+    'failed',
+    `Redline would have to write ${label} in a shape it cannot read back: the block it is about ` +
+      'to write does not come back as the one well-formed REDLINE block in the file, so a later ' +
+      'run could not find it again. Nothing was written.',
+    unterminatedFence === null ? MARKER_HINT : fenceHint(result, unterminatedFence)
+  );
+}
+
 export function wrapBlock(existing: string | null, body: string, label: string): string {
   const block = `${BEGIN}\n\n${body.trimEnd()}\n\n${END}\n`;
-  if (existing === null || existing === '') return block;
+  if (existing === null || existing === '') return verifyWritten(block, 0, label);
   const span = findBlock(existing, label);
   if (span === null) {
     // Byte-for-byte on the existing content: only the separator that makes the
     // appended block a paragraph of its own is added. Trimming the human's
     // trailing whitespace would be a change Redline was not asked to make.
     const gap = existing.endsWith('\n\n') ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
-    return `${existing}${gap}${block}`;
+    return verifyWritten(`${existing}${gap}${block}`, existing.length + gap.length, label);
   }
-  return existing.slice(0, span.start) + block.trimEnd() + existing.slice(span.stop + END.length);
+  return verifyWritten(
+    existing.slice(0, span.start) + block.trimEnd() + existing.slice(span.stop + END.length),
+    span.start,
+    label
+  );
 }

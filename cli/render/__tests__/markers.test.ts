@@ -6,9 +6,9 @@ import { BEGIN, BEGIN_PREFIX, END, findBlock, wrapBlock } from '../markers.ts';
 const LABEL = '.github/pull_request_template.md';
 const wrap = (existing: string | null, body: string): string => wrapBlock(existing, body, LABEL);
 
-const malformed = (existing: string): { message: string; exitCode: number } => {
+const malformed = (existing: string | null, body = 'NEW'): { message: string; exitCode: number } => {
   try {
-    wrap(existing, 'NEW');
+    wrap(existing, body);
   } catch (error) {
     assert.ok(isRedlineError(error), 'a malformed marker pair must fail as a RedlineError');
     return { message: error.message, exitCode: error.exitCode };
@@ -227,4 +227,91 @@ test('a fence opened inside the marked block is refused rather than silently swa
 test('a closing fence carrying an info string does not close the fence', () => {
   const { message } = malformed(`\`\`\`\nexample:\n\`\`\`md\n${BEGIN}\nX\n${END}\n`);
   assert.match(message, /unclosed code fence/);
+});
+
+// --- validating the file about to be WRITTEN, not only the one read.
+// `findBlock` returning null is not a neutral observation, it is the
+// instruction "append at end of file" — and end of file can be inside an
+// unterminated fence. Checking the marker set and acting on the write position
+// is checking one thing and deciding another.
+
+test('an unclosed fence with no markers refuses instead of writing the block inside the code block', () => {
+  // The idiom that made this reachable: a short template ending in an open
+  // fence for the author to paste into.
+  const { message, exitCode } = malformed('# PR\n\nPaste your logs:\n\n```\n');
+  assert.match(message, /pull_request_template\.md/);
+  assert.equal(exitCode, 1);
+});
+
+test('the append guard fires on the shape the refinement actually decides, not only where a block exists', () => {
+  // No block yet, fence above the append point: the one shape where the
+  // "no marker in the region" exemption changes the outcome.
+  assert.throws(() => wrap('# Team notes\n\n```sh\nnpm test\n', 'NEW'), isRedlineError);
+  // And the shape it was narrowed to keep: an unterminated fence BELOW an
+  // intact block, where the write is a replace and never enters the region.
+  const replaced = wrap(`${BEGIN}\n\nOLD\n\n${END}\n\n# Notes\n\n\`\`\`sh\nnever closed\n`, 'NEW');
+  assert.match(replaced, /NEW/);
+  assert.ok(replaced.endsWith('```sh\nnever closed\n'));
+});
+
+test('a generated body that leaves a fence open is refused before anything is written', () => {
+  // I1: standards/ content is emitted verbatim into the body. An unbalanced
+  // fence authored there would otherwise write a block nothing can find again,
+  // in every onboarded repository.
+  const { message } = malformed(null, '# Rules\n\n```sh\nnpm test\n');
+  assert.match(message, /pull_request_template\.md/);
+  assert.throws(() => wrap('# Existing\n', '# Rules\n\n```sh\nnpm test\n'), isRedlineError);
+});
+
+test('the unclosed-fence hint does not tell the operator to move a block that is inside the fence', () => {
+  try {
+    wrap(`${BEGIN}\n\n\`\`\`\nOLD\n\n${END}\n\nafter\n`, 'NEW');
+    throw new Error('expected a refusal');
+  } catch (error) {
+    assert.ok(isRedlineError(error));
+    assert.ok(
+      !(error.hint ?? '').includes('move the REDLINE block above it'),
+      'the block it names is the one inside the fence — that advice cannot be followed'
+    );
+    assert.match(error.hint ?? '', /generated block/);
+  }
+});
+
+// --- fence-parser states that silently appended a second block or refused a
+// document that renders correctly.
+
+test('a list-item code fence closed at the list content indent is not read as an unclosed fence', () => {
+  const existing = `# Docs\n\n- run this:\n\n- \`\`\`\n  npm test\n  \`\`\`\n\n${BEGIN}\n\nOLD\n\n${END}\n`;
+  const out = wrap(existing, 'NEW');
+  assert.match(out, /npm test/, 'the list item must survive');
+  assert.match(out, /NEW/);
+  assert.ok(!out.includes('OLD'));
+  assert.equal(out.split(BEGIN_PREFIX).length - 1, 1, 'no second block may be appended');
+});
+
+test('a fence inside a multi-line HTML comment is not a fence, so the real block is still replaced', () => {
+  const existing =
+    `# Docs\n\n<!--\n\`\`\`\nan aside\n-->\n\n${BEGIN}\n\nOLD\n\n${END}\n\n` +
+    `<!--\n\`\`\`\nanother aside\n-->\n`;
+  const out = wrap(existing, 'NEW');
+  assert.equal(out.split(BEGIN_PREFIX).length - 1, 1, 'the real block must be found, not duplicated');
+  assert.match(out, /NEW/);
+  assert.ok(!out.includes('OLD'));
+});
+
+test('a fence inside an HTML block is not a fence, so no second block is appended beside the real one', () => {
+  const existing =
+    `<div>\n\`\`\`\n</div>\n\n${BEGIN}\n\nOLD\n\n${END}\n\n` +
+    `<div>\n\`\`\`\n</div>\n`;
+  const out = wrap(existing, 'NEW');
+  assert.equal(out.split(BEGIN_PREFIX).length - 1, 1, 'the real block must be found, not abandoned');
+  assert.equal(out.split(END).length - 1, 1);
+  assert.match(out, /NEW/);
+  assert.ok(!out.includes('OLD'));
+});
+
+test('markers are still seen inside an HTML block, so suppressing fences there hides nothing', () => {
+  const out = wrap(`<div>\n${BEGIN}\n\nOLD\n\n${END}\n</div>\n`, 'NEW');
+  assert.equal(out.split(BEGIN_PREFIX).length - 1, 1);
+  assert.match(out, /NEW/);
 });

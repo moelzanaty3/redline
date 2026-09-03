@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render } from '../standards.ts';
+import { BEGIN_PREFIX } from '../markers.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const tmp = (t: TestContext): string => {
@@ -129,4 +130,46 @@ test('a file carrying two marker pairs refuses the render rather than picking on
 
   assert.throws(() => render({ root, profile: 'tooling', out }), /AGENTS\.md/);
   assert.equal(readFileSync(target, 'utf8'), doubled);
+});
+
+// The append shape of the same defect: with no block present yet, an
+// unterminated fence made findBlock report "nothing here", which wrapBlock read
+// as "append at end of file" — and end of file was inside the fence. Run 1 wrote
+// the block into a code block; every run after that refused, so the repository
+// was left less onboardable than before Redline touched it.
+test('an unclosed fence with no markers refuses the render instead of writing the block into the code block', (t) => {
+  const out = tmp(t);
+  const target = join(out, 'AGENTS.md');
+  const human = '# Team notes\n\n```sh\nnpm test\n';
+  mkdirSync(out, { recursive: true });
+  writeFileSync(target, human);
+
+  for (let run = 1; run <= 3; run += 1) {
+    assert.throws(
+      () => render({ root, profile: 'tooling', out }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /AGENTS\.md/);
+        return true;
+      },
+      `render ${run} must refuse rather than write into the fence`
+    );
+    assert.equal(readFileSync(target, 'utf8'), human, `render ${run} must not change a byte`);
+  }
+});
+
+test('a well-formed file still renders and is byte-stable across three runs', (t) => {
+  const out = tmp(t);
+  const target = join(out, 'AGENTS.md');
+  mkdirSync(out, { recursive: true });
+  writeFileSync(target, '# Team notes\n\n```sh\nnpm test\n```\n');
+
+  render({ root, profile: 'tooling', out });
+  const first = readFileSync(target, 'utf8');
+  render({ root, profile: 'tooling', out });
+  render({ root, profile: 'tooling', out });
+
+  assert.equal(readFileSync(target, 'utf8'), first);
+  assert.match(first, /^# Team notes/);
+  assert.equal(first.split(BEGIN_PREFIX).length - 1, 1);
 });

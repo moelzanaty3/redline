@@ -450,6 +450,36 @@ Record seed scores here. A standards change with no measurement is an opinion.
   path uses, measured against the content *outside* the block; when the file satisfies both
   gate jobs on its own, the block is left exactly as it is. Verified stable across three
   consecutive runs.
+- `wrapBlock` now validates the file it is about to WRITE, not only the one it read. The
+  previous guard checked whether an unterminated code fence hid any marker, and skipped the
+  refusal when it hid none — on the reasoning that both readings of the fence then produce
+  the same marker set. That is true of the marker set and false of the write: "no markers"
+  is not a neutral observation, it is the instruction *append at end of file*, and end of
+  file is inside the fence. So a five-line brownfield pull request template ending in an
+  open ``` — a common idiom, and valid CommonMark — had Redline's block written inside the
+  code block on the first run, after which every `redline init` and every `redline init
+  --dry-run` refused in the plan pass: the repository was left less onboardable than before
+  Redline ran, by Redline's own write. The result of every merge is now re-scanned and must
+  come back as the one well-formed REDLINE block, at the offset it was placed at, or the
+  run refuses before writing. The narrow case the old reasoning did hold for — an
+  unterminated fence *below* an intact block, where the write is a replace and never enters
+  the undecidable region — still writes, and is pinned by its own test.
+- The same output check closes a second failure with the same root: an unbalanced code
+  fence authored into `standards/` is emitted verbatim into the generated body, so the
+  block Redline wrote could not be found again. Previously the first render wrote the file
+  and every render afterwards refused — in every onboarded repository, with a hint naming a
+  line inside Redline's own generated block that the repository owner could not act on. The
+  first render now refuses instead, before writing, and the hint says that a fence inside
+  the generated block means the generated content is unbalanced and its source is what
+  needs fixing.
+- Three fence-parser corrections. A code fence opened on a list-item line
+  (`- ` + a rail) and closed at the item's content indent is now recognised as a pair,
+  instead of reading the closing rail as a lone opener and refusing a document that renders
+  correctly. A rail inside a multi-line HTML comment or an HTML block is no longer treated
+  as a fence — CommonMark says it is literal content — which had let a pair of spurious
+  fences hide a real marker block so that a second one was silently appended beside it and
+  the first abandoned. HTML tracking suppresses fence detection only, never marker
+  detection: not seeing a marker is the dangerous direction.
 
 ## 3.0.0 — 2026-09-02
 
