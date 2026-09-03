@@ -60,7 +60,7 @@ export function render(opts: RenderOptions): RenderResult {
   for (const [relPath, spec] of planned) {
     const target = join(out, relPath);
     const current = existsSync(target) ? readFileSync(target, 'utf8') : null;
-    const next = spec.merge ? wrapBlock(current, spec.body) : `${spec.body.trimEnd()}\n`;
+    const next = spec.merge ? wrapBlock(current, spec.body, relPath) : `${spec.body.trimEnd()}\n`;
     if (current === next) continue;
     if (check) {
       staleWritten.push(relPath);

@@ -19,7 +19,7 @@ import type {
 } from '../types.ts';
 import type { GitHubClient } from './client.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
-import { BEGIN_PREFIX, END, wrapBlock } from '../../render/markers.ts';
+import { BEGIN_PREFIX, END, findBlock, wrapBlock } from '../../render/markers.ts';
 
 export const RULESET_NAME = 'Redline';
 export const REQUIRED_CHECK = 'redline-gate / gate';
@@ -147,56 +147,114 @@ function syncFile(cwd: string, relPath: string, contents: string, check: boolean
 // with the heading a repository's own template already has. Dropping the ADR
 // section would leave a merged repository failing a gate job it has no
 // affordance to satisfy.
-const GATED_SECTIONS = ['Launch readiness', 'Architecture decision'];
+//
+// `satisfied` asks what the gate job asks, not what the section looks like.
+// The checklist job's awk matches the heading by prefix, so
+// `## Launch readiness checklist` already satisfies it and must not be given a
+// second, competing section. The adr job greps the whole body for `docs/adr/`,
+// so any existing ADR link satisfies it, heading or no heading.
+const GATED_SECTIONS = [
+  {
+    heading: 'Launch readiness',
+    satisfied: (template: string): boolean => /^##[ \t]+Launch readiness/m.test(template),
+  },
+  {
+    heading: 'Architecture decision',
+    satisfied: (template: string): boolean => template.includes('docs/adr/'),
+  },
+];
 
-function gatedSections(template: string): string {
+const ALL_GATED = GATED_SECTIONS.map((section) => section.heading);
+
+function gatedSections(template: string, headings: string[]): string {
   const kept: string[] = [];
   let inside = false;
   for (const line of template.split('\n')) {
     // The packaged template carries the markers itself, so a greenfield file is
     // marked from the first run. The marker lines are the wrapper wrapBlock
     // adds back, never part of the body it wraps.
-    if (line.startsWith(BEGIN_PREFIX) || line === END) continue;
+    if (line.startsWith(BEGIN_PREFIX) || line.startsWith(END)) continue;
     const heading = /^##\s+(.+?)\s*$/.exec(line);
-    if (heading) inside = GATED_SECTIONS.includes(heading[1] ?? '');
+    if (heading) inside = headings.includes(heading[1] ?? '');
     if (inside) kept.push(line);
   }
   return kept.join('\n').trim();
 }
 
-// Any filename the host would resolve as the default pull request template.
-// Both hosts match the name case-insensitively, so `PULL_REQUEST_TEMPLATE.md`
-// is the file being served and the one Redline must merge into — writing the
-// canonical lower-case path beside it would leave two templates with ambiguous
-// precedence, and if the host serves the human's, the Redline block is
-// invisible and the gate blocks every one of that repository's pull requests.
-const TEMPLATE_NAMES = new Set([
-  'pull_request_template.md',
-  'pull_request_template.txt',
-  'pull_request_template',
-]);
+// GitHub's documentation names only `pull_request_template.md`. `.txt` and
+// extension-less forms are not documented, and adopting an undocumented one as
+// the merge target risks merging into a file the host never serves while
+// creating no `.md` at all — so the served name is the only candidate.
+const TEMPLATE_NAMES = ['pull_request_template.md'];
 
 // GitHub resolves the default template from `.github/`, the repository root
-// and `docs/`, in that precedence — the same candidate order this adapter
-// already uses for CODEOWNERS.
+// and `docs/` — its documentation names the three folders but no precedence,
+// so this mirrors the candidate order this adapter already uses for CODEOWNERS.
 const TEMPLATE_DIRS = ['.github', '', 'docs'];
 
+interface Candidate {
+  abs: string;
+  rel: string;
+}
+
+// Resolved by listing rather than by `existsSync`, for two reasons the review
+// found the hard way: both hosts treat the folder name as case-insensitive, and
+// `existsSync` is case-insensitive on macOS but not on Linux, so a `.GitHub/`
+// checkout was silently missed on CI and a second template written beside the
+// served one. Listing also answers `isDirectory()`, which is what stops a plain
+// file named `docs` from throwing ENOTDIR mid-run, after the gate workflow has
+// already been written.
+function candidateDirs(cwd: string): Candidate[] {
+  const entries = readdirSync(cwd, { withFileTypes: true });
+  const found: Candidate[] = [];
+  for (const wanted of TEMPLATE_DIRS) {
+    if (wanted === '') {
+      found.push({ abs: cwd, rel: '' });
+      continue;
+    }
+    const dir = entries.find((entry) => entry.isDirectory() && entry.name.toLowerCase() === wanted);
+    if (dir) found.push({ abs: join(cwd, dir.name), rel: dir.name });
+  }
+  return found;
+}
+
+const under = (candidate: Candidate, name: string): string =>
+  candidate.rel === '' ? name : `${candidate.rel}/${name}`;
+
 function findPullRequestTemplate(cwd: string): string | null {
-  for (const dir of TEMPLATE_DIRS) {
-    const abs = dir === '' ? cwd : join(cwd, dir);
-    if (!existsSync(abs)) continue;
-    // `isFile()` is what excludes a `PULL_REQUEST_TEMPLATE/` directory of
-    // alternate templates. Those are reachable only through a `?template=`
-    // link and are never the default body, so Redline neither adopts one as
-    // the template nor rewrites anything inside it — it writes the default
-    // path instead, which is what a plain pull request would otherwise open
-    // with an empty body and fail the gate for.
-    const hit = readdirSync(abs, { withFileTypes: true }).find(
-      (entry) => entry.isFile() && TEMPLATE_NAMES.has(entry.name.toLowerCase())
-    );
-    if (hit) return dir === '' ? hit.name : `${dir}/${hit.name}`;
+  for (const candidate of candidateDirs(cwd)) {
+    const names = readdirSync(candidate.abs, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && TEMPLATE_NAMES.includes(entry.name.toLowerCase()))
+      .map((entry) => entry.name);
+    // Two case variants in one directory: the host picks one and does not say
+    // which, so the tie-break is at least deterministic rather than whatever
+    // order the filesystem happened to list. Canonical spelling first,
+    // preferred extension next, byte order last.
+    names.sort((a, b) => {
+      const byName = TEMPLATE_NAMES.indexOf(a.toLowerCase()) - TEMPLATE_NAMES.indexOf(b.toLowerCase());
+      if (byName !== 0) return byName;
+      if (a === b.toLowerCase()) return -1;
+      if (b === a.toLowerCase()) return 1;
+      return a < b ? -1 : 1;
+    });
+    const hit = names[0];
+    if (hit !== undefined) return under(candidate, hit);
   }
   return null;
+}
+
+// GitHub has no branch-specific templates: a `PULL_REQUEST_TEMPLATE/` directory
+// holds alternates reachable only through a `?template=` link, never the
+// default body. `isFile()` above is what skips it — Redline neither adopts one
+// as the template nor rewrites anything inside it, and writes the default path
+// instead, which is what a plain pull request there would otherwise open with
+// an empty body and fail the gate for. (Azure's branch templates are not the
+// same case and are handled in that adapter.)
+
+interface TemplateMerge {
+  path: string;
+  changed: boolean;
+  detail: string;
 }
 
 // A repository's own pull request template is a human-owned file, and this was
@@ -205,48 +263,62 @@ function findPullRequestTemplate(cwd: string): string | null {
 // whose body has no `## Launch readiness` section, so an untouched brownfield
 // template would block the repository's own pull requests. So: write the
 // packaged template only where the host would resolve none, and otherwise
-// merge just the gated sections into a REDLINE marker block, leaving every
-// other byte alone.
+// merge only the gated sections the file does not already satisfy into a
+// REDLINE marker block, leaving every other byte alone.
+function mergeTemplate(cwd: string, relPath: string, packaged: string, check: boolean): TemplateMerge {
+  const target = join(cwd, relPath);
+  const existing = existsSync(target) ? readFileSync(target, 'utf8') : null;
+  if (existing === null) {
+    return { path: relPath, changed: syncFile(cwd, relPath, packaged, check), detail: `wrote ${relPath}` };
+  }
+
+  // Throws on a half-edited marker pair rather than guessing which span is
+  // Redline's — see cli/render/markers.ts. Nothing is written on that path.
+  if (findBlock(existing, relPath) !== null) {
+    const contents = wrapBlock(existing, gatedSections(packaged, ALL_GATED), relPath);
+    const changed = syncFile(cwd, relPath, contents, check);
+    return {
+      path: relPath,
+      changed,
+      detail: changed
+        ? `refreshed the Redline block in ${relPath}`
+        : `${relPath} is already up to date`,
+    };
+  }
+
+  const missing = GATED_SECTIONS.filter((section) => !section.satisfied(existing)).map(
+    (section) => section.heading
+  );
+  if (missing.length === 0) {
+    // Also where a repository onboarded before the packaged template carried
+    // markers lands: its marker-less file already answers both gate jobs, so it
+    // keeps what it has and Redline never rewrites it.
+    return {
+      path: relPath,
+      changed: false,
+      detail: `${relPath} already satisfies the gate on its own — left untouched`,
+    };
+  }
+  const contents = wrapBlock(existing, gatedSections(packaged, missing), relPath);
+  const appended = missing.map((heading) => `"## ${heading}"`).join(' and ');
+  return {
+    path: relPath,
+    changed: syncFile(cwd, relPath, contents, check),
+    detail: `kept this repository's ${relPath} and appended ${appended} inside REDLINE markers`,
+  };
+}
+
 function syncPullRequestTemplate(
   cwd: string,
   defaultPath: string,
   packaged: string,
   check: boolean
-): { path: string; changed: boolean; detail: string } {
-  const relPath = findPullRequestTemplate(cwd) ?? defaultPath;
-  const target = join(cwd, relPath);
-  const existing = existsSync(target) ? readFileSync(target, 'utf8') : null;
-  const marked = existing !== null && existing.includes(BEGIN_PREFIX) && existing.includes(END);
-  // Already satisfies the gate on its own. This is also where a repository
-  // onboarded before the packaged template carried markers lands: its
-  // marker-less file is treated as the team's, so it keeps what it has and
-  // Redline never rewrites it.
-  const selfSufficient =
-    existing !== null && !marked && /^##[ \t]+Launch readiness[ \t]*$/m.test(existing);
+): { files: string[]; changed: boolean; detail: string } {
+  const results = [mergeTemplate(cwd, findPullRequestTemplate(cwd) ?? defaultPath, packaged, check)];
+  const details = [results[0]?.detail ?? ''];
 
-  const contents =
-    existing === null
-      ? packaged
-      : selfSufficient
-        ? existing
-        : wrapBlock(existing, gatedSections(packaged));
-  const changed = syncFile(cwd, relPath, contents, check);
-
-  if (selfSufficient) {
-    return {
-      path: relPath,
-      changed,
-      detail: `${relPath} already has its own "## Launch readiness" section — left untouched`,
-    };
-  }
-  if (!changed) return { path: relPath, changed, detail: `${relPath} is already up to date` };
-  if (existing === null) return { path: relPath, changed, detail: `wrote ${relPath}` };
-  if (marked) return { path: relPath, changed, detail: `refreshed the Redline block in ${relPath}` };
-  return {
-    path: relPath,
-    changed,
-    detail: `kept this repository's ${relPath} and appended the gated section inside REDLINE markers`,
-  };
+  const files = results.filter((result) => result.changed).map((result) => result.path);
+  return { files, changed: files.length > 0, detail: details.join('; ') };
 }
 
 function buildRules(policy: MergePolicy): unknown[] {
@@ -409,7 +481,7 @@ export function createGitHubInstall(
         template,
         check
       );
-      if (prTemplate.changed) files.push(prTemplate.path);
+      files.push(...prTemplate.files);
 
       if (check) return { files, outcomes: [] };
 
