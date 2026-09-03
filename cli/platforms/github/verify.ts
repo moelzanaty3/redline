@@ -162,6 +162,9 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
         requireThreadResolution: prParams.requiredReviewThreadResolution,
         requiredChecks: parseRequiredCheckContexts(checksRule?.parameters),
         blocking: checksRule !== undefined,
+        // No unownedSettings: the ruleset read here is the one named `Redline`
+        // and `applyPolicy` writes every field above into it, so each one is
+        // Redline's own and `verify` may hold the repository to all of them.
       };
     },
 
@@ -193,6 +196,19 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
         invisible ? 'unsupported' : statuses[key] === 'enabled' ? 'applied' : 'denied';
       const note = invisible ? ' (not visible to this token)' : '';
 
+      // Dependabot alerts live on their own endpoint, and it answers with a
+      // status rather than a body: 204 enabled, 404 disabled (the repository
+      // read above already proved the repository itself resolves, so a 404
+      // here is about the feature, not the path). 403 is the one case where
+      // nothing was learned — an indeterminate read is not an answer, and
+      // `denied` is the status that files work against an administrator. Any
+      // other non-2xx is a host failure, same as everywhere else in this file.
+      const alertsPath = `${path}/vulnerability-alerts`;
+      const alerts = await client.rest<unknown>('GET', alertsPath);
+      if (alerts.status !== 404 && alerts.status !== 403) assertOk(alerts.status, alertsPath);
+      const alertsStatus: CapabilityOutcome['status'] =
+        alerts.status === 403 ? 'unsupported' : alerts.status === 404 ? 'denied' : 'applied';
+
       return {
         outcomes: [
           {
@@ -204,6 +220,13 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
             capability: 'push-protection',
             status: stateFor('secret_scanning_push_protection'),
             detail: `secret scanning push protection${note}`,
+          },
+          {
+            capability: 'dependency-alerts',
+            status: alertsStatus,
+            detail: `dependabot alerts (vulnerability alerts)${
+              alertsStatus === 'unsupported' ? ' (not visible to this token)' : ''
+            }`,
           },
         ],
       };

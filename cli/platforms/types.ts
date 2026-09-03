@@ -59,7 +59,21 @@ export interface MergePolicy {
   // block. `redline verify` prints it with the merge-policy finding, so an
   // operator debugging stuck pull requests is pointed at the real cause.
   advisoryReason?: string;
+  // Read side only. Settings whose live value this host cannot attribute to
+  // Redline — either the adapter never applies them (Azure has no
+  // CODEOWNERS-driven required reviewers) or the policy carrying them is a
+  // human's that `redline init` deliberately backed off from rather than
+  // stacking a second copy of the same control. `redline verify` reports
+  // these and does not compare them: an indeterminate read is not an answer,
+  // and failing on one would block every pull request in a repository that is
+  // in exactly the state init left it in.
+  unownedSettings?: PolicySetting[];
 }
+
+export type PolicySetting =
+  | 'requiredApprovals'
+  | 'requireCodeOwnerReview'
+  | 'requireThreadResolution';
 
 export interface OwnershipRule {
   pattern: string;

@@ -190,10 +190,43 @@ Record seed scores here. A standards change with no measurement is an opinion.
   last naming the capabilities nobody observed (GitHub omits the block for a non-admin
   token; Azure returns 404 where Advanced Security is unlicensed). Plain `redline verify`
   fails on it: an operator asking whether the floor is on must not be told yes on no
-  evidence. `redline verify --gate` reports it without failing, because the Azure gate and
-  the fleet re-verification job both run with a token documented as read-only and a gate
-  that always fails is a gate nobody keeps. A capability that is present and off still
-  fails in both modes.
+  evidence. `redline verify --gate` reports it without failing, because that flag's only
+  caller is the Azure gate template, whose step runs as the build service identity — not a
+  repository administrator, so the Advanced Security enablement endpoint is routinely
+  invisible to it — and a gate that always fails is a gate nobody keeps. A capability that
+  is present and off still fails in both modes.
+- `redline verify` no longer fails a healthy repository for four different reasons.
+  - A required check missing from a pull request the gate never ran on is reported as "no
+    gate run observed yet", not as a broken contract: the host is asked about the newest
+    pull request of any state, which is routinely one that predates the gate. The failing
+    finding now needs a gate run to have published *something* on that head commit, and it
+    only claims every pull request is blocked when the policy actually blocks.
+  - Stale rendered artifacts are split by version. Where the installed CLI's standards
+    version differs from the one `.redline.json` records, the finding reports "standards
+    updated upstream (vX → vY) — re-run redline init to adopt" and does not fail; adopting
+    a release is `init`'s job. Where the versions match, staleness is local drift and still
+    fails. Publishing standards used to fail `verify` in every onboarded repository at once
+    and, through the Azure gate, on every open pull request.
+  - The merge-policy finding now compares the approvals count, code-owner review and thread
+    resolution as well as the blocking flag, so an administrator loosening the review
+    requirements is caught. Approvals are a floor, not an equality: a team requiring three
+    is stricter, not drifted. A host that cannot attribute a setting to Redline names it
+    (Azure applies no code-owner requirement at all, and backs off a reviewer or comment
+    policy a human already owns) and `verify` reports those without comparing them.
+  - The pending-admin finding scopes "an administrator must still enable" to the
+    capabilities a read can actually answer, and lists the rest as "recorded as pending;
+    not verifiable with this token".
+- `redline verify` now observes the pull request template the host would actually serve,
+  which nothing checked before: a deleted template, one whose `REDLINE:BEGIN`/`REDLINE:END`
+  pair a human half-edited (which `redline init` refuses to write to), and an Azure
+  branch-specific template added after onboarding are all failing findings. A marker-less
+  template that answers the gate on its own is reported and left alone, because that is
+  exactly what `init` does with it.
+- `readSecurityState` covers dependency alerts on both hosts — GitHub through
+  `GET /repos/{o}/{r}/vulnerability-alerts` (204 enabled, 404 disabled, 403 unobserved),
+  Azure off the same Advanced Security flag its install writes — so the capability can be
+  observed to be off, and a `dependency-alerts` entry recorded in `.redline.json` can be
+  answered rather than persisting forever.
 - `redline init --dry-run` prints the plan — the files it would write, the files it would
   remove, the repository settings it would change and the resolved menu — and exits 0
   having written nothing, contacted no host and required no credential. The repository

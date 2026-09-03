@@ -1,14 +1,15 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fakePlatform } from './fake-platform.ts';
+import { fakePlatform, type FakePlatform } from './fake-platform.ts';
 import { init } from '../init.ts';
 import { verify } from '../verify.ts';
 import { CONFIG_FILE, readConfig, writeConfig } from '../../config/redline-json.ts';
 import { RedlineError, isRedlineError } from '../../core/errors.ts';
+import type { MergePolicy } from '../../platforms/types.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const now = (): Date => new Date('2026-09-01T00:00:00.000Z');
@@ -226,4 +227,241 @@ test('a pendingAdmin capability that has since been granted is called out distin
   assert.match(finding?.detail ?? '', /partially onboarded/);
   assert.match(finding?.detail ?? '', /push-protection/);
   assert.match(finding?.detail ?? '', /secret-scanning.*now granted/);
+});
+
+// --- the gate contract: not-yet-run is not the same as reported-wrong -------
+
+const policyOf = (over: Partial<MergePolicy> = {}): MergePolicy => ({
+  requiredApprovals: 1,
+  dismissStaleReviews: true,
+  requireCodeOwnerReview: true,
+  requireThreadResolution: true,
+  requiredChecks: [],
+  blocking: false,
+  ...over,
+});
+
+async function withPolicy(cwd: string, policy: MergePolicy): Promise<FakePlatform> {
+  const platform = fakePlatform();
+  await platform.applyPolicy(await platform.repoRef(cwd), policy);
+  return platform;
+}
+
+// The newest pull request of any state is what the host is asked about, so a
+// healthy repository whose newest pull request predates the gate reported the
+// required check missing and exited 1 — on the Azure gate, on every pull
+// request.
+test('a pull request the gate never ran on is reported without being called a broken contract', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: true } });
+
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: ['redline-gate / gate'], blocking: true }));
+  platform.readReportedCheckNames = async () => ['build', 'unit tests'];
+
+  const report = await verify(() => platform, { cwd, root });
+  const finding = find(report, 'check-name-reported');
+  assert.equal(finding?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.match(finding?.detail ?? '', /no gate run observed yet/);
+});
+
+// Both halves in one test: Azure publishes a blocking Status policy whose
+// Build Validation policy is missing, so required checks exist while nothing
+// blocks on them. Telling that operator every pull request is blocked sends
+// them after the wrong thing; not telling the blocking one hides the outage.
+test('the "blocks every pull request" warning is claimed only when the policy actually blocks', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: true } });
+  const blocking = await withPolicy(cwd, policyOf({ requiredChecks: ['redline-gate / typo'], blocking: true }));
+  const blocked = find(await verify(() => blocking, { cwd, root }), 'check-name-reported');
+  assert.equal(blocked?.ok, false, blocked?.detail);
+  assert.match(blocked?.detail ?? '', /will block every pull request/);
+
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: false } });
+  const advisory = await withPolicy(cwd, policyOf({ requiredChecks: ['redline/typo'], blocking: false }));
+  const reported = find(await verify(() => advisory, { cwd, root }), 'check-name-reported');
+  assert.equal(reported?.ok, false, reported?.detail);
+  assert.ok(!/block every pull request/.test(reported?.detail ?? ''), reported?.detail);
+});
+
+// --- upstream standards versus local drift ----------------------------------
+
+// Publishing any change to standards/** used to fail `verify` in every
+// onboarded repository at once, and with it the Azure gate on every open pull
+// request. Adopting a new version is work for `redline init`, not drift.
+test('artifacts left behind by an upstream standards release are advice, not drift', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, standardsVersion: '0.0.0-older' });
+  writeFileSync(join(cwd, 'AGENTS.md'), 'rendered from the previous version\n');
+
+  const report = await verify(() => fakePlatform(), { cwd, root });
+  const finding = find(report, 'artifacts-current');
+  assert.equal(finding?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.match(finding?.detail ?? '', /standards updated upstream \(v0\.0\.0-older → v/);
+  assert.match(finding?.detail ?? '', /redline init/);
+
+  const gated = await verify(() => fakePlatform(), { cwd, root, gate: true });
+  assert.equal(find(gated, 'artifacts-current')?.ok, true, 'the gate must not fail on an upstream release');
+});
+
+// --- pendingAdmin: only chase an administrator for what a read can answer ---
+
+test('a pendingAdmin capability no read can answer is not reported as work an administrator must do', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pendingAdmin: ['labels', 'secret-scanning'] });
+  const platform = fakePlatform({
+    securityState: [
+      { capability: 'secret-scanning', status: 'denied', detail: 'off' },
+      { capability: 'push-protection', status: 'applied', detail: 'on' },
+    ],
+  });
+
+  const report = await verify(() => platform, { cwd, root });
+  const detail = find(report, 'pending-admin')?.detail ?? '';
+  assert.match(detail, /must still enable: secret-scanning/);
+  assert.match(detail, /not verifiable with this token: labels/);
+  assert.ok(!/must still enable: [^.]*labels/.test(detail), detail);
+});
+
+// --- merge policy: the settings init applied, not just the blocking flag ----
+
+test('a policy that no longer requires code-owner review is drift even while the gate still matches', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(cwd, policyOf({ requireCodeOwnerReview: false }));
+  const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /code-owner review/);
+});
+
+test('a policy that no longer blocks on unresolved threads is drift', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(cwd, policyOf({ requireThreadResolution: false }));
+  const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /thread/);
+});
+
+// The approval count is a floor, not an equality: a team that requires three
+// approvals is stricter than the standard, and failing them would fail their
+// gate on every pull request.
+test('a policy dropped to zero required approvals is drift, while a stricter one is not', async () => {
+  const cwd = await onboarded();
+  const dropped = await withPolicy(cwd, policyOf({ requiredApprovals: 0 }));
+  const finding = find(await verify(() => dropped, { cwd, root }), 'merge-policy');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /approval/);
+
+  const stricter = await withPolicy(cwd, policyOf({ requiredApprovals: 3 }));
+  assert.equal(find(await verify(() => stricter, { cwd, root }), 'merge-policy')?.ok, true);
+});
+
+// --- the pull request template the host actually serves ---------------------
+
+const GITHUB_TEMPLATE = '.github/pull_request_template.md';
+const SATISFYING_TEMPLATE = [
+  '# Summary',
+  '',
+  '## Launch readiness',
+  '',
+  '- [ ] Tested',
+  '',
+  '## Architecture decision',
+  '',
+  'ADR: `docs/adr/0001-thing.md`',
+  '',
+].join('\n');
+
+test('a pull request template whose markers a human mangled is a failing finding', async () => {
+  const cwd = await onboarded();
+  writeFileSync(
+    join(cwd, GITHUB_TEMPLATE),
+    [
+      '# Summary',
+      '<!-- REDLINE:BEGIN — generated by Redline. Do not edit inside this block. -->',
+      '## Launch readiness',
+      '<!-- REDLINE:BEGIN — generated by Redline. Do not edit inside this block. -->',
+      'ADR: docs/adr/0001-thing.md',
+      '<!-- REDLINE:END -->',
+      '',
+    ].join('\n')
+  );
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'pull-request-template');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /marker/);
+});
+
+// A repository onboarded before the packaged template carried markers keeps
+// its own file forever — `redline init` leaves it untouched, so verify must
+// not send anyone off to run one.
+test('a marker-less template that already answers the gate is reported without failing', async () => {
+  const cwd = await onboarded();
+  writeFileSync(join(cwd, GITHUB_TEMPLATE), SATISFYING_TEMPLATE);
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'pull-request-template');
+  assert.equal(finding?.ok, true, finding?.detail);
+  assert.match(finding?.detail ?? '', /pull_request_template\.md/);
+});
+
+test('a template with neither gated section fails, because the gate fails every pull request against it', async () => {
+  const cwd = await onboarded();
+  writeFileSync(join(cwd, GITHUB_TEMPLATE), '# Summary\n\nTicket:\n');
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'pull-request-template');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /Launch readiness/);
+});
+
+test('a deleted pull request template is drift, not silence', async () => {
+  const cwd = await onboarded();
+  rmSync(join(cwd, GITHUB_TEMPLATE));
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'pull-request-template');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /no pull request template/);
+});
+
+// Azure serves a branch template in preference to the default, so one added
+// after onboarding silently replaces everything `redline init` merged.
+test('a branch template added to an Azure repository after onboarding is drift', async () => {
+  const cwd = tempRepo('redline-verify-azure-');
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  const ref = {
+    host: 'azure' as const,
+    org: 'contoso',
+    project: 'Payments',
+    repo: 'web',
+    repoId: 'repo-guid',
+    defaultBranch: 'main',
+  };
+  await init(fakePlatform({ ref }), { cwd, root, now });
+  mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/pull_request_template.md'), SATISFYING_TEMPLATE);
+
+  const clean = find(await verify(() => fakePlatform({ ref }), { cwd, root }), 'pull-request-template');
+  assert.equal(clean?.ok, true, clean?.detail);
+
+  mkdirSync(join(cwd, '.azuredevops/pull_request_template/branches'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/pull_request_template/branches/release.md'), '# Release\n');
+  const drifted = find(await verify(() => fakePlatform({ ref }), { cwd, root }), 'pull-request-template');
+  assert.equal(drifted?.ok, false, drifted?.detail);
+  assert.match(drifted?.detail ?? '', /branches\/release\.md/);
+});
+
+// Azure never applies a code-owner requirement, and backs off a reviewer or
+// comment policy a human already owns. Holding a repository to a setting the
+// host cannot attribute to Redline would fail it forever — through the gate,
+// on every pull request — for being in exactly the state init left it in.
+test('a policy setting the host cannot attribute to Redline is named, not failed', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(
+    cwd,
+    policyOf({
+      requireCodeOwnerReview: false,
+      requiredApprovals: 0,
+      unownedSettings: ['requireCodeOwnerReview', 'requiredApprovals'],
+    })
+  );
+  const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
+  assert.equal(finding?.ok, true, finding?.detail);
+  assert.match(finding?.detail ?? '', /not compared here: requireCodeOwnerReview, requiredApprovals/);
 });

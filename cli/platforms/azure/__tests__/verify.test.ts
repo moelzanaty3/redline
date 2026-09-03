@@ -140,6 +140,32 @@ test('an enforcing gate carries no advisory reason', async () => {
   assert.equal(policy?.advisoryReason, undefined);
 });
 
+// Azure has no CODEOWNERS-driven required reviewers, and `applyPolicy` never
+// writes one — so a code-owner requirement read off this host says nothing
+// about drift. The reviewer and comment policies are the same story whenever a
+// human owns them: `redline init` deliberately backs off rather than stacking a
+// second copy of a one-setting-per-branch control. `verify` must be told which
+// settings it cannot hold this repository to, or it fails every Azure
+// repository on every pull request through the gate.
+test('settings Redline does not own on Azure are named rather than reported as its own', async () => {
+  const policy = await createAzureVerify(fakeAzure(configurations(true))).readPolicy(ref);
+  assert.deepEqual(
+    [...(policy?.unownedSettings ?? [])].sort(),
+    ['requireCodeOwnerReview', 'requireThreadResolution', 'requiredApprovals']
+  );
+});
+
+test('reviewer and comment policies Redline wrote are its own to be held to', async () => {
+  const owned = configurations(true);
+  const value = (owned['GET /Payments/_apis/policy/configurations'].body as {
+    value: { settings: Record<string, unknown> }[];
+  }).value;
+  value[0]!.settings['displayName'] = 'Redline: minimum reviewers';
+  value[1]!.settings['displayName'] = 'Redline: comment resolution';
+  const policy = await createAzureVerify(fakeAzure(owned)).readPolicy(ref);
+  assert.deepEqual(policy?.unownedSettings, ['requireCodeOwnerReview']);
+});
+
 test('a human build policy without the Redline marker does not count as the gate build', async () => {
   const policy = await createAzureVerify(
     fakeAzure(configurations(true, buildValidation('Nightly CI')))
@@ -304,4 +330,28 @@ test('latestPullRequestNumber surfaces a non-2xx response as a host error, not n
     createAzureVerify(client).latestPullRequestNumber(ref),
     (err: unknown) => isRedlineError(err) && err.kind === 'host'
   );
+});
+
+// The same enablement flag Advanced Security is switched on with covers
+// dependency scanning, and `enableSecurityFloor` records all three from it.
+// The read side reported only two, so a `dependency-alerts` entry recorded on
+// an Azure repository could never be answered either way.
+test('readSecurityState reports advanced security dependency scanning alongside the rest of the floor', async () => {
+  const enabled = fakeAzure({
+    'GET /Payments/_apis/management/repositories/repo-guid/enablement': {
+      status: 200,
+      body: { advSecEnabled: true, blockPushes: true },
+    },
+  });
+  const on = await createAzureVerify(enabled).readSecurityState(ref);
+  assert.equal(on.outcomes.find((o) => o.capability === 'dependency-alerts')?.status, 'applied');
+
+  const off = fakeAzure({
+    'GET /Payments/_apis/management/repositories/repo-guid/enablement': {
+      status: 200,
+      body: { advSecEnabled: false, blockPushes: false },
+    },
+  });
+  const state = await createAzureVerify(off).readSecurityState(ref);
+  assert.equal(state.outcomes.find((o) => o.capability === 'dependency-alerts')?.status, 'denied');
 });

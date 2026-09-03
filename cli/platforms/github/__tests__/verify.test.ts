@@ -265,7 +265,7 @@ test('a security block the token cannot see reads as unsupported, never as denie
   const state = await createGitHubVerify(client).readSecurityState(ref);
 
   assert.deepEqual(
-    state.outcomes.map((o) => o.status),
+    state.outcomes.filter((o) => o.capability !== 'dependency-alerts').map((o) => o.status),
     ['unsupported', 'unsupported']
   );
   assert.ok(!state.outcomes.some(isPending), 'an unobservable setting must never become pending admin work');
@@ -281,4 +281,51 @@ test('a security block that is present but off still reads as denied', async () 
   });
   const state = await createGitHubVerify(client).readSecurityState(ref);
   assert.equal(state.outcomes.find((o) => o.capability === 'secret-scanning')?.status, 'denied');
+});
+
+// `dependency-alerts` had no read-back at all, so a repository whose alerts an
+// administrator switched off after onboarding verified clean, and a
+// `dependency-alerts` entry recorded in `.redline.json` could never clear.
+test('dependency alerts GitHub reports as off read back as denied', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': { status: 200, body: { security_and_analysis: {} } },
+    'GET /repos/acme/web/vulnerability-alerts': { status: 404, body: { message: 'Not Found' } },
+  });
+  const state = await createGitHubVerify(client).readSecurityState(ref);
+  const alerts = state.outcomes.find((o) => o.capability === 'dependency-alerts');
+  assert.equal(alerts?.status, 'denied');
+});
+
+test('dependency alerts GitHub reports as on read back as applied', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': { status: 200, body: { security_and_analysis: {} } },
+    'GET /repos/acme/web/vulnerability-alerts': { status: 204 },
+  });
+  const state = await createGitHubVerify(client).readSecurityState(ref);
+  assert.equal(state.outcomes.find((o) => o.capability === 'dependency-alerts')?.status, 'applied');
+});
+
+// An indeterminate read is not an answer: a token refused the endpoint has
+// learned nothing about the repository, and `denied` is the status that files
+// work against an administrator.
+test('a token refused the vulnerability-alerts endpoint leaves dependency alerts unobserved, not denied', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': { status: 200, body: { security_and_analysis: {} } },
+    'GET /repos/acme/web/vulnerability-alerts': { status: 403, body: { message: 'Forbidden' } },
+  });
+  const state = await createGitHubVerify(client).readSecurityState(ref);
+  const alerts = state.outcomes.find((o) => o.capability === 'dependency-alerts');
+  assert.equal(alerts?.status, 'unsupported');
+  assert.ok(alerts !== undefined && !isPending(alerts));
+});
+
+test('a 500 from the vulnerability-alerts endpoint is a host error, not a disabled capability', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': { status: 200, body: { security_and_analysis: {} } },
+    'GET /repos/acme/web/vulnerability-alerts': { status: 500, body: { message: 'server error' } },
+  });
+  await assert.rejects(
+    createGitHubVerify(client).readSecurityState(ref),
+    (err: unknown) => isRedlineError(err) && err.kind === 'host'
+  );
 });

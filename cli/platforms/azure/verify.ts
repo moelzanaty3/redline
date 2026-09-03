@@ -3,6 +3,7 @@ import type {
   CapabilityOutcome,
   MergePolicy,
   PlatformVerify,
+  PolicySetting,
   RepoRef,
   SecurityResult,
 } from '../types.ts';
@@ -174,6 +175,22 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
 
       const minimumApproverCount = reviewers?.settings['minimumApproverCount'];
 
+      // What this host cannot say is Redline's own. `applyPolicy` writes no
+      // required-reviewers policy at all here — Azure has no CODEOWNERS-driven
+      // reviewer requirement — so `requireCodeOwnerReview` read off this host
+      // is never evidence about Redline's install. The reviewer count and
+      // comment resolution are Redline's only while the policy carrying them
+      // carries the Redline: marker; where a human already owned that control,
+      // init reported it and wrote nothing, and holding the repository to a
+      // value Redline never set would fail it on every pull request forever.
+      const ownsSetting = (config: PolicyConfiguration | undefined): boolean => {
+        const displayName = config?.settings['displayName'];
+        return typeof displayName === 'string' && displayName.startsWith(REDLINE_POLICY_MARKER);
+      };
+      const unownedSettings: PolicySetting[] = ['requireCodeOwnerReview'];
+      if (!ownsSetting(reviewers)) unownedSettings.push('requiredApprovals');
+      if (!ownsSetting(comments)) unownedSettings.push('requireThreadResolution');
+
       // A blocking Status policy with nothing to queue the pipeline reads as
       // advisory above, which on its own tells an operator the opposite of
       // what they need: the Status policy is the part that is right, and the
@@ -197,6 +214,7 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
         // and redline/gate is never published — a blocking status policy on
         // its own is a misconfiguration, not an enforcing gate.
         blocking: status?.isBlocking === true && gateBuild !== undefined,
+        unownedSettings,
         ...(advisoryReason !== null ? { advisoryReason } : {}),
       };
     },
@@ -243,6 +261,14 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
             capability: 'push-protection',
             status: statusFor(body?.blockPushes),
             detail: 'advanced security push protection',
+          },
+          // Read back off the same flag `enableSecurityFloor` records it from:
+          // dependency scanning is part of Advanced Security, not a separately
+          // switched feature, so `advSecEnabled` is the whole answer here.
+          {
+            capability: 'dependency-alerts',
+            status: statusFor(body?.advSecEnabled),
+            detail: 'advanced security dependency scanning',
           },
         ],
       };
