@@ -1,6 +1,15 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1158,4 +1167,105 @@ test('a dry run writes no pull request template, whatever the repository already
   assert.ok(plans[0]?.files.includes('.azuredevops/pull_request_template.md'));
   assert.ok(plans[1]?.files.includes('.azuredevops/pull_request_template.md'));
   assert.ok(!plans[2]?.files.includes('.azuredevops/pull_request_template.md'));
+});
+
+// Azure DevOps resolves the default template from `.azuredevops/`, the legacy
+// `.vsts/` folder, `docs/` and the repository root, matching the filename
+// case-insensitively. Same harm as on GitHub if Redline writes beside the one
+// the host actually serves.
+
+test('a template at a non-default candidate path is the file merged into, and no second one appears', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, 'docs'), { recursive: true });
+  writeFileSync(join(cwd, 'docs/pull_request_template.md'), HUMAN_TEMPLATE);
+
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(
+    ref,
+    cwd,
+    gateOpts
+  );
+
+  const merged = readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8');
+  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()));
+  assert.match(merged, /## Launch readiness/);
+  assert.ok(
+    !existsSync(join(cwd, '.azuredevops/pull_request_template.md')),
+    'no second template may be created beside the one the host resolves'
+  );
+  assert.deepEqual(result.files, ['.azuredevops/redline-gate.yml', 'docs/pull_request_template.md']);
+});
+
+test('a template whose filename differs only in case is the one merged into', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/PULL_REQUEST_TEMPLATE.md'), HUMAN_TEMPLATE);
+
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(
+    ref,
+    cwd,
+    gateOpts
+  );
+
+  const merged = readFileSync(join(cwd, '.azuredevops/PULL_REQUEST_TEMPLATE.md'), 'utf8');
+  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()), 'the human template must survive verbatim');
+  assert.match(merged, /## Launch readiness/);
+  assert.ok(result.files.includes('.azuredevops/PULL_REQUEST_TEMPLATE.md'));
+  assert.equal(
+    readdirSync(join(cwd, '.azuredevops')).filter((n) => n.toLowerCase() === 'pull_request_template.md')
+      .length,
+    1
+  );
+});
+
+test('a pull_request_template directory is never mistaken for the template and is left alone', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.azuredevops/pull_request_template'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/pull_request_template/bugfix.md'), HUMAN_TEMPLATE);
+
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(
+    ref,
+    cwd,
+    gateOpts
+  );
+
+  assert.equal(
+    readFileSync(join(cwd, '.azuredevops/pull_request_template/bugfix.md'), 'utf8'),
+    HUMAN_TEMPLATE
+  );
+  assert.equal(templateAt(cwd), PACKAGED_TEMPLATE);
+  assert.ok(result.files.includes('.azuredevops/pull_request_template.md'));
+});
+
+test('the greenfield template is written with the gated sections inside the markers', () => {
+  const block = PACKAGED_TEMPLATE.slice(
+    PACKAGED_TEMPLATE.indexOf(BEGIN),
+    PACKAGED_TEMPLATE.indexOf(END) + END.length
+  );
+  assert.ok(PACKAGED_TEMPLATE.includes(BEGIN) && PACKAGED_TEMPLATE.includes(END));
+  assert.match(block, /## Launch readiness/);
+  assert.match(block, /## Architecture decision/);
+  for (const outside of ['# Summary', '## Change type', '## Automated review']) {
+    assert.ok(!block.includes(outside), `${outside} is the team's to edit and belongs outside the block`);
+  }
+});
+
+test('Redline updates its own block in a template it wrote, and keeps what the team added around it', async () => {
+  const cwd = tmp();
+  const install = createAzureInstall(fakeAzure(registrationRoutes), gitFor);
+  await install.installGate(ref, cwd, gateOpts);
+  seedTemplate(
+    cwd,
+    templateAt(cwd)
+      .replace(/- \[ \] No unrelated changes in the diff/, '- [ ] hand-edited inside the block')
+      .replace(/## Automated review/, '## Our own section\n\n- [ ] our item\n\n## Automated review')
+  );
+
+  const result = await install.installGate(ref, cwd, gateOpts);
+  const after = templateAt(cwd);
+
+  assert.match(after, /- \[ \] No unrelated changes in the diff/, 'the block is Redline-owned and restored');
+  assert.ok(!after.includes('hand-edited inside the block'));
+  assert.match(after, /## Our own section/, 'content outside the block is the team\'s and survives');
+  assert.match(after, /- \[ \] our item/);
+  assert.ok(result.files.includes('.azuredevops/pull_request_template.md'));
 });

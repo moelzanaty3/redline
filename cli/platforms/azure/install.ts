@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RedlineError } from '../../core/errors.ts';
@@ -28,7 +28,7 @@ import {
   resolvePolicyTypeIds,
 } from './policy-types.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
-import { BEGIN, END, wrapBlock } from '../../render/markers.ts';
+import { BEGIN_PREFIX, END, wrapBlock } from '../../render/markers.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -218,17 +218,25 @@ function syncFile(cwd: string, relPath: string, contents: string, check: boolean
 }
 
 // The two sections workflows/redline-gate.yml actually reads out of a pull
-// request body: `## Launch readiness` (the `checklist` job fails the pull
-// request outright when it is missing) and the `docs/adr/` link the `adr`
-// job looks for. `## Change type` is explicitly not gated, `## Automated
-// review` is gated by nothing, and `# Summary` would collide with the
-// heading a repository's own template already has.
+// request body, and the reason it is these two and not the others: the
+// `checklist` job fails the pull request outright when `## Launch readiness`
+// is missing, and the `adr` job fails a large diff whose body carries no
+// `docs/adr/` link, which is what `## Architecture decision` prompts for.
+// `## Change type` is gated by nothing (the workflow says so in a comment),
+// `## Automated review` is gated by nothing, and `# Summary` would collide
+// with the heading a repository's own template already has. Dropping the ADR
+// section would leave a merged repository failing a gate job it has no
+// affordance to satisfy.
 const GATED_SECTIONS = ['Launch readiness', 'Architecture decision'];
 
 function gatedSections(template: string): string {
   const kept: string[] = [];
   let inside = false;
   for (const line of template.split('\n')) {
+    // The packaged template carries the markers itself, so a greenfield file is
+    // marked from the first run. The marker lines are the wrapper wrapBlock
+    // adds back, never part of the body it wraps.
+    if (line.startsWith(BEGIN_PREFIX) || line === END) continue;
     const heading = /^##\s+(.+?)\s*$/.exec(line);
     if (heading) inside = GATED_SECTIONS.includes(heading[1] ?? '');
     if (inside) kept.push(line);
@@ -236,27 +244,62 @@ function gatedSections(template: string): string {
   return kept.join('\n').trim();
 }
 
+// Any filename the host would resolve as the default pull request template.
+// Both hosts match the name case-insensitively, so `PULL_REQUEST_TEMPLATE.md`
+// is the file being served and the one Redline must merge into — writing the
+// canonical lower-case path beside it would leave two templates with ambiguous
+// precedence, and if the host serves the human's, the Redline block is
+// invisible and the gate blocks every one of that repository's pull requests.
+const TEMPLATE_NAMES = new Set([
+  'pull_request_template.md',
+  'pull_request_template.txt',
+  'pull_request_template',
+]);
+
+// Azure DevOps resolves the default template from `.azuredevops/`, the legacy
+// `.vsts/` folder, `docs/` and the repository root.
+const TEMPLATE_DIRS = ['.azuredevops', '.vsts', 'docs', ''];
+
+function findPullRequestTemplate(cwd: string): string | null {
+  for (const dir of TEMPLATE_DIRS) {
+    const abs = dir === '' ? cwd : join(cwd, dir);
+    if (!existsSync(abs)) continue;
+    // `isFile()` is what excludes a `PULL_REQUEST_TEMPLATE/` directory of
+    // alternate templates. Those are reachable only through a `?template=`
+    // link and are never the default body, so Redline neither adopts one as
+    // the template nor rewrites anything inside it — it writes the default
+    // path instead, which is what a plain pull request would otherwise open
+    // with an empty body and fail the gate for.
+    const hit = readdirSync(abs, { withFileTypes: true }).find(
+      (entry) => entry.isFile() && TEMPLATE_NAMES.has(entry.name.toLowerCase())
+    );
+    if (hit) return dir === '' ? hit.name : `${dir}/${hit.name}`;
+  }
+  return null;
+}
+
 // A repository's own pull request template is a human-owned file, and this was
 // the last host-writing path in either adapter that simply overwrote one.
 // Leaving it alone is not the fix either: the gate fails any pull request
 // whose body has no `## Launch readiness` section, so an untouched brownfield
 // template would block the repository's own pull requests. So: write the
-// packaged template only where there is none, and otherwise merge just the
-// gated sections into a REDLINE marker block, leaving every other byte alone.
-// Same semantics as cli/platforms/github/install.ts.
+// packaged template only where the host would resolve none, and otherwise
+// merge just the gated sections into a REDLINE marker block, leaving every
+// other byte alone.
 function syncPullRequestTemplate(
   cwd: string,
-  relPath: string,
+  defaultPath: string,
   packaged: string,
   check: boolean
-): { changed: boolean; detail: string } {
+): { path: string; changed: boolean; detail: string } {
+  const relPath = findPullRequestTemplate(cwd) ?? defaultPath;
   const target = join(cwd, relPath);
   const existing = existsSync(target) ? readFileSync(target, 'utf8') : null;
-  const marked = existing !== null && existing.includes(BEGIN) && existing.includes(END);
-  // Already satisfies the gate on its own — which includes the unmarked
-  // template Redline itself wrote on an earlier greenfield run. Appending here
-  // would leave the body with two `## Launch readiness` sections, and the
-  // gate's extraction reads both.
+  const marked = existing !== null && existing.includes(BEGIN_PREFIX) && existing.includes(END);
+  // Already satisfies the gate on its own. This is also where a repository
+  // onboarded before the packaged template carried markers lands: its
+  // marker-less file is treated as the team's, so it keeps what it has and
+  // Redline never rewrites it.
   const selfSufficient =
     existing !== null && !marked && /^##[ \t]+Launch readiness[ \t]*$/m.test(existing);
 
@@ -270,14 +313,16 @@ function syncPullRequestTemplate(
 
   if (selfSufficient) {
     return {
+      path: relPath,
       changed,
       detail: `${relPath} already has its own "## Launch readiness" section — left untouched`,
     };
   }
-  if (!changed) return { changed, detail: `${relPath} is already up to date` };
-  if (existing === null) return { changed, detail: `wrote ${relPath}` };
-  if (marked) return { changed, detail: `refreshed the Redline block in ${relPath}` };
+  if (!changed) return { path: relPath, changed, detail: `${relPath} is already up to date` };
+  if (existing === null) return { path: relPath, changed, detail: `wrote ${relPath}` };
+  if (marked) return { path: relPath, changed, detail: `refreshed the Redline block in ${relPath}` };
   return {
+    path: relPath,
     changed,
     detail: `kept this repository's ${relPath} and appended the gated section inside REDLINE markers`,
   };
@@ -721,7 +766,7 @@ export function createAzureInstall(
         template,
         check
       );
-      if (prTemplate.changed) files.push('.azuredevops/pull_request_template.md');
+      if (prTemplate.changed) files.push(prTemplate.path);
 
       if (check) return { files, outcomes: [] };
 

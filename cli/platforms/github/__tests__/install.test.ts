@@ -1,6 +1,15 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -682,4 +691,95 @@ test('a dry run writes no pull request template, whatever the repository already
   assert.ok(plans[0]?.files.includes('.github/pull_request_template.md'));
   assert.ok(plans[1]?.files.includes('.github/pull_request_template.md'));
   assert.ok(!plans[2]?.files.includes('.github/pull_request_template.md'));
+});
+
+// GitHub resolves the pull request template from the repository root, `docs/`
+// and `.github/`, and the filename is not case sensitive. Writing the default
+// path beside a human's template at any other candidate leaves two templates
+// with ambiguous precedence: if the host serves theirs, the Redline block is
+// invisible and the gate blocks every one of their pull requests.
+
+test('a template at a non-default candidate path is the file merged into, and no second one appears', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, 'docs'), { recursive: true });
+  writeFileSync(join(cwd, 'docs/pull_request_template.md'), HUMAN_TEMPLATE);
+
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
+
+  const merged = readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8');
+  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()));
+  assert.match(merged, /## Launch readiness/);
+  assert.ok(
+    !existsSync(join(cwd, '.github/pull_request_template.md')),
+    'no second template may be created beside the one the host resolves'
+  );
+  assert.deepEqual(result.files, ['.github/workflows/redline.yml', 'docs/pull_request_template.md']);
+});
+
+test('a template whose filename differs only in case is the one merged into', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github'), { recursive: true });
+  writeFileSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE.md'), HUMAN_TEMPLATE);
+
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
+
+  const merged = readFileSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8');
+  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()), 'the human template must survive verbatim');
+  assert.match(merged, /## Launch readiness/);
+  assert.ok(result.files.includes('.github/PULL_REQUEST_TEMPLATE.md'));
+  assert.equal(
+    readdirSync(join(cwd, '.github')).filter((n) => n.toLowerCase() === 'pull_request_template.md').length,
+    1
+  );
+});
+
+// A `PULL_REQUEST_TEMPLATE/` directory holds alternate templates reachable only
+// through a `?template=` link; it is not the default body. Redline must not
+// rewrite the files inside it, and the repository still needs a default
+// template or every plain pull request opens with an empty body and fails the gate.
+test('a PULL_REQUEST_TEMPLATE directory is never mistaken for the template and is left alone', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE'), { recursive: true });
+  writeFileSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE/bugfix.md'), HUMAN_TEMPLATE);
+
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
+
+  assert.equal(readFileSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE/bugfix.md'), 'utf8'), HUMAN_TEMPLATE);
+  assert.equal(templateAt(cwd), PACKAGED_TEMPLATE);
+  assert.ok(result.files.includes('.github/pull_request_template.md'));
+});
+
+test('the greenfield template is written with the gated sections inside the markers', () => {
+  const block = PACKAGED_TEMPLATE.slice(
+    PACKAGED_TEMPLATE.indexOf(BEGIN),
+    PACKAGED_TEMPLATE.indexOf(END) + END.length
+  );
+  assert.ok(PACKAGED_TEMPLATE.includes(BEGIN) && PACKAGED_TEMPLATE.includes(END));
+  assert.match(block, /## Launch readiness/);
+  assert.match(block, /## Architecture decision/);
+  for (const outside of ['# Summary', '## Change type', '## Automated review']) {
+    assert.ok(!block.includes(outside), `${outside} is the team's to edit and belongs outside the block`);
+  }
+});
+
+// Without markers on the greenfield file, Redline could never update the gated
+// sections in a repository it created the template in — and `redline verify`
+// does not observe the template at all, so the drift would be silent.
+test('Redline updates its own block in a template it wrote, and keeps what the team added around it', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  await install.installGate(ref, cwd, gateOpts);
+  const edited = templateAt(cwd)
+    .replace(/- \[ \] No unrelated changes in the diff/, '- [ ] hand-edited inside the block')
+    .replace(/## Automated review/, '## Our own section\n\n- [ ] our item\n\n## Automated review');
+  writeFileSync(join(cwd, '.github/pull_request_template.md'), edited);
+
+  const result = await install.installGate(ref, cwd, gateOpts);
+  const after = templateAt(cwd);
+
+  assert.match(after, /- \[ \] No unrelated changes in the diff/, 'the block is Redline-owned and restored');
+  assert.ok(!after.includes('hand-edited inside the block'));
+  assert.match(after, /## Our own section/, 'content outside the block is the team\'s and survives');
+  assert.match(after, /- \[ \] our item/);
+  assert.ok(result.files.includes('.github/pull_request_template.md'));
 });
