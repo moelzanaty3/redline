@@ -151,15 +151,15 @@ test('a corrupt config surfaces as a failed onboarding check, not a crash', asyn
   assert.equal(find(report, 'onboarded')?.ok, false);
 });
 
-// `unsupported` is every case where the floor was not observed at all: a
-// GitHub token that cannot see security_and_analysis, or Advanced Security
-// unlicensed on an Azure repository. Neither is evidence the floor is on.
-test('a capability nobody could observe is never reported as an enabled floor', async () => {
+// `unknown` (Task 17) is the indeterminate case: nothing was observed, and
+// unlike `unsupported` (genuinely unlicensed) a differently-scoped token
+// could still answer it. Neither is evidence the floor is on.
+test('an indeterminate capability is never reported as an enabled floor', async () => {
   const cwd = await onboarded();
   const platform = fakePlatform({
     security: [
       { capability: 'secret-scanning', status: 'applied', detail: 'on' },
-      { capability: 'push-protection', status: 'unsupported', detail: 'Advanced Security unlicensed' },
+      { capability: 'push-protection', status: 'unknown', detail: 'not visible to this token' },
     ],
   });
   const report = await verify(() => platform, { cwd, root });
@@ -169,15 +169,33 @@ test('a capability nobody could observe is never reported as an enabled floor', 
   assert.match(floor?.detail ?? '', /push-protection/, 'and it names what could not be checked');
 });
 
-// The Azure gate and the fleet re-verification job both run with a token that
-// is documented as read-only. A gate that always fails is a gate nobody keeps,
-// so an unobservable capability is reported there without failing the run.
-test('a capability nobody could observe does not fail --gate, and still says so', async () => {
+// The core Task 17 fix: a repository whose Advanced Security is genuinely
+// unlicensed — a DEFINITE answer, not an indeterminate one — must not fail a
+// plain `redline verify` forever with no operator remedy.
+test('a genuinely unlicensed capability no longer fails a plain verify', async () => {
   const cwd = await onboarded();
   const platform = fakePlatform({
     security: [
-      { capability: 'secret-scanning', status: 'unsupported', detail: 'not visible to this token' },
-      { capability: 'push-protection', status: 'unsupported', detail: 'not visible to this token' },
+      { capability: 'secret-scanning', status: 'applied', detail: 'on' },
+      { capability: 'push-protection', status: 'unsupported', detail: 'Advanced Security unlicensed' },
+    ],
+  });
+  const report = await verify(() => platform, { cwd, root });
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.ok(!/enabled/.test(floor?.detail ?? ''), 'no positive claim without evidence');
+  assert.match(floor?.detail ?? '', /push-protection/, 'and it still names what is unavailable');
+});
+
+// The Azure gate and the fleet re-verification job both run with a token that
+// is documented as read-only. A gate that always fails is a gate nobody keeps,
+// so an indeterminate capability is reported there without failing the run.
+test('an indeterminate capability does not fail --gate, and still says so', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    security: [
+      { capability: 'secret-scanning', status: 'unknown', detail: 'not visible to this token' },
+      { capability: 'push-protection', status: 'unknown', detail: 'not visible to this token' },
     ],
   });
   const report = await verify(() => platform, { cwd, root, gate: true });

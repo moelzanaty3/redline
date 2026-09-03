@@ -279,38 +279,48 @@ export async function verify(
     }
   }
 
-  // Three states, not two. `unsupported` is what both adapters report when
-  // nothing was observed at all — GitHub omits security_and_analysis entirely
-  // for a token without admin permission, and Azure returns 404 where Advanced
-  // Security is unlicensed — so it is neither "enabled" nor "disabled", and
-  // "security floor enabled" must never be printed on the strength of it. An
-  // operator who asks whether the floor is on is told no when nothing was
-  // observed. `--gate` has exactly one caller: platforms/azure/gate-template.yml,
-  // whose "Redline gate" step runs as `$(System.AccessToken)` — the build
-  // service identity, which is not a repository administrator and so is
-  // routinely refused the Advanced Security enablement endpoint. Failing there
-  // for what that identity structurally cannot see would block every pull
-  // request in the repository, and a gate that always fails is a gate nobody
-  // keeps, so the gate run is told what could not be checked without being
-  // failed for it. (workflows/verify-onboarding.yml, the fleet re-verification
-  // job, is `if: false` and still shells out to a deleted script — it invokes
-  // this CLI nowhere.) A `denied` capability fails in both modes.
+  // Four states, not two — `applied`/`already` are positive answers and
+  // `denied` is a negative one; all three are definite. `unsupported` and
+  // `unknown` are the two ways nothing was answered, and they are not the
+  // same thing (Task 17). `unsupported` is ALSO definite — Advanced Security
+  // is unlicensed on this Azure repository, so no administrator action ever
+  // makes it appear, and it must never fail a plain `redline verify` the way
+  // a real gap does. `unknown` is the indeterminate one — GitHub omits
+  // security_and_analysis for a token without admin permission, and Azure's
+  // enablement endpoint cannot tell "you cannot see this" apart from a
+  // well-formed refusal — so "security floor enabled" must never be printed
+  // on the strength of it either. `--gate` has exactly one caller:
+  // platforms/azure/gate-template.yml, whose "Redline gate" step runs as
+  // `$(System.AccessToken)` — the build service identity, which is not a
+  // repository administrator and so is routinely refused the Advanced
+  // Security enablement endpoint. Failing there for what that identity
+  // structurally cannot see would block every pull request in the
+  // repository, and a gate that always fails is a gate nobody keeps, so the
+  // gate run is told what could not be checked without being failed for it.
+  // (workflows/verify-onboarding.yml, the fleet re-verification job, is
+  // `if: false` and still shells out to a deleted script — it invokes this
+  // CLI nowhere.) A `denied` capability fails in both modes; an `unsupported`
+  // one never fails either.
   const security = await platform.readSecurityState(ref);
   const off = security.outcomes.filter((o) => o.status === 'denied').map((o) => o.capability);
-  const unobserved = security.outcomes
+  const unlicensed = security.outcomes
     .filter((o) => o.status === 'unsupported')
     .map((o) => o.capability);
-  const unobservedDetail = `not confirmed: ${unobserved.join(
-    ', '
-  )} — not visible to this token, or not available on this repository`;
+  const unobserved = security.outcomes
+    .filter((o) => o.status === 'unknown')
+    .map((o) => o.capability);
+  const unlicensedDetail = `not available on this repository: ${unlicensed.join(', ')}`;
+  const unobservedDetail = `not confirmed: ${unobserved.join(', ')} — not visible to this token`;
   add(
     'security-floor',
     off.length === 0 && (unobserved.length === 0 || opts.gate === true),
-    off.length > 0
-      ? `disabled: ${off.join(', ')}${unobserved.length > 0 ? `. ${unobservedDetail}` : ''}`
-      : unobserved.length > 0
-        ? unobservedDetail
-        : 'security floor enabled'
+    [
+      off.length > 0 ? `disabled: ${off.join(', ')}` : null,
+      unobserved.length > 0 ? unobservedDetail : null,
+      unlicensed.length > 0 ? unlicensedDetail : null,
+    ]
+      .filter((s): s is string => s !== null)
+      .join('. ') || 'security floor enabled'
   );
 
   // Read-only: render() runs in check mode, which reports staleness without
@@ -385,15 +395,17 @@ export async function verify(
   // the operator knows to re-run `redline init` and clear it), but the
   // finding still reports not-fully-onboarded while the record is stale.
   // Only a read that answered can produce work for an administrator, and the
-  // same three-state rule the security-floor finding runs on applies here.
-  // `applied`/`already`/`denied` are answers; `unsupported` is the status both
-  // adapters use for "nothing was observed" — the feature is not licensed on
-  // this repository, or the token cannot see it — and no administrator action
-  // changes either. Naming one of those as work to do sent operators to check
+  // same rule the security-floor finding runs on applies here.
+  // `applied`/`already`/`denied` are answers; `unsupported` and `unknown` are
+  // both "nothing was observed" from this clause's point of view — the
+  // capability may be genuinely unlicensed (`unsupported`), or the read may
+  // simply have been indeterminate (`unknown`, Task 17) — and no
+  // administrator action clears a pendingAdmin entry on the strength of
+  // either. Naming one of those as work to do sent operators to check
   // settings that were already correct, or that do not exist to be checked.
-  // (A later CLI splits `unsupported` into unlicensed and unobserved; the two
-  // land in this same clause today and the split refines its wording, it does
-  // not move a capability between the buckets below.)
+  // The security-floor finding tells the two apart in its own wording; this
+  // clause does not need to, because neither one moves a capability between
+  // the buckets below.
   const answered = new Set(
     security.outcomes
       .filter((o) => o.status === 'applied' || o.status === 'already' || o.status === 'denied')

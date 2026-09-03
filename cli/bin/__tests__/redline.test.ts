@@ -373,9 +373,10 @@ test('verify never asks for a lazy client either', async () => {
 
 // A GitHub token without admin permission cannot see security_and_analysis at
 // all — the token workflows/verify-onboarding.yml documents as read-only, and
-// the one the Azure gate template runs with. "Enabled" must not be claimed from
-// that, but a gate that always fails is a gate nobody keeps.
-test('a security floor nobody could observe fails verify, and reports without failing --gate', async () => {
+// the one the Azure gate template runs with. `unknown` (Task 17) is that
+// indeterminate case: "Enabled" must not be claimed from it, but a gate that
+// always fails is a gate nobody keeps.
+test('an indeterminate security floor fails verify, and reports without failing --gate', async () => {
   const cwd = repo();
   const { opts, lines } = deps(cwd);
   await run(['init'], opts);
@@ -385,8 +386,8 @@ test('a security floor nobody could observe fails verify, and reports without fa
     resolvePlatform: async () =>
       fakePlatform({
         securityState: [
-          { capability: 'secret-scanning' as const, status: 'unsupported' as const, detail: 'not visible' },
-          { capability: 'push-protection' as const, status: 'unsupported' as const, detail: 'not visible' },
+          { capability: 'secret-scanning' as const, status: 'unknown' as const, detail: 'not visible' },
+          { capability: 'push-protection' as const, status: 'unknown' as const, detail: 'not visible' },
         ],
       }),
   };
