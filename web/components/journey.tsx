@@ -44,14 +44,32 @@ const cmd = (text: string): Line => ({
   toks: [{ t: "$ ", c: "tk-prompt" }, white(text)],
 });
 
-// Mirrors cli/render/profile.ts resolveProfile — stacks in declaration order, parents first.
+// Mirrors cli/render/profile.ts resolveProfile — stacks in declaration order,
+// parents first — including both of its throws. The transcript's write list and
+// the after-band's file chips are both derived from what this returns, so a
+// profile the manifest cannot resolve has to fail the build: rendering two
+// short lists against a green build is the silent degradation this page exists
+// to avoid.
 function resolveStacks(manifest: Manifest, profile: string): string[] {
+  const key = manifest.profileAliases[profile] ?? profile;
+  const stacks = manifest.profiles[key];
+  if (stacks === undefined) {
+    throw new Error(
+      `standards/manifest.json has no profile "${profile}"; the home page renders its resolved file list`
+    );
+  }
   const out: string[] = [];
   const visit = (id: string): void => {
-    for (const parent of manifest.stacks[id]?.extends ?? []) visit(parent);
+    const stack = manifest.stacks[id];
+    if (stack === undefined) {
+      throw new Error(
+        `standards/manifest.json profile "${key}" references unknown stack "${id}"`
+      );
+    }
+    for (const parent of stack.extends ?? []) visit(parent);
     if (!out.includes(id)) out.push(id);
   };
-  (manifest.profiles[profile] ?? []).forEach(visit);
+  stacks.forEach(visit);
   return out;
 }
 
@@ -346,6 +364,11 @@ export function Journey() {
                 </span>
               </li>
             </ul>
+            <p className="jr-note">
+              Those are the paths of the GitHub run above; on Azure DevOps the host
+              files sit elsewhere.{" "}
+              <Link href="/docs/onboarding">Onboarding, host by host →</Link>
+            </p>
 
             <h4 className="jr-sub-h">The slash commands it installs</h4>
             <ul className="jr-cmds">
