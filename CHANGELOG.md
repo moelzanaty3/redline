@@ -210,6 +210,23 @@ Record seed scores here. A standards change with no measurement is an opinion.
   a `#` annotation, now named), the honesty caveat moved off `--faint` onto `--muted` for
   AA contrast, and the hero proof rail reads `manifest.version` instead of a hardcoded
   site constant that could drift from it.
+- A repository's own pull request template is no longer destroyed. `installGate` wrote
+  `.github/pull_request_template.md` / `.azuredevops/pull_request_template.md` through a
+  plain content compare, so the first `redline init` on a repository that already had a
+  template silently replaced it — the last host-writing path in either adapter with no
+  coexistence guard. Leaving it untouched is not the fix either: `redline-gate` fails any
+  pull request whose body has no `## Launch readiness` section, so an untouched template
+  would block the repository's own pull requests. Now: with no template present the
+  packaged one is written whole, as before; with a template present the file is kept
+  byte for byte and only the gated sections (`## Launch readiness`, which the `checklist`
+  job enforces, and `## Architecture decision`, which the `adr` job reads for a
+  `docs/adr/` link) are appended inside `REDLINE:BEGIN`/`END` markers through the same
+  `wrapBlock` the instruction files use; with markers already present only that span is
+  regenerated. A template that already carries its own `## Launch readiness` section —
+  which includes the one Redline itself wrote on an earlier run — is left alone rather
+  than given a second, duplicate one. Both adapters, identical semantics; the run reports
+  which of the four it did, and `--dry-run` writes nothing on every path. This supersedes
+  the "one shared-name file that is replaced" line above: the template is now merged.
 
 ## 3.0.0 — 2026-09-02
 

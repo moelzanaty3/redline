@@ -28,6 +28,7 @@ import {
   resolvePolicyTypeIds,
 } from './policy-types.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
+import { BEGIN, END, wrapBlock } from '../../render/markers.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -214,6 +215,72 @@ function syncFile(cwd: string, relPath: string, contents: string, check: boolean
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, contents);
   return true;
+}
+
+// The two sections workflows/redline-gate.yml actually reads out of a pull
+// request body: `## Launch readiness` (the `checklist` job fails the pull
+// request outright when it is missing) and the `docs/adr/` link the `adr`
+// job looks for. `## Change type` is explicitly not gated, `## Automated
+// review` is gated by nothing, and `# Summary` would collide with the
+// heading a repository's own template already has.
+const GATED_SECTIONS = ['Launch readiness', 'Architecture decision'];
+
+function gatedSections(template: string): string {
+  const kept: string[] = [];
+  let inside = false;
+  for (const line of template.split('\n')) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) inside = GATED_SECTIONS.includes(heading[1] ?? '');
+    if (inside) kept.push(line);
+  }
+  return kept.join('\n').trim();
+}
+
+// A repository's own pull request template is a human-owned file, and this was
+// the last host-writing path in either adapter that simply overwrote one.
+// Leaving it alone is not the fix either: the gate fails any pull request
+// whose body has no `## Launch readiness` section, so an untouched brownfield
+// template would block the repository's own pull requests. So: write the
+// packaged template only where there is none, and otherwise merge just the
+// gated sections into a REDLINE marker block, leaving every other byte alone.
+// Same semantics as cli/platforms/github/install.ts.
+function syncPullRequestTemplate(
+  cwd: string,
+  relPath: string,
+  packaged: string,
+  check: boolean
+): { changed: boolean; detail: string } {
+  const target = join(cwd, relPath);
+  const existing = existsSync(target) ? readFileSync(target, 'utf8') : null;
+  const marked = existing !== null && existing.includes(BEGIN) && existing.includes(END);
+  // Already satisfies the gate on its own — which includes the unmarked
+  // template Redline itself wrote on an earlier greenfield run. Appending here
+  // would leave the body with two `## Launch readiness` sections, and the
+  // gate's extraction reads both.
+  const selfSufficient =
+    existing !== null && !marked && /^##[ \t]+Launch readiness[ \t]*$/m.test(existing);
+
+  const contents =
+    existing === null
+      ? packaged
+      : selfSufficient
+        ? existing
+        : wrapBlock(existing, gatedSections(packaged));
+  const changed = syncFile(cwd, relPath, contents, check);
+
+  if (selfSufficient) {
+    return {
+      changed,
+      detail: `${relPath} already has its own "## Launch readiness" section — left untouched`,
+    };
+  }
+  if (!changed) return { changed, detail: `${relPath} is already up to date` };
+  if (existing === null) return { changed, detail: `wrote ${relPath}` };
+  if (marked) return { changed, detail: `refreshed the Redline block in ${relPath}` };
+  return {
+    changed,
+    detail: `kept this repository's ${relPath} and appended the gated section inside REDLINE markers`,
+  };
 }
 
 export function createAzureInstall(
@@ -648,9 +715,13 @@ export function createAzureInstall(
         join(PACKAGE_ROOT, 'templates/azure/pull_request_template.md'),
         'utf8'
       );
-      if (syncFile(cwd, '.azuredevops/pull_request_template.md', template, check)) {
-        files.push('.azuredevops/pull_request_template.md');
-      }
+      const prTemplate = syncPullRequestTemplate(
+        cwd,
+        '.azuredevops/pull_request_template.md',
+        template,
+        check
+      );
+      if (prTemplate.changed) files.push('.azuredevops/pull_request_template.md');
 
       if (check) return { files, outcomes: [] };
 
@@ -664,7 +735,14 @@ export function createAzureInstall(
         // No `labels` outcome here: Azure creates pull request labels on use
         // rather than pre-declaring them, so the capability is only exercised
         // when openPullRequest applies them — and it reports it there.
-        outcomes: [gate],
+        outcomes: [
+          gate,
+          {
+            capability: 'gate',
+            status: prTemplate.changed ? 'applied' : 'already',
+            detail: prTemplate.detail,
+          },
+        ],
       };
     },
 
