@@ -128,7 +128,7 @@ export function ValueCase() {
   const severityCount = new Set(rules.map((r) => r.severity)).size;
   const stackCount = Object.keys(manifest.stacks).length;
   const profileCount = Object.keys(manifest.profiles).length;
-  const vendorCount = Object.keys(manifest.vendors).length;
+  const vendorCount = Object.values(manifest.vendors).filter((v) => v.enabled).length;
 
   const pairs: Pair[] = [
     {
