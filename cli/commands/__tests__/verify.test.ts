@@ -150,7 +150,10 @@ test('a corrupt config surfaces as a failed onboarding check, not a crash', asyn
   assert.equal(find(report, 'onboarded')?.ok, false);
 });
 
-test('an unsupported security capability is not counted against the floor', async () => {
+// `unsupported` is every case where the floor was not observed at all: a
+// GitHub token that cannot see security_and_analysis, or Advanced Security
+// unlicensed on an Azure repository. Neither is evidence the floor is on.
+test('a capability nobody could observe is never reported as an enabled floor', async () => {
   const cwd = await onboarded();
   const platform = fakePlatform({
     security: [
@@ -159,7 +162,40 @@ test('an unsupported security capability is not counted against the floor', asyn
     ],
   });
   const report = await verify(() => platform, { cwd, root });
-  assert.equal(find(report, 'security-floor')?.ok, true, JSON.stringify(report.findings, null, 2));
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.ok, false, JSON.stringify(report.findings, null, 2));
+  assert.ok(!/enabled/.test(floor?.detail ?? ''), 'no positive claim without evidence');
+  assert.match(floor?.detail ?? '', /push-protection/, 'and it names what could not be checked');
+});
+
+// The Azure gate and the fleet re-verification job both run with a token that
+// is documented as read-only. A gate that always fails is a gate nobody keeps,
+// so an unobservable capability is reported there without failing the run.
+test('a capability nobody could observe does not fail --gate, and still says so', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    security: [
+      { capability: 'secret-scanning', status: 'unsupported', detail: 'not visible to this token' },
+      { capability: 'push-protection', status: 'unsupported', detail: 'not visible to this token' },
+    ],
+  });
+  const report = await verify(() => platform, { cwd, root, gate: true });
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.ok(!/enabled/.test(floor?.detail ?? ''), 'not failing is not the same as confirmed');
+  assert.match(floor?.detail ?? '', /secret-scanning, push-protection/);
+});
+
+test('a disabled capability still fails under --gate', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    security: [
+      { capability: 'secret-scanning', status: 'applied', detail: '' },
+      { capability: 'push-protection', status: 'denied', detail: 'off' },
+    ],
+  });
+  const report = await verify(() => platform, { cwd, root, gate: true });
+  assert.equal(find(report, 'security-floor')?.ok, false, 'the soft treatment is for unobserved, not for off');
 });
 
 test('a host error mid-verify propagates rather than being reported as denied capabilities', async () => {

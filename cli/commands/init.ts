@@ -20,7 +20,6 @@ import type {
   AdminCapability,
   CapabilityOutcome,
   GateOptions,
-  MergePolicy,
   OwnershipRule,
   Platform,
   PullRequestRef,
@@ -180,26 +179,34 @@ export interface InitReport {
 // both adapters report "this token cannot see it" as well as "the feature is
 // not licensed here", and neither is an answer about whether an administrator
 // still has to act — so it leaves the record exactly as recorded, in both
-// directions. Nothing reads back `labels`, `review-ownership`, `repo-property`
-// or `gate` at all, so those are never in `security` and always survive.
+// directions. Nothing reads back `labels`, `review-ownership`, `repo-property`,
+// `gate` or `dependency-alerts` at all, so those are never in `security` and
+// always survive.
+//
+// `merge-policy` is the sixth capability with no read-back, and the one that
+// looks like it has one. `readPolicy` answers "a ruleset with Redline's name
+// exists"; `merge-policy` in pendingAdmin records "this token was refused the
+// write". On GitHub those split exactly along GET /rulesets (read) versus
+// PUT /rulesets/{id} (admin), so an administrator's ruleset reads back fine
+// for the write-but-not-admin token that cannot touch it. Clearing the record
+// from the read made the plan phase disagree with what the apply would record
+// — cleared here, re-recorded by the refused write, never settled, and from
+// the second re-run exit 1 on a non-fast-forward push to redline/onboard.
+// The accepted cost of leaving it: on a repository whose ruleset already
+// matches the menu, a recorded `merge-policy` survives even after an
+// administrator grants the rights, because nothing re-applies and nothing
+// reads write-permission back. That is the same standing cost the other five
+// carry, and the already-onboarded output qualifies the list as recorded at
+// the last run.
 const DEFINITE: CapabilityOutcome['status'][] = ['applied', 'already', 'denied'];
 
 function refreshPendingAdmin(
   recorded: AdminCapability[],
-  security: CapabilityOutcome[],
-  policy: MergePolicy | null
+  security: CapabilityOutcome[]
 ): AdminCapability[] {
   const answered = new Set<AdminCapability>(
     security.filter((o) => DEFINITE.includes(o.status)).map((o) => o.capability)
   );
-  // readPolicy is what answers for `merge-policy`, and it answers in one
-  // direction only: a policy that comes back exists, so the ruleset was
-  // created and a recorded refusal is stale. A null read is indeterminate —
-  // the ruleset a refused install never created reads null, and so does a
-  // token that cannot list rulesets — so a recorded entry survives it and
-  // nothing is added. Hardcoding `merge-policy` as answered made every
-  // repository onboarded without admin rights permanently unsettled.
-  if (policy !== null) answered.add('merge-policy');
   const denied = security.filter(isPending).map((o) => o.capability);
   return [
     ...recorded.filter((capability) => !answered.has(capability) || denied.includes(capability)),
@@ -306,7 +313,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   if (existing !== null && settledOnFiles && !dryRun) {
     const policy = await platform.readPolicy(ref);
     const security = await platform.readSecurityState(ref);
-    livePendingAdmin = refreshPendingAdmin(existing.pendingAdmin, security.outcomes, policy);
+    livePendingAdmin = refreshPendingAdmin(existing.pendingAdmin, security.outcomes);
     // A null policy read is not by itself drift. A repository onboarded
     // without admin rights never got a ruleset — that refusal is exactly what
     // `merge-policy` in pendingAdmin records — so null is its settled state.
@@ -341,7 +348,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       removals: [],
       outcomes: [],
       // Refreshed for the capabilities a read can answer (secret scanning,
-      // push protection, the merge policy) and equal to what .redline.json
+      // push protection) and equal to what .redline.json
       // records for the rest — if it were not equal, this would not be the
       // settled path. `bin` still marks it as recorded rather than measured.
       pendingAdmin: livePendingAdmin ?? existing.pendingAdmin,

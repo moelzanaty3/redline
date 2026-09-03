@@ -174,6 +174,26 @@ Record seed scores here. A standards change with no measurement is an opinion.
   now reported `unsupported` — "not visible to this token" — which neither files
   pending-admin work nor clears what is already recorded. A block that is present and not
   enabled is still `denied`.
+- Nothing reads back whether this token may *write* the merge policy, so a recorded
+  `merge-policy` refusal is never cleared by a read. `GET /rulesets` proves a ruleset
+  exists; `PUT /rulesets/{id}` is the admin call that gets refused, and the two come apart
+  for exactly the write-but-not-admin token above — on a repository whose ruleset an
+  administrator had already created, the plan phase cleared the entry and the refused
+  write re-recorded it on every run, so it never settled and `redline init` exited 1 from
+  the second re-run onward. The entry now persists, like `labels`, `review-ownership`,
+  `repo-property`, `gate` and `dependency-alerts`, and the already-onboarded output marks
+  the list "(as recorded at the last run)". A ruleset that is absent where the record says
+  it was applied, or that does not match the requested menu, is still drift and is still
+  re-applied — which is also what clears the entry once an administrator grants the rights.
+- `redline verify` no longer reports "security floor enabled" for a token that cannot see
+  the setting. The finding has three states — enabled, disabled, and not confirmed, the
+  last naming the capabilities nobody observed (GitHub omits the block for a non-admin
+  token; Azure returns 404 where Advanced Security is unlicensed). Plain `redline verify`
+  fails on it: an operator asking whether the floor is on must not be told yes on no
+  evidence. `redline verify --gate` reports it without failing, because the Azure gate and
+  the fleet re-verification job both run with a token documented as read-only and a gate
+  that always fails is a gate nobody keeps. A capability that is present and off still
+  fails in both modes.
 - `redline init --dry-run` prints the plan — the files it would write, the files it would
   remove, the repository settings it would change and the resolved menu — and exits 0
   having written nothing, contacted no host and required no credential. The repository

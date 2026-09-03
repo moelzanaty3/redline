@@ -18,6 +18,9 @@ export interface VerifyReport {
 export interface VerifyOptions {
   cwd: string;
   root: string;
+  // `redline verify --gate`, the run that publishes the merge-gate status.
+  // It changes exactly one verdict — see the security-floor finding.
+  gate?: boolean;
 }
 
 // The platform arrives as a thunk, not a value: resolving one builds a host
@@ -107,14 +110,33 @@ export async function verify(
     }
   }
 
-  // unsupported (e.g. Advanced Security unlicensed on this Azure repository)
-  // is never a failure — only an outright denial counts against the floor.
+  // Three states, not two. `unsupported` is what both adapters report when
+  // nothing was observed at all — GitHub omits security_and_analysis entirely
+  // for a token without admin permission, and Azure returns 404 where Advanced
+  // Security is unlicensed — so it is neither "enabled" nor "disabled", and
+  // "security floor enabled" must never be printed on the strength of it. An
+  // operator who asks whether the floor is on is told no when nothing was
+  // observed; the gate run, which the Azure gate template and the fleet
+  // re-verification job both drive with a token documented as read-only, is
+  // told what could not be checked without being failed for it — the same
+  // soft-fail shape the gate template already uses. A `denied` capability
+  // fails in both modes.
   const security = await platform.readSecurityState(ref);
   const off = security.outcomes.filter((o) => o.status === 'denied').map((o) => o.capability);
+  const unobserved = security.outcomes
+    .filter((o) => o.status === 'unsupported')
+    .map((o) => o.capability);
+  const unobservedDetail = `not confirmed: ${unobserved.join(
+    ', '
+  )} — not visible to this token, or not available on this repository`;
   add(
     'security-floor',
-    off.length === 0,
-    off.length === 0 ? 'security floor enabled' : `disabled: ${off.join(', ')}`
+    off.length === 0 && (unobserved.length === 0 || opts.gate === true),
+    off.length > 0
+      ? `disabled: ${off.join(', ')}${unobserved.length > 0 ? `. ${unobservedDetail}` : ''}`
+      : unobserved.length > 0
+        ? unobservedDetail
+        : 'security floor enabled'
   );
 
   // Read-only: render() runs in check mode, which reports staleness without

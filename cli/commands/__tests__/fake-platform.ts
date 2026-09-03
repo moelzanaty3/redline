@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { isPending } from '../../platforms/types.ts';
 import type {
   CapabilityOutcome,
   Change,
@@ -117,8 +118,15 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     },
     async applyPolicy(_ref: RepoRef, policy: MergePolicy): Promise<PolicyResult> {
       applied.push('applyPolicy');
-      platform.lastPolicy = policy;
-      return { outcomes: opts.policy ?? [ok('merge-policy'), ok('repo-property')], policy };
+      const outcomes = opts.policy ?? [ok('merge-policy'), ok('repo-property')];
+      // A refused write changes nothing on the host. Recording the policy
+      // anyway modelled a host where the denial still took effect, which is
+      // the one state `merge-policy` in pendingAdmin is about — and it is what
+      // hid a re-run that never converged when the ruleset was readable but
+      // not writable.
+      const wrote = !outcomes.some((o) => o.capability === 'merge-policy' && isPending(o));
+      if (wrote) platform.lastPolicy = policy;
+      return { outcomes, policy };
     },
     async enableSecurityFloor(): Promise<SecurityResult> {
       applied.push('enableSecurityFloor');

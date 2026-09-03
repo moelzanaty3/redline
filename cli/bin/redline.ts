@@ -169,7 +169,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       );
       // resolve is passed unevaluated: verify() must be able to report "not
       // onboarded" without a host credential — see cli/commands/verify.ts.
-      const report = await verify(() => resolve(cwd), { cwd, root });
+      const report = await verify(() => resolve(cwd), { cwd, root, gate: values.gate === true });
       log.report(report.findings);
 
       // verify() short-circuits to exactly one finding when .redline.json is

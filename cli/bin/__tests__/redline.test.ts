@@ -370,3 +370,30 @@ test('verify never asks for a lazy client either', async () => {
   assert.deepEqual(u.resolveOptions, [undefined]);
   assert.equal(u.constructions(), 1);
 });
+
+// A GitHub token without admin permission cannot see security_and_analysis at
+// all — the token workflows/verify-onboarding.yml documents as read-only, and
+// the one the Azure gate template runs with. "Enabled" must not be claimed from
+// that, but a gate that always fails is a gate nobody keeps.
+test('a security floor nobody could observe fails verify, and reports without failing --gate', async () => {
+  const cwd = repo();
+  const { opts, lines } = deps(cwd);
+  await run(['init'], opts);
+
+  const blind = {
+    ...opts,
+    resolvePlatform: async () =>
+      fakePlatform({
+        securityState: [
+          { capability: 'secret-scanning' as const, status: 'unsupported' as const, detail: 'not visible' },
+          { capability: 'push-protection' as const, status: 'unsupported' as const, detail: 'not visible' },
+        ],
+      }),
+  };
+
+  assert.equal(await run(['verify'], blind), 1, 'an operator must not be told yes on no evidence');
+  assert.ok(!lines.some((l) => l.includes('security floor enabled')));
+  assert.equal(await run(['verify', '--gate'], blind), 0);
+  assert.ok(lines.some((l) => l.includes('Redline gate passed.')));
+  assert.ok(lines.some((l) => l.includes('not confirmed: secret-scanning, push-protection')));
+});

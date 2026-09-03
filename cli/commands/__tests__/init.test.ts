@@ -667,28 +667,6 @@ test('a repository onboarded without admin rights settles instead of re-running 
   assert.deepEqual(report.pendingAdmin, ['merge-policy']);
 });
 
-test('a merge policy an administrator created since the last run clears the recorded refusal', async () => {
-  const cwd = repo();
-  await init(
-    fakePlatform({
-      policy: [
-        { capability: 'merge-policy', status: 'denied', detail: 'needs repository admin' },
-        { capability: 'repo-property', status: 'applied', detail: '' },
-      ],
-    }),
-    { cwd, root, now }
-  );
-  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['merge-policy']);
-
-  // The fake reads its own ADVISORY policy back, which is what an administrator
-  // creating the ruleset looks like.
-  const second = fakePlatform();
-  const report = await init(second, { cwd, root, now });
-
-  assert.equal(report.alreadyOnboarded, false, 'a stale refusal is work to do');
-  assert.deepEqual(readConfig(cwd)?.pendingAdmin, []);
-});
-
 test('a read that cannot see a capability leaves the recorded state exactly as recorded', async () => {
   const cwd = repo();
   await init(
@@ -735,4 +713,76 @@ test('a run that already has work to do never reads the host', async () => {
     ['repoRef'],
     'the drift reads only decide a run with nothing else to do — a read-side outage must not abort a real run'
   );
+});
+
+// `readPolicy` answers "a ruleset exists", never "this token may write one".
+// On GitHub the two split along GET /rulesets (read) and PUT /rulesets/{id}
+// (admin), which is exactly the write-but-not-admin actor this whole area is
+// about: the ruleset an administrator created reads back fine while every
+// write to it is refused.
+test('a ruleset the token can read but not write settles instead of re-applying forever', async () => {
+  const cwd = repo();
+  const platform = fakePlatform({
+    policy: [
+      { capability: 'merge-policy', status: 'denied', detail: 'needs repository admin' },
+      { capability: 'repo-property', status: 'applied', detail: '' },
+    ],
+  });
+
+  await init(platform, { cwd, root, now });
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['merge-policy']);
+  assert.notEqual(platform.lastPolicy, null, 'the ruleset an administrator created is still on the host');
+
+  for (const run of [2, 3, 4]) {
+    const before = platform.applied.length;
+    const report = await init(platform, { cwd, root, now });
+
+    assert.equal(report.alreadyOnboarded, true, `run ${run} must not treat a refused write as drift`);
+    assert.deepEqual(
+      platform.applied.slice(before),
+      [],
+      `run ${run} re-applied host settings, so run ${run + 1} will read the same refusal again`
+    );
+    assert.deepEqual(report.pendingAdmin, ['merge-policy'], `run ${run} lost the recorded refusal`);
+  }
+});
+
+test('a refused policy write leaves the host without the ruleset it was refused', async () => {
+  const cwd = repo();
+  const platform = fakePlatform({
+    policy: [
+      { capability: 'merge-policy', status: 'denied', detail: 'needs repository admin' },
+      { capability: 'repo-property', status: 'applied', detail: '' },
+    ],
+  });
+  // A repository with no Redline ruleset yet, whose install is then refused.
+  platform.lastPolicy = null;
+
+  await init(platform, { cwd, root, now });
+
+  assert.equal(platform.lastPolicy, null, 'a write the host refused created nothing to read back');
+});
+
+test('a granted merge-policy clears from the record on the next run that has a policy to write', async () => {
+  const cwd = repo();
+  await init(
+    fakePlatform({
+      policy: [
+        { capability: 'merge-policy', status: 'denied', detail: 'needs repository admin' },
+        { capability: 'repo-property', status: 'applied', detail: '' },
+      ],
+    }),
+    { cwd, root, now }
+  );
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['merge-policy']);
+
+  // The administrator granted the rights. Nothing reads write-permission back,
+  // so the record clears when a run actually writes the policy — here because
+  // the live advisory ruleset no longer matches the requested menu.
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now, menu: { blockingGate: true } });
+
+  assert.equal(report.alreadyOnboarded, false);
+  assert.ok(second.applied.includes('applyPolicy'));
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, []);
 });
