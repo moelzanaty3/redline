@@ -470,8 +470,7 @@ const CALLER_WITH_JOB_BODY_KEYS = [
   '  pull_request:',
   'jobs:',
   '  redline-gate:',
-  '    needs: []',
-  '    runs-on: ubuntu-latest',
+  "    if: github.event_name == 'pull_request'",
   '    permissions:',
   '      contents: read',
   '    with:',
@@ -480,7 +479,7 @@ const CALLER_WITH_JOB_BODY_KEYS = [
   '',
 ].join('\n');
 
-test('a job body with runs-on, permissions and a with: block before uses: still reports the job id, not a nested key', () => {
+test('a job body with if, permissions and a with: block before uses: still reports the job id, not a nested key', () => {
   const cwd = repoWith({ '.github/workflows/redline.yml': CALLER_WITH_JOB_BODY_KEYS });
   assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).publishes, REQUIRED_CHECK);
 });
