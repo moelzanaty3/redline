@@ -315,3 +315,44 @@ test('markers are still seen inside an HTML block, so suppressing fences there h
   assert.equal(out.split(BEGIN_PREFIX).length - 1, 1);
   assert.match(out, /NEW/);
 });
+
+// --- m4: a marker line prefixed by leading whitespace used to be invisible to
+// the scan, so a real block a human tab-indented (a paste, an autoformatter, a
+// manual edit) was read as absent and the next run appended a silent second
+// block beside it. Detection is now tolerant of leading whitespace; writing is
+// not — a found indented block is replaced and re-emitted at column zero.
+
+test('a tab-indented marker pair is found and replaced, not duplicated', () => {
+  const existing = `before\n\n\t${BEGIN}\n\n\tOLD\n\n\t${END}\n\nafter\n`;
+  const out = wrap(existing, 'NEW');
+  // The interior is Redline's to regenerate, same as any replace: OLD does
+  // not survive, and the new block lands at column zero, not re-indented.
+  assert.equal(out, `before\n\n${BEGIN}\n\nNEW\n\n${END}\n\nafter\n`);
+  assert.equal(out.split(BEGIN_PREFIX).length - 1, 1, 'no second block may be appended');
+  assert.equal(out.split(END).length - 1, 1);
+  assert.equal(wrap(out, 'NEW'), out, 'and it is stable across a second run');
+});
+
+test('a marker indented with plain spaces is found too', () => {
+  const existing = `head\n\n    ${BEGIN}\n\n    OLD\n\n    ${END}\n\ntail\n`;
+  const out = wrap(existing, 'NEW');
+  assert.equal(out.split(BEGIN_PREFIX).length - 1, 1);
+  assert.match(out, /NEW/);
+  assert.ok(!out.includes('OLD'));
+});
+
+test('a tab-indented BEGIN paired with a column-zero END is still found as the one span', () => {
+  // Only the BEGIN line picked up the indent — still a single well-formed
+  // pair, not an ambiguity, so it replaces rather than refusing.
+  const existing = `\t${BEGIN}\n\nOLD\n\n${END}\n`;
+  const out = wrap(existing, 'NEW');
+  assert.equal(out, `${BEGIN}\n\nNEW\n\n${END}\n`);
+});
+
+test('an indented look-alike beside a real column-zero block is refused rather than guessed at', () => {
+  // Two BEGINs now — one real, one that only widened detection makes
+  // visible. Ambiguous, so the existing duplicate-marker refusal fires
+  // rather than either one silently winning.
+  const { message } = malformed(`\t${BEGIN}\n\nDOC EXAMPLE\n\n\t${END}\n\n${BEGIN}\n\nOLD\n\n${END}\n`);
+  assert.match(message, /2 REDLINE:BEGIN/);
+});

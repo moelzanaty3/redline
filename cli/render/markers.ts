@@ -15,12 +15,16 @@ export interface MarkerSpan {
   stop: number;
 }
 
-// A marker counts only when it opens a line and is not inside a fenced code
-// block. Both conditions exist because the block is spliced by byte offset:
-// a marker quoted in prose or illustrated in a ```md fence would otherwise be
-// the splice point, and everything between it and the next END would be
-// deleted. Anchoring alone is not enough — a fence is exactly where a document
-// puts a marker on a line of its own to show what one looks like.
+// A marker counts only when it opens a line — leading spaces or tabs aside —
+// and is not inside a fenced code block. Both conditions exist because the
+// block is spliced by byte offset: a marker quoted in prose or illustrated in
+// a ```md fence would otherwise be the splice point, and everything between
+// it and the next END would be deleted. Anchoring alone is not enough — a
+// fence is exactly where a document puts a marker on a line of its own to
+// show what one looks like. Whitespace tolerance runs the other way: it is
+// the false-negative direction (a real block missed) that silently
+// duplicates, so a marker only loses on an outright ambiguity — never on
+// having picked up an indent.
 //
 // `unterminatedFence` is the offset of a fence that never closed. CommonMark
 // allows that ("If the end of the document is reached and no closing code fence
@@ -82,8 +86,21 @@ function scanMarkers(text: string, trackFences: boolean): Scan {
         fence = null;
       }
     } else if (fence === null) {
-      if (bare.startsWith(BEGIN_PREFIX)) begins.push(offset);
-      else if (bare.startsWith(END)) ends.push(offset);
+      // Leading whitespace no longer hides a marker. A real block a human
+      // tab-indented (a paste, an autoformatter, a manual edit) used to read
+      // as absent, and the next run appended a silent second block beside it
+      // — the same failure shape a hidden fence has, just from the opposite
+      // direction (too little tolerance instead of too much). `begins` still
+      // records the START OF THE LINE: on replace, the prefix cut lands
+      // before the indent, so a tab-indented block is normalized back to
+      // column zero rather than being re-indented. `ends` records where the
+      // literal END text itself begins, because `stop + END.length` — used
+      // here and by both adapters' own `outside` split — has to land exactly
+      // after the marker text no matter how much whitespace preceded it.
+      const indent = (/^[ \t]*/.exec(bare)?.[0] ?? '').length;
+      const rest = bare.slice(indent);
+      if (rest.startsWith(BEGIN_PREFIX)) begins.push(offset);
+      else if (rest.startsWith(END)) ends.push(offset + indent);
     }
     offset += line.length + 1;
   }

@@ -502,6 +502,14 @@ Record seed scores here. A standards change with no measurement is an opinion.
   fences hide a real marker block so that a second one was silently appended beside it and
   the first abandoned. HTML tracking suppresses fence detection only, never marker
   detection: not seeing a marker is the dangerous direction.
+- A marker line prefixed by leading whitespace is no longer invisible to the scan. A real
+  Redline block a human tab-indented — a paste, an autoformatter, a manual edit — used to
+  read as absent, so the next run silently appended a second, correctly-indented block
+  beside it. Detection now tolerates leading spaces or tabs before `REDLINE:BEGIN`/`END`;
+  writing does not — a found indented block is replaced and re-emitted at column zero, same
+  as any other replace. An indented look-alike that leaves the file ambiguous (a second
+  BEGIN or END that only widened detection makes visible) is refused rather than guessed
+  at, the same rule already applied to every other malformed marker pair.
 
 ## 3.0.0 — 2026-09-02
 
