@@ -24,9 +24,11 @@ Record seed scores here. A standards change with no measurement is an opinion.
   too, not just a stack dropped within one still selected); a shared `merge: true` file
   (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) has only its
   `REDLINE:BEGIN`…`REDLINE:END` block cut out, reusing `cli/render/markers.ts`'s `findBlock`
-  rather than a second marker parser, and is deleted only when nothing but the block (and the
-  separator `wrapBlock` inserted before it) remains — a file carrying the team's own content
-  keeps it byte-identical. The removal rides out through the existing rendered-file diffing,
+  rather than a second marker parser, and is deleted only when nothing but whitespace remains —
+  a file carrying the team's own content keeps it byte-identical, mirroring `wrapBlock`'s own
+  contract on the append path: the bytes outside the block are never trimmed or reformatted,
+  and the only newline ever removed is the block's own trailing one. The removal rides out
+  through the existing rendered-file diffing,
   so it lands in a pull request like any other change and prints as a removal, not a write,
   under `--dry-run`. A vendor selection change that has nothing left on disk to remove no
   longer reads as "nothing to change" on a settled repository — the same failure mode a menu

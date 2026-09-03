@@ -4,8 +4,8 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { render } from '../standards.ts';
-import { BEGIN_PREFIX } from '../markers.ts';
+import { render, stripBlock } from '../standards.ts';
+import { BEGIN, BEGIN_PREFIX, END, wrapBlock } from '../markers.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const tmp = (t: TestContext): string => {
@@ -230,7 +230,11 @@ test("deselecting a vendor strips only its own block, leaving the team's content
   const r = render({ root, profile: 'web', out, vendors: [] });
 
   assert.ok(r.removed.includes('AGENTS.md'));
-  assert.equal(readFileSync(join(out, 'AGENTS.md'), 'utf8'), 'Team-owned intro.\n\n## Repo notes\n\nkeep me\n');
+  // Byte-for-byte, not the canonical-looking `\n\n` the old trimming behaviour
+  // produced: the human's own blank line before the block (2 newlines) plus
+  // the one newline they typed right after it survive untouched, and only the
+  // block's own trailing newline is the one byte stripBlock ever removes.
+  assert.equal(readFileSync(join(out, 'AGENTS.md'), 'utf8'), 'Team-owned intro.\n\n\n## Repo notes\n\nkeep me\n');
 });
 
 test('deselecting copilot removes both its per-stack instruction files and its merged file', (t) => {
@@ -269,4 +273,72 @@ test('check mode reports a deselected vendor block as a removal, not a write, an
   assert.deepEqual(r.staleWritten, []);
   assert.ok(r.staleRemovals.includes('CLAUDE.md'));
   assert.ok(existsSync(join(out, 'CLAUDE.md')), 'check mode must delete nothing');
+});
+
+// --- stripBlock byte-identity ------------------------------------------------
+//
+// The brief required, three times, that everything outside the block survive
+// byte-identical. Every assertion below is a single exact-string equality
+// against a literal, not `includes` — `includes` is what let a reformatting
+// bug (trimming the human's trailing whitespace, collapsing blank lines,
+// always rejoining with a canonical `\n\n`) through undetected, because the
+// content it deleted lived entirely in whitespace that `includes` cannot see.
+
+test('stripBlock reproduces the human bytes exactly around irregular whitespace on both sides', () => {
+  const before = 'MY INTRO.   \n\n\n\n';
+  const block = `${BEGIN}\nSOME GENERATED CONTENT\n${END}`;
+  const after = '\n\n\n\ntrailing content...\n';
+  const existing = before + block + after;
+
+  const result = stripBlock(existing, 'test.md');
+
+  // `after` loses only the one newline that belongs to a block written by
+  // wrapBlock's append path (its own trailing `${END}\n`) — never a byte the
+  // human put there themselves.
+  const expected = 'MY INTRO.   \n\n\n\n' + '\n\n\ntrailing content...\n';
+  assert.equal(result, expected);
+});
+
+test('stripBlock deletes a file that holds nothing but the block', () => {
+  const block = `${BEGIN}\nSOME GENERATED CONTENT\n${END}`;
+  assert.equal(stripBlock(block, 'test.md'), null);
+});
+
+test('stripBlock deletes a file whose remainder is whitespace-only on both sides', () => {
+  const existing = '   \n\n' + `${BEGIN}\nSOME GENERATED CONTENT\n${END}` + '\n\n  \n';
+  assert.equal(stripBlock(existing, 'test.md'), null);
+});
+
+test('stripBlock keeps content before the block byte-for-byte when nothing follows it', () => {
+  const before = 'Some real content.   \n\n\n';
+  const existing = before + `${BEGIN}\nSOME GENERATED CONTENT\n${END}`;
+  assert.equal(stripBlock(existing, 'test.md'), before);
+});
+
+test('stripBlock keeps content after the block byte-for-byte when nothing precedes it', () => {
+  const after = 'trailing stuff.   \n\n\n';
+  const existing = `${BEGIN}\nSOME GENERATED CONTENT\n${END}` + '\n' + after;
+  assert.equal(stripBlock(existing, 'test.md'), after);
+});
+
+// The inverse of wrapBlock's own three-way `gap` decision (markers.ts). Only
+// the branch where the file already ended in a blank line (`\n\n`) round-trips
+// byte-for-byte: the other two branches make wrapBlock insert a newline or two
+// of its own as the paragraph separator, and once written those bytes sit on
+// disk exactly like anything the human typed — stripBlock has no way to tell
+// them apart from human content, so it correctly keeps them rather than
+// guessing. Wrapping then stripping is therefore lossless only starting from a
+// file that already ended in a blank line; the other two branches gain the
+// separator bytes wrapBlock added, permanently.
+test('wrapBlock -> stripBlock round-trips exactly only when the file already ended in a blank line', () => {
+  const label = 'test.md';
+  const body = 'GENERATED';
+
+  const noNewline = 'Team notes with no trailing newline';
+  const oneNewline = 'Team notes with one newline\n';
+  const twoNewlines = 'Team notes with two newlines\n\n';
+
+  assert.equal(stripBlock(wrapBlock(noNewline, body, label), label), `${noNewline}\n\n`);
+  assert.equal(stripBlock(wrapBlock(oneNewline, body, label), label), `${oneNewline}\n`);
+  assert.equal(stripBlock(wrapBlock(twoNewlines, body, label), label), twoNewlines);
 });

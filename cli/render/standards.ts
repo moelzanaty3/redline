@@ -30,25 +30,27 @@ export interface RenderResult {
 }
 
 // The rest of a shared file once its Redline block is cut out, or `null` when
-// nothing but the block — and the blank-line separator wrapBlock inserted
-// before it — remains, so the caller deletes the file rather than writing
-// back a blank one. `findBlock` (markers.ts) owns the marker scan and its
-// refusal on an ambiguous marker state; this only decides the byte range to
-// keep, reusing that scan rather than re-parsing the file itself. Returns
-// `existing` unchanged when there is no block to find, so a caller can tell
-// "nothing here was ever Redline's" from "the block was removed" by identity.
-function stripBlock(existing: string, label: string): string | null {
+// nothing survives but whitespace, so the caller deletes the file rather than
+// writing back a blank one. Mirrors wrapBlock's own contract in the other
+// direction: `before` is kept byte-for-byte, and `after` only ever loses the
+// single newline that trails the block itself (the append path's own
+// `${END}\n`, or none at all on the replace path's `block.trimEnd()`) — never
+// a byte the human wrote. Because that trailing newline is indistinguishable
+// on disk from a separator wrapBlock itself inserted, stripping a block back
+// out is not always the exact inverse of wrapping it in — see the round-trip
+// tests. `findBlock` (markers.ts) owns the marker scan and its refusal on an
+// ambiguous marker state; this only decides the byte range to keep, reusing
+// that scan rather than re-parsing the file itself. Returns `existing`
+// unchanged when there is no block to find, so a caller can tell "nothing
+// here was ever Redline's" from "the block was removed" by identity.
+export function stripBlock(existing: string, label: string): string | null {
   const span = findBlock(existing, label);
   if (span === null) return existing;
-  const before = existing.slice(0, span.start).replace(/\s+$/, '');
-  const after = existing
-    .slice(span.stop + END.length)
-    .replace(/^\s+/, '')
-    .trimEnd();
-  if (before === '' && after === '') return null;
-  if (before === '') return `${after}\n`;
-  if (after === '') return `${before}\n`;
-  return `${before}\n\n${after}\n`;
+  const before = existing.slice(0, span.start);
+  const rest = existing.slice(span.stop + END.length);
+  const after = rest.startsWith('\n') ? rest.slice(1) : rest;
+  if (before.trim() === '' && after.trim() === '') return null;
+  return before + after;
 }
 
 export function render(opts: RenderOptions): RenderResult {
