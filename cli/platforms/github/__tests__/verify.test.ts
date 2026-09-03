@@ -425,3 +425,79 @@ test('a ruleset switched out of active enforcement is reported as not in force',
     'an active ruleset is in force and must carry no reason'
   );
 });
+
+// --- the caller scan must know what a jobs: block is ------------------------
+
+// Every form below is legal YAML that GitHub Actions accepts and that really
+// does publish `redline-gate / gate`. The line scan used to take the last
+// two-space key it had seen, which in this file is `  pull_request:` from the
+// `on:` block — so each of these failed the gate with a message naming a job
+// that exists nowhere, about a job id that was already correct.
+const CALLER_FORMS: Record<string, string> = {
+  'an inline comment on the job-id line': CALLER.replace(
+    '  redline-gate:',
+    '  redline-gate: # DO NOT RENAME'
+  ),
+  'a double-quoted job id': CALLER.replace('  redline-gate:', '  "redline-gate":'),
+  'a single-quoted job id': CALLER.replace('  redline-gate:', "  'redline-gate':"),
+  'a four-space indented job id': CALLER.replace('  redline-gate:', '    redline-gate:').replace(
+    '    uses:',
+    '      uses:'
+  ),
+  'a tab-indented job id': CALLER.replace('  redline-gate:', '\tredline-gate:'),
+  'an anchor on the job id': CALLER.replace('  redline-gate:', '  redline-gate: &gate'),
+};
+
+for (const [form, body] of Object.entries(CALLER_FORMS)) {
+  test(`${form} still reports the job id it actually declares`, () => {
+    const cwd = repoWith({ '.github/workflows/redline.yml': body });
+    assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).publishes, REQUIRED_CHECK);
+  });
+}
+
+// A key from anywhere else in the file is never a job id.
+test('a workflow with no jobs block reports no job rather than a key from another block', () => {
+  const cwd = repoWith({
+    '.github/workflows/redline.yml': [
+      'name: Redline',
+      'on:',
+      '  pull_request:',
+      'steps:',
+      '  - uses: acme/.github/.github/workflows/redline-gate.yml@main',
+      '',
+    ].join('\n'),
+  });
+  assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).publishes, null);
+});
+
+// A gate workflow nothing triggers publishes nothing, however correctly its
+// job is named — and the ruleset still requires the check it will never send.
+test('a caller workflow no longer triggered by pull requests publishes nothing', () => {
+  const cwd = repoWith({
+    '.github/workflows/redline.yml': CALLER.replace('  pull_request:', '  workflow_dispatch:'),
+  });
+  assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).publishes, null);
+});
+
+test('a workflow triggered by pull_request in list form still publishes', () => {
+  const cwd = repoWith({
+    '.github/workflows/redline.yml': CALLER.replace('on:\n  pull_request:', 'on: [pull_request]'),
+  });
+  assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).publishes, REQUIRED_CHECK);
+});
+
+test('readGateMachinery names the check a correctly installed gate publishes', () => {
+  const cwd = repoWith({ '.github/workflows/redline.yml': CALLER });
+  assert.equal(createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd).expected, REQUIRED_CHECK);
+});
+
+// A local read that cannot be completed is a finding about this repository,
+// not an internal defect: unguarded, EACCES/EISDIR escaped verify() as
+// "redline failed unexpectedly" with the host exit code.
+test('a gate workflow that cannot be read fails as a Redline error, not an unexpected crash', () => {
+  const cwd = repoWith({ '.github/workflows/redline.yml/keep': 'a directory sits where the file should' });
+  assert.throws(
+    () => createGitHubVerify(fakeGitHubClient()).readGateMachinery(cwd),
+    (error: unknown) => isRedlineError(error) && error.kind === 'failed'
+  );
+});

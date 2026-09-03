@@ -115,9 +115,16 @@ export async function verify(
   const unowned = policy?.unownedSettings ?? [];
   const owned = (setting: PolicySetting): boolean => !unowned.includes(setting);
   if (policy !== null) {
-    // First, because it makes every comparison below moot: a policy the host
-    // says is not applying is a policy whose settings are readable and inert.
+    // First, because they make every comparison below moot: a policy the host
+    // says is not applying is a policy whose settings are readable and inert,
+    // and a policy the host says nothing can satisfy is an outage whoever
+    // configured what. `advisoryReason` was printed inside the detail of a
+    // PASSING finding whose own words were "every pull request will sit
+    // blocked" — Azure sets it in exactly one state (a blocking Status policy
+    // with no Build Validation policy to queue the pipeline) and GitHub never
+    // sets it, so failing on it cannot produce a false positive anywhere.
     if (policy.notEnforcedReason !== undefined) weakened.push(policy.notEnforcedReason);
+    if (policy.advisoryReason !== undefined) weakened.push(policy.advisoryReason);
     if (policy.blocking !== config.menu.blockingGate) {
       weakened.push(
         `policy is ${policy.blocking ? 'blocking' : 'advisory'}, config says ${
@@ -160,9 +167,7 @@ export async function verify(
                 policy.requiredApprovals
               } approval(s), code-owner review ${policy.requireCodeOwnerReview ? 'on' : 'off'}`
             : weakened.join('; ')
-        }${unowned.length > 0 ? `; not compared here: ${unowned.join(', ')}` : ''}${
-          policy.advisoryReason ? ` — ${policy.advisoryReason}` : ''
-        }`
+        }${unowned.length > 0 ? `; not compared here: ${unowned.join(', ')}` : ''}`
   );
 
   // The check-name comparison is the highest-value check in the product: an
@@ -179,25 +184,36 @@ export async function verify(
   // so before this the deletion was invisible.
   const machinery = platform.readGateMachinery(opts.cwd);
   const requiredChecks = policy?.requiredChecks ?? [];
-  const machineryHealthy =
-    machinery.present &&
+  // Three separate failures, and they need three different sentences. The
+  // renamed case is not "the policy requires something else": telling an
+  // operator whose job id is already correct to rename it back points them at
+  // a fiction, and it was reachable — an advisory repository requires no
+  // checks, so a rename there used to pass entirely.
+  const renamed = machinery.publishes !== null && machinery.publishes !== machinery.expected;
+  const policyMoved =
     machinery.publishes !== null &&
-    (requiredChecks.length === 0 || requiredChecks.includes(machinery.publishes));
+    !renamed &&
+    requiredChecks.length > 0 &&
+    !requiredChecks.includes(machinery.publishes);
+  const machineryHealthy = machinery.present && machinery.publishes !== null && !renamed && !policyMoved;
   add(
     'gate-machinery',
     machineryHealthy,
     !machinery.present
-      ? `${machinery.path} is not in this repository, so nothing will ever publish the gate` +
-        `${requiredChecks.length > 0 ? ` — the policy requires ${requiredChecks.join(', ')}` : ''}` +
+      ? `${machinery.path} is not in this repository, so nothing will ever publish ${machinery.expected}` +
+        `${requiredChecks.includes(machinery.expected) ? ' — which the policy requires' : ''}` +
         '; re-run redline init'
       : machinery.publishes === null
-        ? `${machinery.path} no longer declares the job that publishes the gate check, so nothing ` +
-          'will report it; re-run redline init'
-        : requiredChecks.length > 0 && !requiredChecks.includes(machinery.publishes)
-          ? `${machinery.path} publishes ${machinery.publishes}, but the policy requires ${requiredChecks.join(
-              ', '
-            )} — no pull request can ever satisfy it; rename the job back or fix the policy`
-          : `${machinery.path} publishes ${machinery.publishes}`
+        ? `${machinery.path} no longer publishes ${machinery.expected} — the gate is not triggered by ` +
+          'pull requests, or the part of the file that reports it has been edited; re-run redline init'
+        : renamed
+          ? `${machinery.path} publishes ${machinery.publishes} rather than ${machinery.expected}, so no ` +
+            'policy requiring the Redline gate can ever be satisfied; rename it back or re-run redline init'
+          : policyMoved
+            ? `${machinery.path} publishes ${machinery.expected} as installed, but the policy requires ` +
+              `${requiredChecks.join(', ')} — the policy no longer requires the Redline gate, so fix the ` +
+              'policy rather than the workflow'
+            : `${machinery.path} publishes ${machinery.publishes}`
   );
 
   const pr = await platform.latestPullRequestNumber(ref);

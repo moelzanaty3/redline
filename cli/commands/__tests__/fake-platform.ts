@@ -206,7 +206,14 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     readGateMachinery(): GateMachinery {
       reads.push('readGateMachinery');
       const host = HOST_FILES[ref.host];
-      return opts.gateMachinery ?? { path: host.gate, present: true, publishes: host.publishes };
+      return (
+        opts.gateMachinery ?? {
+          path: host.gate,
+          present: true,
+          publishes: host.publishes,
+          expected: host.publishes,
+        }
+      );
     },
     async readPolicy(): Promise<MergePolicy | null> {
       reads.push('readPolicy');

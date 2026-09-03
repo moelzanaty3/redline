@@ -37,6 +37,11 @@ const hostShapeError = createHostShapeError('Azure DevOps');
 // policy blocks every pull request forever.
 const GATE_PIPELINE = '.azuredevops/redline-gate.yml';
 
+// What the Status branch policy requires, and what a correctly installed
+// pipeline publishes — the same `genre/name` shape readReportedCheckNames
+// reports back off a pull request.
+const AZURE_STATUS_CONTEXT = `${AZURE_STATUS_GENRE}/${AZURE_STATUS_NAME}`;
+
 function assertOk(status: number, path: string): void {
   if (!isSuccess(status)) {
     throw new RedlineError('host', `Azure DevOps returned HTTP ${status} reading ${path}`);
@@ -244,18 +249,41 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
 
     readGateMachinery(cwd: string): GateMachinery {
       const abs = join(cwd, GATE_PIPELINE);
-      if (!existsSync(abs)) return { path: GATE_PIPELINE, present: false, publishes: null };
-      const body = readFileSync(abs, 'utf8');
+      const base = { path: GATE_PIPELINE, expected: AZURE_STATUS_CONTEXT };
+      if (!existsSync(abs)) return { ...base, present: false, publishes: null };
+      // Same guard as the GitHub adapter: a local read that cannot be
+      // completed is a finding about this repository, not an internal defect.
+      let body: string;
+      try {
+        body = readFileSync(abs, 'utf8');
+      } catch (error) {
+        throw new RedlineError(
+          'failed',
+          `cannot read ${GATE_PIPELINE}: ${error instanceof Error ? error.message : String(error)}`,
+          'restore it from redline init, or make it readable'
+        );
+      }
       // CONTRACT with platforms/azure/gate-template.yml: its final step posts
       // a pull-request status whose context is this genre and name, and the
       // Status branch policy requires exactly that. Editing either value in
       // the installed file makes the policy unsatisfiable, which is the same
       // outage a renamed caller job is on GitHub.
+      //
+      // Matched with the quoting and spacing latitude jq's own body allows —
+      // a substring match on one spelling failed the gate over a second space
+      // — and with comment lines dropped first, so the contract surviving in a
+      // comment after the publish step was deleted is not read as publishing.
+      const live = body
+        .split('\n')
+        .filter((line) => !line.trimStart().startsWith('#'))
+        .join('\n');
+      const declares = (key: string, value: string): boolean =>
+        new RegExp(`${key}\\s*:\\s*["']${value}["']`).test(live);
       const publishes =
-        body.includes(`name: "${AZURE_STATUS_NAME}"`) && body.includes(`genre: "${AZURE_STATUS_GENRE}"`)
-          ? `${AZURE_STATUS_GENRE}/${AZURE_STATUS_NAME}`
+        declares('name', AZURE_STATUS_NAME) && declares('genre', AZURE_STATUS_GENRE)
+          ? AZURE_STATUS_CONTEXT
           : null;
-      return { path: GATE_PIPELINE, present: true, publishes };
+      return { ...base, present: true, publishes };
     },
 
     async readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]> {

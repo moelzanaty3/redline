@@ -423,3 +423,46 @@ test('a pipeline edited to publish a different status name publishes nothing the
   });
   assert.equal(createAzureVerify(fakeAzure({})).readGateMachinery(cwd).publishes, null);
 });
+
+// The status context is what the Status branch policy requires, and whitespace
+// or quote style around it changes nothing about what the pipeline publishes.
+// A whole-file substring match failed the gate on both.
+test('the status contract is read whatever quoting or spacing the file uses', () => {
+  for (const variant of ['name:  "gate"', "name: 'gate'", 'name:"gate"']) {
+    const cwd = azureRepoWith({
+      '.azuredevops/redline-gate.yml': PIPELINE.replace('name: "gate"', variant),
+    });
+    assert.equal(
+      createAzureVerify(fakeAzure({})).readGateMachinery(cwd).publishes,
+      'redline/gate',
+      variant
+    );
+  }
+});
+
+// The other direction: the publish step deleted and its text left behind in a
+// comment is not a pipeline that publishes anything.
+test('the status contract surviving only in a comment does not count as publishing', () => {
+  const cwd = azureRepoWith({
+    '.azuredevops/redline-gate.yml': [
+      'steps:',
+      '  - script: npx --yes --package=redline-cli@latest redline verify --gate',
+      '  # was: context: {name: "gate", genre: "redline"}',
+      '',
+    ].join('\n'),
+  });
+  assert.equal(createAzureVerify(fakeAzure({})).readGateMachinery(cwd).publishes, null);
+});
+
+test('readGateMachinery names the status a correctly installed pipeline publishes', () => {
+  const cwd = azureRepoWith({ '.azuredevops/redline-gate.yml': PIPELINE });
+  assert.equal(createAzureVerify(fakeAzure({})).readGateMachinery(cwd).expected, 'redline/gate');
+});
+
+test('a gate pipeline that cannot be read fails as a Redline error, not an unexpected crash', () => {
+  const cwd = azureRepoWith({ '.azuredevops/redline-gate.yml/keep': 'a directory, not the pipeline' });
+  assert.throws(
+    () => createAzureVerify(fakeAzure({})).readGateMachinery(cwd),
+    (error: unknown) => isRedlineError(error) && error.kind === 'failed'
+  );
+});

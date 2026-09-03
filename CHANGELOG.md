@@ -230,6 +230,19 @@ Record seed scores here. A standards change with no measurement is an opinion.
   it, because `render()` covers only rendered standards artifacts. It now fails, which is also
   what makes the softened "no gate run observed yet" report safe: that path may only mean the
   gate has not run yet once the machinery that would run it is known to be in place.
+- Three inputs `gate-machinery` and `merge-policy` still reported as fully green are now caught.
+  An Azure blocking Status policy with no Build Validation policy to queue the pipeline fails
+  `merge-policy` instead of passing while its own detail said "every pull request will sit
+  blocked". The GitHub caller-job scan now anchors on the `jobs:` block structurally instead of
+  taking the last two-space key seen anywhere in the file, so an inline comment, a quoted or
+  differently-indented job id, or a YAML anchor on the job-id line no longer falls through to a
+  key from the `on:` block and names a job that does not exist; where the scan genuinely cannot
+  attribute a job id it now reports the file as unparseable rather than fabricating one. And a
+  caller workflow present and correctly named but with its `pull_request` trigger removed no
+  longer reports healthy — nothing can ever publish the check, so `gate-machinery` fails rather
+  than telling the operator to go open a pull request. A `gate-machinery` mismatch is now three
+  distinct messages (renamed job, policy no longer requiring the gate, file unreadable) instead
+  of one that told a correctly-named repository to "rename the job back".
 - `redline verify`'s `merge-policy` finding also catches a GitHub ruleset switched out of
   `active` enforcement — the cheapest loosening on that host, and one every field this CLI
   reads back survives unchanged — and an approvals policy that no longer dismisses stale

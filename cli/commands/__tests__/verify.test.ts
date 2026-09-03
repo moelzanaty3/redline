@@ -483,6 +483,7 @@ test('a blocking repository whose gate workflow was deleted fails instead of bei
     path: '.github/workflows/redline.yml',
     present: false,
     publishes: null,
+    expected: 'redline-gate / gate',
   });
 
   const report = await verify(() => platform, { cwd, root });
@@ -511,6 +512,7 @@ test('a caller job renamed away from the required check name fails', async () =>
     path: '.github/workflows/redline.yml',
     present: true,
     publishes: 'ci-gate / gate',
+    expected: 'redline-gate / gate',
   });
 
   const report = await verify(() => platform, { cwd, root });
@@ -610,4 +612,83 @@ test('a policy that no longer dismisses stale approvals on push is drift', async
   const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
   assert.equal(finding?.ok, false, finding?.detail);
   assert.match(finding?.detail ?? '', /dismissed when new commits are pushed/);
+});
+
+// --- round 3: a finding whose own text says the repository is broken --------
+
+// The Azure state the adapter already diagnoses in full: a blocking Status
+// policy with no Build Validation policy to queue the pipeline. `blocking`
+// reads false, so on an advisory-configured repository the flag comparison
+// matches and every finding passed — while the detail of the passing finding
+// said, in plain English, that every pull request will sit blocked.
+test('a policy whose own detail says pull requests are blocked does not pass', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(
+    cwd,
+    policyOf({
+      blocking: false,
+      requiredChecks: [],
+      advisoryReason:
+        'the redline/gate status policy is blocking, but no "Redline: gate build" Build Validation ' +
+        'policy queues the gate pipeline, so every pull request will sit blocked',
+    })
+  );
+
+  const report = await verify(() => platform, { cwd, root });
+  const finding = find(report, 'merge-policy');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /will sit blocked/);
+  assert.equal(report.ok, false);
+
+  const gated = await verify(() => platform, { cwd, root, gate: true });
+  assert.equal(find(gated, 'merge-policy')?.ok, false, 'and it blocks nothing that was not already blocked');
+});
+
+// A rename is drift on an advisory repository too: the gate reports under a
+// name nobody required, and promoting to blocking would break every pull
+// request the moment someone flips the menu.
+test('a renamed gate job fails even where the policy requires no checks yet', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    gateMachinery: {
+      path: '.github/workflows/redline.yml',
+      present: true,
+      publishes: 'ci-gate / gate',
+      expected: 'redline-gate / gate',
+    },
+  });
+  const finding = find(await verify(() => platform, { cwd, root }), 'gate-machinery');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /ci-gate \/ gate/);
+});
+
+// The mirror image, and the one the old message got wrong: the workflow is
+// exactly as init wrote it and the POLICY stopped requiring Redline's check.
+// Telling that operator to rename a correct job sends them at a fiction.
+test('a policy that no longer requires the gate is not reported as a renamed job', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, menu: { ...config.menu, blockingGate: true } });
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: ['build'], blocking: true }));
+
+  const finding = find(await verify(() => platform, { cwd, root }), 'gate-machinery');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.ok(!/rename the job back/.test(finding?.detail ?? ''), finding?.detail);
+  assert.match(finding?.detail ?? '', /policy/);
+});
+
+// MINIMUM_APPROVALS in verify.ts is a copy of a literal in init.ts that cannot
+// be imported. A comment naming the contract is not the contract: raising
+// init's count left the whole suite green, and a repository sitting at the old
+// count would have reported clean.
+test('the merge policy init applies is the one verify holds a repository to', async () => {
+  const cwd = tempRepo('redline-verify-contract-');
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  const platform = fakePlatform();
+  await init(platform, { cwd, root, now });
+
+  assert.equal(platform.lastPolicy?.requiredApprovals, 1, 'raise MINIMUM_APPROVALS in verify.ts with it');
+  assert.equal(platform.lastPolicy?.dismissStaleReviews, true);
+  assert.equal(platform.lastPolicy?.requireCodeOwnerReview, true);
+  assert.equal(platform.lastPolicy?.requireThreadResolution, true);
 });

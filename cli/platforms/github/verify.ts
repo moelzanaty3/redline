@@ -160,20 +160,89 @@ const CALLER_WORKFLOW = '.github/workflows/redline.yml';
 const CHECK_SEPARATOR = ' / ';
 const AGGREGATE_JOB = REQUIRED_CHECK.slice(REQUIRED_CHECK.indexOf(CHECK_SEPARATOR) + CHECK_SEPARATOR.length);
 
-// Deliberately not a YAML parse: this file is Redline's own, the question is
-// one line deep, and a dependency-free CLI does not gain a YAML parser for it.
-// The job id is the last `  <id>:` seen above the `uses:` line that names the
-// reusable gate workflow, which is how a rename is caught whatever else the
-// file grew around it.
+// Still not a YAML parse — this file is Redline's own, `init` rewrites it
+// wholesale, and a zero-runtime-dependency CLI does not gain a YAML parser for
+// one question. It is structural rather than shape-matched, which is a
+// different thing: the scan finds the `jobs:` mapping and reads job ids from
+// inside it and nowhere else.
+//
+// The version that pattern-matched a two-space key anywhere in the file took
+// the last one it had seen before the `uses:` line, which in the shipped
+// template is `  pull_request:` from the `on:` block. An inline comment on the
+// job-id line — a plausible edit, given the DO NOT RENAME THE JOB banner four
+// lines above it — was enough to fail the gate with "publishes pull_request /
+// gate ... rename the job back", naming a job that exists nowhere about a job
+// id that was already correct. Where this scan cannot attribute a name it
+// returns null, whose message says the file could not be read for one; a
+// message that admits it could not tell is honest, a fabricated job name is
+// not.
+const KEY = /^\s*(?:(["'])([\w.-]+)\1|([\w.-]+))\s*:(.*)$/;
+const USES_THE_GATE = /^\s*uses:\s*["']?\S*redline-gate\.yml@/;
+
+const indentOf = (line: string): number => line.length - line.trimStart().length;
+const skippable = (line: string): boolean => line.trim() === '' || line.trimStart().startsWith('#');
+const keyName = (line: string): string | null => {
+  const match = KEY.exec(line);
+  return match?.[2] ?? match?.[3] ?? null;
+};
+
+function lines(body: string): string[] {
+  return body.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
+}
+
+// A workflow nothing triggers on a pull request publishes nothing, however
+// correctly its job is named — and the ruleset still requires the check it
+// will never send. `on:` is quoted in some hand-edited workflows because bare
+// `on` is a YAML boolean, and the trigger may be inline (`on: [pull_request]`)
+// or a key in the block below it.
+function triggersOnPullRequest(body: string): boolean {
+  const all = lines(body);
+  for (let i = 0; i < all.length; i += 1) {
+    const line = all[i] ?? '';
+    if (skippable(line) || indentOf(line) !== 0 || keyName(line) !== 'on') continue;
+    const inline = KEY.exec(line)?.[4] ?? '';
+    if (inline.trim() !== '') return inline.includes('pull_request');
+    for (const rest of all.slice(i + 1)) {
+      if (skippable(rest)) continue;
+      if (indentOf(rest) === 0) break;
+      if (rest.includes('pull_request')) return true;
+    }
+    return false;
+  }
+  return false;
+}
+
 function callerJobId(body: string): string | null {
+  const all = lines(body);
+  let jobsIndent: number | null = null;
+  let jobIdIndent: number | null = null;
   let jobId: string | null = null;
-  for (const line of body.split('\n')) {
-    const declaration = /^ {2}([\w.-]+):\s*$/.exec(line);
-    if (declaration?.[1] !== undefined) {
-      jobId = declaration[1];
+
+  for (const line of all) {
+    if (skippable(line)) continue;
+    const indent = indentOf(line);
+
+    if (jobsIndent === null) {
+      // Flow style (`jobs: {redline-gate: …}`) leaves content after the colon
+      // and is deliberately not attributed: `init` does not write it, and a
+      // truthful "could not read a job" beats a guess.
+      if (keyName(line) === 'jobs' && (KEY.exec(line)?.[4] ?? '').trim() === '') jobsIndent = indent;
       continue;
     }
-    if (/^\s+uses:\s*\S*redline-gate\.yml@/.test(line)) return jobId;
+
+    // Back out to the level of `jobs:` or above and the block is over, so no
+    // later key can be mistaken for a job id.
+    if (indent <= jobsIndent) break;
+
+    if (USES_THE_GATE.test(line) && jobId !== null) return jobId;
+
+    const name = keyName(line);
+    if (name === null) continue;
+    // The first key inside the block fixes the job-id column; only keys at
+    // exactly that column are job ids, so `uses:` and `with:` below one are
+    // never mistaken for another job.
+    if (jobIdIndent === null) jobIdIndent = indent;
+    if (indent === jobIdIndent) jobId = name;
   }
   return null;
 }
@@ -224,10 +293,26 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
 
     readGateMachinery(cwd: string): GateMachinery {
       const abs = join(cwd, CALLER_WORKFLOW);
-      if (!existsSync(abs)) return { path: CALLER_WORKFLOW, present: false, publishes: null };
-      const jobId = callerJobId(readFileSync(abs, 'utf8'));
+      const base = { path: CALLER_WORKFLOW, expected: REQUIRED_CHECK };
+      if (!existsSync(abs)) return { ...base, present: false, publishes: null };
+      // A local read that cannot be completed — a directory at the path, a
+      // file the process cannot open — is a finding about this repository, not
+      // an internal defect. Unguarded it escaped verify() as "redline failed
+      // unexpectedly" with the host exit code, for a read that never left the
+      // machine.
+      let body: string;
+      try {
+        body = readFileSync(abs, 'utf8');
+      } catch (error) {
+        throw new RedlineError(
+          'failed',
+          `cannot read ${CALLER_WORKFLOW}: ${error instanceof Error ? error.message : String(error)}`,
+          'restore it from redline init, or make it readable'
+        );
+      }
+      const jobId = triggersOnPullRequest(body) ? callerJobId(body) : null;
       return {
-        path: CALLER_WORKFLOW,
+        ...base,
         present: true,
         publishes: jobId === null ? null : `${jobId}${CHECK_SEPARATOR}${AGGREGATE_JOB}`,
       };

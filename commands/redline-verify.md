@@ -10,15 +10,18 @@ after the table, such as when running this by hand to mirror what CI's gate chec
 Each line is a check. For any `FAIL`, explain what it means and what fixes it:
 
 - `onboarded` — the repository has no `.redline.json`. Run `redline init`.
-- `merge-policy` — the live branch policy has been loosened, or the ruleset that carries it is
-  no longer in force. The finding names what changed: the blocking flag, the approval count,
-  dismissing approvals on push, code-owner review, or unresolved-thread resolution. Re-run
-  `redline init` to reapply it. Settings the host cannot attribute to Redline are listed as
-  "not compared here" rather than held against the repository.
-- `gate-machinery` — the file that runs the gate is missing from this repository, or the job
-  that publishes the required check has been renamed. Nothing will ever report the gate, so a
-  blocking policy blocks every pull request forever. Re-run `redline init`, or rename the job
-  back to match the policy.
+- `merge-policy` — no Redline merge policy was found on the host at all, or the live one has
+  been loosened, or the ruleset that carries it is no longer in force. The finding names what
+  changed: the blocking flag, the approval count, dismissing approvals on push, code-owner
+  review, unresolved-thread resolution — or, on Azure, a blocking Status policy that no Build
+  Validation policy queues, which leaves every pull request sitting blocked whatever the
+  configured menu says. Re-run `redline init` to reapply it. Settings the host cannot attribute
+  to Redline are listed as "not compared here" rather than held against the repository.
+- `gate-machinery` — the file that runs the gate is missing from this repository, the job that
+  publishes the required check has been renamed, or the file is present and correctly named but
+  no pull request will ever trigger it. Nothing will ever report the gate, so a blocking policy
+  blocks every pull request forever. Re-run `redline init`, or rename the job back to match the
+  policy.
 - `check-name-reported` — a check ran on the pull request but the required name was never among
   the ones reported. Where the policy blocks, this blocks every pull request in the repository.
   Fix the caller job id, or the policy. "No gate run observed yet" is not a failure: no Redline

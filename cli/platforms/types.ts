@@ -150,9 +150,15 @@ export interface GateMachinery {
   path: string;
   present: boolean;
   // The check name this file would publish, read out of the file itself. null
-  // when the file is absent, or when it no longer carries the contract that
-  // produces a name — a renamed caller job, an edited status step.
+  // when the file is absent, when it no longer carries the contract that
+  // produces a name — a renamed caller job, an edited status step, a trigger
+  // removed — or when the file is there but could not be attributed at all.
   publishes: string | null;
+  // The name a correctly installed gate publishes on this host. `publishes`
+  // differing from it is a rename; `publishes` matching it while the policy
+  // requires something else is the policy having moved, which is a different
+  // sentence to say to an operator.
+  expected: string;
 }
 
 export interface PlatformVerify {
