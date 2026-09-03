@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -754,4 +754,57 @@ test('the merge policy init applies is the one verify holds a repository to', as
   assert.equal(platform.lastPolicy?.dismissStaleReviews, true);
   assert.equal(platform.lastPolicy?.requireCodeOwnerReview, true);
   assert.equal(platform.lastPolicy?.requireThreadResolution, true);
+});
+
+// --- repository-local rules --------------------------------------------------
+//
+// `.redline/local.md` is the repository's own file. Editing it makes the
+// rendered artifacts trail it until the next render — that is work to do, and
+// the repository is not failing at anything in the meantime.
+
+const LOCAL = '.redline/local.md';
+
+function writeLocal(cwd: string, body: string): void {
+  mkdirSync(join(cwd, '.redline'), { recursive: true });
+  writeFileSync(join(cwd, LOCAL), body);
+}
+
+test('editing the repository-local rules reports the artifacts stale without failing the repository', async () => {
+  const cwd = await onboarded();
+  writeLocal(cwd, 'We allow console.log in the CLI.\n');
+
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'artifacts-current');
+
+  assert.equal(finding?.ok, true, 'a repository that owns its own rules is not failing at anything');
+  assert.match(finding?.detail ?? '', /\.redline\/local\.md/);
+  assert.match(finding?.detail ?? '', /redline init/);
+});
+
+test('deleting the repository-local rules after onboarding is work to do, not drift', async () => {
+  const cwd = await onboarded();
+  writeLocal(cwd, 'We allow console.log in the CLI.\n');
+  await init(fakePlatform(), { cwd, root, now });
+  assert.equal(readConfig(cwd)?.localRules, true);
+
+  rmSync(join(cwd, LOCAL));
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'artifacts-current');
+
+  assert.equal(finding?.ok, true);
+  assert.match(finding?.detail ?? '', /\.redline\/local\.md/);
+});
+
+// The forgiving branch above must not swallow the check it exists beside: a
+// repository with local rules still fails when something else was hand-edited.
+test('a hand-edited artifact still fails a repository that has repository-local rules', async () => {
+  const cwd = await onboarded();
+  writeLocal(cwd, 'We allow console.log in the CLI.\n');
+  await init(fakePlatform(), { cwd, root, now });
+
+  const agents = readFileSync(join(cwd, 'AGENTS.md'), 'utf8');
+  writeFileSync(join(cwd, 'AGENTS.md'), agents.replace('## Output contract (required)', '## Rewritten by hand'));
+
+  const finding = find(await verify(() => fakePlatform(), { cwd, root }), 'artifacts-current');
+
+  assert.equal(finding?.ok, false, 'the local rules are unchanged, so this is drift');
+  assert.match(finding?.detail ?? '', /stale: /);
 });

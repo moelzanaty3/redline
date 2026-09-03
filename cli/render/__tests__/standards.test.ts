@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render, stripBlock } from '../standards.ts';
 import { BEGIN, BEGIN_PREFIX, END, wrapBlock } from '../markers.ts';
+import { loadManifest } from '../manifest.ts';
+import { VENDORS } from '../vendors.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const tmp = (t: TestContext): string => {
@@ -341,4 +343,131 @@ test('wrapBlock -> stripBlock round-trips exactly only when the file already end
   assert.equal(stripBlock(wrapBlock(noNewline, body, label), label), `${noNewline}\n\n`);
   assert.equal(stripBlock(wrapBlock(oneNewline, body, label), label), `${oneNewline}\n`);
   assert.equal(stripBlock(wrapBlock(twoNewlines, body, label), label), twoNewlines);
+});
+
+// --- repository-local rules (.redline/local.md) ------------------------------
+//
+// A file the repository owns outright: Redline reads it, renders it inside its
+// own block so it survives every re-render, and never writes, prunes or fails
+// on it.
+
+const LOCAL = '.redline/local.md';
+
+function writeLocal(out: string, body: string): void {
+  mkdirSync(join(out, '.redline'), { recursive: true });
+  writeFileSync(join(out, LOCAL), body);
+}
+
+// Only the vendors the org manifest enables render a file at all, so these are
+// the artifacts a repository can actually observe. Cursor is exercised through
+// its renderer directly below.
+const ARTIFACTS = ['AGENTS.md', 'CLAUDE.md', '.github/copilot-instructions.md'];
+const ENABLED = ['agents', 'claude', 'copilot'];
+
+test('a repository with no local rules file gets no local-rules heading anywhere', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'tooling', out, vendors: ENABLED });
+  for (const relPath of ARTIFACTS) {
+    const body = readFileSync(join(out, relPath), 'utf8');
+    assert.ok(!/Repository-local rules/.test(body), `${relPath} must carry no empty local-rules section`);
+  }
+});
+
+test('an empty local rules file renders no local-rules heading either', (t) => {
+  const out = tmp(t);
+  writeLocal(out, '   \n\n');
+  render({ root, profile: 'tooling', out, vendors: ENABLED });
+  for (const relPath of ARTIFACTS) {
+    assert.ok(!/Repository-local rules/.test(readFileSync(join(out, relPath), 'utf8')), relPath);
+  }
+});
+
+test("a local rules file is rendered into every enabled vendor's artifact, inside the marker block", (t) => {
+  const out = tmp(t);
+  writeLocal(out, '## Our exception\n\nWe allow `any` in generated protobuf types.\n');
+  render({ root, profile: 'tooling', out, vendors: ENABLED });
+
+  for (const relPath of ARTIFACTS) {
+    const body = readFileSync(join(out, relPath), 'utf8');
+    assert.match(body, /We allow `any` in generated protobuf types\./, relPath);
+    const start = body.indexOf(BEGIN_PREFIX);
+    const stop = body.indexOf(END);
+    const rule = body.indexOf('We allow `any`');
+    assert.ok(start < rule && rule < stop, `${relPath}: the local rules must sit inside the block`);
+  }
+});
+
+test('a vendor whose artifact Redline generates whole also carries the local rules', () => {
+  const manifest = loadManifest(root);
+  const cursor = VENDORS['cursor']!({
+    manifest,
+    root,
+    profile: 'tooling',
+    stacks: [],
+    local: 'We allow console.log in the CLI.',
+  });
+  const core = cursor.files.get('.cursor/rules/redline-core.mdc');
+  assert.match(core?.body ?? '', /We allow console\.log in the CLI\./);
+});
+
+test('the local-rules section states that the repository rule wins over the org standard', (t) => {
+  const out = tmp(t);
+  writeLocal(out, 'We allow console.log in the CLI.\n');
+  render({ root, profile: 'tooling', out, vendors: ['agents'] });
+  const body = readFileSync(join(out, 'AGENTS.md'), 'utf8');
+  assert.match(body, /repository's own rules win/i);
+});
+
+test('the local rules file is read but never written, rewritten or pruned, including on a vendor deselect', (t) => {
+  const out = tmp(t);
+  const bytes = '# Ours\n\nkeep every byte   \n';
+  writeLocal(out, bytes);
+
+  const first = render({ root, profile: 'tooling', out, vendors: ENABLED });
+  assert.match(readFileSync(join(out, 'AGENTS.md'), 'utf8'), /keep every byte/);
+  const second = render({ root, profile: 'tooling', out, vendors: [] });
+
+  assert.ok(!first.written.includes(LOCAL) && !first.removed.includes(LOCAL));
+  assert.ok(!second.written.includes(LOCAL) && !second.removed.includes(LOCAL));
+  assert.ok(!first.managed.includes(LOCAL), 'Redline must not claim the file it only reads');
+  assert.equal(existsSync(join(out, LOCAL)), true);
+  assert.equal(readFileSync(join(out, LOCAL), 'utf8'), bytes);
+});
+
+test('deleting the local rules file removes its section and leaves the rest of the block byte-identical', (t) => {
+  const out = tmp(t);
+  render({ root, profile: 'tooling', out, vendors: ['agents'] });
+  const before = readFileSync(join(out, 'AGENTS.md'), 'utf8');
+
+  writeLocal(out, 'Our own rule.\n');
+  render({ root, profile: 'tooling', out, vendors: ['agents'] });
+  assert.notEqual(readFileSync(join(out, 'AGENTS.md'), 'utf8'), before);
+
+  rmSync(join(out, LOCAL));
+  render({ root, profile: 'tooling', out, vendors: ['agents'] });
+  assert.equal(readFileSync(join(out, 'AGENTS.md'), 'utf8'), before);
+});
+
+// The two shapes in a human's file that reach markers.ts as structure rather
+// than prose. Neither may cost the run: the file is not Redline's to validate.
+test('a local rules file with an unclosed code fence still renders, and renders again', (t) => {
+  const out = tmp(t);
+  writeLocal(out, 'Our rule:\n\n```ts\nconst x = 1;\n');
+  render({ root, profile: 'tooling', out, vendors: ['agents'] });
+  const body = readFileSync(join(out, 'AGENTS.md'), 'utf8');
+  assert.match(body, /const x = 1;/);
+  // Quoted, because markers.ts cannot read a block back through a fence the
+  // human never closed — every byte is still there, and the run did not fail.
+  assert.match(body, /^> const x = 1;$/m);
+  assert.deepEqual(render({ root, profile: 'tooling', out, vendors: ['agents'] }).written, []);
+});
+
+test('a local rules file that quotes a REDLINE marker keeps the text and adds no second marker', (t) => {
+  const out = tmp(t);
+  writeLocal(out, `Never write this yourself:\n\n${BEGIN}\nhi\n${END}\n`);
+  render({ root, profile: 'tooling', out, vendors: ['agents'] });
+  const body = readFileSync(join(out, 'AGENTS.md'), 'utf8');
+  assert.match(body, /Never write this yourself:/);
+  assert.equal(body.split(BEGIN_PREFIX).length - 1, 1, 'exactly one REDLINE:BEGIN may survive');
+  assert.deepEqual(render({ root, profile: 'tooling', out, vendors: ['agents'] }).written, []);
 });

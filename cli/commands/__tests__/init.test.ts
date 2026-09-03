@@ -138,9 +138,17 @@ test('a re-run whose only change is a rewritten command file still opens a pull 
 
   // Command sources ship with the CLI and version independently of
   // standards/manifest.json — simulate a CLI upgrade that changed a command
-  // body without touching any rendered standards file.
+  // body without touching any rendered standards file. The edit goes INSIDE
+  // the REDLINE block, which is the half Redline owns; bytes outside it belong
+  // to whoever wrote them and are never rewritten.
   const commandFile = join(cwd, '.claude/commands/redline-init.md');
-  writeFileSync(commandFile, 'stale body from an older CLI version\n');
+  writeFileSync(
+    commandFile,
+    readFileSync(commandFile, 'utf8').replace(
+      '\n\n<!-- REDLINE:END -->',
+      '\n\nstale body from an older CLI version\n\n<!-- REDLINE:END -->'
+    )
+  );
 
   const second = fakePlatform();
   const report = await init(second, { cwd, root, now });

@@ -333,6 +333,35 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
   };
 }
 
+// The one file `redline init` writes that cannot take the marker-block merge
+// the shared markdown artifacts take: appending to YAML gives the workflow a
+// second `name:` and `on:` key, and a file that no longer parses runs nothing
+// at all. So the only two honest answers here are "replace Redline's own file"
+// and "stop" — never "overwrite whatever was there".
+//
+// Attribution is read from the bytes rather than from the path, because the
+// path alone proves nothing and the 2.1 rollout wrote its own caller here,
+// which `redline init` exists to migrate. Deliberately generous: the
+// false-negative direction destroys a repository's file, and the
+// false-positive direction only replaces something that already carries
+// Redline's name at Redline's path.
+const CALLER_PATH = '.github/workflows/redline.yml';
+const REDLINE_AUTHORED = /redline/i;
+
+function refuseForeignCaller(cwd: string): void {
+  const target = join(cwd, CALLER_PATH);
+  if (!existsSync(target)) return;
+  if (REDLINE_AUTHORED.test(readFileSync(target, 'utf8'))) return;
+  throw new RedlineError(
+    'failed',
+    `${CALLER_PATH} already exists in this repository and was not written by Redline, so ` +
+      'installing the merge gate there would destroy it. Nothing was written',
+    `Move or rename that workflow and re-run redline init. Redline cannot merge into it the way ` +
+      'it merges into a markdown file: a second `name:` and `on:` key would stop the workflow ' +
+      'running at all.'
+  );
+}
+
 function syncPullRequestTemplate(
   cwd: string,
   defaultPath: string,
@@ -479,6 +508,7 @@ export function createGitHubInstall(
       check = false
     ): Promise<InstallResult> {
       const files: string[] = [];
+      refuseForeignCaller(cwd);
       const caller = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
         .replaceAll('<org>', ref.org)
         .replace(/adr-diff-threshold: \d+/, `adr-diff-threshold: ${opts.adrDiffThreshold}`)

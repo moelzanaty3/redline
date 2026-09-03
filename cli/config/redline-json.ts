@@ -27,6 +27,14 @@ export interface RedlineConfig {
   // When `redline init` last did real work here. Absent in configs written
   // before the field existed, where it reads back as onboardedAt.
   lastRunAt: string;
+  // Whether `.redline/local.md` was present at the last run. It is what lets
+  // `verify` tell "this repository never had repo-local rules" from "it had
+  // some and they are gone" — the rendered artifacts look the same in both
+  // cases, and only the second is work the next render has to do. Absent in
+  // configs written before the field existed, which read back as false: a
+  // repository that had a local file then has stale artifacts reported as
+  // work to do rather than as drift, which is the forgiving direction.
+  localRules: boolean;
 }
 
 export const MENU_KEYS: (keyof MenuSelections)[] = [
@@ -87,6 +95,7 @@ export function parseConfig(raw: unknown): RedlineConfig {
     pendingAdmin: pending as AdminCapability[],
     onboardedAt,
     lastRunAt,
+    localRules: o['localRules'] === true,
   };
 }
 

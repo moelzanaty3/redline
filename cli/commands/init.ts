@@ -15,6 +15,7 @@ import { loadManifest } from '../render/manifest.ts';
 import { resolveProfile } from '../render/profile.ts';
 import { render } from '../render/standards.ts';
 import { renderCommands, COMMAND_HOSTS } from '../render/commands.ts';
+import { LOCAL_RULES_FILE } from '../render/vendors.ts';
 import { isPending } from '../platforms/types.ts';
 import type {
   AdminCapability,
@@ -296,7 +297,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // Files first, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
   const rendered = render({ root, profile, out: cwd, vendors, check: dryRun });
-  const commandFiles = renderCommands({
+  const commands = renderCommands({
     root,
     out: cwd,
     hosts: vendors.flatMap((v) => (v in COMMAND_HOSTS ? [v] : [])),
@@ -322,11 +323,15 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   // render() prunes stale vendor files with rmSync; those deletions must ride
   // along in the same file list as the writes, or the PR never reflects them.
-  const removals = [...(dryRun ? rendered.staleRemovals : rendered.removed), ...legacyRemovals];
+  const removals = [
+    ...(dryRun ? rendered.staleRemovals : rendered.removed),
+    ...commands.removed,
+    ...legacyRemovals,
+  ];
   const changedFiles = [
     ...(dryRun ? rendered.staleWritten : rendered.written),
     ...removals,
-    ...commandFiles,
+    ...commands.written,
     ...gatePlan.files,
     ...ownershipPlan.files,
   ];
@@ -482,6 +487,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     // this on every run erased the only record of when the standard landed.
     onboardedAt: existing?.onboardedAt ?? now().toISOString(),
     lastRunAt: now().toISOString(),
+    localRules: existsSync(join(cwd, LOCAL_RULES_FILE)),
   });
 
   let pullRequest: PullRequestRef | null = null;

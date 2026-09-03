@@ -1,7 +1,10 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { isRedlineError } from '../core/errors.ts';
 import { readConfig, type RedlineConfig } from '../config/redline-json.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { render } from '../render/standards.ts';
+import { LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
 import {
   observePullRequestTemplates,
   type TemplateObservation,
@@ -326,13 +329,30 @@ export async function verify(
   // Read-only: render() runs in check mode, which reports staleness without
   // writing or touching the working tree.
   const manifest = loadManifest(opts.root);
-  const stale = render({
+  const rendered = render({
     root: opts.root,
     profile: config.profile,
     out: opts.cwd,
     vendors: config.vendors,
     check: true,
-  }).stale;
+  });
+  const stale = rendered.stale;
+  // A repository's own rules file is not something the repository can be
+  // failing at: the artifacts trail it until the next render, which is work to
+  // do. It is only the cause of the staleness when an artifact does not
+  // already carry the section this run would give it — otherwise the local
+  // rules are already rendered and whatever is stale is a hand edit, which
+  // still fails. A file that has appeared or gone since the last run is the
+  // other half, and only the recorded flag can see that one.
+  const local = readLocalRules(opts.cwd);
+  const section = local === null ? null : localSection(local);
+  const localStale =
+    config.localRules !== (local !== null) ||
+    (section !== null &&
+      rendered.staleWritten.some((relPath) => {
+        const path = join(opts.cwd, relPath);
+        return existsSync(path) && !readFileSync(path, 'utf8').includes(section);
+      }));
   // Two different things look identical to render(): a repository someone
   // edited by hand, and a repository the org has moved past. `render()` uses
   // the *installed* CLI's standards, so every publish of standards/** made
@@ -346,14 +366,16 @@ export async function verify(
   const drift = versionOrder(manifest.version, config.standardsVersion);
   add(
     'artifacts-current',
-    stale.length === 0 || drift !== 'same',
+    stale.length === 0 || drift !== 'same' || localStale,
     stale.length === 0
       ? `rendered artifacts match standards v${manifest.version}`
       : drift === 'newer'
         ? `standards updated upstream (v${config.standardsVersion} → v${manifest.version}) — re-run redline init to adopt: ${stale.join(', ')}`
         : drift === 'older'
           ? `this CLI renders standards v${manifest.version}, older than the v${config.standardsVersion} this repository recorded — update the CLI rather than re-running init here: ${stale.join(', ')}`
-          : `stale: ${stale.join(', ')}`
+          : localStale
+            ? `this repository's own ${LOCAL_RULES_FILE} has changed since the last render — re-run redline init to fold it in: ${stale.join(', ')}`
+            : `stale: ${stale.join(', ')}`
   );
 
   // The pull request template is the one thing `redline init` writes that

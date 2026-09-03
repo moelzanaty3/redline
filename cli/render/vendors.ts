@@ -1,14 +1,26 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Manifest } from './manifest.ts';
+import { BEGIN, END, findBlock } from './markers.ts';
 
 export const PREFIX = 'redline-';
+
+// The repository's own rules. A human owns this file outright: Redline reads
+// it, never writes it, never prunes it, and never fails a run over what is in
+// it. It is rendered INSIDE the Redline block precisely because a human's edit
+// to the block itself does not survive the next render and this has to.
+export const LOCAL_RULES_FILE = '.redline/local.md';
 
 export interface RenderContext {
   manifest: Manifest;
   root: string;
   profile: string;
   stacks: string[];
+  // The repository's own rules, ready to embed, or null when it has none.
+  // Read from the tree being rendered INTO (`out`), not from `root`: `root` is
+  // the standards package, and the org's copy of a repository's local rules
+  // does not exist.
+  local: string | null;
 }
 
 export interface RenderedFile {
@@ -37,11 +49,60 @@ const stackBody = (ctx: RenderContext, id: string): string =>
 const header = (ctx: RenderContext, stacks: string[]): string =>
   `<!-- Redline v${ctx.manifest.version} · profile: ${ctx.profile} · stacks: ${stacks.join(', ')} -->`;
 
+// Precedence has to be stated in the artifact itself, in words the tool acts
+// on: two rule sets sitting side by side with nothing to resolve a conflict
+// between them is the gap this section exists to close.
+const PRECEDENCE = [
+  `The rules below come from this repository's own \`${LOCAL_RULES_FILE}\`, not from the org`,
+  'standard. Where one of them conflicts with anything above, the repository\'s own rules win',
+  'here. Everything above that they do not contradict still applies.',
+].join('\n');
+
+export function localSection(local: string): string {
+  return `---\n\n# Repository-local rules\n\n${PRECEDENCE}\n\n${local}`;
+}
+
+const withLocal = (ctx: RenderContext, body: string): string =>
+  ctx.local === null ? body : `${body}\n\n${localSection(ctx.local)}`;
+
+// A REDLINE marker line and an unclosed code fence are the two shapes in a
+// human's markdown that reach markers.ts as structure rather than as prose: the
+// first makes a second marker pair, which wrapBlock refuses, and the second
+// swallows the END marker written below it. Neither may cost the run, because
+// this file is not Redline's to validate. So the marker text is escaped to the
+// characters it renders as, and whether what is left can still be read back is
+// asked of markers.ts itself rather than of a second parser here — anything it
+// cannot read is quoted, which no fence and no marker survives.
+const MARKER_LINE = /^([ \t]*)<!--(\s*REDLINE:(?:BEGIN|END))/gm;
+
+const readable = (candidate: string): boolean => {
+  try {
+    return findBlock(`${BEGIN}\n${candidate}\n${END}\n`, LOCAL_RULES_FILE) !== null;
+  } catch {
+    return false;
+  }
+};
+
+const quote = (text: string): string =>
+  text
+    .split('\n')
+    .map((line) => (line.trim() === '' ? '>' : `> ${line}`))
+    .join('\n');
+
+export function readLocalRules(out: string): string | null {
+  const path = join(out, LOCAL_RULES_FILE);
+  if (!existsSync(path)) return null;
+  const raw = readFileSync(path, 'utf8').trim();
+  if (raw === '') return null;
+  const escaped = raw.replace(MARKER_LINE, '$1&lt;!--$2');
+  return readable(escaped) ? escaped : quote(escaped);
+}
+
 const copilot: VendorRenderer = (ctx) => {
   const files = new Map<string, RenderedFile>();
   files.set('.github/copilot-instructions.md', {
     merge: true,
-    body: `${header(ctx, ctx.stacks)}\n\n${read(ctx.root, ctx.manifest.core.source)}`,
+    body: withLocal(ctx, `${header(ctx, ctx.stacks)}\n\n${read(ctx.root, ctx.manifest.core.source)}`),
   });
   for (const id of ctx.stacks) {
     const stack = ctx.manifest.stacks[id]!;
@@ -80,21 +141,24 @@ const agents: VendorRenderer = (ctx) => {
     '',
     sections.join('\n\n---\n\n'),
   ].join('\n');
-  return { files: new Map([['AGENTS.md', { merge: true, body }]]), prune: [] };
+  return { files: new Map([['AGENTS.md', { merge: true, body: withLocal(ctx, body) }]]), prune: [] };
 };
 
-const claude: VendorRenderer = () => ({
+const claude: VendorRenderer = (ctx) => ({
   files: new Map([
     [
       'CLAUDE.md',
       {
         merge: true,
-        body: [
-          'Engineering standards and review rules for this repository are defined by Redline',
-          'and rendered into `AGENTS.md`. They are binding for all work in this repo.',
-          '',
-          '@AGENTS.md',
-        ].join('\n'),
+        body: withLocal(
+          ctx,
+          [
+            'Engineering standards and review rules for this repository are defined by Redline',
+            'and rendered into `AGENTS.md`. They are binding for all work in this repo.',
+            '',
+            '@AGENTS.md',
+          ].join('\n')
+        ),
       },
     ],
   ]),
@@ -106,7 +170,7 @@ const cursor: VendorRenderer = (ctx) => {
   files.set(`.cursor/rules/${PREFIX}core.mdc`, {
     body:
       `---\ndescription: Redline core standards\nalwaysApply: true\n---\n\n` +
-      `${header(ctx, ctx.stacks)}\n\n${read(ctx.root, ctx.manifest.core.source)}`,
+      withLocal(ctx, `${header(ctx, ctx.stacks)}\n\n${read(ctx.root, ctx.manifest.core.source)}`),
   });
   for (const id of ctx.stacks) {
     const stack = ctx.manifest.stacks[id]!;

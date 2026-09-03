@@ -7,6 +7,55 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- Repository-local rules that Redline renders and never overwrites. A repository can now
+  state a rule that *overrides* an org rule by writing `.redline/local.md`. Redline reads that
+  file, renders it into every enabled vendor's artifact **inside** the
+  `REDLINE:BEGIN`…`REDLINE:END` block under a `# Repository-local rules` heading that states
+  the precedence in words the tool acts on — the repository's own rules win where they
+  conflict with the org standard — and never writes, rewrites or prunes the file itself, on
+  any path including a vendor deselect. Landing inside the block is the whole point: an edit a
+  human makes to the block does not survive the next render, and this does. The section is
+  absent entirely when the file is missing or empty — no heading, no placeholder — and
+  deleting the file removes the section on the next render while leaving the rest of the block
+  byte-identical. Nothing in the file can fail a run: a `REDLINE` marker line in it is escaped
+  to the characters it renders as, and content that `cli/render/markers.ts` cannot read a block
+  back through (an unclosed code fence, which would swallow the `END` marker) is quoted rather
+  than refused — a human's file is not Redline's to validate. Readability is asked of
+  `markers.ts` itself, not of a second parser. `.redline.json` records `localRules`, whether
+  the file was present at the last run, so `redline verify` can tell "never had one" from "had
+  one and it went away"; a config written before the field reads back as `false`.
+  `redline verify` reports a changed local file as work to do rather than as drift the
+  repository is failing at — `artifacts-current` stays green and names `.redline/local.md` and
+  the re-run that folds it in — and it stays a failure when the local rules are already
+  rendered and something else was hand-edited, so the forgiving branch does not swallow the
+  check it sits beside.
+- Closed the command-file clobber. `cli/render/commands.ts` writes
+  `.github/prompts/<name>.prompt.md`, `.claude/commands/<name>.md`,
+  `.opencode/command/<name>.md` and `.cursor/commands/<name>.md`, where `<name>` is only the
+  filename in `commands/` — nothing reserves that name in a consumer repository, so adding
+  `commands/review-pr.md` here would have silently overwritten a team's own
+  `.claude/commands/review-pr.md` in every onboarded repository. Today's two command files
+  happen to be `redline-`-prefixed, so this was latent rather than live. Redline now merges its
+  block into whatever is already at the path, reusing `wrapBlock`/`stripBlock` rather than a
+  second merge implementation, and creates the file only when nothing is there. A
+  `.claude/commands/<name>.md` is a single prompt body, so `/<name>` on a file a team already
+  owned now runs both texts concatenated; that is the accepted cost of not destroying their
+  prompt, and the markers are what keep Redline's half removable and re-renderable. The
+  frontmatter header stays outside the block, because the tools that read these files parse it
+  at byte zero; a file whose only content outside the block is that header is one Redline
+  created, so its `description:` still tracks `commands/<name>.md`, while a header or any prose
+  a human wrote is never rewritten. Deselecting a command host now takes Redline's block back
+  out — deleting a file that was only ever Redline's, and leaving a repository's own bytes
+  byte-identical otherwise — and a file carrying no Redline block anywhere is never touched.
+- `.github/workflows/redline.yml` gets the opposite treatment, deliberately: appending a
+  marker block to YAML gives the workflow a second `name:` and `on:` key and it stops running
+  at all, so there the only honest answers are "replace Redline's own file" and "stop".
+  `installGate` now refuses — in the plan phase as well as the real run, so `--dry-run` cannot
+  promise a write the run would refuse — when a workflow already at that path was not written
+  by Redline, and nothing is written. Attribution is read from the bytes rather than from the
+  path, so the 2.1-era caller `redline init` exists to migrate is still recognised as Redline's
+  and replaced.
+
 - Per-repository vendor selection. `redline init` used to render every org-enabled vendor
   (`standards/manifest.json` → `copilot`, `agents`, `claude`) into every repository, so a
   Copilot-only team was handed `AGENTS.md` and `CLAUDE.md` it never asked for. It now

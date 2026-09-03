@@ -21,6 +21,7 @@ const valid: RedlineConfig = {
   pendingAdmin: ['secret-scanning'],
   onboardedAt: '2026-09-01T00:00:00.000Z',
   lastRunAt: '2026-09-02T00:00:00.000Z',
+  localRules: true,
 };
 
 test('parses a valid config', () => {
@@ -72,4 +73,18 @@ test('a corrupt config is a failure, not a silent null', (t) => {
 test('a config written before lastRunAt existed parses, dating the last run to onboarding', () => {
   const { lastRunAt: _lastRunAt, ...legacy } = valid;
   assert.equal(parseConfig(legacy).lastRunAt, valid.onboardedAt);
+});
+
+// The record of whether `.redline/local.md` was there last time, which is what
+// lets verify tell "never had one" from "had one and it went away". A config
+// written before the field existed reads back as never having had one — the
+// forgiving direction, since verify's local-rules branch only ever softens a
+// finding.
+test('a config written before local rules existed reads back as never having had one', () => {
+  const { localRules: _localRules, ...legacy } = valid;
+  assert.equal(parseConfig(legacy).localRules, false);
+});
+
+test('a non-boolean localRules is read as absent rather than failing the config', () => {
+  assert.equal(parseConfig({ ...valid, localRules: 'yes' }).localRules, false);
 });

@@ -523,7 +523,7 @@ test('installGate reports only the file whose content actually changed', async (
   const cwd = tmp();
   const install = createGitHubInstall(fakeGitHubClient(), gitFor);
   await install.installGate(ref, cwd, gateOpts);
-  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'left over from an older CLI\n');
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'name: Redline\n# left over from an older CLI\n');
 
   const second = await install.installGate(ref, cwd, gateOpts);
   assert.deepEqual(second.files, ['.github/workflows/redline.yml']);
@@ -1051,4 +1051,58 @@ test('a template with a balanced fence still merges and is byte-stable across th
   assert.equal(templateAt(cwd), merged, 'byte-stable from the first run');
   assert.ok(first.files.includes('.github/pull_request_template.md'));
   assert.ok(!second.files.includes('.github/pull_request_template.md'));
+});
+
+// --- the caller workflow is refused, never merged and never clobbered --------
+//
+// The shared markdown artifacts take a REDLINE marker block appended to
+// whatever a repository already had there. A workflow cannot: appending gives
+// the YAML a second `name:` and `on:` key and the file stops running at all.
+// So the only two honest answers at this path are "replace Redline's own file"
+// and "stop".
+
+const NOT_OURS = 'name: Nightly deploy\non:\n  schedule:\n    - cron: "0 3 * * *"\njobs:\n  go:\n    runs-on: ubuntu-latest\n';
+
+test("a workflow at the caller path that Redline did not write is refused, not overwritten", async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), NOT_OURS);
+
+  await assert.rejects(
+    createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts),
+    /\.github\/workflows\/redline\.yml/
+  );
+  assert.equal(readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8'), NOT_OURS);
+});
+
+// The plan phase is what `redline init --dry-run` prints and what a re-run
+// decides "settled" from, so it has to refuse in the same place — a plan that
+// promises a write the real run will refuse is the lie this whole branch has
+// been closing.
+test('the plan phase refuses the same foreign workflow rather than promising a write', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), NOT_OURS);
+
+  await assert.rejects(
+    createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts, true),
+    /\.github\/workflows\/redline\.yml/
+  );
+});
+
+// The 2.1 rollout wrote its own caller at this path, and migrating it is the
+// whole point of `detectMigration`. Attribution is read from the bytes, so
+// that file is Redline's and is replaced.
+test("the 2.1 caller workflow is Redline's own and is replaced by the v3 one", async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'name: Redline 2.1\non:\n  pull_request:\n');
+
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
+
+  assert.ok(result.files.includes('.github/workflows/redline.yml'));
+  assert.match(
+    readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8'),
+    /uses: acme\/\.github\/\.github\/workflows\/redline-gate\.yml@main/
+  );
 });

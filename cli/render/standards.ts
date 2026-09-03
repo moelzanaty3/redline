@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { loadManifest } from './manifest.ts';
 import { resolveProfile } from './profile.ts';
 import { END, findBlock, wrapBlock } from './markers.ts';
-import { VENDORS, type PruneRule, type RenderedFile } from './vendors.ts';
+import { readLocalRules, VENDORS, type PruneRule, type RenderedFile } from './vendors.ts';
 import { RedlineError } from '../core/errors.ts';
 
 export interface RenderOptions {
@@ -79,7 +79,15 @@ export function render(opts: RenderOptions): RenderResult {
   );
   const selected = requested.filter((name) => orgEnabled.has(name));
 
-  const ctx = { manifest, root, profile: resolved.profile, stacks: resolved.stacks };
+  // Read from `out`, the tree being rendered into: the repository's own rules
+  // live in the repository, and every vendor renderer gets the same bytes.
+  const ctx = {
+    manifest,
+    root,
+    profile: resolved.profile,
+    stacks: resolved.stacks,
+    local: readLocalRules(out),
+  };
   const planned = new Map<string, RenderedFile>();
   const prunes: PruneRule[] = [];
   // A shared (`merge: true`) file belonging to a vendor that is not currently
