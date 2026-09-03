@@ -161,10 +161,13 @@ Record seed scores here. A standards change with no measurement is an opinion.
   "(as recorded at the last run)" rather than asserted as this run's finding.
 - `redline init --dry-run` prints the plan — the files it would write, the files it would
   remove, the repository settings it would change and the resolved menu — and exits 0
-  having written nothing and made no request to the host: the repository identity it plans
-  against is derived from the git remote and the local clone, not from a live read. (A host
-  credential is still resolved before the command runs, because that happens once for every
-  command in `resolvePlatform`.) Deletions print as `would remove`, not as writes.
+  having written nothing, contacted no host and required no credential. The repository
+  identity it plans against is derived from the git remote and the local clone, not from a
+  live read, and the host client is built lazily so the token is never resolved on this
+  path: the most useful moment for a preview is before anyone has gone and got an
+  admin-scoped PAT. Every other command, and a non-dry-run `init`, still resolves the
+  credential up front in `resolvePlatform` and still exits 3 there with the same message.
+  Deletions print as `would remove`, not as writes.
   `--no-a11y` and `--speckit` now say in the usage text what they
   really do: they are recorded in `.redline.json` for later phases and change nothing in
   Phase 1. `accessibility` defaults from the resolved stacks rather than being `true`

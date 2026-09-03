@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { CLI_VERSION } from '../core/version.ts';
 import { createLog, type Sink } from '../core/log.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
-import { resolvePlatform as defaultResolvePlatform } from '../platforms/resolve.ts';
+import {
+  resolvePlatform as defaultResolvePlatform,
+  type ResolvePlatformOptions,
+} from '../platforms/resolve.ts';
 import { init, ONBOARD_BRANCH } from '../commands/init.ts';
 import type { MenuSelections } from '../config/redline-json.ts';
 import { verify } from '../commands/verify.ts';
@@ -18,7 +21,7 @@ const USAGE = [
   '',
   '  redline init [--profile <name>] [--blocking] [--no-a11y] [--speckit] [--dry-run]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
-  '      --dry-run   print the plan; writes nothing and makes no request to the host',
+  '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
   '      --blocking  promote the merge gate from advisory to blocking',
   '      --no-a11y, --speckit  recorded in .redline.json for later phases; changes nothing in Phase 1',
   '      omitted flags keep whatever .redline.json already recorded',
@@ -45,14 +48,16 @@ export interface RunDeps {
   cwd?: string;
   root?: string;
   sink?: Sink;
-  resolvePlatform?: (cwd: string) => Promise<Platform>;
+  resolvePlatform?: (cwd: string, opts?: ResolvePlatformOptions) => Promise<Platform>;
 }
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
   const cwd = deps.cwd ?? process.cwd();
   const root = deps.root ?? PACKAGE_ROOT;
   const log = createLog(deps.sink);
-  const resolve = deps.resolvePlatform ?? ((dir: string) => defaultResolvePlatform(dir));
+  const resolve =
+    deps.resolvePlatform ??
+    ((dir: string, options?: ResolvePlatformOptions) => defaultResolvePlatform(dir, options));
 
   const [command, ...rest] = argv;
 
@@ -91,12 +96,16 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values['no-a11y'] !== undefined) menu.accessibility = !values['no-a11y'];
       if (values.speckit !== undefined) menu.speckit = values.speckit;
 
-      const platform = await resolve(cwd);
+      const dryRun = values['dry-run'] === true;
+      // A dry run sends no request, so it must not require a credential —
+      // see ResolvePlatformOptions.lazyCredentials. Every other path here
+      // resolves one up front, exactly as before.
+      const platform = await resolve(cwd, dryRun ? { lazyCredentials: true } : {});
       const report = await init(platform, {
         cwd,
         root,
         ...(values.profile ? { profile: values.profile } : {}),
-        ...(values['dry-run'] === true ? { dryRun: true } : {}),
+        ...(dryRun ? { dryRun: true } : {}),
         menu,
       });
 

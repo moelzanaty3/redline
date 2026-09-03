@@ -3,14 +3,63 @@ import { RedlineError } from '../core/errors.ts';
 import { parseRemote } from './detect.ts';
 import { createGitHubClient, type GitHubClient } from './github/client.ts';
 import { createGitHubPlatform } from './github/index.ts';
-import { createAzureClient, type AzureClient } from './azure/client.ts';
+import { createAzureClient, type AzureClient, type AzureRequestOptions } from './azure/client.ts';
 import { createAzurePlatform } from './azure/index.ts';
+import type { HttpResponse } from './http.ts';
 import type { Platform } from './types.ts';
 
-export interface ResolveDeps {
+export interface ResolvePlatformOptions {
+  // Build the client without resolving a credential, and resolve it on the
+  // first host request instead.
+  //
+  // Only `redline init --dry-run` sets this. A dry run builds a Platform
+  // purely to plan against — it derives the repository identity from the
+  // local clone (Platform.localRef) and never sends a request — so the eager
+  // check below would make a preview demand the one thing the preview exists
+  // to avoid: someone evaluating Redline wants to see what it would do to
+  // their repository *before* going to get an admin-scoped token.
+  //
+  // Everything else keeps the fail-fast chokepoint, unchanged and in one
+  // place. When a lazy client is eventually used, it throws exactly the error
+  // the eager path would have thrown, just later.
+  lazyCredentials?: boolean;
+}
+
+export interface ResolveDeps extends ResolvePlatformOptions {
   gitFor?: (cwd: string) => Git;
   makeGitHubClient?: () => GitHubClient;
   makeAzureClient?: (org: string) => AzureClient;
+}
+
+// One memoised construction, behind the same interface. Deliberately written
+// out per client rather than proxied: `rest`/`request` are generic, and a
+// generic proxy cannot forward a type parameter without an escape hatch.
+function lazyGitHubClient(make: () => GitHubClient): GitHubClient {
+  let real: GitHubClient | null = null;
+  const client = (): GitHubClient => (real ??= make());
+  return {
+    rest<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>> {
+      return client().rest<T>(method, path, body);
+    },
+    graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+      return client().graphql<T>(query, variables);
+    },
+  };
+}
+
+function lazyAzureClient(make: () => AzureClient): AzureClient {
+  let real: AzureClient | null = null;
+  const client = (): AzureClient => (real ??= make());
+  return {
+    request<T>(
+      method: string,
+      path: string,
+      body?: unknown,
+      opts?: AzureRequestOptions
+    ): Promise<HttpResponse<T>> {
+      return client().request<T>(method, path, body, opts);
+    },
+  };
 }
 
 // The one place that turns a working tree into a Platform. Every command
@@ -24,10 +73,12 @@ export async function resolvePlatform(cwd: string, deps: ResolveDeps = {}): Prom
   }
 
   const identity = parseRemote(git.remoteUrl());
+  const lazy = deps.lazyCredentials === true;
   if (identity.host === 'github') {
-    const client = (deps.makeGitHubClient ?? (() => createGitHubClient()))();
-    return createGitHubPlatform({ client, gitFor });
+    const make = deps.makeGitHubClient ?? ((): GitHubClient => createGitHubClient());
+    return createGitHubPlatform({ client: lazy ? lazyGitHubClient(make) : make(), gitFor });
   }
-  const client = (deps.makeAzureClient ?? ((org: string) => createAzureClient(org)))(identity.org);
-  return createAzurePlatform({ client, gitFor });
+  const makeAzure = deps.makeAzureClient ?? ((org: string): AzureClient => createAzureClient(org));
+  const make = (): AzureClient => makeAzure(identity.org);
+  return createAzurePlatform({ client: lazy ? lazyAzureClient(make) : make(), gitFor });
 }

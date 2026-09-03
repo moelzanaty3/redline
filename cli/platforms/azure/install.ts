@@ -523,6 +523,16 @@ export function createAzureInstall(
         // triggers) — written only against a definition installGate confirmed
         // or registered, never against a guess, and written BEFORE the Status
         // policy so that a rejected write can still hold the gate advisory.
+        //
+        // DO NOT ADD `oneSettingPerBranch: true` HERE. Azure keys Build
+        // Validation policies by buildDefinitionId and several coexist on one
+        // branch, so a human's Build policy is a neighbour, not the same
+        // control. Backing off beside it would leave the repository with a
+        // blocking `redline/gate` Status policy (written below, after this
+        // entry) and nothing able to publish that status — every pull request
+        // blocked forever. The back-off branch in the loop below deliberately
+        // does not degrade `effectiveBlocking`, because this entry is the one
+        // case where it would matter and this entry must never reach it.
         ...(registeredGate === null
           ? []
           : [

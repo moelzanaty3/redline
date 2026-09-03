@@ -7,6 +7,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../redline.ts';
 import { CLI_VERSION } from '../../core/version.ts';
+import { createGit, type GitRunner } from '../../core/git.ts';
+import { RedlineError } from '../../core/errors.ts';
+import { resolvePlatform } from '../../platforms/resolve.ts';
 import { fakePlatform, type FakePlatform } from '../../commands/__tests__/fake-platform.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -281,4 +284,69 @@ test('a no-op re-run marks the pending-admin list as recorded, not as this run\'
     second.lines.some((l) => l.includes('secret-scanning') && l.includes('at the last run')),
     second.lines.join('\n')
   );
+});
+
+// --- The dry run needs no credential ----------------------------------------
+//
+// Someone evaluating Redline wants to see what it would do to their repository
+// before they go and get an admin-scoped token. These two tests are the whole
+// guarantee: the preview runs without a credential, and nothing else does.
+
+const CREDENTIALLESS_GIT: GitRunner = (args) => {
+  if (args[0] === 'rev-parse') return 'true';
+  if (args[0] === 'remote') return 'https://github.com/acme/web.git';
+  if (args[0] === 'symbolic-ref') return 'origin/main';
+  return '';
+};
+
+// Exactly what createGitHubClient() does when GH_TOKEN is unset and
+// `gh auth token` fails — see resolveGitHubToken.
+const noCredentials = (): never => {
+  throw new RedlineError(
+    'permission',
+    'no GitHub credentials found — run: gh auth login, or set GH_TOKEN',
+    'run: gh auth login — or set GH_TOKEN'
+  );
+};
+
+function unauthenticated(cwd: string) {
+  const lines: string[] = [];
+  return {
+    lines,
+    opts: {
+      cwd,
+      root,
+      sink: { out: (l: string) => lines.push(l), err: (l: string) => lines.push(l) },
+      // The real resolvePlatform, so the lazy wiring is exercised end to end.
+      resolvePlatform: (dir: string, options?: { lazyCredentials?: boolean }) =>
+        resolvePlatform(dir, {
+          ...options,
+          gitFor: (d: string) => createGit(d, CREDENTIALLESS_GIT),
+          makeGitHubClient: noCredentials,
+        }),
+    },
+  };
+}
+
+test('init --dry-run prints the plan with no credential in the environment', async () => {
+  const { opts, lines } = unauthenticated(repo());
+  assert.equal(await run(['init', '--dry-run'], opts), 0, lines.join('\n'));
+  assert.ok(lines.some((l) => l.includes('would write')), lines.join('\n'));
+  assert.ok(lines.some((l) => l.includes('dry run')));
+});
+
+test('a real init with no credential still exits 3 at the same chokepoint, with nothing on disk', async () => {
+  const cwd = repo();
+  const { opts, lines } = unauthenticated(cwd);
+  assert.equal(await run(['init'], opts), 3);
+  assert.ok(lines.some((l) => l.includes('gh auth login')), lines.join('\n'));
+  assert.equal(existsSync(join(cwd, 'AGENTS.md')), false);
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});
+
+test('verify with no credential still exits 3 — the laziness does not leak past --dry-run', async () => {
+  const cwd = repo();
+  await run(['init'], deps(cwd).opts);
+  const { opts } = unauthenticated(cwd);
+  assert.equal(await run(['verify'], opts), 3);
 });
