@@ -1,13 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadManifest } from '../manifest.ts';
 import { resolveProfile } from '../profile.ts';
 import { VENDORS, type RenderContext } from '../vendors.ts';
 import { ONBOARD_BRANCH, SYNC_LABEL } from '../../commands/init.ts';
+import { verify } from '../../commands/verify.ts';
 import { REQUIRED_CHECK } from '../../platforms/github/install.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
+const journeyPath = fileURLToPath(new URL('../../../web/components/journey.tsx', import.meta.url));
 const manifest = loadManifest(root);
 
 function ctx(profileName: string): RenderContext {
@@ -85,6 +90,36 @@ test('web/components/journey.tsx mirrors these CLI constants verbatim', () => {
   assert.equal(REQUIRED_CHECK, 'redline-gate / gate');
   assert.equal(ONBOARD_BRANCH, 'redline/onboard');
   assert.equal(SYNC_LABEL, 'redline-sync');
+});
+
+// The "before" probe on the journey page shows `redline verify`'s literal
+// "not onboarded" hint for an illustrative repo. Unlike the constants above,
+// that hint is not an exported value — it is built inline in verify.ts from
+// opts.cwd — so it is derived here by actually running verify() against an
+// empty repo and substituting the page's illustrative cwd into the real
+// result, then compared against the text journey.tsx renders. Hardcoding the
+// same sentence in both files would only move the drift this pins against.
+test('web/components/journey.tsx mirrors the "not onboarded" hint verbatim', async () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'redline-journey-hint-'));
+  try {
+    const report = await verify(
+      () => {
+        throw new Error('unreachable: no .redline.json short-circuits before the platform resolves');
+      },
+      { cwd, root }
+    );
+    const detail = report.findings.find((f) => f.check === 'onboarded')?.detail ?? '';
+    const prefix = `no ${cwd}`;
+    assert.ok(detail.startsWith(prefix), detail);
+    const expected = `no /src/checkout-service${detail.slice(prefix.length)}`;
+
+    const journeySource = readFileSync(journeyPath, 'utf8');
+    const match = /<span className="tk-dim">\s*\{" "\}\s*\n\s*(.+)\n\s*<\/span>/.exec(journeySource);
+    assert.ok(match, 'journey.tsx "not onboarded" hint span not found');
+    assert.equal(match[1]!.trim(), expected);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test('cursor globs are unquoted and per-stack files carry no header comment', () => {

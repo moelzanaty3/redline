@@ -662,11 +662,11 @@ npx redline-cli init
    required yet, and `verify` can only surface what the host is currently reporting, not
    assert against it.
 6. **`redline verify` cannot detect drift in the rendered command files.** `renderCommands`
-   (`cli/render/commands.ts`) only ever writes; it has no `check` mode, unlike `render()`
-   for the standards artifacts. It also has no prune step: disabling a vendor in
-   `standards/manifest.json` after a repo has already onboarded leaves that vendor's
-   `commands/*.md` files behind, undetected and unremoved. Both a check mode and a prune
-   step are Phase 2.
+   (`cli/render/commands.ts`) has a `check` mode — `redline init --dry-run` uses it — but
+   `verify.ts` never calls `renderCommands` at all, so it has nothing to report drift with.
+   It also has no prune step: disabling a vendor in `standards/manifest.json` after a repo
+   has already onboarded leaves that vendor's `commands/*.md` files behind, undetected and
+   unremoved. Wiring `verify` to it and adding the prune step are Phase 2.
 7. **Azure DevOps Server (on-premises) is unreachable.** `cli/platforms/azure/client.ts`
    hardcodes `dev.azure.com`, with no environment-variable override — unlike
    `cli/platforms/github/client.ts`, which honours `GITHUB_API_URL` for GitHub Enterprise

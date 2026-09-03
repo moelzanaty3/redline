@@ -280,8 +280,7 @@ export function Journey() {
               <span className="tk-white">{"onboarded".padEnd(22)}</span>
               <span className="tk-dim">
                 {" "}
-                no /src/checkout-service/.redline.json — run: npx
-                --package=redline-cli@latest redline init
+                no /src/checkout-service/.redline.json — run: npx redline-cli init
               </span>
             </pre>
           </div>
