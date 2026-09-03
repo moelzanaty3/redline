@@ -245,6 +245,9 @@ test('a pendingAdmin capability that has since been granted is called out distin
   assert.match(finding?.detail ?? '', /partially onboarded/);
   assert.match(finding?.detail ?? '', /push-protection/);
   assert.match(finding?.detail ?? '', /secret-scanning.*now granted/);
+  // A read never clears a record of a refused write, so the remedy is the run
+  // that retries the write — not a plain re-run, which settles and does nothing.
+  assert.match(finding?.detail ?? '', /redline init --repair/);
 });
 
 // --- the gate contract: not-yet-run is not the same as reported-wrong -------
@@ -605,6 +608,34 @@ test('a capability the host does not offer is never filed as work an administrat
   assert.match(detail, /secret-scanning/);
 });
 
+// I2. `unsupported` and `unknown` are both "not answered", and the two
+// findings used to give directly opposed advice about the same repository:
+// security-floor said "not visible to this token" while pending-admin said
+// "no administrator action would clear it". Only the first is true — an
+// administrator enabling the setting is exactly what clears an `unknown`.
+test('a capability the token cannot see is never reported as beyond an administrator', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pendingAdmin: ['secret-scanning'] });
+  const platform = fakePlatform({
+    securityState: [
+      { capability: 'secret-scanning', status: 'unknown', detail: 'not visible to this token' },
+      { capability: 'push-protection', status: 'applied', detail: 'on' },
+    ],
+  });
+
+  const report = await verify(() => platform, { cwd, root });
+  assert.match(find(report, 'security-floor')?.detail ?? '', /not visible to this token/);
+  const detail = find(report, 'pending-admin')?.detail ?? '';
+  assert.ok(
+    !/no administrator action would clear it/.test(detail),
+    `contradicts the security-floor finding on the same state: ${detail}`
+  );
+  assert.match(detail, /secret-scanning/);
+  assert.match(detail, /not visible to this token/);
+  assert.match(detail, /redline init --repair/);
+});
+
 // Same shape as security-floor: the Azure gate runs as the build service
 // identity, so a record nothing there can act on must not block every pull
 // request in the repository forever.
@@ -689,6 +720,34 @@ test('a policy whose own detail says pull requests are blocked does not pass', a
 
   const gated = await verify(() => platform, { cwd, root, gate: true });
   assert.equal(find(gated, 'merge-policy')?.ok, false, 'and it blocks nothing that was not already blocked');
+});
+
+// I3. The producer side (github/verify.ts sets notEnforcedReason for a
+// ruleset switched to "evaluate") was tested; the consumer that turns it into
+// a failing finding was not, and deleting it broke nothing. The state is a
+// repository whose every readable field is still correct — advisory as the
+// config says, one approval, code-owner review on — while none of the
+// ruleset's rules apply to any pull request. Without this the report is green.
+test('a ruleset the host says is not in force fails even though every field still reads correctly', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(
+    cwd,
+    policyOf({
+      blocking: false,
+      notEnforcedReason:
+        'the Redline ruleset is set to "evaluate" rather than "active", so none of its rules apply ' +
+        'and every setting below is readable but inert',
+    })
+  );
+
+  const report = await verify(() => platform, { cwd, root });
+  const finding = find(report, 'merge-policy');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /none of its rules apply/);
+  assert.equal(report.ok, false);
+
+  const gated = await verify(() => platform, { cwd, root, gate: true });
+  assert.equal(find(gated, 'merge-policy')?.ok, false, 'a gate run must not pass a policy nothing enforces');
 });
 
 // A rename is drift on an advisory repository too: the gate reports under a

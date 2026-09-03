@@ -212,46 +212,33 @@ export interface InitReport {
   hostPlan: string[];
 }
 
-// An indeterminate read is not an answer. A capability's recorded state may
-// only change when the read says something definite about that capability:
-// `applied`/`already` (granted) or `denied` (refused). `unsupported` is how
-// both adapters report "this token cannot see it" as well as "the feature is
-// not licensed here", and neither is an answer about whether an administrator
-// still has to act — so it leaves the record exactly as recorded, in both
-// directions. Nothing reads back `labels`, `review-ownership`, `repo-property`,
-// `gate` or `dependency-alerts` at all, so those are never in `security` and
-// always survive.
+// `pendingAdmin` records one fact and one only: a WRITE this run attempted was
+// refused. Every entry is produced by `outcomes.filter(isPending)` further
+// down, off what the four install calls returned. No read revises it, in either
+// direction, for any capability — not `labels`, `review-ownership`,
+// `repo-property` or `gate` (which have no read side at all), not
+// `merge-policy` (whose `readPolicy` answers "a ruleset with Redline's name
+// exists", never "this token may write one" — on GitHub those split exactly
+// along GET /rulesets versus PUT /rulesets/{id}), and not the three security
+// capabilities either.
 //
-// `merge-policy` is the sixth capability with no read-back, and the one that
-// looks like it has one. `readPolicy` answers "a ruleset with Redline's name
-// exists"; `merge-policy` in pendingAdmin records "this token was refused the
-// write". On GitHub those split exactly along GET /rulesets (read) versus
-// PUT /rulesets/{id} (admin), so an administrator's ruleset reads back fine
-// for the write-but-not-admin token that cannot touch it. Clearing the record
-// from the read made the plan phase disagree with what the apply would record
-// — cleared here, re-recorded by the refused write, never settled, and from
-// the second re-run exit 1 on a non-fast-forward push to redline/onboard.
-// The accepted cost of leaving it: on a repository whose ruleset already
-// matches the menu, a recorded `merge-policy` survives even after an
-// administrator grants the rights, because nothing re-applies and nothing
-// reads write-permission back. That is the same standing cost the other five
-// carry, and the already-onboarded output qualifies the list as recorded at
-// the last run.
-const DEFINITE: CapabilityOutcome['status'][] = ['applied', 'already', 'denied'];
-
-function refreshPendingAdmin(
-  recorded: AdminCapability[],
-  security: CapabilityOutcome[]
-): AdminCapability[] {
-  const answered = new Set<AdminCapability>(
-    security.filter((o) => DEFINITE.includes(o.status)).map((o) => o.capability)
-  );
-  const denied = security.filter(isPending).map((o) => o.capability);
-  return [
-    ...recorded.filter((capability) => !answered.has(capability) || denied.includes(capability)),
-    ...denied.filter((capability) => !recorded.includes(capability)),
-  ];
-}
+// The security three look reconcilable and are not. `readSecurityState`
+// answers "is the setting on?"; the record answers "was this token allowed to
+// set it?". A fine-grained GitHub token with `administration: read` reads
+// GET /vulnerability-alerts as 204 while PUT /automated-security-fixes answers
+// 403; an Azure PAT with `vso.advsec` but no Project Administrator role reads
+// `advSecEnabled: true` while the PATCH is refused, for all three at once.
+// Letting the read clear or create an entry made the settled path disagree
+// with what the apply path would record, so the two answers chased each other:
+// the read cleared the entry, the refused write re-recorded it, and every run
+// re-applied four host mutations and pushed another commit onto the onboarding
+// pull request, exiting 0 throughout.
+//
+// The accepted cost of the uniform rule: a recorded entry survives even after
+// an administrator grants the rights, because nothing re-applies and nothing
+// reads write-permission back. `redline init --repair` is the sanctioned way
+// out — it is what `redline verify`'s pending-admin finding points at — and
+// the already-onboarded output qualifies the list as recorded at the last run.
 
 export async function init(platform: Platform, opts: InitOptions): Promise<InitReport> {
   const { cwd, root } = opts;
@@ -285,8 +272,8 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const ref = dryRun ? platform.localRef(cwd) : await platform.repoRef(cwd);
   // detected <- what this repository already recorded <- what the caller
   // typed, the same precedence the menu resolves under. The org ceiling is
-  // deliberately not applied here: render() enforces it on every call it
-  // makes (including verify's), so a recorded selection can outlive an
+  // deliberately not applied to the RECORD: render() enforces it on every call
+  // it makes (including verify's), so a recorded selection can outlive an
   // org-side disablement without this function needing to track that.
   const orgVendors = Object.entries(manifest.vendors)
     .filter(([, v]) => v.enabled)
@@ -296,10 +283,16 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // Files first, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
   const rendered = render({ root, profile, out: cwd, vendors, check: dryRun });
+  // The ceiling render() applies internally, applied here too. renderCommands
+  // cannot enforce it for itself: COMMAND_HOSTS carries hosts the vendor
+  // manifest has no entry for at all (opencode), which is not the same thing
+  // as a vendor the org switched off. Without this, `redline init --vendors
+  // copilot,cursor` skipped .cursor/rules/ and still wrote .cursor/commands/,
+  // delivering half of a vendor the org had disabled.
   const commandFiles = renderCommands({
     root,
     out: cwd,
-    hosts: vendors.flatMap((v) => (v in COMMAND_HOSTS ? [v] : [])),
+    hosts: vendors.flatMap((v) => (orgVendors.includes(v) && v in COMMAND_HOSTS ? [v] : [])),
     check: dryRun,
   });
   const legacyRemovals = migratedFrom === '2.1' ? removeLegacyArtifacts(cwd, dryRun) : [];
@@ -353,38 +346,28 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // destroys onboardedAt, the recorded menu, and makes this run look like a
   // 2.1 migration.
   //
-  // The two reads happen only when nothing else has already settled the
-  // question. They exist to decide whether a run with no other work to do is
-  // genuinely finished, so a run that already has work does not need them —
-  // and must not be aborted by them: a 502 on GET /rulesets, or a token that
-  // can write but cannot list rulesets, would otherwise exit 4 on a run that
-  // had real work and had already written the rendered files.
+  // The read happens only when nothing else has already settled the question.
+  // It exists to decide whether a run with no other work to do is genuinely
+  // finished, so a run that already has work does not need it — and must not
+  // be aborted by it: a 502 on GET /rulesets, or a token that can write but
+  // cannot list rulesets, would otherwise exit 4 on a run that had real work
+  // and had already written the rendered files.
   // `--repair` exists precisely to bypass the settled verdict below, so
-  // computing it here would spend two host GETs whose answer nothing then
-  // reads: `alreadyOnboarded` is forced false for a repair run further down,
-  // never mind what these reads would have said.
+  // computing it here would spend a host GET whose answer nothing then reads:
+  // `alreadyOnboarded` is forced false for a repair run further down, never
+  // mind what the read would have said.
   const settledOnFiles = existing !== null && changedFiles.length === 0 && !menuChanged && !vendorsChanged;
-  let livePendingAdmin: AdminCapability[] | null = null;
   let settledOnHost = true;
   if (existing !== null && settledOnFiles && !dryRun && !repair) {
     const policy = await platform.readPolicy(ref);
-    const security = await platform.readSecurityState(ref);
-    livePendingAdmin = refreshPendingAdmin(existing.pendingAdmin, security.outcomes);
     // A null policy read is not by itself drift. A repository onboarded
     // without admin rights never got a ruleset — that refusal is exactly what
     // `merge-policy` in pendingAdmin records — so null is its settled state.
     // Where the record says the ruleset was applied, null means it vanished.
-    const policySettled =
+    settledOnHost =
       policy === null
         ? existing.pendingAdmin.includes('merge-policy')
         : policy.blocking === menu.blockingGate;
-    // `redline verify` prints "<capability> now granted — rerun redline init
-    // to clear it from .redline.json". A short-circuited re-run would never
-    // clear it, so a recorded list the host now contradicts is work to do.
-    const pendingChanged =
-      livePendingAdmin.length !== existing.pendingAdmin.length ||
-      livePendingAdmin.some((capability, i) => capability !== existing.pendingAdmin[i]);
-    settledOnHost = policySettled && !pendingChanged;
   }
 
   // `--repair` skips the short-circuit outright: it exists for exactly the
@@ -407,11 +390,10 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       files: [],
       removals: [],
       outcomes: [],
-      // Refreshed for the capabilities a read can answer (secret scanning,
-      // push protection) and equal to what .redline.json
-      // records for the rest — if it were not equal, this would not be the
-      // settled path. `bin` still marks it as recorded rather than measured.
-      pendingAdmin: livePendingAdmin ?? existing.pendingAdmin,
+      // Exactly what .redline.json records, because this run attempted no
+      // write and only a write answers the question the record asks. `bin`
+      // marks it as recorded rather than measured.
+      pendingAdmin: existing.pendingAdmin,
       pullRequest: null,
       pullRequestError: null,
       migratedFrom,

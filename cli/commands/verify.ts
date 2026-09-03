@@ -6,7 +6,12 @@ import {
   observePullRequestTemplates,
   type TemplateObservation,
 } from '../platforms/pull-request-templates.ts';
-import type { Platform, PolicySetting } from '../platforms/types.ts';
+import type {
+  AdminCapability,
+  CapabilityOutcome,
+  Platform,
+  PolicySetting,
+} from '../platforms/types.ts';
 
 // Which way the two standards versions run. Neither direction is local drift —
 // the repository is in the state its own `redline init` left it in — but the
@@ -390,57 +395,56 @@ export async function verify(
   );
 
   // pendingAdmin is a known, recorded state — not drift — so it gets its own
-  // check rather than folding into artifacts-current or security-floor. A
-  // capability that has since been granted is called out in the detail (so
-  // the operator knows to re-run `redline init` and clear it), but the
-  // finding still reports not-fully-onboarded while the record is stale.
+  // check rather than folding into artifacts-current or security-floor. Every
+  // entry records one thing: `redline init` attempted a write and the host
+  // refused it. Nothing read here can clear that, so every clause below points
+  // at `redline init --repair`, the only run that retries a write a settled
+  // repository would otherwise never attempt again.
+  //
   // Only a read that answered can produce work for an administrator, and the
-  // same rule the security-floor finding runs on applies here.
-  // `applied`/`already`/`denied` are answers; `unsupported` and `unknown` are
-  // both "nothing was observed" from this clause's point of view — the
-  // capability may be genuinely unlicensed (`unsupported`), or the read may
-  // simply have been indeterminate (`unknown`, Task 17) — and no
-  // administrator action clears a pendingAdmin entry on the strength of
-  // either. Naming one of those as work to do sent operators to check
-  // settings that were already correct, or that do not exist to be checked.
-  // The security-floor finding tells the two apart in its own wording; this
-  // clause does not need to, because neither one moves a capability between
-  // the buckets below.
-  const answered = new Set(
-    security.outcomes
-      .filter((o) => o.status === 'applied' || o.status === 'already' || o.status === 'denied')
-      .map((o) => o.capability)
-  );
-  const grantedSince = config.pendingAdmin.filter((capability) => {
-    const current = security.outcomes.find((o) => o.capability === capability);
-    return current !== undefined && (current.status === 'applied' || current.status === 'already');
-  });
-  const stillPending = config.pendingAdmin.filter(
-    (capability) => answered.has(capability) && !grantedSince.includes(capability)
-  );
-  // Observed, but the answer was "not here to enable".
-  const unavailable = config.pendingAdmin.filter(
-    (capability) =>
-      !answered.has(capability) && security.outcomes.some((o) => o.capability === capability)
-  );
+  // same rule the security-floor finding runs on applies here — but the two
+  // unanswered statuses need different advice, not just different wording.
+  // `unsupported` is definite: Advanced Security is not licensed here, so no
+  // administrator action would ever clear it. `unknown` is indeterminate: the
+  // token could not see the setting, and an administrator enabling it is
+  // exactly what clears it. Giving `unknown` the `unsupported` advice had this
+  // finding telling the operator nothing would help while security-floor, on
+  // the same repository, told them to retry with a token that can see it.
+  const statusOf = (capability: AdminCapability): CapabilityOutcome['status'] | null =>
+    security.outcomes.find((o) => o.capability === capability)?.status ?? null;
+  const withStatus = (...statuses: CapabilityOutcome['status'][]): AdminCapability[] =>
+    config.pendingAdmin.filter((capability) => {
+      const status = statusOf(capability);
+      return status !== null && statuses.includes(status);
+    });
+  const grantedSince = withStatus('applied', 'already');
+  const stillPending = withStatus('denied');
+  // Observed, and the answer was definite: "not here to enable".
+  const unavailable = withStatus('unsupported');
+  // Observed, and nothing was learned.
+  const invisible = withStatus('unknown');
   // Never read back at all: labels, review-ownership, repo-property, gate and
   // merge-policy have no read side, so a record of one is exactly as true as
   // the day it was written and no verify run will ever clear it.
-  const unverifiable = config.pendingAdmin.filter(
-    (capability) => !answered.has(capability) && !unavailable.includes(capability)
-  );
+  const unverifiable = config.pendingAdmin.filter((capability) => statusOf(capability) === null);
   const clauses = [
     stillPending.length > 0 ? `an administrator must still enable: ${stillPending.join(', ')}` : null,
     unavailable.length > 0
-      ? `recorded as pending, but not available on this repository or not visible to this token, ` +
-        `so no administrator action would clear it: ${unavailable.join(', ')}`
+      ? `recorded as pending, but not available on this repository, so no administrator action ` +
+        `would clear it: ${unavailable.join(', ')}`
+      : null,
+    invisible.length > 0
+      ? `recorded as pending and not visible to this token: ${invisible.join(', ')} — an ` +
+        `administrator enabling it is what clears this, so re-read with a token that can see the ` +
+        `setting, then run redline init --repair`
       : null,
     unverifiable.length > 0
       ? `recorded as pending; not verifiable with this token: ${unverifiable.join(', ')} — after an ` +
         `administrator grants access, a plain redline init will not recheck these; run redline init --repair`
       : null,
     grantedSince.length > 0
-      ? `${grantedSince.join(', ')} now granted — rerun redline init to clear it from .redline.json`
+      ? `${grantedSince.join(', ')} now granted on the host, but the record is of a refused write and ` +
+        `no read clears it — run redline init --repair to retry the write`
       : null,
   ].filter((s): s is string => s !== null);
   add(

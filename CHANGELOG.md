@@ -7,6 +7,50 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- Final whole-branch review fixes. **`redline init` now converges whenever a security
+  capability's write answer and its read answer disagree.** `pendingAdmin` records exactly one
+  fact — a write `redline init` attempted was refused — and the settled path used to revise that
+  record from `readSecurityState`, which answers a different question ("is the setting on?"). The
+  two chased each other: the read cleared the entry, the refused write re-recorded it, and every
+  run re-applied all four host mutations and pushed another commit onto the onboarding pull
+  request, exiting `0` throughout, while `redline verify` told the operator to re-run. Reachable
+  on both hosts — a fine-grained GitHub token with `administration: read` reads
+  `GET /vulnerability-alerts` as 204 while `PUT /automated-security-fixes` answers 403; an Azure
+  PAT with `vso.advsec` but no Project Administrator role reads `advSecEnabled: true` while the
+  `PATCH` is refused, oscillating all three capabilities at once. No read now revises the record,
+  for any capability, so the security three carry the same standing cost `merge-policy` and the
+  four write-only capabilities already carried, and `redline init --repair` is the one sanctioned
+  way to clear a recorded refusal. The comment that claimed `dependency-alerts` is never read back
+  — the false premise the settled path's whole safety argument rested on — is corrected; both
+  adapters emit it from `readSecurityState`. The settled path is one host GET lighter as a result.
+- `redline verify`'s `pending-admin` finding no longer contradicts its own `security-floor`
+  finding. `unsupported` and `unknown` are both "not answered" but need different *advice*, not
+  just different wording: `unsupported` is definite (the feature is not licensed here, so no
+  administrator action would ever clear it), while `unknown` only means the token could not see
+  the setting — an administrator enabling it is exactly what clears it. On one repository state
+  (`pendingAdmin: ["secret-scanning"]` plus a token that cannot see `security_and_analysis`)
+  `security-floor` said "not visible to this token" while `pending-admin` said "no administrator
+  action would clear it". They are now separate clauses with separate remedies.
+- Azure gained GitHub's rejected-payload guard. A 400 from
+  `POST/PUT _apis/policy/configurations` — Azure rejecting the Redline branch-policy payload —
+  used to fold into `outcome()` as `merge-policy: denied`, printing "an administrator must still
+  enable: merge-policy" and exiting `0`: a Redline defect misdiagnosed as a missing permission.
+  It now throws `RedlineError('host', …)` naming the method and path, exactly as
+  `cli/platforms/github/install.ts` does for a 422 on the ruleset write.
+- Two untested behaviours pinned. The `notEnforcedReason` consumer in `cli/commands/verify.ts`
+  had a tested producer and no test at all on the consumer side: a GitHub ruleset switched from
+  `enforcement: "active"` to `"evaluate"` keeps every field readable while none of its rules
+  apply, and deleting the consumer left the suite green. The rendered command files
+  (`cli/render/commands.ts`) — written into every onboarded repository — had their paths,
+  frontmatter prefixes and cross-host body equality asserted but never their bytes, so a changed
+  trailing shape broke nothing. Both are now killed by a test.
+- `renderCommands` is held to the org vendor ceiling `render()` already enforced. With
+  `standards/manifest.json` as it stands (`cursor.enabled: false`), `redline init --vendors
+  copilot,cursor` correctly skipped `.cursor/rules/` and still wrote `.cursor/commands/
+  redline-{init,verify}.md`, delivering half of a vendor the org had switched off. The ceiling is
+  applied at the call site rather than inside `renderCommands`, because `COMMAND_HOSTS` carries
+  hosts the vendor manifest has no entry for at all (`opencode`) — which is not the same thing as
+  a vendor the org disabled.
 - Per-repository vendor selection. `redline init` used to render every org-enabled vendor
   (`standards/manifest.json` → `copilot`, `agents`, `claude`) into every repository, so a
   Copilot-only team was handed `AGENTS.md` and `CLAUDE.md` it never asked for. It now

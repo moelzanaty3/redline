@@ -55,6 +55,37 @@ test('every rendered command body is identical across hosts', () => {
   );
 });
 
+// m3. `redline init` writes these files into every onboarded repository and
+// nothing pinned their bytes: the frontmatter prefix and cross-host body
+// equality were asserted, the assembly and the trailing shape were not, so a
+// renderer emitting a stray blank line or dropping the final newline changed
+// every repository in the estate without failing a test.
+test('a rendered command file is exactly its frontmatter, one blank line, the body, and one final newline', () => {
+  const out = tmp();
+  renderCommands({ root, out, hosts: ['claude', 'copilot', 'opencode', 'cursor'] });
+  const source = loadCommands(root).find((c) => c.name === 'redline-init');
+  assert.ok(source);
+  const body = `${source.body.trimEnd()}\n`;
+
+  const files: [string, string][] = [
+    ['.claude/commands/redline-init.md', `---\ndescription: ${source.description}\n---\n\n${body}`],
+    ['.opencode/command/redline-init.md', `---\ndescription: ${source.description}\n---\n\n${body}`],
+    [
+      '.github/prompts/redline-init.prompt.md',
+      `---\nmode: agent\ndescription: ${source.description}\n---\n\n${body}`,
+    ],
+    ['.cursor/commands/redline-init.md', body],
+  ];
+  for (const [path, expected] of files) {
+    const actual = readFileSync(join(out, path), 'utf8');
+    assert.equal(actual, expected, path);
+    // Independent of the source file's own trailing whitespace, so a renderer
+    // that simply passed the body through cannot ride on it happening to match.
+    assert.ok(actual.endsWith('\n'), `${path} must end with a newline`);
+    assert.ok(!actual.endsWith('\n\n'), `${path} must end with exactly one newline`);
+  }
+});
+
 test('an unknown host is rejected by name', () => {
   assert.throws(() => renderCommands({ root, out: tmp(), hosts: ['emacs'] }), /unknown command host "emacs"/);
 });

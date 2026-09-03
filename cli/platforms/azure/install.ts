@@ -858,9 +858,23 @@ export function createAzureInstall(
           continue;
         }
         const config = wantedPolicy.config(effectiveBlocking);
-        const res = match
-          ? await client.request('PUT', `/${proj}/_apis/policy/configurations/${match.id}`, config)
-          : await client.request('POST', `/${proj}/_apis/policy/configurations`, config);
+        const method = match ? 'PUT' : 'POST';
+        const path = match
+          ? `/${proj}/_apis/policy/configurations/${match.id}`
+          : `/${proj}/_apis/policy/configurations`;
+        const res = await client.request(method, path, config);
+        // Parity with github/install.ts's 422 guard, for the same reason: a
+        // rejected payload is a Redline bug or a project-settings conflict,
+        // and reporting it as a capability outcome makes it `merge-policy:
+        // denied` — "an administrator must still enable: merge-policy", exit
+        // 0 — which sends an operator to check permissions that are already
+        // correct for a defect only Redline can fix.
+        if (res.status === 400) {
+          throw new RedlineError(
+            'host',
+            `Azure DevOps rejected the Redline branch policy payload (HTTP 400 on ${method} ${path})`
+          );
+        }
         results.push(outcome('merge-policy', res.status, 'branch policies'));
         if (wantedPolicy.runsTheGate === true && !isSuccess(res.status)) effectiveBlocking = false;
       }
