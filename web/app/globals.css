@@ -16,6 +16,8 @@
   --ok-ink: #45de83;
   --ok-line: rgba(69, 222, 131, 0.35);
   --ok-bg: rgba(69, 222, 131, 0.1);
+  --ok-wash: rgba(69, 222, 131, 0.04);
+  --ok-spine: rgba(69, 222, 131, 0.55);
   --amber: #f5b93e;
   --blue: #52a8ff;
   /* severity ramp: one hue, monotone lightness — most severe reads strongest
@@ -773,7 +775,7 @@ kbd {
 .vc-answer {
   position: relative;
   border-left: 1px solid var(--border);
-  background: rgba(230, 0, 0, 0.04);
+  background: var(--ok-wash);
 }
 .vc-answer::before {
   content: "";
@@ -782,7 +784,7 @@ kbd {
   top: 12%;
   bottom: 12%;
   width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(230, 0, 0, 0.6), transparent);
+  background: linear-gradient(180deg, transparent, var(--ok-spine), transparent);
 }
 .vc-meta {
   display: flex;
@@ -1970,6 +1972,8 @@ kbd {
   /* #45de83 is too pale on this light surface (< 4.5:1); darkened to hold contrast */
   --ok-ink: #0e6b35;
   --ok-line: rgba(14, 107, 53, 0.32);
+  --ok-wash: rgba(14, 107, 53, 0.035);
+  --ok-spine: rgba(14, 107, 53, 0.5);
   --ok-bg: rgba(14, 107, 53, 0.08);
   color-scheme: light;
 }
@@ -2038,9 +2042,6 @@ kbd {
    so the red inside them needs the dark-surface value, not the light one */
 [data-theme="light"] .jr-probe .tk-red {
   color: #ff6b6b;
-}
-[data-theme="light"] .vc-answer {
-  background: rgba(230, 0, 0, 0.03);
 }
 [data-theme="light"] .site-nav .links a:hover {
   background: rgba(0, 0, 0, 0.05);
