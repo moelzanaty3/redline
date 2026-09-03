@@ -21,7 +21,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | `standards/core.md` | Core standards: security, type safety, error handling, scope, and the severity output contract | source of truth — **the only file a human edits** |
 | `standards/stacks/*.md` | Per-stack rules: javascript, react, react-native, nodejs, microservices, java, go, python, csharp, kotlin, swift, terraform | source of truth |
 | `standards/manifest.json` | Stack globs, profiles, vendor toggles, standards version | source of truth |
-| `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx --package=redline-cli@latest redline` |
+| `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx redline-cli`, or `redline` once installed with `npm i -g redline-cli` |
 | `.github/pull_request_template.md` | Readiness checklist + ADR link | every onboarded repo |
 | `templates/repo-context.md` | Per-repo context template | reference only — a human copies it above the generated block in `AGENTS.md`; `redline init` never installs it |
 | `templates/CODEOWNERS` | Reference shape of the CODEOWNERS pattern that makes `require_code_owner_review` real and protects the enforcement surface | `redline init` writes `.github/CODEOWNERS` on GitHub repos with equivalent content built in code — it does not read this file |
@@ -53,7 +53,7 @@ TypeScript-only globs previously missed. Shell/Dockerfile/Gherkin intentionally 
 
 ```sh
 cd your-repo
-npx --package=redline-cli@latest redline init
+npx redline-cli init
 ```
 
 That is the whole procedure. It detects your stack, renders the standards for it, installs
@@ -61,12 +61,21 @@ the merge-readiness template and the gate (advisory — it reports, it does not 
 turns on the security floor, and opens a pull request. Anything that needed repository
 admin rights you do not have is listed at the end for an administrator to run.
 
+Install it once and the everyday command is shorter:
+
 ```sh
-npx --package=redline-cli@latest redline verify
+npm i -g redline-cli
+redline verify
 ```
 
-Checks the repository still matches what it claims. Run it any time; the control plane runs
-it across the estate weekly.
+The package is named `redline-cli`, not `redline` — that name is already taken on the public
+npm registry by an unrelated package, so `npx redline …` always resolves to the wrong thing.
+The binary it installs is named `redline`, which is why the everyday command reads `redline
+init` / `redline verify` once it is installed rather than `redline-cli init`.
+
+`redline verify` checks the repository still matches what it claims. Run it any time —
+scheduled estate-wide re-verification is Phase 3 work, not yet wired up; see
+[CHANGELOG.md](CHANGELOG.md) known limitations.
 
 Both GitHub and Azure DevOps are supported. Redline detects which from your git remote.
 

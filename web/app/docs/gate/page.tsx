@@ -36,6 +36,15 @@ export default function Page() {
         derived from a job name and that failure mode doesn&apos;t exist on
         that host.
       </p>
+      <p>
+        Azure Repos ignores a pipeline&apos;s YAML <code>pr:</code> trigger, so
+        the gate pipeline alone runs nothing. <code>redline init</code> also
+        registers a build definition for it and a <code>Redline: gate build</code>{" "}
+        Build Validation branch policy that queues that pipeline on every pull
+        request — without Build Administrator rights that registration is
+        recorded as pending and the required status is written advisory,
+        since no pipeline could publish what it would require.
+      </p>
       <div className="table-scroll">
         <table>
           <thead>

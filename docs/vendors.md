@@ -16,9 +16,9 @@ Only the third row is vendor-aware, and it is about 60 lines of `cli/render/vend
 
 ## What renders where
 
-`npx --package=redline-cli@latest redline init` renders the detected profile for you.
-Programmatically, the same entry point is `render({ root, profile, out })` from
-`cli/render/standards.ts` — see `scripts/render-self.mjs` for the smallest working caller.
+`npx redline-cli init` renders the detected profile for you. Programmatically, the same
+entry point is `render({ root, profile, out })` from `cli/render/standards.ts` — see
+`scripts/render-self.mjs` for the smallest working caller.
 
 | Vendor | Artifact | Path scoping mechanism |
 | --- | --- | --- |
@@ -27,12 +27,14 @@ Programmatically, the same entry point is `render({ root, profile, out })` from
 | Claude Code, Claude in GitHub | `CLAUDE.md` (imports `AGENTS.md` with `@AGENTS.md`) | inherits AGENTS.md |
 | Cursor rules | `.cursor/rules/redline-*.mdc` | `globs:` frontmatter |
 
-Vendor selection is driven entirely by `standards/manifest.json` under `vendors` — each
-entry's `enabled` flag decides the org-wide default. `render()` (`cli/render/standards.ts`)
-and `init()` both accept a programmatic `vendors` list that overrides the manifest default,
-but `redline init` has no CLI flag exposing it in Phase 1 (see `cli/bin/redline.ts`); a
-subset can only be selected by calling `render()`/`init()` directly, not from the
-command line.
+Vendor selection is driven by `standards/manifest.json` under `vendors` — each entry's
+`enabled` flag decides the org-wide default, which is a ceiling: a repository may select a
+subset of what the org enables, never a superset, and a vendor the org later disables stops
+rendering regardless of what a repository recorded. `redline init` resolves a per-repository
+default from what the repository already contains (existing Copilot, Claude, `AGENTS.md` or
+Cursor markers; the org default when none are present), a recorded `.redline.json` selection
+overrides detection on a re-run, and the `--vendors <list>` flag (see `cli/bin/redline.ts`)
+overrides both — e.g. `redline init --vendors copilot,agents`.
 
 ## Adding a vendor
 

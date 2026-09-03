@@ -252,30 +252,6 @@ kbd {
   mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 20%, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 20%, transparent 70%);
 }
-.hero-badge {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 999px;
-  padding: 6px 16px;
-  margin-bottom: 22px;
-}
-.hero-badge .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--red);
-  box-shadow: 0 0 10px var(--red);
-}
-.hero-badge b {
-  color: var(--text);
-  font-weight: 550;
-}
 .hero h1 {
   position: relative;
   font-size: clamp(42px, 6.6vw, 76px);
@@ -2013,9 +1989,6 @@ kbd {
   background:
     radial-gradient(ellipse 640px 300px at 50% -8%, rgba(230, 0, 0, 0.1), transparent 70%),
     radial-gradient(ellipse 900px 420px at 50% 0%, rgba(0, 0, 0, 0.03), transparent 70%);
-}
-[data-theme="light"] .hero-badge {
-  background: rgba(0, 0, 0, 0.03);
 }
 [data-theme="light"] .search-pill kbd,
 [data-theme="light"] .cmdk-input-row kbd,

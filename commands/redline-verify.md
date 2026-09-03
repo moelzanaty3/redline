@@ -2,10 +2,12 @@
 description: Check this repository still matches the standards and guardrails it claims
 ---
 
-Run `npx --package=redline-cli@latest redline verify` in the repository root and report the
-findings table. Do not run plain `npx redline` — that resolves to an unrelated package on the
-public registry. Add `--gate` if the engineer wants an explicit pass/fail summary line printed
-after the table, such as when running this by hand to mirror what CI's gate check sees.
+Run `npx redline-cli verify` in the repository root and report the findings table. Do not run
+plain `npx redline` — that resolves to an unrelated package on the public registry; the
+published package is `redline-cli`. If the engineer already has it installed
+(`npm i -g redline-cli`), the everyday command is just `redline verify`. Add `--gate` if the
+engineer wants an explicit pass/fail summary line printed after the table, such as when
+running this by hand to mirror what CI's gate check sees.
 
 Each line is a check. For any `FAIL`, explain what it means and what fixes it:
 
@@ -13,10 +15,11 @@ Each line is a check. For any `FAIL`, explain what it means and what fixes it:
 - `merge-policy` — no Redline merge policy was found on the host at all, or the live one has
   been loosened, or the ruleset that carries it is no longer in force. The finding names what
   changed: the blocking flag, the approval count, dismissing approvals on push, code-owner
-  review, unresolved-thread resolution — or, on Azure, a blocking Status policy that no Build
-  Validation policy queues, which leaves every pull request sitting blocked whatever the
-  configured menu says. Re-run `redline init` to reapply it. Settings the host cannot attribute
-  to Redline are listed as "not compared here" rather than held against the repository.
+  review, unresolved-thread resolution — or, on Azure, a blocking Status policy with no
+  matching Build Validation policy to queue the gate pipeline, so the status is never
+  published and every pull request sits blocked; re-run `redline init` with build
+  administrator rights. Settings the host cannot attribute to Redline are listed as
+  "not compared here" rather than held against the repository.
 - `gate-machinery` — the file that runs the gate is missing from this repository, the job that
   publishes the required check has been renamed, the file is present and correctly named but no
   pull request will ever trigger it, or the job is unchanged but the merge policy now requires a
@@ -49,6 +52,9 @@ Each line is a check. For any `FAIL`, explain what it means and what fixes it:
 A capability the host reports as **unsupported** — for example Azure DevOps Advanced Security
 when it isn't licensed on this repository — is not the same as **denied**: it is never listed
 as work an administrator must do, because there is no administrator action that would change
-it. It is still named, so nobody mistakes silence for a clean bill.
+it. A capability the host answers with **unknown** — a 401/403 this host cannot tell apart
+from a genuine refusal — is treated the same way for the same reason: an indeterminate read
+is not an answer, so it is never counted as work to chase either. Both are still named, so
+nobody mistakes silence for a clean bill.
 
 Do not attempt to fix host settings yourself. Report and stop.

@@ -594,12 +594,13 @@ Record seed scores here. A standards change with no measurement is an opinion.
 The shell rollout is retired. Onboarding a repository is one command:
 
 ```sh
-npx --package=redline-cli@latest redline init
+npx redline-cli init
 ```
 
 - **`redline` CLI**, published as the `redline-cli` npm package (`redline` alone is taken
-  on the public registry by an unrelated package — every invocation is
-  `npx --package=redline-cli@latest redline <command>`, never `npx redline@latest`).
+  on the public registry by an unrelated package — every invocation is `npx redline-cli
+  <command>`, or plain `redline <command>` once installed with `npm i -g redline-cli`;
+  never a bare `npx redline@latest`).
   `redline init` detects the repository's stack and host, renders the right standards
   profile, installs the merge-readiness template and gate, turns on the security floor,
   and opens a pull request — never a direct push. `redline verify` re-checks a repository
@@ -671,6 +672,27 @@ npx --package=redline-cli@latest redline init
    `cli/platforms/github/client.ts`, which honours `GITHUB_API_URL` for GitHub Enterprise
    Server. There is no way to point Redline at an on-premises Azure DevOps Server instance
    in Phase 1.
+8. **Two Azure behaviours are unverified against a live tenant — confirm both during the
+   pilot, before trusting the estate-wide rollout on Azure DevOps.**
+   - `settings.displayName` — the field `cli/platforms/azure/install.ts` and
+     `cli/platforms/azure/verify.ts` use as the `Redline:` brownfield ownership marker — is
+     documented for the Build Validation policy type only. It is expected to round-trip
+     unchanged as an ignored extra field on the other three policy types Redline writes
+     (minimum reviewers, comment requirements, required reviewers), but this is unconfirmed.
+     If the pilot tenant strips it, those three policy types lose their marker on read-back
+     and every subsequent run reports the repository's own Redline policy as human-owned and
+     stops writing to it. Verify by reading a written policy back with `GET
+     _apis/policy/configurations/{id}` and confirming `settings.displayName` is present. The
+     Status policy is unaffected — its ownership marker is the `redline`/`gate` genre/name
+     pair, not `displayName`.
+   - The Azure PR labels POST (`installGate`'s label call, applied after the onboarding pull
+     request is created) and the gate template's own label read (`GET
+     $pr_url/labels?api-version=7.1` in `platforms/azure/gate-template.yml`, used for the
+     `SOFT_FAIL_LABELS` exemption) are both unconfirmed as generally available rather than
+     preview-only on the pilot tenant. If labels is unavailable there: the onboarding pull
+     request opens with no `redline-sync` label (degrades to a `labels` outcome rather than
+     failing the run), and a repository onboarded `--blocking` blocks its own onboarding pull
+     request, because the gate can never read a soft-fail label to exempt it.
 
 ## 0.0.1 — 2026-09-01
 

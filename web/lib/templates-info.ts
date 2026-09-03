@@ -46,8 +46,10 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
   "pr-template": {
     what: "The GitHub pull request template: a Change type pick-list (ungated) and a Launch readiness checklist (gated).",
     installedAs: ".github/pull_request_template.md",
-    installedBy: "redline init, verbatim.",
+    installedBy: "redline init — written whole only when the repository has no template the host would serve.",
     detail: [
+      "redline init searches .github/, the repository root, then docs/ (GitHub's own precedence order) for an existing pull_request_template.md before writing one. Where it finds none, it writes the packaged template whole, gated sections already inside REDLINE:BEGIN/END markers.",
+      "Where a template already exists, it is kept byte for byte and only the gated sections (## Launch readiness, ## Architecture decision) are appended inside REDLINE:BEGIN/END markers — a section the template already provides on its own is left untouched rather than duplicated. On a re-run, only that marked span is regenerated.",
       "The redline-gate.yml checklist job parses the PR body specifically for a ## Launch readiness heading, then fails if any box under it is unticked.",
       "Deleting the heading — not just leaving boxes unticked — fails the gate outright and loudly, by design: a missing section can't be mistaken for a completed one.",
       "The Architecture decision and Automated review sections are informational; only Launch readiness is enforced by the gate.",
@@ -57,8 +59,10 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
   "azure-pr-template": {
     what: "The Azure DevOps equivalent pull request template — the same Launch readiness checklist, worded for Azure's exemption flow instead of GitHub's.",
     installedAs: ".azuredevops/pull_request_template.md",
-    installedBy: "redline init, verbatim, on an Azure DevOps repository.",
+    installedBy: "redline init — written whole only when the repository has no template the host would serve; merged into an existing one otherwise.",
     detail: [
+      "redline init searches .azuredevops/, .vsts/, docs/, then the repository root (all four, matched case-insensitively) for an existing template, plus any branch-specific template under pull_request_template/branches/ — Azure serves those in preference to the default, so one added after onboarding is merged into as well.",
+      "Same merge behaviour as GitHub: written whole with no template present, otherwise the gated sections are appended inside REDLINE:BEGIN/END markers and the rest of the file is kept untouched.",
       "Same gated Launch readiness section and the same seven checklist items as the GitHub template.",
       "Because Azure's entire gate is one step (redline verify --gate), there is no separate checklist job parsing this file the way GitHub's redline-gate.yml does — the checklist is process discipline for the team, not something the Azure pipeline itself enforces item by item.",
     ],
@@ -69,6 +73,7 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     installedAs: ".azuredevops/redline-gate.yml",
     installedBy: "redline init, with the ADR threshold, dependency-severity floor and soft-fail labels filled in, on an Azure DevOps repository.",
     detail: [
+      "This file alone runs nothing — Azure Repos ignores its pr: trigger. redline init also registers a redline-gate build definition pointing at it and a \"Redline: gate build\" Build Validation branch policy that queues that pipeline on every pull request; without Build Administrator rights that registration degrades to a pending gate capability and the redline/gate status policy is written advisory, since no pipeline could publish the status it would require.",
       "Step \"Redline gate\" runs npx --yes --package=redline-cli@latest redline verify --gate.",
       "Step \"Publish redline/gate status\" always runs (condition: always()) and publishes a PR status with genre redline and name gate — the branch policy requires exactly redline/gate. Renaming either value makes the policy unsatisfiable and every PR in the repo sits blocked.",
       "Materially weaker than the GitHub gate: redline verify --gate runs none of GitHub's four checks. An Azure repository gets no dependency-review job and no diff secret scan at the gate — the two checks that are hard-fail and never label-exemptible on GitHub. checklist and adr, the two that are soft-fail there, are the lesser loss.",

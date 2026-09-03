@@ -59,7 +59,7 @@ test('a repository with no .redline.json never resolves a platform', async () =>
   }, { cwd, root });
   assert.equal(report.ok, false);
   assert.equal(report.findings.length, 1);
-  assert.match(find(report, 'onboarded')?.detail ?? '', /redline init/);
+  assert.match(find(report, 'onboarded')?.detail ?? '', /npx redline-cli init/);
 });
 
 test('a required check the host has never reported is a failure', async () => {

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
+import { loadManifest } from "@/lib/manifest";
 
 export const metadata: Metadata = { title: "Onboard a repository" };
 
 export default function Page() {
+  const manifest = loadManifest();
   return (
     <DocsPage
       crumb="Onboard a repository"
@@ -42,6 +44,9 @@ export default function Page() {
           <tbody>
             <tr><td><code>--blocking</code></td><td>off</td><td>Promotes the gate from advisory to blocking.</td></tr>
             <tr><td><code>--profile &lt;name&gt;</code></td><td>detected</td><td>Overrides stack detection.</td></tr>
+            <tr><td><code>--vendors &lt;list&gt;</code></td><td>detected</td><td>Comma-separated vendor ids (<code>copilot,agents,claude,cursor</code>) to render for — overrides detection and any recorded selection; a vendor the org has not enabled never renders regardless.</td></tr>
+            <tr><td><code>--dry-run</code></td><td>off</td><td>Prints the plan — files, repository settings, resolved menu — and exits; writes nothing, needs no credential.</td></tr>
+            <tr><td><code>--repair</code></td><td>off</td><td>Re-applies capabilities a plain re-run treats as already settled — the fix once an administrator grants rights a read can never confirm on its own.</td></tr>
             <tr><td><code>--no-a11y</code></td><td>on</td><td>Recorded in <code>.redline.json</code>; doesn&apos;t change what&apos;s rendered yet.</td></tr>
             <tr><td><code>--speckit</code></td><td>off</td><td>Recorded in <code>.redline.json</code>; no scaffolding lands yet.</td></tr>
           </tbody>
@@ -63,32 +68,40 @@ export default function Page() {
       <div className="callout info">
         <span className="ic">ℹ</span>
         <p>
-          <code>pendingAdmin</code> and <b>unsupported</b> are different
-          things. A denied capability goes in <code>pendingAdmin</code> — an
-          admin can grant it later. Azure DevOps Advanced Security is
-          separately licensed; an unlicensed repository reports it as{" "}
-          <code>unsupported</code>, not <code>pendingAdmin</code> — no admin
-          action clears it, so it doesn&apos;t sit on the dashboard forever
-          demanding one.
+          <code>pendingAdmin</code>, <b>unsupported</b> and <b>unknown</b> are
+          three different things. A denied capability goes in{" "}
+          <code>pendingAdmin</code> — an admin can grant it later. Azure
+          DevOps Advanced Security is separately licensed; an unlicensed
+          repository reports it as <code>unsupported</code>, not{" "}
+          <code>pendingAdmin</code> — no admin action clears it, so it
+          doesn&apos;t sit on the dashboard forever demanding one. A read the
+          host answered with neither a yes nor a definite no — a 401/403 it
+          cannot tell apart from a genuine refusal — reports{" "}
+          <code>unknown</code> instead, and is treated the same way: an
+          indeterminate read is never filed as admin work either.
         </p>
       </div>
 
       <h2>Verify</h2>
       <CodeWindow title="terminal" copyText="npx redline-cli verify">
         <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli verify</span>{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">onboarded</span>              profile web, standards v0.0.1{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">onboarded</span>              profile web, standards v{manifest.version}{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">merge-policy</span>           policy is advisory, config says advisory{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">gate-machinery</span>         .github/workflows/redline.yml publishes redline-gate / gate{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">check-name-reported</span>    no required check configured yet (advisory gate) — PR #42 reported: <span className="tk-blue">redline-gate / gate</span>{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">security-floor</span>         security floor enabled{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">artifacts-current</span>      rendered artifacts match standards v0.0.1{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">artifacts-current</span>      rendered artifacts match standards v{manifest.version}{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">pull-request-template</span>  .github/pull_request_template.md — maintained inside REDLINE markers{"\n"}
         <span className="tk-red">FAIL</span> <span className="tk-dim">pending-admin</span>          partially onboarded — an administrator must still enable: dependency-alerts
       </CodeWindow>
       <p>
-        Six checks: the repo is onboarded at all; the required check name has
-        actually been reported on a real pull request (skipped, not failed, on
-        a repo with no PR yet — a fresh repo isn&apos;t drifted, it&apos;s
-        just new); the live merge policy matches the menu; the security floor
-        is still on; rendered artifacts aren&apos;t stale; and nothing is
+        Eight checks: the repo is onboarded at all; the live merge policy
+        matches the menu; the machinery that would run the gate is actually in
+        place; the required check name has actually been reported on a real
+        pull request (skipped, not failed, on a repo with no PR yet — a fresh
+        repo isn&apos;t drifted, it&apos;s just new); the security floor is
+        still on; rendered artifacts aren&apos;t stale; the pull request
+        template the host would actually serve is intact; and nothing is
         still waiting on an administrator. Run it on demand, or wire{" "}
         <code>redline verify --gate</code> into CI — it&apos;s the same
         checks, exiting non-zero on failure.

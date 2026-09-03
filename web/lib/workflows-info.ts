@@ -89,7 +89,7 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
       "Counts onboarded repos by reading sync-targets.txt from the source repo, for a coverage figure.",
       "Builds dist/index.html with scripts/build-dashboard.mjs, then deploys, then opens or updates a tracking issue on failure.",
     ],
-    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise.",
+    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise. The coverage figure is frozen: scripts/setup-repo.sh used to append to sync-targets.txt on each onboarding, redline init does not, and nothing else writes it — so the count no longer moves as repos actually onboard.",
     action: "Nothing, normally — it runs itself daily. Run scripts/build-dashboard.mjs locally against a copy of data/ to preview a metric or chart change.",
   },
   "seed-canary": {
@@ -115,6 +115,6 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
       "Would open or update a single tracking issue naming every repo that failed verification.",
     ],
     phase1: "Disabled (if: false). redline verify reads .redline.json from a local checkout of the target repo; it has no --repo owner/name mode that works over the API alone. A scheduled cross-repo verify needs a clone-then-verify loop, which is control-plane work alongside redline sync in Phase 3.",
-    action: "Nothing to run. Verify a single repo yourself instead: npx --package=redline-cli@latest redline verify from a checkout of it.",
+    action: "Nothing to run. Verify a single repo yourself instead: npx redline-cli verify from a checkout of it.",
   },
 };

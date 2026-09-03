@@ -1,16 +1,17 @@
 import Link from "next/link";
 import { SearchButton } from "@/components/search-button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { VERSION } from "@/lib/site";
+import { loadManifest } from "@/lib/manifest";
 
 export function SiteNav() {
+  const manifest = loadManifest();
   return (
     <header className="site-nav">
       <div className="inner">
         <Link className="logo" href="/">
           <span className="mark" aria-hidden="true" />
           Redline
-          <span className="v">v{VERSION}</span>
+          <span className="v">v{manifest.version}</span>
         </Link>
         <nav className="links" aria-label="Main">
           <Link href="/docs">Docs</Link>

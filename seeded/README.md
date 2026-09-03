@@ -29,7 +29,7 @@ higher than that rule carries in the standard.
 ## Protocol
 
 1. Pick a pilot repo for the stack under test and make sure it is fully onboarded
-   (`npx --package=redline-cli@latest redline verify`).
+   (`npx redline-cli verify`).
 2. Open a PR that adds the matching seed directory **and** `seeded/clean/`.
    Label it `redline-exempt` so the readiness gate does not block a PR nobody will merge.
 3. Wait for the automated review to finish.

@@ -10,7 +10,7 @@
 #     redline-gate / gate
 #
 # Changing either job id changes the required context and will silently block every PR
-# in every onboarded repo. `npx --package=redline-cli@latest redline verify` checks the
+# in every onboarded repo. `npx redline-cli verify` checks the
 # real name after onboarding.
 name: Redline Gate
 

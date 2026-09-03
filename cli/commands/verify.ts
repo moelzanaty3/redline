@@ -82,7 +82,7 @@ export async function verify(
     return { findings, ok: false };
   }
   if (!config) {
-    add('onboarded', false, `no ${opts.cwd}/.redline.json — run: npx --package=redline-cli@latest redline init`);
+    add('onboarded', false, `no ${opts.cwd}/.redline.json — run: npx redline-cli init`);
     return { findings, ok: false };
   }
   add('onboarded', true, `profile ${config.profile}, standards v${config.standardsVersion}`);
