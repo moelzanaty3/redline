@@ -258,11 +258,13 @@ Record seed scores here. A standards change with no measurement is an opinion.
   blocking, so nothing looked changed); it is re-applied. The only recovery that used to
   exist was deleting `.redline.json`, which destroys `onboardedAt`, silently reverts every
   unrecorded menu selection, and makes the next run look like a 2.1 migration.
-  `redline verify` also tells the operator "<capability> now granted — rerun redline init
-  to clear it from `.redline.json`"; a recorded pending-admin list the host now contradicts
-  is treated as work to do, so that instruction is true. Where the re-run does
-  short-circuit, the pending-admin line is marked "(as recorded at the last run)" rather
-  than asserted as this run's finding.
+  `redline verify` also names the capability and the command that actually clears it:
+  "<capability> now granted on the host, but the record is of a refused write and no read
+  clears it — run `redline init --repair` to retry the write". A plain re-run deliberately
+  does not revise a recorded pending entry in either direction, so `--repair` is the true
+  instruction and the one every clause gives. Where the re-run does short-circuit, the
+  pending-admin line is marked "(as recorded at the last run)" rather than asserted as this
+  run's finding.
 - A read only changes what `.redline.json` records about a capability when it says
   something definite about that capability. Two consequences. `redline init` on a
   repository onboarded *without* repository-admin rights — the normal partial-permission
