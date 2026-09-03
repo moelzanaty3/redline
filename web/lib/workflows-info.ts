@@ -30,7 +30,7 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     action: "Nothing directly — it's called by the caller workflow your repo already has. If it fails, see The merge gate for what each check expects and how to satisfy or exempt it.",
   },
   "redline-sync": {
-    what: "Would distribute standards, the gate caller and the PR template to already-onboarded repos as pull requests, driven by sync-targets.txt.",
+    what: "Would distribute standards, the gate caller and the PR template to already-onboarded repos as pull requests. The register it read its targets from, sync-targets.txt, is deleted — Phase 3 has to reintroduce one that redline init actually writes.",
     disabled: true,
     livesIn: "This (source) repo.",
     trigger: "push to main touching standards/**, templates/**, etc., or workflow_dispatch (dry-run, only <repo>) — but the sync job carries if: false, so neither trigger runs it.",
@@ -86,10 +86,10 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     trigger: "Daily at 05:30 UTC, plus workflow_dispatch, plus automatically once Redline Collect or Redline Seed Canary finishes.",
     steps: [
       "Same Pages-visibility gate as the inbox.",
-      "Counts onboarded repos by reading sync-targets.txt from the source repo, for a coverage figure.",
+      "Would count onboarded repos by reading sync-targets.txt from the source repo, for a coverage figure — that file is deleted, so this read always fails.",
       "Builds dist/index.html with scripts/build-dashboard.mjs, then deploys, then opens or updates a tracking issue on failure.",
     ],
-    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise. The coverage figure is frozen: scripts/setup-repo.sh used to append to sync-targets.txt on each onboarding, redline init does not, and nothing else writes it — so the count no longer moves as repos actually onboard.",
+    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise. The coverage figure is omitted entirely: sync-targets.txt was the register it counted, scripts/setup-repo.sh used to append to it on each onboarding, redline init never did, and the file is now deleted — so the guarded read fails and the dashboard warns instead of publishing a number.",
     action: "Nothing, normally — it runs itself daily. Run scripts/build-dashboard.mjs locally against a copy of data/ to preview a metric or chart change.",
   },
   "seed-canary": {
@@ -111,7 +111,7 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     livesIn: "This (source) repo.",
     trigger: "Weekly, Tuesday 06:00 UTC, plus workflow_dispatch with a single-repo override — but the verify job carries if: false, so neither trigger runs it.",
     steps: [
-      "Would loop over sync-targets.txt (or one --repo override) calling bash scripts/setup-repo.sh <repo> --verify — but scripts/setup-repo.sh was also deleted this release, so even removing if: false would not make this job run.",
+      "Would loop over sync-targets.txt (or one --repo override) calling bash scripts/setup-repo.sh <repo> --verify — but both sync-targets.txt and scripts/setup-repo.sh are deleted, so even removing if: false would not make this job run.",
       "Would open or update a single tracking issue naming every repo that failed verification.",
     ],
     phase1: "Disabled (if: false). redline verify reads .redline.json from a local checkout of the target repo; it has no --repo owner/name mode that works over the API alone. A scheduled cross-repo verify needs a clone-then-verify loop, which is control-plane work alongside redline sync in Phase 3.",

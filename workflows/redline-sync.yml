@@ -6,7 +6,8 @@
 # see CHANGELOG.md. The job below is left in place, gated off, so Phase 3 has a shape to
 # rewire rather than rebuilding this from nothing.
 #
-# Targets and their profiles are listed in sync-targets.txt.
+# Targets and their profiles were listed in sync-targets.txt, now deleted; Phase 3 needs a
+# register that `redline init` actually writes.
 name: Redline Sync
 
 on:
@@ -17,7 +18,6 @@ on:
       - 'scripts/render-self.mjs'
       - 'templates/**'
       - '.github/pull_request_template.md'
-      - 'sync-targets.txt'
   workflow_dispatch:
     inputs:
       dry-run:

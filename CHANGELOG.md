@@ -640,12 +640,13 @@ npx redline-cli init
    `workflows/verify-onboarding.yml` are disabled (`if: false`), not deleted, so Phase 3
    has a shape to rewire. Between now and Phase 3 the estate has no automated standards
    distribution path — an already-onboarded repo picks up a standards change by
-   re-running `redline init` by hand. `sync-targets.txt` also lost its only writer in this
-   task: `scripts/setup-repo.sh` used to append to it on each onboarding, and `redline init`
-   does not. `workflows/dashboard.yml` still reads it to compute the coverage figure on the
-   telemetry dashboard, so that figure is now frozen at whatever the register held before
-   this task, regardless of how many repos actually onboard — not just paused pending
-   Phase 3, but silently wrong in the meantime.
+   re-running `redline init` by hand. `sync-targets.txt` is deleted. It had already lost its
+   only writer in this task — `scripts/setup-repo.sh` used to append to it on each
+   onboarding and `redline init` does not — so it recorded a register that had stopped
+   moving. `workflows/dashboard.yml` reads it through a guarded `gh api` call, which now
+   always takes the failure branch and omits the coverage figure with a warning: absent
+   rather than silently wrong. Phase 3 has to reintroduce a register that `redline init`
+   actually writes.
 3. **No offline single-file executables.** `platforms/azure/gate-template.yml` runs the
    gate via `npx`, so the build agent must reach npm. An air-gapped Azure agent cannot run
    the gate until the Phase-1-deferred single-file executables (spec §16, R3) ship.
