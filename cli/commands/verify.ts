@@ -160,7 +160,9 @@ export async function verify(
     'merge-policy',
     policy !== null && weakened.length === 0,
     policy === null
-      ? 'no Redline merge policy found on the host'
+      ? 'no Redline merge policy found on the host — if this is a repository that was refused ' +
+        'admin rights at onboarding, a plain redline init treats that as settled and will not ' +
+        'retry it: after an administrator grants the rights, run redline init --repair'
       : `${
           weakened.length === 0
             ? `policy is ${policy.blocking ? 'blocking' : 'advisory'} as configured, ${
@@ -422,7 +424,8 @@ export async function verify(
         `so no administrator action would clear it: ${unavailable.join(', ')}`
       : null,
     unverifiable.length > 0
-      ? `recorded as pending; not verifiable with this token: ${unverifiable.join(', ')}`
+      ? `recorded as pending; not verifiable with this token: ${unverifiable.join(', ')} — after an ` +
+        `administrator grants access, a plain redline init will not recheck these; run redline init --repair`
       : null,
     grantedSince.length > 0
       ? `${grantedSince.join(', ')} now granted — rerun redline init to clear it from .redline.json`

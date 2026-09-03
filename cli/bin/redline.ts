@@ -19,11 +19,14 @@ const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const USAGE = [
   'redline — engineering control plane',
   '',
-  '  redline init [--profile <name>] [--blocking] [--no-a11y] [--speckit] [--dry-run]',
+  '  redline init [--profile <name>] [--blocking] [--no-a11y] [--speckit] [--dry-run] [--repair]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
   '      --blocking  promote the merge gate from advisory to blocking',
   '      --no-a11y, --speckit  recorded in .redline.json for later phases; changes nothing in Phase 1',
+  '      --repair    re-apply every capability even if this repository looks already onboarded — for',
+  '                  labels, review-ownership, repo-property, gate and merge-policy, whose recorded',
+  '                  pendingAdmin entry a plain re-run can never clear on its own; composes with --dry-run',
   '      omitted flags keep whatever .redline.json already recorded',
   '',
   '  redline verify [--gate]',
@@ -86,6 +89,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             'no-a11y': { type: 'boolean' },
             speckit: { type: 'boolean' },
             'dry-run': { type: 'boolean' },
+            repair: { type: 'boolean' },
           },
           allowPositionals: false,
         })
@@ -97,6 +101,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values.speckit !== undefined) menu.speckit = values.speckit;
 
       const dryRun = values['dry-run'] === true;
+      const repair = values.repair === true;
       // A dry run sends no request, so it must not require a credential —
       // see ResolvePlatformOptions.lazyCredentials. Every other path here
       // resolves one up front, exactly as before.
@@ -106,6 +111,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         root,
         ...(values.profile ? { profile: values.profile } : {}),
         ...(dryRun ? { dryRun: true } : {}),
+        ...(repair ? { repair: true } : {}),
         menu,
       });
 

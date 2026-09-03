@@ -147,6 +147,17 @@ export interface InitOptions {
   // back to what the repository already chose — see the menu precedence below.
   menu?: Partial<MenuSelections>;
   dryRun?: boolean;
+  // Bypasses the alreadyOnboarded short-circuit so every capability is
+  // re-applied and pendingAdmin is recomputed from the fresh outcomes,
+  // instead of carried over from .redline.json. It exists for the
+  // capabilities nothing reads back — labels, review-ownership,
+  // repo-property, gate and merge-policy's own null branch — whose recorded
+  // pendingAdmin entry a plain re-run can otherwise never clear even after an
+  // administrator grants the rights. It is NOT `rm .redline.json`: onboardedAt,
+  // the recorded menu and migratedFrom are untouched (see their own fields
+  // below), because this still reads the existing config rather than starting
+  // from nothing.
+  repair?: boolean;
   now?: () => Date;
 }
 
@@ -217,6 +228,7 @@ function refreshPendingAdmin(
 export async function init(platform: Platform, opts: InitOptions): Promise<InitReport> {
   const { cwd, root } = opts;
   const dryRun = opts.dryRun === true;
+  const repair = opts.repair === true;
   const manifest = loadManifest(root);
   const now = opts.now ?? (() => new Date());
 
@@ -307,10 +319,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // and must not be aborted by them: a 502 on GET /rulesets, or a token that
   // can write but cannot list rulesets, would otherwise exit 4 on a run that
   // had real work and had already written the rendered files.
+  // `--repair` exists precisely to bypass the settled verdict below, so
+  // computing it here would spend two host GETs whose answer nothing then
+  // reads: `alreadyOnboarded` is forced false for a repair run further down,
+  // never mind what these reads would have said.
   const settledOnFiles = existing !== null && changedFiles.length === 0 && !menuChanged;
   let livePendingAdmin: AdminCapability[] | null = null;
   let settledOnHost = true;
-  if (existing !== null && settledOnFiles && !dryRun) {
+  if (existing !== null && settledOnFiles && !dryRun && !repair) {
     const policy = await platform.readPolicy(ref);
     const security = await platform.readSecurityState(ref);
     livePendingAdmin = refreshPendingAdmin(existing.pendingAdmin, security.outcomes);
@@ -331,7 +347,11 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     settledOnHost = policySettled && !pendingChanged;
   }
 
-  const alreadyOnboarded = settledOnFiles && settledOnHost;
+  // `--repair` skips the short-circuit outright: it exists for exactly the
+  // capabilities this settled verdict would otherwise call done forever —
+  // labels, review-ownership, repo-property, gate, and merge-policy's own
+  // null branch above — none of which a plain re-run can ever re-check.
+  const alreadyOnboarded = !repair && settledOnFiles && settledOnHost;
 
   const hostPlan = [
     `merge gate machinery on ${platform.host}`,

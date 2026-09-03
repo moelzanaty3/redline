@@ -326,7 +326,36 @@ test('a pendingAdmin capability no read can answer is not reported as work an ad
   assert.ok(!/must still enable: [^.]*labels/.test(detail), detail);
 });
 
+// A plain `redline init` never retries a capability nothing reads back — that
+// is exactly the "settled by design" verdict `--repair` exists to bypass. The
+// remedy printed here must name it, not the plain command that would not help.
+test('a capability nothing reads back names --repair as the remedy, not a plain redline init', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pendingAdmin: ['labels'] });
+  const platform = fakePlatform({ securityState: [] });
+
+  const report = await verify(() => platform, { cwd, root });
+  const detail = find(report, 'pending-admin')?.detail ?? '';
+  assert.match(detail, /not verifiable with this token: labels/);
+  assert.match(detail, /redline init --repair/);
+});
+
 // --- merge policy: the settings init applied, not just the blocking flag ----
+
+// A repository refused admin rights at onboarding never got a ruleset —
+// `readPolicy` reads back null forever, and a plain `redline init` treats
+// that as settled by design (policySettled's null branch) so it never
+// retries. `--repair` is the only thing that does.
+test('the merge-policy finding names --repair as the remedy when no ruleset is on the host', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform();
+  platform.lastPolicy = null;
+
+  const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /redline init --repair/);
+});
 
 test('a policy that no longer requires code-owner review is drift even while the gate still matches', async () => {
   const cwd = await onboarded();

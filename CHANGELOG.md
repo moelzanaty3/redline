@@ -510,6 +510,19 @@ Record seed scores here. A standards change with no measurement is an opinion.
   as any other replace. An indented look-alike that leaves the file ambiguous (a second
   BEGIN or END that only widened detection makes visible) is refused rather than guessed
   at, the same rule already applied to every other malformed marker pair.
+- `redline init --repair` closes the last onboarding path that never converged on its own.
+  `labels`, `review-ownership`, `repo-property`, `gate` and `merge-policy`'s own null branch
+  (a repository refused admin rights, so no ruleset was ever created) have no read side, so a
+  plain re-run treats a recorded refusal for any of them as settled by design and never tries
+  again — even after an administrator grants the rights. `--repair` skips that verdict, re-applies
+  every capability and recomputes `pendingAdmin` from the fresh outcomes instead of the record. It
+  is not `rm .redline.json && redline init`: `onboardedAt`, the recorded menu (unless an explicit
+  menu flag overrides it, same precedence as every other run) and `migratedFrom` are all untouched,
+  because it still reads the existing config rather than starting from nothing. `--repair --dry-run`
+  composes as everywhere else — it prints the plan and makes zero host mutations. `redline verify`'s
+  `merge-policy` finding and the `pending-admin` finding now name `redline init --repair` as the
+  remedy for the capabilities a read can never answer, instead of pointing at a plain `redline init`
+  that would not have retried them.
 
 ## 3.0.0 — 2026-09-02
 
