@@ -7,6 +7,36 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Cost and DORA — what review cost against what it caught
+
+- Redline could prove review works and could not say what it cost. `scripts/build-roi.mjs`
+  now produces the page the roadmap's exit condition asks for: one page a finance stakeholder
+  can read, sourced entirely from collected data. The headline is **cost per BLOCKER caught**
+  — a figure nobody else in the toolchain can compute, because a cost-management tool knows
+  spend and has no findings, and a DORA tool has neither.
+- **Value is what was acted on, not what was reported.** A finding nobody acted on caught
+  nothing, and counting it would let the return be inflated by producing more noise — the
+  exact behaviour the guardrails exist to prevent.
+- **Answers open question 2 by refusing to guess.** Spend carries its grain, and an org-level
+  figure will not answer a per-repository question: it says to publish org-level cost against
+  org-level value instead. Org spend divided by repository count and presented as
+  per-repository cost looks precise, is invented, and is the number a stakeholder would act on.
+- Lead time and change failure rate come from merged-pull-request data the collector already
+  pulls. Deployment frequency is reported as **unknown, not zero**, where a repository does
+  not use the deployments API — assuming one deploy per merge reports a trunk-based team and a
+  quarterly-release team as identical, which is the exact distinction the metric draws.
+- **MTTR is refused by name**, so nobody wonders whether it was forgotten. It needs an
+  incident feed Redline does not have and should not acquire, and a wrong MTTR is the number
+  most likely to be quoted at someone who will act on it.
+- The change-failure caveat travels with the number rather than living in a doc: it is a
+  floor, not the true rate, because a revert or hotfix is evidence of a failed change rather
+  than proof, and a team that fixes forward without saying "hotfix" scores better than one
+  that labels honestly.
+- The collector now records each pull request's title and first commit timestamp, which is
+  what lead time and change failure rate are derived from. A pull request whose first commit
+  the API did not return is left absent rather than defaulted to the merge time, which would
+  report a lead time of zero and drag the median toward a number no team achieved.
+
 ### Standards v0.0.3 — the deterministic policy tier
 
 - A share of what the standard asserts needs no model. A ticket reference is present or it

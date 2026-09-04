@@ -33,6 +33,7 @@ export const SCRIPTS: RegistryEntry[] = [
   { slug: "build-inbox", title: "build-inbox.mjs", file: "scripts/build-inbox.mjs", description: "Builds the org-wide prioritised PR inbox for GitHub Pages." },
   { slug: "build-dashboard", title: "build-dashboard.mjs", file: "scripts/build-dashboard.mjs", description: "Builds the telemetry dashboard — runs in the redline-metrics repo." },
   { slug: "build-registry", title: "build-registry.mjs", file: "scripts/build-registry.mjs", description: "Derives registry.json — the register of onboarded repositories — by walking the estate for .redline.json." },
+  { slug: "build-roi", title: "build-roi.mjs", file: "scripts/build-roi.mjs", description: "The one page a finance stakeholder can read: what AI review cost, what it caught, and the DORA figures beside it." },
   { slug: "measure-context", title: "measure-context.mjs", file: "scripts/measure-context.mjs", description: "Measures what the skills render target actually saves per profile — the number the roadmap makes that piece conditional on." },
   { slug: "build-baseline", title: "build-baseline.mjs", file: "scripts/build-baseline.mjs", description: "Computes the Phase 0 baseline every later roadmap phase is judged against, with every unavailable figure stating why." },
 ];

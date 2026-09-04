@@ -178,6 +178,9 @@ if (!verifyWorkflow.includes('verify --repo')) {
 if (!existsSync(join(ROOT, 'scripts/build-baseline.mjs'))) {
   fail('scripts/build-baseline.mjs is missing — there is no way to compute the baseline every later roadmap phase is measured against');
 }
+if (!existsSync(join(ROOT, 'scripts/build-roi.mjs'))) {
+  fail('scripts/build-roi.mjs is missing — the one page that says what AI review cost against what it caught');
+}
 
 // --- exemptions ---------------------------------------------------------------
 // The exemption block is parsed twice, deliberately: the CLI enforces it at the

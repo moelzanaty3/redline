@@ -81,7 +81,13 @@ query($q: String!, $cursor: String) {
         changedFiles
         repository { nameWithOwner }
         author { login }
+        title
         body
+        # Lead time is first commit to merge. The first commit, not the branch
+        # creation: a branch that sat unused for a week did not take a week of
+        # lead time, and reporting that it did makes every team look slower than
+        # it is.
+        commits(first: 1) { nodes { commit { committedDate } } }
         labels(first: 30) { nodes { name } }
         reviewThreads(first: 100) {
           nodes {
@@ -147,7 +153,12 @@ function summarise(pr) {
   return {
     repo: pr.repository.nameWithOwner,
     pr: pr.number,
+    title: pr.title ?? '',
     merged_at: pr.mergedAt,
+    // Absent where the API did not return it. Left absent rather than defaulted
+    // to the merge time, which would report a lead time of zero for every one of
+    // them and drag the median toward a number no team achieved.
+    first_commit_at: pr.commits?.nodes?.[0]?.commit?.committedDate ?? null,
     author: pr.author?.login ?? null,
     reviewers: [...reviewers],
     labels: (pr.labels?.nodes ?? []).map((l) => l.name),
