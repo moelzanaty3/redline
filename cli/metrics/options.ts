@@ -33,6 +33,12 @@ export interface OptionSpec {
 
 export interface CommandSpec {
   summary: string;
+  // This runner parses its own argv rather than reading the environment. The
+  // flags below are still validated and still generate its --help; they are
+  // forwarded as arguments instead of exported as variables. Without this the
+  // command would set variables the runner ignores and then fail with the
+  // runner's own usage error, which is exactly the confusion it exists to remove.
+  argv?: boolean;
   // Where this runs, said in the help text. Several of these are org
   // infrastructure and are meaningless in a product repository, and a command
   // that does not say so wastes somebody's afternoon.
@@ -95,6 +101,8 @@ export const METRICS_COMMANDS: Record<string, CommandSpec> = {
       out: { env: 'OUT', type: 'path', help: 'write the card here instead of stdout' },
       'open-prs': { env: 'OPEN_PRS', type: 'number', help: 'open PR count, from the caller' },
       'stale-prs': { env: 'STALE_PRS', type: 'number', help: 'stale PR count, from the caller' },
+      'seed-scores': { env: 'SEED_SCORES', type: 'path', help: 'seed score history, for the recall line' },
+      'dashboard-url': { env: 'DASHBOARD_URL', type: 'string', help: 'linked from the card' },
     },
   },
   inbox: {
@@ -172,12 +180,15 @@ export const METRICS_COMMANDS: Record<string, CommandSpec> = {
     summary: 'score an automated reviewer against the seeded corpus',
     runsIn: 'anywhere, against a pull request that carries the corpus',
     script: 'scripts/score-seeds.mjs',
+    argv: true,
     options: {
       repo: { env: 'REPO', type: 'string', help: 'owner/name of the pilot repository', required: true },
       pr: { env: 'PR', type: 'number', help: 'the pull request number', required: true },
       token: TOKEN,
-      stack: { env: 'STACK', type: 'string', help: 'the seeded stack under test' },
       json: { env: 'JSON_OUT', type: 'boolean', help: 'machine-readable output' },
+      window: { env: 'WINDOW', type: 'number', help: 'lines around a marker a finding may land on', default: '4' },
+      history: { env: 'HISTORY', type: 'path', help: 'append the score to this JSONL' },
+      baseline: { env: 'BASELINE', type: 'boolean', help: 'record as a baseline rather than a run' },
     },
   },
   context: {
@@ -293,4 +304,32 @@ export function helpFor(name: string, spec: CommandSpec): string {
     '',
     'Every option can also be set as an environment variable — see the names in the docs.',
   ].join('\n');
+}
+
+
+/**
+ * The same validated flags, as argv, for a runner that parses its own.
+ *
+ * `--token` is deliberately never forwarded: it is a credential, and a command
+ * line is visible in the process table and lands in shell history. It travels as
+ * an environment variable, which is where the runner reads it from anyway.
+ */
+export function resolveArgv(
+  spec: CommandSpec,
+  flags: Record<string, string | boolean | undefined>,
+  env: NodeJS.ProcessEnv,
+  name: string
+): string[] {
+  const resolvedEnv = resolveEnv(spec, flags, env, name);
+  const argv: string[] = [];
+
+  for (const [flag, option] of Object.entries(spec.options)) {
+    if (option.env === 'GH_TOKEN') continue;
+    const value = resolvedEnv[option.env];
+    if (value === undefined) continue;
+    if (option.type === 'boolean') argv.push(`--${flag}`);
+    else argv.push(`--${flag}`, value);
+  }
+
+  return argv;
 }

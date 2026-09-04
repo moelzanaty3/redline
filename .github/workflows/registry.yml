@@ -47,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
           ORG: ${{ github.repository_owner }}
           SOURCE: ${{ github.repository }}
-        run: node scripts/build-registry.mjs
+        run: node dist/bin/redline.js registry
 
       - name: Commit the register if it changed
         run: |

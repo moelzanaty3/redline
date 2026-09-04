@@ -144,6 +144,23 @@ if (!gate.includes('pull-requests: write')) {
 if (!existsSync(join(ROOT, 'scripts/build-registry.mjs'))) {
   fail('scripts/build-registry.mjs is missing — the register cannot be derived, so redline sync has no targets and the dashboard loses its coverage figure');
 }
+
+// --- the estate command surface -------------------------------------------------
+// Every runner the metrics commands dispatch to must ship, because the commands
+// locate them inside the installed package rather than in a checkout. A runner
+// missing from package.json "files" is an installation where `redline metrics
+// dashboard` exists, is documented, and cannot run — the exact broken promise the
+// command surface was built to remove.
+const optionsSource = read('cli/metrics/options.ts');
+for (const match of optionsSource.matchAll(/script: '([^']+)'/g)) {
+  if (!existsSync(join(ROOT, match[1]))) {
+    fail(`cli/metrics/options.ts points at ${match[1]}, which does not exist`);
+  }
+}
+const shippedPaths = JSON.parse(read('package.json')).files ?? [];
+if (!shippedPaths.includes('scripts/')) {
+  fail('package.json "files" no longer ships scripts/ — every redline metrics command would be present, documented, and unable to run');
+}
 if (!existsSync(join(ROOT, '.github/workflows/registry.yml'))) {
   fail('.github/workflows/registry.yml is missing — the register would silently stop refreshing and go stale without a single failing build');
 }

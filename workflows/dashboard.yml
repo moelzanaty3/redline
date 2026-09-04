@@ -55,21 +55,30 @@ jobs:
           # instrumented-vs-onboarded, so partial coverage cannot read as health. A
           # failed read omits the figure rather than reporting zero — absent is honest,
           # zero is a lie that looks like a finding.
-          if registry=$(gh api "repos/$SOURCE/contents/registry.json" --jq '.content' 2>/dev/null | base64 -d); then
-            count=$(node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).entries.length)}catch{process.exit(1)}})' <<<"$registry")
+          # Written to a file rather than counted here: the dashboard reads the whole
+          # register for the enforcement ladder, not just its length, and a count
+          # alone cannot say how much of the estate is actually enforcing.
+          if gh api "repos/$SOURCE/contents/registry.json" --jq '.content' 2>/dev/null | base64 -d > registry.json; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
           else
-            count=""
-            echo "::warning::Could not read registry.json from $SOURCE — coverage will be omitted."
+            rm -f registry.json
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Could not read registry.json from $SOURCE — coverage and the ladder will be omitted."
           fi
-          echo "onboarded=$count" >> "$GITHUB_OUTPUT"
 
+      # No checkout of the Redline source, and no copy of its scripts in this
+      # repository. The command ships in the package; this repo owns its data and
+      # nothing else.
       - name: Build dashboard
         env:
-          ORG: ${{ github.repository_owner }}
-          DAYS: '90'
-          ONBOARDED: ${{ steps.coverage.outputs.onboarded }}
           STANDARDS_VERSION: ${{ vars.STANDARDS_VERSION }}
-        run: node scripts/build-dashboard.mjs
+        run: |
+          npx --yes "redline-cli@0.0.1" metrics dashboard \
+            --org "${{ github.repository_owner }}" \
+            --data data \
+            --days 90 \
+            --out dist \
+            --registry registry.json
 
       - uses: actions/upload-pages-artifact@v3
         with:

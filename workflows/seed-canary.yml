@@ -155,9 +155,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/scores"
-          node scripts/score-seeds.mjs --repo "$TARGET_REPO" --pr "$PR" --json \
+          npx --yes "redline-cli@0.0.1" metrics score-seeds --repo "$TARGET_REPO" --pr "$PR" --json \
             > "$GITHUB_WORKSPACE/scores/$(echo "$TARGET_REPO" | tr / -).json" || echo "score-seeds exited non-zero"
-          node scripts/score-seeds.mjs --repo "$TARGET_REPO" --pr "$PR" \
+          npx --yes "redline-cli@0.0.1" metrics score-seeds --repo "$TARGET_REPO" --pr "$PR" \
             | tee -a "$GITHUB_STEP_SUMMARY" || true
 
       - name: Close the canary pull request

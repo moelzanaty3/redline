@@ -7,6 +7,33 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### `redline metrics` — the estate runners get a front door
+
+- Running a measurement meant cloning the metrics repo, knowing the file path, and knowing
+  that `SPEND_GRAIN` existed at all. Env-var-only configuration is the genuinely
+  old-fashioned part, not the file extension: there is no `--help`, so the only way to
+  discover an option was to read the source. `redline metrics <command>` and
+  `redline registry` own configuration now, with a flag surface declared as data — which is
+  what makes it testable, and what guarantees help and validation cannot disagree, because
+  they are generated from the same table.
+- **Every refusal here used to be silent.** A mistyped `--spend-grain per-seat` became
+  `unknown` and made the resulting number quietly less trustworthy than it looked; a
+  non-numeric `--days` became `NaN` and produced an empty window; a missing token surfaced as
+  a 401 halfway through an org walk. All three are now refused by name before anything runs.
+- **The metrics repo no longer needs a copy of `scripts/`.** It checked itself out and ran
+  `node scripts/build-dashboard.mjs`, which meant keeping the runners duplicated there. Those
+  workflows call `npx redline-cli@<version> metrics …` and own nothing but their own `data/`.
+  The inbox workflow, which runs in the source repo, deliberately uses the local build
+  instead: a broken command there should fail before the release, not after it.
+- A runner that throws is reported as a host failure with a hint, not as "redline failed
+  unexpectedly" — that catch-all is for internal defects, and telling a reader the tool is
+  broken when their token is wastes an afternoon.
+- Credentials are never forwarded on a command line, even for the runner that parses its own
+  argv. A command line is visible in the process table and lands in shell history.
+- **The four build internals stay scripts** — `validate`, `assign-rule-ids`, `render-self`,
+  `check-pins`. They act on this repository's own `standards/`, and a command that exists but
+  cannot work on your repository is a worse promise than one that does not exist.
+
 ### Ignored-finding correlation — research, reported with its confidence
 
 - Redline could say a rule was ignored and not that ignoring it mattered. Where a finding was

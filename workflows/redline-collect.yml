@@ -35,10 +35,14 @@ jobs:
       - name: Collect telemetry
         env:
           # Read-only: repo metadata + pull requests across the org. No write scope.
+          # The token travels as an environment variable rather than a flag: a
+          # command line is visible in the process table.
           GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
-          ORG: ${{ github.repository_owner }}
-          DAYS: ${{ inputs.days || '8' }}
-        run: node scripts/collect-telemetry.mjs
+        run: |
+          npx --yes "redline-cli@0.0.1" metrics collect \
+            --org "${{ github.repository_owner }}" \
+            --days "${{ inputs.days || '8' }}" \
+            --out data
 
       - name: Commit
         run: |

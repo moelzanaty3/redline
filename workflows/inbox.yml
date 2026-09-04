@@ -40,11 +40,21 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      # This one runs in the source repo, so it uses the build it is about to
+      # ship rather than the last published package: a broken inbox here is a
+      # broken command, and finding that out from the release is too late.
       - name: Build inbox
         env:
           GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
-          ORG: ${{ github.repository_owner }}
-        run: node scripts/build-inbox.mjs
+        run: |
+          node dist/bin/redline.js metrics inbox \
+            --org "${{ github.repository_owner }}" \
+            --out dist
 
       - uses: actions/upload-pages-artifact@v3
         with:

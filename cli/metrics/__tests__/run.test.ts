@@ -66,3 +66,61 @@ test('an unknown subcommand lists the ones that exist', async () => {
 test('registry resolves to its own spec rather than a metrics one', () => {
   assert.match(specFor('registry').script, /build-registry\.mjs$/);
 });
+
+test('a runner that parses its own argv receives the flags as arguments', async () => {
+  // Without this the command would set variables the runner ignores and then
+  // fail with the runner's own usage error — exactly the confusion it exists to
+  // remove.
+  await withEnv(async () => {
+    let seen: string[] = [];
+    await runMetrics('score-seeds', {
+      root: ROOT,
+      flags: { repo: 'acme/pilot', pr: '12', json: true },
+      env: {},
+      load: async () => void (seen = [...process.argv]),
+    });
+
+    assert.ok(seen.includes('--repo'), seen.join(' '));
+    assert.equal(seen[seen.indexOf('--repo') + 1], 'acme/pilot');
+    assert.equal(seen[seen.indexOf('--pr') + 1], '12');
+    assert.ok(seen.includes('--json'));
+  });
+});
+
+test('a credential is never forwarded on a command line', async () => {
+  // A command line is visible in the process table and lands in shell history.
+  await withEnv(async () => {
+    let seen: string[] = [];
+    await runMetrics('score-seeds', {
+      root: ROOT,
+      flags: { repo: 'acme/pilot', pr: '1', token: 'ghp_secret' },
+      env: {},
+      load: async () => void (seen = [...process.argv]),
+    });
+
+    assert.equal(seen.join(' ').includes('ghp_secret'), false);
+    assert.equal(process.env['GH_TOKEN'], 'ghp_secret', 'it travels as an environment variable instead');
+  });
+});
+
+test('process.argv is restored after the runner has finished', async () => {
+  await withEnv(async () => {
+    const before = [...process.argv];
+    await runMetrics('score-seeds', {
+      root: ROOT,
+      flags: { repo: 'a/b', pr: '1' },
+      env: {},
+      load: async () => undefined,
+    });
+    assert.deepEqual(process.argv, before);
+  });
+});
+
+test('an env-reading runner does not get argv it never asked for', async () => {
+  await withEnv(async () => {
+    const before = [...process.argv];
+    await runMetrics('roi', { root: ROOT, flags: { days: '30' }, env: {}, load: async () => {
+      assert.deepEqual(process.argv, before);
+    } });
+  });
+});
