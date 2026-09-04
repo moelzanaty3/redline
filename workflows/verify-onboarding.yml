@@ -61,7 +61,11 @@ jobs:
           if [ -n "$ONLY" ]; then
             repos="$ONLY"
           else
-            repos=$(node -e 'const r=require("./registry.json");for(const e of r.entries)if(e.host==="github")console.log(`${e.org}/${e.repo}`)')
+            # String concatenation rather than a template literal: `${...}` inside
+            # single quotes is ambiguous to a reader and to shellcheck, which
+            # cannot know the braces are JavaScript's. Avoiding the construct
+            # beats suppressing the warning about it.
+            repos=$(node -e 'const r=require("./registry.json");for(const e of r.entries)if(e.host==="github")console.log(e.org+"/"+e.repo)')
           fi
 
           : > drift.txt
