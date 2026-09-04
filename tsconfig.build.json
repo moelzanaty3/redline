@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "cli",
+    "outDir": "dist",
+    "rewriteRelativeImportExtensions": true,
+    "sourceMap": true,
+    "declaration": false
+  },
+  "include": ["cli/**/*.ts"],
+  "exclude": ["cli/**/__tests__/**"]
+}

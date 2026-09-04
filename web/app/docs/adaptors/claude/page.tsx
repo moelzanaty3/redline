@@ -25,7 +25,7 @@ export default function Page() {
 
       <h2>Connect Claude Code (CLI / IDE)</h2>
       <ol>
-        <li>Onboard the repo — the sync PR adds <code>CLAUDE.md</code> and <code>AGENTS.md</code>.</li>
+        <li>Onboard the repo with <code>npx redline-cli init</code> — the pull request it opens adds <code>CLAUDE.md</code> and <code>AGENTS.md</code>.</li>
         <li>Nothing else. Claude Code loads <code>CLAUDE.md</code> automatically on session start; reviews and edits follow the standard, including the output contract when asked to review.</li>
       </ol>
 

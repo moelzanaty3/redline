@@ -1,0 +1,35 @@
+{
+  "name": "redline-cli",
+  "version": "0.0.0-development",
+  "description": "Engineering control plane: standards, merge gates and evidence across GitHub and Azure DevOps",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "redline": "./dist/bin/redline.js",
+    "redline-cli": "./dist/bin/redline.js"
+  },
+  "files": [
+    "dist/",
+    "standards/",
+    "commands/",
+    "templates/",
+    "platforms/",
+    "workflows/",
+    "rulesets/"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "test": "node --test 'cli/**/__tests__/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "semantic-release": "25.0.9",
+    "typescript": "^5.7.0"
+  }
+}

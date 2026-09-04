@@ -30,7 +30,7 @@ export default function Page() {
 
       <h2>Connect an agent</h2>
       <ol>
-        <li>Onboard the repo — the sync PR adds <code>AGENTS.md</code> with the profile&apos;s stacks.</li>
+        <li>Onboard the repo with <code>npx redline-cli init</code> — the pull request it opens adds <code>AGENTS.md</code> with the profile&apos;s stacks.</li>
         <li>Point the agent at the repo. Codex, Copilot coding agent, Jules, Devin and Cursor&apos;s agent read <code>AGENTS.md</code> by convention — no per-vendor configuration.</li>
         <li>Add repo-specific context above the marker block using <code>templates/repo-context.md</code>.</li>
       </ol>

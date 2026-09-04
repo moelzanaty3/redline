@@ -14,26 +14,40 @@ export default function Page() {
     >
       <h2>The contract</h2>
       <p>
-        Add one function to the <code>vendors</code> object in{" "}
-        <code>scripts/render.mjs</code>. It receives{" "}
-        <code>{"{ profile, stacks }"}</code> and returns the files to write:
+        Add one function to the <code>VENDORS</code> record in{" "}
+        <code>cli/render/vendors.ts</code> — the renderer lives in the CLI as
+        TypeScript, not <code>scripts/render.mjs</code> (deleted). A{" "}
+        <code>VendorRenderer</code> is <code>(ctx: RenderContext) =&gt;
+        VendorOutput</code>, where <code>ctx</code> carries{" "}
+        <code>{"{ manifest, root, profile, stacks }"}</code> — every real
+        vendor needs <code>ctx.root</code> and <code>ctx.manifest</code> to
+        actually read rule text off disk; a function that only sees{" "}
+        <code>profile</code> and <code>stacks</code> has no way to read a
+        single rule.
       </p>
-      <CodeWindow title="scripts/render.mjs — vendor function shape">
-        <span className="tk-white">myvendor</span>: ({"{ profile, stacks }"}) =&gt; ({"{"}{"\n"}
-        {"  "}files: <span className="tk-blue">Map</span>&lt;path, {"{ body, merge? }"}&gt;,  <span className="tk-dim">// merge: true wraps in REDLINE markers</span>{"\n"}
-        {"  "}prune: [<span className="tk-green">&quot;.myvendor/redline-*.rules&quot;</span>]   <span className="tk-dim">// generated files sync may delete</span>{"\n"}
-        {"}"})
+      <CodeWindow title="cli/render/vendors.ts — a minimal vendor">
+        <span className="tk-white">const</span> myvendor: <span className="tk-blue">VendorRenderer</span> = (ctx) =&gt; {"{"}{"\n"}
+        {"  "}<span className="tk-white">const</span> files = <span className="tk-white">new</span> <span className="tk-blue">Map</span>&lt;string, RenderedFile&gt;();{"\n"}
+        {"  "}files.set(<span className="tk-green">&apos;.myvendor/redline-core.rules&apos;</span>, {"{"}{"\n"}
+        {"    "}merge: <span className="tk-white">true</span>,  <span className="tk-dim">// wraps the body in REDLINE:BEGIN markers</span>{"\n"}
+        {"    "}body: read(ctx.root, ctx.manifest.core.source),{"\n"}
+        {"  "}{"}"});{"\n"}
+        {"  "}<span className="tk-white">return</span> {"{"}{"\n"}
+        {"    "}files,{"\n"}
+        {"    "}prune: [{"{"} dir: <span className="tk-green">&apos;.myvendor&apos;</span>, matches: (f) =&gt; f.startsWith(<span className="tk-green">&apos;redline-&apos;</span>) {"}"}],{"\n"}
+        {"  "}{"}"};{"\n"}
+        {"}"};
       </CodeWindow>
       <ul>
-        <li><code>merge: true</code> wraps the body in <code>&lt;!-- REDLINE:BEGIN --&gt;</code> markers and preserves everything outside them — a repo&apos;s own context survives every sync.</li>
-        <li><code>prune</code> lets sync delete generated files a profile no longer includes. Generated files are prefixed <code>redline-</code> precisely so pruning can never touch a file a team wrote.</li>
+        <li><code>merge: true</code> wraps the body in <code>&lt;!-- REDLINE:BEGIN --&gt;</code> markers and preserves everything outside them — a repo&apos;s own context survives every re-render. That marker string is frozen deliberately: changing it would make every already-onboarded repo append a second block instead of replacing its first.</li>
+        <li><code>prune</code> is an array of <code>{"{ dir, matches: (filename) => boolean }"}</code> — not glob strings. <code>redline init</code> deletes anything matching, inside <code>dir</code>, that a re-render no longer produces. Every real vendor generates filenames prefixed <code>redline-</code> precisely so pruning can never touch a file a team wrote by hand.</li>
       </ul>
 
       <h2>Register and ship</h2>
       <ol>
         <li>Add the vendor to <code>vendors</code> in <code>standards/manifest.json</code> with <code>enabled: true</code>.</li>
         <li>CI renders it for every profile on the next PR — the render-drift check keeps output honest.</li>
-        <li>Merge. The next sync distributes the new artifacts to every onboarded repo as PRs.</li>
+        <li>Merge. Every repo that runs <code>redline init</code> next picks up the new artifacts as part of its pull request. There is no push-based distribution to already-onboarded repos yet — <code>redline verify</code> reports them as stale until they re-run <code>init</code>.</li>
       </ol>
 
       <h2>Measurement comes free</h2>

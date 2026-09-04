@@ -1,10 +1,12 @@
-# Redline CODEOWNERS template. Installed at .github/CODEOWNERS by scripts/setup-repo.sh.
+# Reference shape only. `redline init` builds equivalent content in code and never reads
+# this file — it writes .github/CODEOWNERS only on a repository that has none yet, and
+# leaves an existing one untouched.
 #
-# The branch ruleset sets require_code_owner_review: true. Without this file that rule is
-# a silent no-op, so the platform team must own at minimum the enforcement surface below —
-# otherwise any contributor can weaken their own gate in a self-approved PR.
+# The branch ruleset sets require_code_owner_review: true. Without a CODEOWNERS file that
+# rule is a silent no-op, so the platform team must own at minimum the enforcement surface
+# below — otherwise any contributor can weaken their own gate in a self-approved PR.
 #
-# Replace <org>/<team> placeholders before installing.
+# Replace <org>/<team> placeholders before installing by hand.
 
 # Default owner for everything not matched below.
 *                                   @<org>/<owning-team>

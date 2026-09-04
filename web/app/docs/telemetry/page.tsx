@@ -12,6 +12,14 @@ export default function Page() {
       intro="Redline measures what was acted on, not what was flagged — and regression-tests the reviewer itself. A rule nobody acts on is noise, and noise is visible."
       href="/docs/telemetry"
     >
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          This pipeline is GitHub-only today, carried over unchanged from the
+          workflow-bundle era. The CLI onboards and verifies repos on either
+          host; wiring telemetry to Azure DevOps is later-phase work.
+        </p>
+      </div>
       <h2>What is measured</h2>
       <ul>
         <li><b>Acted-on rate</b> — resolved review threads versus findings left stale and outdated, per severity and per rule id.</li>

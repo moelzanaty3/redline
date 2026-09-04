@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Proves the pinned release toolchain resolves from the lockfile on every
+  # same-repo PR. It proves no more than that: semantic-release detects the PR
+  # context and exits 0 before verifyConditions, so no credentials are checked and
+  # none are provided. Fork PRs are skipped entirely. The full publish path is
+  # rehearsed by the workflow_dispatch canary job below.
+  dry-run:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Resolve pinned release toolchain (dry run, exits early on PRs)
+        run: npx semantic-release --dry-run
+
+  release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # With no v* tag, semantic-release computes 1.0.0 while CHANGELOG.md is at
+      # 3.0.0. Seeding v2.1.0 once makes the first computed release 3.0.0.
+      - name: First-release guard
+        run: |
+          set -euo pipefail
+          if [ -z "$(git tag -l 'v*')" ]; then
+            echo "::error::No v* tag exists — semantic-release would publish 1.0.0, contradicting CHANGELOG.md (3.0.0)."
+            echo "::error::Seed the release history once (pick a pre-v3 sha), then re-run this workflow:"
+            echo "::error::  git tag v2.1.0 <sha> && git push origin v2.1.0"
+            exit 1
+          fi
+
+      # standards/manifest.json is NOT stamped from the npm version here: the
+      # standards line and the npm package line are separate, and AGENTS.md
+      # requires a human to bump the manifest in the same PR as the rule change.
+      - name: Gate before publish
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npm test
+          npm run build
+          node scripts/assign-rule-ids.mjs --check
+          node scripts/validate.mjs
+          node scripts/render-self.mjs --check
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release
+
+  # Manual rehearsal of the publish path: pushes a throwaway version to the
+  # `canary` dist-tag so `latest` — what every onboarded repo installs — is untouched.
+  canary:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Publish canary
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          # `g` prefix keeps an all-digit sha from becoming a numeric prerelease
+          # identifier with a leading zero (invalid semver); run attempt keeps a
+          # re-run from colliding with the version its first attempt published.
+          npm version --no-git-tag-version "0.0.0-canary.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}.g$(git rev-parse --short HEAD)"
+          npm publish --tag canary

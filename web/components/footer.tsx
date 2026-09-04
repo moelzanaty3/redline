@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { AUTHOR, AUTHOR_TITLE, LINKEDIN_URL, VERSION } from "@/lib/site";
+import { AUTHOR, AUTHOR_TITLE, LINKEDIN_URL } from "@/lib/site";
+import { loadManifest } from "@/lib/manifest";
 
 export function SiteFooter() {
+  const manifest = loadManifest();
   return (
     <footer className="site-footer">
       <div className="container">
@@ -10,11 +12,11 @@ export function SiteFooter() {
             <div className="logo">
               <span className="mark" aria-hidden="true" />
               Redline
-              <span className="v">v{VERSION}</span>
+              <span className="v">v{manifest.version}</span>
             </div>
             <p>
               The engineering oversight layer for AI-assisted development.
-              Built on GitHub-native primitives — no servers, no SaaS.
+              GitHub and Azure DevOps, from one CLI — no servers, no SaaS.
             </p>
           </div>
           <div>

@@ -1,5 +1,6 @@
 # Redline caller. Installed into every onboarded repo as .github/workflows/redline.yml
-# by scripts/setup-repo.sh, and kept in sync by workflows/redline-sync.yml.
+# by `redline init`. Kept in sync by workflows/redline-sync.yml once `redline sync`
+# ships in Phase 3 — see CHANGELOG.md.
 #
 # DO NOT RENAME THE JOB. The branch ruleset requires the check "redline-gate / gate",
 # which is derived from this job id plus the aggregate job id in the reusable workflow.
@@ -26,3 +27,4 @@ jobs:
     with:
       adr-diff-threshold: 300
       fail-on-dependency-severity: high
+      soft-fail-labels: redline-exempt,redline-sync

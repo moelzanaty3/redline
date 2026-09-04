@@ -1,0 +1,104 @@
+# Redline merge gate for Azure DevOps.
+#
+# CONTRACT: the final step publishes a pull-request status with genre `redline`
+# and name `gate`. The Status branch policy installed by `redline init` requires exactly
+# that status. Renaming either value makes the policy unsatisfiable and every pull
+# request in this repository will sit blocked. `redline verify` checks the live
+# status name against this contract.
+#
+# There is deliberately no `pr:` block here: Azure Repos ignores YAML `pr:`
+# triggers (they only fire for GitHub-hosted repositories). This pipeline is
+# queued on pull requests by the "Redline: gate build" Build Validation branch
+# policy that `redline init` creates against the registered `redline-gate`
+# build definition.
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ADR_DIFF_THRESHOLD: 300
+  FAIL_ON_DEPENDENCY_SEVERITY: high
+  SOFT_FAIL_LABELS: redline-exempt,redline-sync
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: NodeTool@0
+    displayName: Node 22
+    inputs:
+      versionSpec: '22.x'
+
+  # --package pins npx to the redline-cli package explicitly. `redline` alone
+  # names a different, unrelated package on the public registry — `redline`
+  # is only this package's bin name, never resolve npx against it directly.
+  - script: npx --yes --package=redline-cli@latest redline verify --gate
+    displayName: Redline gate
+    name: gate
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      ADR_DIFF_THRESHOLD: $(ADR_DIFF_THRESHOLD)
+      FAIL_ON_DEPENDENCY_SEVERITY: $(FAIL_ON_DEPENDENCY_SEVERITY)
+      SOFT_FAIL_LABELS: $(SOFT_FAIL_LABELS)
+
+  - script: |
+      set -euo pipefail
+      state="succeeded"
+      description="Redline merge gate"
+      if [ "$AGENT_JOBSTATUS" != "Succeeded" ]; then state="failed"; fi
+
+      # $SYSTEM_TEAMPROJECT is admin-set, not attacker-controlled, but a
+      # display name containing a space or a quote must not be allowed to
+      # break the JSON body or the URL path — encode it, never interpolate
+      # it raw into either.
+      project_enc=$(jq -rn --arg v "$SYSTEM_TEAMPROJECT" '$v | @uri')
+      target_url="${SYSTEM_TEAMFOUNDATIONCOLLECTIONURI}${project_enc}/_build/results?buildId=$BUILD_BUILDID"
+      pr_url="${SYSTEM_TEAMFOUNDATIONCOLLECTIONURI}${project_enc}/_apis/git/repositories/$BUILD_REPOSITORY_ID/pullRequests/$SYSTEM_PULLREQUEST_PULLREQUESTID"
+
+      # The access token must never appear in argv — visible via `ps` or
+      # /proc/<pid>/cmdline to any process on the agent for the call's
+      # duration. It is already an env var; hand it to curl through a
+      # stdin config instead of putting it on the command line with -H.
+      curl_authed() {
+        printf 'header = "Authorization: Bearer %s"\n' "$SYSTEM_ACCESSTOKEN" | curl -K - "$@"
+      }
+
+      # Soft-fail escape hatch, the same one workflows/redline-gate.yml gives
+      # GitHub: a pull request carrying one of SOFT_FAIL_LABELS reports the
+      # gate succeeded-with-warning instead of blocking, so a reviewer can
+      # accept a process failure deliberately. It can only ever turn a
+      # failure into a success, never the reverse.
+      #
+      # NOTE for whoever splits this job up: on GitHub the security jobs
+      # (dependency-review, secrets) are excluded from the exemption. Here the
+      # gate is one `redline verify --gate` run that checks configuration
+      # drift only — no scanning step exists to downgrade. Adding one means
+      # excluding it from this branch, exactly as the GitHub workflow does.
+      if [ "$state" = "failed" ] && [ -n "${SOFT_FAIL_LABELS:-}" ]; then
+        labels=$(curl_authed -sS "$pr_url/labels?api-version=7.1") || labels=''
+        for label in ${SOFT_FAIL_LABELS//,/ }; do
+          if printf '%s' "$labels" \
+            | jq -e --arg l "$label" '[.value[]? | select(.active != false) | .name] | index($l)' >/dev/null 2>&1
+          then
+            state="succeeded"
+            description="Redline gate failed but the \"$label\" label is applied — a reviewer accepted this deliberately"
+            echo "##vso[task.logissue type=warning]$description"
+            break
+          fi
+        done
+      fi
+
+      body=$(jq -n --arg state "$state" --arg url "$target_url" --arg description "$description" \
+        '{state: $state, description: $description, context: {name: "gate", genre: "redline"}, targetUrl: $url}')
+
+      curl_authed -sS --fail-with-body -X POST \
+        -H "Content-Type: application/json" \
+        -d "$body" \
+        "$pr_url/statuses?api-version=7.1"
+    displayName: Publish redline/gate status
+    condition: always()
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      SOFT_FAIL_LABELS: $(SOFT_FAIL_LABELS)

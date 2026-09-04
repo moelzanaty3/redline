@@ -4,6 +4,12 @@
 # the ruleset, renames the caller job, or turns off push protection, and the gate becomes
 # decorative without a single failing build anywhere. This turns that from a thing
 # somebody was supposed to remember into a thing that opens an issue.
+#
+# DISABLED as of redline v3 Phase 1: `redline verify` (unlike scripts/setup-repo.sh
+# --verify) reads .redline.json from a local checkout of the target repo — it has no
+# `--repo owner/name` mode that works purely over the API. Re-enabling this on a schedule
+# needs a clone-then-verify loop, which is control-plane work alongside `redline sync` in
+# Phase 3. See CHANGELOG.md.
 name: Redline Verify Onboarding
 
 on:
@@ -26,6 +32,11 @@ concurrency:
 
 jobs:
   verify:
+    # Dead in Phase 1: the steps below still call the deleted scripts/setup-repo.sh
+    # (twice — the verify loop and the drift-issue body text). Left in place, not
+    # deleted, purely as the shape to rewire once a clone-then-verify loop lands in
+    # Phase 3 — see the DISABLED note above and CHANGELOG.md.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -88,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Redline onboarding drift detected"
-          body=$(printf 'These repos no longer verify. Their gate may be reporting a check name the ruleset does not require, or their security floor has been turned off.\n\n%s\n\nRun: %s\n\nInvestigate with:\n```sh\nscripts/setup-repo.sh <org>/<repo> --verify\n```' \
+          body=$(printf 'These repos no longer verify. Their gate may be reporting a check name the ruleset does not require, or their security floor has been turned off.\n\n%s\n\nRun: %s\n\nInvestigate by checking out each repo and running: npx redline-cli verify\n' \
             "$(for r in $FAILURES; do echo "- $r"; done)" "$RUN")
           existing=$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // ""')
           if [[ -n "$existing" ]]; then

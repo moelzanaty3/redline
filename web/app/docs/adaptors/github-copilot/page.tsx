@@ -27,26 +27,22 @@ export default function Page() {
 
       <h2>Connect it</h2>
       <ol>
-        <li>Onboard the repo: <code>scripts/setup-repo.sh &lt;org&gt;/&lt;repo&gt; &lt;profile&gt;</code> — the sync PR adds the instruction files.</li>
+        <li>Onboard the repo: <code>npx redline-cli init</code> — the pull request it opens adds the instruction files.</li>
         <li>Enable Copilot code review for the repo or org (Copilot settings → code review).</li>
         <li>The branch ruleset ships with <code>automatic_copilot_code_review_enabled</code> — every PR gets reviewed without being requested.</li>
-        <li>Merge the sync PR. Findings arrive as review comments with the <code>Redline/&lt;SEVERITY&gt; [&lt;rule-id&gt;]:</code> prefix.</li>
+        <li>Merge the pull request. Findings arrive as review comments with the <code>Redline/&lt;SEVERITY&gt; [&lt;rule-id&gt;]:</code> prefix.</li>
       </ol>
 
-      <h2>Render manually</h2>
-      <CodeWindow
-        title="terminal"
-        copyText="node scripts/render.mjs --profile web --vendors copilot --out ./target-repo"
-      >
-        <span className="tk-prompt">$</span> <span className="tk-white">node scripts/render.mjs --profile web --vendors copilot --out ./target-repo</span>
-      </CodeWindow>
       <div className="callout info">
         <span className="ic">ℹ</span>
         <p>
-          Copilot reads the core file plus every matching instructions file, so
-          individual stack files stay focused. The{" "}
-          <code>automatic_copilot_code_review_enabled</code> ruleset flag is the
-          only Copilot-specific line in the entire enforcement layer.
+          The renderer that produces these files now lives inside the CLI (
+          <code>cli/render/vendors.ts</code>), invoked by <code>redline init</code>{" "}
+          — there is no longer a standalone script to run it against an
+          arbitrary output directory. Copilot reads the core file plus every
+          matching instructions file, so individual stack files stay focused.
+          The <code>automatic_copilot_code_review_enabled</code> ruleset flag is
+          the only Copilot-specific line in the entire enforcement layer.
         </p>
       </div>
     </DocsPage>

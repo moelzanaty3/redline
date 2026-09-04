@@ -50,8 +50,10 @@ jobs:
           SOURCE: ${{ vars.REDLINE_SOURCE || format('{0}/redline', github.repository_owner) }}
         run: |
           set -euo pipefail
-          # sync-targets.txt is the register of onboarded repos; the dashboard reports
-          # instrumented-vs-onboarded so partial coverage cannot be mistaken for health.
+          # sync-targets.txt was the register of onboarded repos; the dashboard reported
+          # instrumented-vs-onboarded so partial coverage could not be mistaken for health.
+          # That file is deleted, so this read now always fails and coverage is omitted —
+          # the warning below is the normal path until Phase 3 reintroduces a register.
           if targets=$(gh api "repos/$SOURCE/contents/sync-targets.txt" --jq '.content' 2>/dev/null | base64 -d); then
             count=$(grep -cE '^[^#[:space:]]+[[:space:]]+[^#[:space:]]+' <<<"$targets" || true)
           else

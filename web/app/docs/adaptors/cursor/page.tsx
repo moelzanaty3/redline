@@ -26,17 +26,9 @@ export default function Page() {
       <h2>Connect it</h2>
       <ol>
         <li>Enable the vendor org-wide: set <code>vendors.cursor.enabled</code> to <code>true</code> in <code>standards/manifest.json</code> (off by default).</li>
-        <li>Re-render and merge — the next sync PR adds the <code>.cursor/rules/</code> files to every onboarded repo.</li>
+        <li>Run <code>npx redline-cli init</code> on the repo — it renders the <code>.cursor/rules/</code> files and opens a pull request with them. There is no separate re-sync command yet; re-running <code>redline init</code> after a standards change re-renders and reports drift via <code>redline verify</code>.</li>
         <li>Cursor picks them up automatically; the Cursor <b>agent</b> additionally reads <code>AGENTS.md</code>.</li>
       </ol>
-
-      <h2>Render manually</h2>
-      <CodeWindow
-        title="terminal"
-        copyText="node scripts/render.mjs --profile web --vendors cursor --out ./target-repo"
-      >
-        <span className="tk-prompt">$</span> <span className="tk-white">node scripts/render.mjs --profile web --vendors cursor --out ./target-repo</span>
-      </CodeWindow>
     </DocsPage>
   );
 }

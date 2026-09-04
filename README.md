@@ -10,7 +10,9 @@ versioned standards, readiness gates, decision log, org-wide inbox — plus the 
 and distribution that let it evolve from data rather than opinion.
 
 **Vendor-neutral.** The rules live once in `standards/` and render to GitHub Copilot,
-OpenAI Codex / `AGENTS.md`, Claude, and Cursor. See [docs/vendors.md](docs/vendors.md).
+OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabled
+(`vendors.cursor.enabled: false` in `standards/manifest.json`). See
+[docs/vendors.md](docs/vendors.md).
 
 ## What's in the box
 
@@ -19,22 +21,21 @@ OpenAI Codex / `AGENTS.md`, Claude, and Cursor. See [docs/vendors.md](docs/vendo
 | `standards/core.md` | Core standards: security, type safety, error handling, scope, and the severity output contract | source of truth — **the only file a human edits** |
 | `standards/stacks/*.md` | Per-stack rules: javascript, react, react-native, nodejs, microservices, java, go, python, csharp, kotlin, swift, terraform | source of truth |
 | `standards/manifest.json` | Stack globs, profiles, vendor toggles, standards version | source of truth |
-| `scripts/render.mjs` | Renders standards into Copilot / AGENTS.md / Claude / Cursor artifacts | run by sync and CI |
+| `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx redline-cli`, or `redline` once installed with `npm i -g redline-cli` |
 | `.github/pull_request_template.md` | Readiness checklist + ADR link | every onboarded repo |
-| `templates/repo-context.md` | Per-repo context template, pasted above the generated block in `AGENTS.md` | every onboarded repo |
-| `templates/CODEOWNERS` | Makes `require_code_owner_review` real and protects the enforcement surface | every onboarded repo |
+| `templates/repo-context.md` | Per-repo context template | reference only — a human copies it above the generated block in `AGENTS.md`; `redline init` never installs it |
+| `templates/CODEOWNERS` | Reference shape of the CODEOWNERS pattern that makes `require_code_owner_review` real and protects the enforcement surface | `redline init` writes `.github/CODEOWNERS` on GitHub repos with equivalent content built in code — it does not read this file |
 | `templates/redline.yml` | Thin caller installed as `.github/workflows/redline.yml` | every onboarded repo |
-| `rulesets/redline-ruleset.json` | Per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | applied by the setup script |
+| `rulesets/redline-ruleset.json` | Reference shape of the per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | nothing reads this file — `redline init` builds the equivalent ruleset at runtime |
 | `rulesets/redline-org-ruleset.json` | Same rules applied org-wide by custom repository property — no per-repo drift | applied once at org level |
 | `workflows/redline-gate.yml` | Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation | org `.github` repo |
-| `workflows/redline-sync.yml` + `scripts/sync.sh` | Distributes standards, gate caller and template to onboarded repos as PRs | this (source) repo |
+| `workflows/redline-sync.yml` | Distributes standards, gate caller and template to onboarded repos as PRs — **disabled in Phase 1**, see [CHANGELOG.md](CHANGELOG.md) | this (source) repo |
 | `workflows/redline-collect.yml` + `scripts/collect-telemetry.mjs` | Nightly central pull of review outcomes across the org | `redline-metrics` repo |
 | `workflows/weekly-digest.yml` + `scripts/build-digest.mjs` | Monday Teams digest as an Adaptive Card | `redline-metrics` repo |
 | `workflows/inbox.yml` + `scripts/build-inbox.mjs` | Org-wide prioritised PR inbox on GitHub Pages | this (source) repo |
-| `scripts/setup-repo.sh` | One-command onboarding: security floor, ruleset, labels, property, sync, verification | run by the platform team |
 | `workflows/dashboard.yml` + `scripts/build-dashboard.mjs` | Static dashboard on Pages: acted-on rate, trends, seed recall history, the rule tuning queue | `redline-metrics` repo |
 | `workflows/seed-canary.yml` | Weekly regression test of the reviewer itself: opens a seeded PR, scores it, closes it | `redline-metrics` repo |
-| `workflows/verify-onboarding.yml` | Weekly re-verification of every onboarded repo; opens an issue on drift | this (source) repo |
+| `workflows/verify-onboarding.yml` | Weekly re-verification of every onboarded repo; opens an issue on drift — **disabled in Phase 1**, see [CHANGELOG.md](CHANGELOG.md) | this (source) repo |
 | `scripts/validate.mjs` | Bundle self-check, run by this repo's CI | this repo |
 | `scripts/check-pins.mjs` | Re-resolves SHA-pinned actions against their upstream tag | this repo's CI |
 | `scripts/assign-rule-ids.mjs` | Assigns and verifies the stable `<stack>/<slug>` id on every rule | this repo |
@@ -48,52 +49,35 @@ Kotlin 14 · Swift 9 · Go 6. All covered — including plain JavaScript, which 
 TypeScript-only globs previously missed. Shell/Dockerfile/Gherkin intentionally uncovered
 (linters serve better than LLM review there).
 
-## Rollout order
+## Onboard a repository
 
-1. **Source repo** — push this bundle to `<org>/redline`.
-2. **Org `.github` repo** — copy `workflows/redline-gate.yml` to
-   `.github/workflows/redline-gate.yml` there so `uses:` resolves org-wide.
-   The secret scanner is already pinned to a commit SHA; `scripts/check-pins.mjs`
-   re-resolves it against its upstream tag on every CI run.
-3. **Metrics repo** — create `redline-metrics` with `workflows/redline-collect.yml`,
-   `workflows/weekly-digest.yml`, `workflows/dashboard.yml`, `workflows/seed-canary.yml`,
-   and the `scripts/` directory (the metrics workflows use `lib/`, so copy the whole thing).
-4. **Secrets and variables**
+```sh
+cd your-repo
+npx redline-cli init
+```
 
-   | Name | Lives in | Scope |
-   | --- | --- | --- |
-   | `REDLINE_SYNC_TOKEN` | source repo | contents:write, pull_requests:write, **workflows:write** on target repos |
-   | `REDLINE_ORG_READ_TOKEN` | source repo + metrics repo | read-only: metadata, contents, pull requests |
-   | `REDLINE_CANARY_TOKEN` | metrics repo | contents:write + pull_requests:write on the **canary repos only** |
-   | `TEAMS_WEBHOOK_URL` | metrics repo | Power Automate flow URL (not a retired O365 connector) |
-   | `PAGES_VISIBILITY_ACKNOWLEDGED` (variable) | source + metrics repo | `private` or `internal` — the inbox and dashboard builds refuse to run otherwise |
-   | `CANARY_TARGETS` (variable) | metrics repo | JSON array, e.g. `[{"repo":"acme/pilot-web","stack":"react"}]` |
-   | `REDLINE_DASHBOARD_URL` (variable) | metrics repo | pasted into the weekly digest as a button |
+That is the whole procedure. It detects your stack, renders the standards for it, installs
+the merge-readiness template and the gate (advisory — it reports, it does not block),
+turns on the security floor, and opens a pull request. Anything that needed repository
+admin rights you do not have is listed at the end for an administrator to run.
 
-   No Redline secret is ever stored in a product repo.
-5. **Org ruleset** — create the custom repository property `redline` (org settings), then
-   apply `rulesets/redline-org-ruleset.json` once.
-6. **Pilot** — one repo per stack:
+Install it once and the everyday command is shorter:
 
-   ```sh
-   scripts/setup-repo.sh acme/web-shop-checkout web
-   # merge the sync PR, then:
-   scripts/setup-repo.sh acme/web-shop-checkout --verify
-   ```
+```sh
+npm i -g redline-cli
+redline verify
+```
 
-7. **Validate** — open a PR adding `seeded/<stack>/` and `seeded/clean/`, then:
+The package is named `redline-cli`, not `redline` — that name is already taken on the public
+npm registry by an unrelated package, so `npx redline …` always resolves to the wrong thing.
+The binary it installs is named `redline`, which is why the everyday command reads `redline
+init` / `redline verify` once it is installed rather than `redline-cli init`.
 
-   ```sh
-   GH_TOKEN=... node scripts/score-seeds.mjs --repo acme/web-shop-checkout --pr 12
-   ```
+`redline verify` checks the repository still matches what it claims. Run it any time —
+scheduled estate-wide re-verification is Phase 3 work, not yet wired up; see
+[CHANGELOG.md](CHANGELOG.md) known limitations.
 
-   Target: 100% BLOCKER recall, zero comments on `seeded/clean/`. Record both in
-   `CHANGELOG.md` before widening. Close the PR — never merge it.
-8. **Automate the validation** — set `CANARY_TARGETS` and let `seed-canary.yml` re-score
-   weekly. It fails the run when BLOCKER recall drops or a false positive appears on the
-   clean corpus, so a regression in the reviewer surfaces without anyone remembering to look.
-9. **Widen** — onboard by team, not big-bang. Tune the standards from telemetry:
-   the dashboard's tuning queue names the rules to cut first.
+Both GitHub and Azure DevOps are supported. Redline detects which from your git remote.
 
 ## Verify before you trust
 
@@ -101,10 +85,18 @@ The single most common silent failure in a system like this is a required status
 whose name nothing ever reports: every PR sits on "Expected — waiting for status" forever.
 
 Reusable workflows report as `<caller job id> / <called job id>`. Here that is
-**`redline-gate / gate`**, and it is asserted in three places: the ruleset JSON,
-`scripts/validate.mjs` (CI fails if a job is renamed), and
-`scripts/setup-repo.sh --verify` (which reads the check names GitHub actually reported on
-a real PR). Run the verify step on every onboarded repo.
+**`redline-gate / gate`**, and the name is pinned in two places: the ruleset JSON's
+reference shape, and `scripts/validate.mjs` (CI fails if the job is renamed).
+On GitHub, whether `redline init` makes it a *required* check depends on `--blocking`:
+the default advisory install adds no `required_status_checks` rule at all, but
+`redline init --blocking` writes `redline-gate / gate` into the ruleset
+(`cli/platforms/github/install.ts`'s `REQUIRED_CHECK` constant, not a caller-supplied
+value). `redline verify` reads back whatever the host currently has required and compares
+it to what actually reported on the latest pull request: on a blocking install this is a
+real assertion, failing if the check is required but never reported; on the default
+advisory install nothing is required yet, so `verify` only surfaces the reported name for
+a human to eyeball. See [CHANGELOG.md](CHANGELOG.md) known limitation 5. Run it on every
+onboarded repo either way.
 
 ## Making a change to the standards
 
@@ -112,7 +104,7 @@ a real PR). Run the verify step on every onboarded repo.
 $EDITOR standards/stacks/react.md          # 1. edit the source, never the output
 node scripts/assign-rule-ids.mjs           # 2. give any new rule a permanent id
 $EDITOR standards/manifest.json            # 3. bump version
-node scripts/render.mjs --self             # 4. re-render this repo's own artifacts
+node scripts/render-self.mjs               # 4. re-render this repo's own artifacts
 node scripts/validate.mjs                  # 5. self-check
 $EDITOR CHANGELOG.md                       # 6. say what changed and why
 ```
@@ -120,8 +112,36 @@ $EDITOR CHANGELOG.md                       # 6. say what changed and why
 Rule ids are permanent. Reword a rule freely; never edit its id, or every historical
 telemetry record for it orphans and the tuning history resets.
 
-Merging to `main` opens a sync PR on every repo in `sync-targets.txt`. Teams review and
-merge their own gate changes; Redline never pushes to a default branch.
+Distribution to already-onboarded repos (`redline sync`) is Phase 3 — see
+[CHANGELOG.md](CHANGELOG.md). Until then, an onboarded repo picks up a standards change by
+re-running `redline init`. Redline never pushes to a default branch; every change lands as
+a pull request a team reviews and merges itself.
+
+## Two version axes
+
+Redline carries two versions that move independently. Do not conflate them.
+
+| Axis | Lives in | Bumped by | Example |
+| --- | --- | --- | --- |
+| **CLI version** | `redline-cli` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `3.0.0` |
+| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.1` |
+
+The CLI version is the tool's release line: [CHANGELOG.md](CHANGELOG.md) tracks it, and
+semantic-release computes the next one from commit messages — never edit
+`package.json`'s `version` by hand. The standards version is the rules' release line:
+sync PRs and rendered artifacts quote it, so a repo always knows which ruleset it is
+running. A CLI release does not imply a standards change, and vice versa.
+
+Each onboarded repo's `.redline.json` records both — `cliVersion` (the tool that
+onboarded it) and `standardsVersion` (the ruleset it was rendered from) — so `redline
+verify` can tell "old tool" apart from "old rules".
+
+Releases publish from `.github/workflows/release.yml`: every same-repo PR checks that
+the pinned release toolchain still resolves from the lockfile (`semantic-release
+--dry-run`, which exits early on PR context — no secrets in the job), a manual
+`workflow_dispatch` rehearses the real publish path with a throwaway build on the npm
+`canary` dist-tag without touching `latest`, and the real publish on `main` runs the
+exact semantic-release version pinned in the lockfile.
 
 ## Why this works at enterprise scale
 
@@ -134,14 +154,17 @@ merge their own gate changes; Redline never pushes to a default branch.
   code against a pilot repo, scores what came back against 82 seeded BLOCKER defects and
   a corpus of correct code that must draw zero comments, then closes it. "No findings"
   and "nothing to find" are otherwise indistinguishable.
-- **Distribution.** One source of truth, rendered per profile, synced to hundreds of
-  repos as reviewable PRs. Never copy-paste per project, never a stale rule file left
+- **Distribution.** One source of truth, rendered per profile. `redline sync` — syncing
+  standards to already-onboarded repos as reviewable PRs — is Phase 3 (see
+  [CHANGELOG.md](CHANGELOG.md)); until then a repo picks up a standards change by
+  re-running `redline init`. Never copy-paste per project, never a stale rule file left
   behind when a repo changes stack.
 - **Hard enforcement.** Org-level ruleset plus a required check that is name-verified.
   CODEOWNERS on the enforcement surface, so nobody can weaken their own gate unreviewed.
 - **A real security floor.** Secret scanning with push protection, Dependabot alerts,
-  dependency review and a diff secret scan — enabled by the onboarding script, not
-  assumed. Security checks in the gate can never be label-exempted.
+  dependency review and a diff secret scan — enabled by `redline init`, not assumed.
+  Security checks in the gate can never be label-exempted. On GitHub, that is; see
+  [CHANGELOG.md](CHANGELOG.md) for what Azure DevOps does not yet get at the gate.
 - **Least privilege.** Telemetry is pulled centrally with a read-only token. Onboarding a
   repo grants Redline no write access to it.
 - **Enterprise shape.** Per-stack rule composition, human approval always required, full

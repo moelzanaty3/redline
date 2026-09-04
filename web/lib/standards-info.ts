@@ -1,0 +1,30 @@
+// "What this is" copy for each stack's standards detail page — grounded in what the
+// stack's rules (from web/lib/rules.ts, sourced from loadRules()) actually cluster
+// around, not a restatement of the one-line registry description that already sits
+// directly above it as the page intro.
+export const STANDARDS_INFO: Record<string, string> = {
+  javascript:
+    "Untyped and loosely-typed JS — build scripts, config, serverless handlers, legacy app code. Its BLOCKER rules concentrate on injection surfaces (prototype pollution, eval-family dynamic code execution, shell injection) and async correctness (floating promises, unvalidated boundary input); the HIGH tier catches JS-specific footguns TypeScript would otherwise rule out by construction — loose equality coercion, unchecked index access, regexes vulnerable to ReDoS.",
+  react:
+    "Web React. Nearly half its rules are about hooks discipline — derived state synced via useEffect instead of computed during render, missing effect cleanup, conditional hook calls, exhaustive-deps disabled — because that's where render-cycle bugs hide. The rest cluster around state correctness (direct mutation, index keys on reorderable lists, server data copied into local state) and render performance (barrel imports, statically-imported heavy components, sequential awaits that should be parallel).",
+  "react-native":
+    "React Native apps. Its own rules are almost entirely about the two places mobile breaks in ways web doesn't: list performance (virtualization, memoized list items, hoisted inline props) and the JS-thread/UI-thread boundary (layout-property animation, blocking gesture handlers, Reanimated shared values touched outside worklets). Two rules exist purely because they crash on Android: bare strings outside <Text> and falsy && rendering.",
+  nodejs:
+    "NestJS services. Its BLOCKER tier is almost all boundary and concurrency discipline specific to a singleton-based DI framework: unvalidated DTOs, request-scoped data leaking across users via singleton providers, the event loop blocked by sync APIs, errors swallowed into a generic 500. The HIGH tier is mostly architecture — logic that belongs in a service ending up in a controller, N+1 ORM queries, HTTP clients built without the shared interceptor stack.",
+  microservices:
+    "Cross-cutting service rules that apply regardless of language — idempotency, timeouts, contract versioning, at-least-once delivery. Its concerns are distributed-systems failure modes any service can hit: calls without timeouts, non-idempotent message consumers, breaking API changes shipped without a version bump, dual writes with no outbox, PII leaking into logs and traces. This is the stack every service-* profile pulls in alongside its language-specific rules.",
+  java:
+    "Spring Boot services. Persistence correctness dominates the BLOCKER tier — entities leaking out of controllers, N+1 queries, @Transactional silently doing nothing on self-invocation, string-concatenated JPQL. The rest is Spring's DI and concurrency model done wrong: field injection over constructor injection, mutable state in singleton beans, blocking calls inside a reactive WebFlux pipeline.",
+  go:
+    "Go services and tools. Its rules cluster tightly around three things Go makes easy to get wrong: error handling (ignored errors, panicking for expected failures instead of returning them), goroutine and context lifetime (leaked goroutines, missing context propagation, data races, WaitGroup misuse), and resource discipline (defer piling up in loops, HTTP clients without timeouts, response bodies left undrained).",
+  python:
+    "Python services and tooling. The BLOCKER tier is mostly injection and safety footguns Python makes easy to write by accident — mutable default arguments, bare except clauses, SQL built by string interpolation, shell=True subprocess calls, blocking I/O inside async def. The HIGH tier pushes toward a typed, timezone-aware, resource-safe style: type hints on new public functions, context managers instead of manual cleanup, timezone-aware datetimes, HTTP calls with timeouts.",
+  csharp:
+    ".NET services. Async correctness is the dominant theme in the BLOCKER tier — async void outside event handlers, sync-over-async blocking that deadlocks the thread pool, missing cancellation tokens, HttpClient instantiated per request instead of via IHttpClientFactory. The HIGH tier is mostly EF Core and LINQ pitfalls: N+1 navigation property access, multiple enumeration of the same query, entities leaking out of controllers instead of DTOs.",
+  kotlin:
+    "Kotlin / Android. Coroutine structure and lifetime dominate — GlobalScope launches that outlive their owner, blocking calls inside suspend functions, broad catches that also swallow CancellationException and break structured cancellation, mutable state shared across coroutines without confinement. The rest is Android-specific state discipline: Activity Context leaked by a singleton, mutable StateFlow/LiveData exposed publicly instead of read-only, force-unwrap (!!) in production paths.",
+  swift:
+    "iOS applications. Its BLOCKER tier is almost entirely the concurrency and safety rules Swift's structured concurrency exists to prevent violations of: UI mutated off the main actor, the main thread blocked synchronously, an unstructured Task {} left uncancelled, retain cycles from self captured strongly in stored closures, force-unwrap and try! in production paths. A smaller thread pushes toward async/await over completion handlers and Keychain over UserDefaults for anything sensitive.",
+  terraform:
+    "Infrastructure as code. The BLOCKER tier is almost entirely things that are expensive or irreversible to get wrong in a plan: secrets committed in .tf/.tfvars, public exposure without a justification comment, a resource renamed without a moved {} block (plan shows destroy+create on live data), IAM scoped too broadly, unpinned provider/module sources. The HIGH tier is mostly configuration hygiene that prevents surprise diffs and gaps: count where for_each is correct, missing backup retention or encryption on new stateful resources.",
+};
