@@ -251,9 +251,10 @@ function refuseForeignGateFile(cwd: string, opts: GateOptions): void {
     'failed',
     `${GATE_PATH} already exists in this repository and carries nothing that attributes it to ` +
       'Redline, so installing the merge gate there would destroy it. Nothing was written',
-    'Move or rename that pipeline and re-run redline init, or re-run with --adopt-caller to hand ' +
-      'that path to Redline. Redline cannot merge into it the way it merges into a markdown file: ' +
-      'a second `trigger:` and `steps:` key would stop the pipeline running at all.'
+    'If that pipeline is already this repository\'s merge gate, re-run with --skip gate and Redline ' +
+      'will leave it in charge. Otherwise move or rename it and re-run redline init, or re-run with ' +
+      '--adopt-caller to hand that path to Redline. Redline cannot merge into it the way it merges ' +
+      'into a markdown file: a second `trigger:` and `steps:` key would stop the pipeline running at all.'
   );
 }
 

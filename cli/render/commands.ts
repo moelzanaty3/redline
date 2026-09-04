@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { RedlineError } from '../core/errors.ts';
@@ -70,11 +71,20 @@ export interface RenderCommandsOptions {
   // Report which files would change and write none of them, matching
   // render()'s own check mode — what `redline init --dry-run` plans with.
   check?: boolean;
+  // Content identifiers recorded by the run that last wrote these files, from
+  // `.redline.json`. Empty for a repository onboarded before the field
+  // existed, which is why `previouslyRendered` below stays as the fallback.
+  known?: Record<string, string>;
 }
 
 export interface RenderCommandsResult {
   written: string[];
   removed: string[];
+  // Repository-relative path to the identifier of the bytes now at it, for
+  // every command file this render owns whole. A file Redline merely merged
+  // its block into is absent: recording an identifier for a human's file is
+  // how a later run would come to overwrite it.
+  contentIds: Record<string, string>;
 }
 
 // What the renderer before the marker block wrote at this path: the header and
@@ -91,6 +101,15 @@ function previouslyRendered(header: string, body: string): string {
   return `${composed.trimEnd()}\n`;
 }
 
+// What `.redline.json` records for every command file Redline owns whole, and
+// the only thing a later run compares that record against. The algorithm is
+// therefore part of the on-disk contract: change it and every recorded
+// identifier stops matching, which silently returns those repositories to the
+// byte-exact fallback below.
+export function contentId(text: string): string {
+  return `sha256:${createHash('sha256').update(text).digest('hex')}`;
+}
+
 // `<name>` is only the filename in `commands/`, and nothing reserves that name
 // in a consumer repository — `commands/review-pr.md` here would land on a
 // team's own `.claude/commands/review-pr.md`. So whatever is at the path stays
@@ -102,6 +121,7 @@ export function renderCommands(opts: RenderCommandsOptions): RenderCommandsResul
   const commands = loadCommands(opts.root);
   const written: string[] = [];
   const removed: string[] = [];
+  const contentIds: Record<string, string> = {};
 
   for (const host of opts.hosts) {
     if (!COMMAND_HOSTS[host]) {
@@ -128,10 +148,15 @@ export function renderCommands(opts: RenderCommandsOptions): RenderCommandsResul
       // sits outside the block carries Redline's own attribution line, or the
       // file predates the block entirely and is byte-for-byte what Redline
       // last rendered there.
+      // The recorded identifier is asked first because it is the only one of
+      // the three that does not move when `commands/<name>.md` changes here.
+      const recorded = opts.known?.[path];
       const ownedWhole =
         outside === null ||
         (outside !== current && MANAGED_HEADER.test(outside)) ||
-        (outside === current && current === previouslyRendered(header, body));
+        (current !== null &&
+          outside === current &&
+          (recorded === contentId(current) || current === previouslyRendered(header, body)));
 
       if (!selected) {
         if (current === null || outside === current) continue; // never Redline's — brownfield rule
@@ -144,6 +169,7 @@ export function renderCommands(opts: RenderCommandsOptions): RenderCommandsResul
       }
 
       const next = wrapBlock(current === null || ownedWhole ? header : current, body, path);
+      if (current === null || ownedWhole) contentIds[path] = contentId(next);
       if (current === next) continue;
       if (!opts.check) {
         mkdirSync(dirname(target), { recursive: true });
@@ -152,5 +178,5 @@ export function renderCommands(opts: RenderCommandsOptions): RenderCommandsResul
       written.push(path);
     }
   }
-  return { written, removed };
+  return { written, removed, contentIds };
 }

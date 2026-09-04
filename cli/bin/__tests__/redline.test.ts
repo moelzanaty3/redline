@@ -1,7 +1,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -420,4 +420,61 @@ test('an indeterminate security floor fails verify, and reports without failing 
   assert.equal(await run(['verify', '--gate'], blind), 0);
   assert.ok(lines.some((l) => l.includes('Redline gate passed.')));
   assert.ok(lines.some((l) => l.includes('not confirmed: secret-scanning, push-protection')));
+});
+
+test('--skip records the deselection and reports it', async () => {
+  const cwd = repo();
+  const { opts, lines } = deps(cwd);
+
+  assert.equal(await run(['init', '--skip', 'gate,labels'], opts), 0);
+
+  const config = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as {
+    capabilities: Record<string, boolean>;
+  };
+  assert.equal(config.capabilities.gate, false);
+  assert.equal(config.capabilities.labels, false);
+  assert.ok(
+    lines.some((l) => l.includes('opted out') && l.includes('gate')),
+    `expected the deselection in the output, got ${JSON.stringify(lines)}`
+  );
+});
+
+test('--with turns a recorded deselection back on', async () => {
+  const cwd = repo();
+  await run(['init', '--skip', 'gate'], deps(cwd).opts);
+  assert.equal(await run(['init', '--with', 'gate'], deps(cwd).opts), 0);
+
+  const config = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as {
+    capabilities: Record<string, boolean>;
+  };
+  assert.equal(config.capabilities.gate, true);
+});
+
+// Silently ignoring the flag would leave the operator believing they opted out
+// of the organisation's floor.
+test('--skip security-floor exits 2 and says why it cannot be deselected', async () => {
+  const cwd = repo();
+  const { opts, lines } = deps(cwd);
+
+  assert.equal(await run(['init', '--skip', 'security-floor'], opts), 2);
+  assert.ok(
+    lines.some((l) => l.includes('cannot be deselected')),
+    `expected a refusal, got ${JSON.stringify(lines)}`
+  );
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});
+
+test('an unknown capability name exits 2 and lists the real ones', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['init', '--skip', 'pipelines'], opts), 2);
+  assert.ok(lines.some((l) => l.includes('unknown capability "pipelines"')));
+});
+
+test('--help documents the per-capability selection', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['--help'], opts);
+  const usage = lines.join('\n');
+  assert.match(usage, /--skip/);
+  assert.match(usage, /--with/);
+  assert.match(usage, /merge-policy/);
 });

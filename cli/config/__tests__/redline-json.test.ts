@@ -22,6 +22,8 @@ const valid: RedlineConfig = {
   onboardedAt: '2026-09-01T00:00:00.000Z',
   lastRunAt: '2026-09-02T00:00:00.000Z',
   localRules: true,
+  capabilities: { gate: true, mergePolicy: true, labels: true },
+  commandFiles: { '.claude/commands/redline-init.md': 'sha256:abc' },
 };
 
 test('parses a valid config', () => {
@@ -87,4 +89,34 @@ test('a config written before local rules existed reads back as never having had
 
 test('a non-boolean localRules is read as absent rather than failing the config', () => {
   assert.equal(parseConfig({ ...valid, localRules: 'yes' }).localRules, false);
+});
+
+
+// Every repository onboarded before the operator could deselect anything chose
+// all of it — that is what running `redline init` at all meant then. Reading a
+// missing key as a deselection would silently stop maintaining the gate on
+// every one of them.
+test('a config written before capabilities existed reads back with every capability selected', () => {
+  const { capabilities: _capabilities, ...rest } = valid;
+  assert.deepEqual(parseConfig(rest).capabilities, { gate: true, mergePolicy: true, labels: true });
+});
+
+test('an explicitly deselected capability reads back deselected', () => {
+  const parsed = parseConfig({ ...valid, capabilities: { gate: false, mergePolicy: true, labels: true } });
+  assert.equal(parsed.capabilities.gate, false);
+});
+
+// Only `false` is a deselection. A key some other tool wrote, or one a hand
+// edit mistyped, must not be the way a repository falls below the standard.
+test('a capability that is not exactly false stays selected', () => {
+  const parsed = parseConfig({ ...valid, capabilities: { gate: 'no', mergePolicy: 0, labels: null } });
+  assert.deepEqual(parsed.capabilities, { gate: true, mergePolicy: true, labels: true });
+});
+
+test('command content ids read back, and are empty when the field predates them', () => {
+  const { commandFiles: _commandFiles, ...rest } = valid;
+  assert.deepEqual(parseConfig(rest).commandFiles, {});
+  assert.deepEqual(parseConfig(structuredClone(valid)).commandFiles, {
+    '.claude/commands/redline-init.md': 'sha256:abc',
+  });
 });

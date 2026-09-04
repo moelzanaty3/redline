@@ -369,10 +369,11 @@ function refuseForeignCaller(cwd: string, opts: GateOptions): void {
     'failed',
     `${CALLER_PATH} already exists in this repository and carries nothing that attributes it to ` +
       'Redline, so installing the merge gate there would destroy it. Nothing was written',
-    'Move or rename that workflow and re-run redline init — or, if it is a Redline 2.1 caller ' +
-      'this run should replace, re-run with --adopt-caller. Redline cannot merge into it the way ' +
-      'it merges into a markdown file: a second `name:` and `on:` key would stop the workflow ' +
-      'running at all.'
+    'If that workflow is already this repository\'s merge gate, re-run with --skip gate and Redline ' +
+      'will leave it in charge. Otherwise move or rename it and re-run redline init — or, if it is a ' +
+      'Redline 2.1 caller this run should replace, re-run with --adopt-caller. Redline cannot merge ' +
+      'into it the way it merges into a markdown file: a second `name:` and `on:` key would stop the ' +
+      'workflow running at all.'
   );
 }
 
@@ -554,8 +555,11 @@ export function createGitHubInstall(
 
       if (check) return { files, outcomes: [] };
 
+      // Deselected: not attempted, and no outcome either. An outcome for work
+      // that never happened is how a deliberate choice gets read back as a
+      // capability that failed.
       const labelOutcomes: CapabilityOutcome[] = [];
-      for (const label of GATE_LABELS) {
+      for (const label of opts.manageLabels === false ? [] : GATE_LABELS) {
         const res = await client.rest('POST', `${repoPath(ref)}/labels`, label);
         labelOutcomes.push(
           res.status === 422
@@ -567,7 +571,7 @@ export function createGitHubInstall(
       return {
         files,
         outcomes: [
-          worstOutcome(labelOutcomes),
+          ...(labelOutcomes.length > 0 ? [worstOutcome(labelOutcomes)] : []),
           {
             capability: 'gate',
             status: prTemplate.changed ? 'applied' : 'already',

@@ -19,6 +19,12 @@ pass it through:
 - re-apply every capability even on a repository that looks already onboarded: `--repair` —
   the fix once an administrator grants rights that a plain re-run cannot recheck on its own
   (labels, review ownership, the repo property, the gate, the merge policy)
+- capabilities this repository does not want Redline to install because it already has its
+  own: `--skip <list>` (comma-separated: gate, merge-policy, labels, review-ownership), and
+  `--with <list>` to select one again. A deselected capability is not attempted, not written
+  and not reported by `redline verify` as missing — it is reported as off by choice. The
+  security floor is the organisation-wide minimum: `--skip security-floor` is refused by name
+  rather than quietly ignored
 - `--no-a11y` and `--speckit` are recorded in `.redline.json` for later phases; they change
   nothing in Phase 1, so do not describe them to the engineer as having taken effect
 

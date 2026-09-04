@@ -7,6 +7,46 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- Per-capability selection at onboarding. `redline init --skip <list>` deselects a capability
+  the repository already has its own answer for — `gate`, `merge-policy`, `labels`,
+  `review-ownership` — and `--with <list>` selects one again. A deselected capability is not
+  attempted, not written and not reported by `redline verify` as missing: `verify` gains a
+  `capabilities` finding naming the whole selection, and the checks a deselection governs
+  (`merge-policy`, `gate-machinery`, `pull-request-template`, `check-name-reported`) say
+  `off by choice` instead of failing, so a reader can tell "off because we chose to" from "off
+  because it broke". The selection is recorded in `.redline.json` under `capabilities` and
+  survives a re-run; flag precedence is the existing rule — a typed flag overrides the record,
+  an omitted flag keeps it. A config written before the field reads back with everything
+  selected, and only an explicit `false` deselects, so neither a missing key nor a mistyped one
+  is a way to fall below the standard. `review-ownership` maps onto the
+  `menu.sensitivePathReviewers` key that was already exactly that switch rather than growing a
+  second one to disagree with it.
+- **The security floor is not optional.** Secret scanning, push protection and dependency
+  alerts are the organisation-wide minimum, and unlike a gate pipeline or a branch policy there
+  is no "we already have our own" to respect — they are additive host settings that displace
+  nothing. `--skip security-floor` is refused by name with an exit 2 saying why, rather than
+  recorded or quietly ignored, so an operator can never come away believing they opted out of
+  it.
+- `--skip gate` with a blocking merge policy is refused before any host call or write: with no
+  gate machinery nothing in the repository publishes the check a blocking policy requires, and
+  the result would block every pull request in the repository forever. The refusal names
+  `--skip merge-policy` as the way a repository keeps both its own gate and its own policy.
+- `redline init` now says what else is already in the directory this host runs pipelines from,
+  before it installs its own gate there, and offers `--skip gate` — and the refusal both
+  adapters raise over a gate machinery file they cannot attribute to Redline now offers
+  `--skip gate` alongside `--adopt-caller`. Detection informs the operator; it does not decide
+  for them, and it is only offered while Redline's own gate is still absent.
+- `.redline.json` records a content identifier for each command file Redline owns whole, and a
+  later run recognises its own earlier output by that identifier rather than by recomputing
+  what it would write there now. This closes the residual left by the previous fix: the
+  byte-exact match against the installed CLI's command text stops recognising a repository the
+  moment `commands/<name>.md`'s body or description changes here, and that repository then
+  takes the merge path and gets its prompt appended to itself. The byte-exact match remains as
+  the fallback for repositories onboarded before the field existed. A file Redline merely
+  merged its block into is never given an identifier — recording one for a human's file is how
+  a later run would come to overwrite it — and gaining the field is not by itself work to do,
+  so a settled repository is not given a pull request just to record a hash.
+
 - Repository-local rules that Redline renders and never overwrites. A repository can now
   state a rule that *overrides* an org rule by writing `.redline/local.md`. Redline reads that
   file, renders it into every enabled vendor's artifact **inside** the

@@ -266,6 +266,18 @@ test('installGate creates the three labels the gate depends on', async () => {
   assert.deepEqual(created, ['no-adr', 'redline-exempt', 'redline-sync']);
 });
 
+// A repository that declined Redline's labels declined the host writes too,
+// not just the label on the onboarding pull request.
+test('deselected labels are never created on the host, and no labels outcome is reported', async () => {
+  const client = fakeGitHubClient();
+  const result = await createGitHubInstall(client, gitFor).installGate(ref, tmp(), {
+    ...gateOpts,
+    manageLabels: false,
+  });
+  assert.deepEqual(client.calls.filter((c) => c.path === '/repos/acme/web/labels'), []);
+  assert.equal(result.outcomes.find((o) => o.capability === 'labels'), undefined);
+});
+
 test('a label that already exists is not an error', async () => {
   const client = fakeGitHubClient({ 'POST /repos/acme/web/labels': { status: 422 } });
   const result = await createGitHubInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
@@ -1148,7 +1160,10 @@ test('a caller Redline cannot attribute is refused until a human adopts it', asy
     (error: unknown) =>
       isRedlineError(error) &&
       /carries nothing that attributes it/.test(error.message) &&
-      /--adopt-caller/.test(error.hint ?? '')
+      /--adopt-caller/.test(error.hint ?? '') &&
+      // The other half of the answer: a repository whose own pipeline is
+      // already the gate should be able to say so rather than adopt or move it.
+      /--skip gate/.test(error.hint ?? '')
   );
 });
 

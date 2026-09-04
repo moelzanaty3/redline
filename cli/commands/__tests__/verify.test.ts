@@ -839,3 +839,75 @@ test('creating the local rules file does not excuse a hand edit made in the same
 
   assert.equal(finding?.ok, false);
 });
+
+// A capability the repository declined is neither a failure nor silence. The
+// report still has to describe the whole surface, or a reader cannot tell
+// "off because we chose to" from "off because it broke".
+test('a deselected gate is reported as off by choice rather than as a missing gate', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, capabilities: { ...config.capabilities, gate: false } });
+  rmSync(join(cwd, '.github/workflows/redline.yml'));
+
+  const platform = fakePlatform({
+    gateMachinery: {
+      path: '.github/workflows/redline.yml',
+      present: false,
+      publishes: null,
+      expected: 'redline-gate / gate',
+    },
+  });
+  const report = await verify(() => platform, { cwd, root });
+
+  assert.equal(find(report, 'gate-machinery')?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.match(find(report, 'gate-machinery')?.detail ?? '', /off by choice/);
+  assert.equal(report.ok, true);
+});
+
+// Redline never applied a policy here, so what is on the host is a human's and
+// comparing the menu against it would report their own configuration as drift.
+test('a deselected merge policy is off by choice and is not read off the host', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, capabilities: { ...config.capabilities, mergePolicy: false } });
+
+  const platform = fakePlatform();
+  platform.lastPolicy = null;
+  const report = await verify(() => platform, { cwd, root });
+
+  assert.equal(find(report, 'merge-policy')?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.match(find(report, 'merge-policy')?.detail ?? '', /off by choice/);
+  assert.ok(!platform.reads.includes('readPolicy'), 'a policy Redline does not own is not read');
+});
+
+test('every deselected capability is named in one finding, and a full selection says so', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+
+  const all = await verify(() => fakePlatform(), { cwd, root });
+  assert.equal(find(all, 'capabilities')?.ok, true);
+  assert.match(find(all, 'capabilities')?.detail ?? '', /every capability selected/);
+
+  writeConfig(cwd, {
+    ...config,
+    menu: { ...config.menu, sensitivePathReviewers: false },
+    capabilities: { ...config.capabilities, labels: false },
+  });
+  const some = await verify(() => fakePlatform(), { cwd, root });
+  assert.equal(find(some, 'capabilities')?.ok, true);
+  assert.match(find(some, 'capabilities')?.detail ?? '', /labels, review-ownership/);
+});
+
+// The pull request template is written by installGate, so a repository that
+// declined the gate has none — and must not be told to run init to restore it.
+test('a deselected gate takes the pull request template with it, off by choice', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, capabilities: { ...config.capabilities, gate: false } });
+  rmSync(join(cwd, '.github/pull_request_template.md'));
+
+  const report = await verify(() => fakePlatform(), { cwd, root });
+
+  assert.equal(find(report, 'pull-request-template')?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.match(find(report, 'pull-request-template')?.detail ?? '', /off by choice/);
+});

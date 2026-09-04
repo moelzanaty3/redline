@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError } from '../core/errors.ts';
-import { readConfig, type RedlineConfig } from '../config/redline-json.ts';
+import { deselectedCapabilities, readConfig, type RedlineConfig } from '../config/redline-json.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { render } from '../render/standards.ts';
 import { LOCAL_HEADING, LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
@@ -37,6 +37,12 @@ function versionOrder(installed: string, recorded: string): 'same' | 'newer' | '
   }
   return 'newer';
 }
+
+// What `redline verify` says instead of a failure about a capability this
+// repository declined at onboarding. It is neither a pass it did not earn nor
+// the silence that would leave a reader unable to tell "off because we chose
+// to" from "off because it broke".
+const OFF_BY_CHOICE = 'off by choice';
 
 export interface VerifyFinding {
   check: string;
@@ -96,9 +102,26 @@ export async function verify(
   // failure (exit 4), never get reinterpreted as a capability finding. A
   // previous task's bug reported a host 404 as two "denied" capabilities,
   // filing false work against an administrator — that must not repeat here.
+
+  // One finding for the whole selection, so the report describes the entire
+  // surface rather than falling silent about the parts that were never
+  // installed. Each finding a deselection governs says so again in its own
+  // words below, where a reader looking for that capability will be.
+  const optedOut = deselectedCapabilities(config.menu, config.capabilities);
+  add(
+    'capabilities',
+    true,
+    optedOut.length === 0
+      ? 'every capability selected'
+      : `${OFF_BY_CHOICE} at onboarding, so Redline neither installs nor checks them: ${optedOut.join(', ')}`
+  );
+
   const platform = await platformFor();
   const ref = await platform.repoRef(opts.cwd);
-  const policy = await platform.readPolicy(ref);
+  // Not read at all when the repository declined it: whatever policy is on the
+  // host then belongs to a human, and every comparison below would report
+  // their own configuration as Redline's drift.
+  const policy = config.capabilities.mergePolicy ? await platform.readPolicy(ref) : null;
 
   // Every setting `redline init` applies, not just the blocking flag: an
   // administrator who turns off code-owner review or approvals leaves the gate
@@ -161,18 +184,21 @@ export async function verify(
   }
   add(
     'merge-policy',
-    policy !== null && weakened.length === 0,
-    policy === null
-      ? 'no Redline merge policy found on the host — if this is a repository that was refused ' +
-        'admin rights at onboarding, a plain redline init treats that as settled and will not ' +
-        'retry it: after an administrator grants the rights, run redline init --repair'
-      : `${
+    !config.capabilities.mergePolicy || (policy !== null && weakened.length === 0),
+    !config.capabilities.mergePolicy
+      ? `${OFF_BY_CHOICE} — this repository manages its own branch policy, so Redline applies none ` +
+        'and compares none'
+      : policy === null
+        ? 'no Redline merge policy found on the host — if this is a repository that was refused ' +
+          'admin rights at onboarding, a plain redline init treats that as settled and will not ' +
+          'retry it: after an administrator grants the rights, run redline init --repair'
+        : `${
           weakened.length === 0
-            ? `policy is ${policy.blocking ? 'blocking' : 'advisory'} as configured, ${
-                policy.requiredApprovals
-              } approval(s), code-owner review ${policy.requireCodeOwnerReview ? 'on' : 'off'}`
-            : weakened.join('; ')
-        }${unowned.length > 0 ? `; not compared here: ${unowned.join(', ')}` : ''}`
+              ? `policy is ${policy.blocking ? 'blocking' : 'advisory'} as configured, ${
+                  policy.requiredApprovals
+                } approval(s), code-owner review ${policy.requireCodeOwnerReview ? 'on' : 'off'}`
+              : weakened.join('; ')
+          }${unowned.length > 0 ? `; not compared here: ${unowned.join(', ')}` : ''}`
   );
 
   // The check-name comparison is the highest-value check in the product: an
@@ -188,6 +214,7 @@ export async function verify(
   // this command observes. render() covers rendered standards artifacts only,
   // so before this the deletion was invisible.
   const machinery = platform.readGateMachinery(opts.cwd);
+  const gateOwned = config.capabilities.gate;
   const requiredChecks = policy?.requiredChecks ?? [];
   // Three separate failures, and they need three different sentences. The
   // renamed case is not "the policy requires something else": telling an
@@ -203,22 +230,25 @@ export async function verify(
   const machineryHealthy = machinery.present && machinery.publishes !== null && !renamed && !policyMoved;
   add(
     'gate-machinery',
-    machineryHealthy,
-    !machinery.present
-      ? `${machinery.path} is not in this repository, so nothing will ever publish ${machinery.expected}` +
-        `${requiredChecks.includes(machinery.expected) ? ' — which the policy requires' : ''}` +
-        '; re-run redline init'
-      : machinery.publishes === null
-        ? `${machinery.path} no longer publishes ${machinery.expected} — the gate is not triggered by ` +
-          'pull requests, or the part of the file that reports it has been edited; re-run redline init'
-        : renamed
-          ? `${machinery.path} publishes ${machinery.publishes} rather than ${machinery.expected}, so no ` +
-            'policy requiring the Redline gate can ever be satisfied; rename it back or re-run redline init'
-          : policyMoved
-            ? `${machinery.path} publishes ${machinery.expected} as installed, but the policy requires ` +
-              `${requiredChecks.join(', ')} — the policy no longer requires the Redline gate, so fix the ` +
-              'policy rather than the workflow'
-            : `${machinery.path} publishes ${machinery.publishes}`
+    !gateOwned || machineryHealthy,
+    !gateOwned
+      ? `${OFF_BY_CHOICE} — this repository publishes its own merge gate, so Redline installs none ` +
+        `at ${machinery.path}`
+      : !machinery.present
+        ? `${machinery.path} is not in this repository, so nothing will ever publish ${machinery.expected}` +
+          `${requiredChecks.includes(machinery.expected) ? ' — which the policy requires' : ''}` +
+          '; re-run redline init'
+        : machinery.publishes === null
+          ? `${machinery.path} no longer publishes ${machinery.expected} — the gate is not triggered by ` +
+            'pull requests, or the part of the file that reports it has been edited; re-run redline init'
+          : renamed
+            ? `${machinery.path} publishes ${machinery.publishes} rather than ${machinery.expected}, so no ` +
+              'policy requiring the Redline gate can ever be satisfied; rename it back or re-run redline init'
+            : policyMoved
+              ? `${machinery.path} publishes ${machinery.expected} as installed, but the policy requires ` +
+                `${requiredChecks.join(', ')} — the policy no longer requires the Redline gate, so fix the ` +
+                'policy rather than the workflow'
+              : `${machinery.path} publishes ${machinery.publishes}`
   );
 
   const pr = await platform.latestPullRequestNumber(ref);
@@ -275,9 +305,17 @@ export async function verify(
       add(
         'check-name-reported',
         true,
-        `no required check configured yet (advisory gate) — PR #${pr} reported: ${
-          reported.length > 0 ? reported.join(', ') : '(nothing)'
-        }`
+        `${
+          gateOwned && config.capabilities.mergePolicy
+            ? 'no required check configured yet (advisory gate)'
+            : // Only the two that decide whether a required check of Redline's
+              // could exist at all. Naming the rest of the selection here would
+              // point the reader at capabilities that have nothing to do with it.
+              `no required check of Redline's — ${[
+                ...(gateOwned ? [] : ['gate']),
+                ...(config.capabilities.mergePolicy ? [] : ['merge-policy']),
+              ].join(', ')} ${OFF_BY_CHOICE}`
+        } — PR #${pr} reported: ${reported.length > 0 ? reported.join(', ') : '(nothing)'}`
       );
     }
   }
@@ -399,27 +437,29 @@ export async function verify(
   const describe = (t: TemplateObservation): string => `${t.path}${t.branch ? ' (branch template)' : ''}`;
   add(
     'pull-request-template',
-    templates.length > 0 && mangled.length === 0 && incomplete.length === 0,
-    templates.length === 0
-      ? 'no pull request template — every pull request opens with an empty body, which the gate ' +
+    !gateOwned || (templates.length > 0 && mangled.length === 0 && incomplete.length === 0),
+    !gateOwned
+      ? `${OFF_BY_CHOICE} — the pull request template is part of the merge gate this repository declined`
+      : templates.length === 0
+        ? 'no pull request template — every pull request opens with an empty body, which the gate ' +
           'fails for having no "## Launch readiness" section; run redline init to restore it'
-      : mangled.length > 0
-        ? `${mangled.map(describe).join(', ')} has a broken REDLINE:BEGIN/END marker pair — redline init ` +
-          'refuses to write to it until a single pair is restored, so nothing here is being maintained'
-        : incomplete.length > 0
-          ? `${incomplete
-              .map((t) => `${describe(t)} does not answer ${t.missing.join(' or ')}`)
-              .join('; ')} — the gate fails a pull request opened from it; run redline init`
-          : templates
-              .map(
-                (t) =>
-                  `${describe(t)} — ${
-                    t.state === 'managed'
-                      ? 'maintained inside REDLINE markers'
-                      : "answers the gate on its own, so it stays the repository's own file"
-                  }`
-              )
-              .join('; ')
+        : mangled.length > 0
+          ? `${mangled.map(describe).join(', ')} has a broken REDLINE:BEGIN/END marker pair — redline init ` +
+            'refuses to write to it until a single pair is restored, so nothing here is being maintained'
+          : incomplete.length > 0
+            ? `${incomplete
+                .map((t) => `${describe(t)} does not answer ${t.missing.join(' or ')}`)
+                .join('; ')} — the gate fails a pull request opened from it; run redline init`
+            : templates
+                .map(
+                  (t) =>
+                    `${describe(t)} — ${
+                      t.state === 'managed'
+                        ? 'maintained inside REDLINE markers'
+                        : "answers the gate on its own, so it stays the repository's own file"
+                    }`
+                )
+                .join('; ')
   );
 
   // pendingAdmin is a known, recorded state — not drift — so it gets its own

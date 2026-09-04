@@ -1668,6 +1668,20 @@ test('the azure plan phase refuses the same foreign gate file rather than promis
   );
 });
 
+test('the azure refusal offers the opt-out as well as the adoption', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
+  writeFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'trigger: none\nsteps: []\n');
+
+  await assert.rejects(
+    createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts),
+    (error: unknown) =>
+      isRedlineError(error) &&
+      /--adopt-caller/.test(error.hint ?? '') &&
+      /--skip gate/.test(error.hint ?? '')
+  );
+});
+
 test('--adopt-caller lets a human hand the azure gate path to Redline', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, '.azuredevops'), { recursive: true });

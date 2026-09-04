@@ -6,6 +6,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fakePlatform } from './fake-platform.ts';
 import { init, sensitivePathRules } from '../init.ts';
+import { capabilitySelection } from '../../config/redline-json.ts';
+import { contentId } from '../../render/commands.ts';
+import { isRedlineError } from '../../core/errors.ts';
 import { readConfig } from '../../config/redline-json.ts';
 import type { AdminCapability, CapabilityOutcome } from '../../platforms/types.ts';
 
@@ -1092,4 +1095,196 @@ test('a refused gate file leaves no half-onboarded tree behind', async () => {
   assert.equal(existsSync(join(cwd, 'CLAUDE.md')), false);
   assert.equal(existsSync(join(cwd, '.claude/commands')), false, 'no command file either');
   assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});
+
+// The product owner's question: "where's the part that makes sure I select what
+// I need to onboard — and if I already have pipelines wired, so I can ignore
+// them?" Brownfield safety stops Redline taking a human's object over; it does
+// not stop Redline writing a second gate beside one that already works.
+test('a deselected gate is never attempted and writes no workflow', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+  await init(platform, { cwd, root, now, capabilities: { gate: false } });
+
+  assert.ok(!platform.applied.includes('installGate'), 'not attempted');
+  assert.ok(!platform.planned.includes('installGate'), 'not even planned');
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false, 'and nothing written');
+});
+
+test('a deselected merge policy is never applied to the host', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, capabilities: { mergePolicy: false } });
+
+  assert.ok(!platform.applied.includes('applyPolicy'));
+});
+
+test('deselected labels leave the onboarding pull request unlabelled', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, capabilities: { labels: false } });
+
+  assert.deepEqual(platform.lastChange?.labels, []);
+});
+
+// The recorded selection is the whole point: an operator who says "we have our
+// own gate" must not have to say it again on every re-run.
+test('a deselected capability survives a re-run with no flags', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, capabilities: { gate: false } });
+
+  const second = fakePlatform();
+  await init(second, { cwd, root, now });
+
+  assert.equal(readConfig(cwd)?.capabilities.gate, false);
+  assert.ok(!second.applied.includes('installGate'));
+});
+
+test('a typed flag turns a deselected capability back on', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, capabilities: { gate: false } });
+
+  const second = fakePlatform();
+  await init(second, { cwd, root, now, capabilities: { gate: true } });
+
+  assert.equal(readConfig(cwd)?.capabilities.gate, true);
+  assert.ok(second.applied.includes('installGate'));
+});
+
+// This branch has had two non-convergence bugs. A selection change is work to
+// do exactly once, and the run after it must settle.
+test('a repository settles on the run after a capability is deselected', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  await init(fakePlatform(), { cwd, root, now, capabilities: { gate: false } });
+
+  const third = fakePlatform();
+  const report = await init(third, { cwd, root, now });
+
+  assert.equal(report.alreadyOnboarded, true);
+  assert.deepEqual(third.applied, []);
+});
+
+// Without this the deselection is swallowed as "nothing to change" and
+// .redline.json keeps recording a capability the operator just switched off.
+test('deselecting a capability on a settled repository is work to do', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+
+  const second = fakePlatform();
+  const report = await init(second, { cwd, root, now, capabilities: { labels: false } });
+
+  assert.equal(report.alreadyOnboarded, false);
+  assert.equal(readConfig(cwd)?.capabilities.labels, false);
+});
+
+test('--dry-run names what a deselection changes and writes nothing', async () => {
+  const cwd = repo();
+  const platform = fakePlatform();
+  const report = await init(platform, { cwd, root, now, dryRun: true, capabilities: { gate: false } });
+
+  assert.deepEqual(report.optedOut, ['gate']);
+  assert.equal(report.capabilities.gate, false);
+  assert.deepEqual(platform.applied, []);
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false);
+});
+
+// Review ownership already had a switch — `menu.sensitivePathReviewers`. The
+// operator-facing name maps onto it rather than growing a second one.
+test('the review-ownership name maps onto the menu switch that already exists', async () => {
+  const { menu, capabilities } = capabilitySelection(['review-ownership'], []);
+  assert.deepEqual(menu, { sensitivePathReviewers: false });
+  assert.deepEqual(capabilities, {});
+
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, menu, capabilities });
+  assert.ok(!platform.applied.includes('ensureReviewOwnership'));
+});
+
+test('--with turns a capability back on by name', () => {
+  assert.deepEqual(capabilitySelection([], ['gate', 'review-ownership']), {
+    menu: { sensitivePathReviewers: true },
+    capabilities: { gate: true },
+  });
+});
+
+// The opt-out is the repository's; the floor is the organisation's. Refusing by
+// name is the difference between "we will not do that" and quietly doing it
+// anyway while the operator believes they opted out.
+test('the security floor is refused by name rather than silently ignored', () => {
+  assert.throws(() => capabilitySelection(['security-floor'], []), /security floor/);
+  assert.throws(() => capabilitySelection(['security-floor'], []), (error: unknown) => {
+    assert.equal(isRedlineError(error) && error.kind, 'usage');
+    return true;
+  });
+});
+
+test('an unknown capability name is a usage error that lists the real ones', () => {
+  assert.throws(() => capabilitySelection(['pipelines'], []), /unknown capability "pipelines"/);
+});
+
+test('a capability named on both sides at once is a usage error', () => {
+  assert.throws(() => capabilitySelection(['gate'], ['gate']), /both/);
+});
+
+// Nothing publishes the required check once the gate is deselected, so a
+// blocking policy would block every pull request in the repository forever.
+test('a blocking merge policy with no gate is refused before anything is touched', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+
+  await assert.rejects(
+    init(platform, { cwd, root, now, capabilities: { gate: false }, menu: { blockingGate: true } }),
+    /blocking/
+  );
+  assert.deepEqual(platform.applied, []);
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});
+
+// Detection informs the operator; it does not decide for them.
+test('init names the pipelines already in the repository and offers the opt-out', async () => {
+  const cwd = repo({
+    'package.json': '{}',
+    '.github/workflows/ci.yml': 'name: ci\n',
+  });
+  const platform = fakePlatform({
+    gateMachinery: {
+      path: '.github/workflows/redline.yml',
+      present: false,
+      publishes: null,
+      expected: 'redline-gate / gate',
+    },
+  });
+  const report = await init(platform, { cwd, root, now, dryRun: true });
+
+  assert.ok(
+    report.notes.some((note) => note.includes('.github/workflows/ci.yml') && note.includes('--skip gate')),
+    `expected a note naming ci.yml and the opt-out, got ${JSON.stringify(report.notes)}`
+  );
+});
+
+test('a repository with nothing already wired is told nothing', async () => {
+  const platform = fakePlatform({
+    gateMachinery: {
+      path: '.github/workflows/redline.yml',
+      present: false,
+      publishes: null,
+      expected: 'redline-gate / gate',
+    },
+  });
+  const report = await init(platform, { cwd: repo(), root, now, dryRun: true });
+
+  assert.deepEqual(report.notes, []);
+});
+
+// Task 19's residual: the byte-exact match against the installed CLI's command
+// text cannot recognise output written under different text. The recorded
+// identifier can, and it only exists if init writes it down.
+test('the content id of every command file it wrote is recorded', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, vendors: ['claude'] });
+
+  assert.equal(
+    readConfig(cwd)?.commandFiles['.claude/commands/redline-init.md'],
+    contentId(readFileSync(join(cwd, '.claude/commands/redline-init.md'), 'utf8'))
+  );
 });

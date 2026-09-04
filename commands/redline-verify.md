@@ -12,6 +12,10 @@ running this by hand to mirror what CI's gate check sees.
 Each line is a check. For any `FAIL`, explain what it means and what fixes it:
 
 - `onboarded` — the repository has no `.redline.json`. Run `redline init`.
+- `capabilities` — never a `FAIL`. It names what this repository deselected at onboarding, so
+  the report describes the whole surface. The checks a deselection governs say `off by choice`
+  in their own detail rather than reporting the capability as missing: that is the difference
+  between "off because we chose to" and "off because it broke".
 - `merge-policy` — no Redline merge policy was found on the host at all, or the live one has
   been loosened, or the ruleset that carries it is no longer in force. The finding names what
   changed: the blocking flag, the approval count, dismissing approvals on push, code-owner

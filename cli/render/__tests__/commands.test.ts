@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadCommands, renderCommands } from '../commands.ts';
+import { contentId, loadCommands, renderCommands } from '../commands.ts';
 
 // Anchored: `commands/redline-init.md` quotes the marker inline, and an
 // inline mention is exactly what markers.ts does not treat as a block either.
@@ -67,7 +67,7 @@ test('a second render of an unchanged tree writes nothing', () => {
   const out = tmp();
   renderCommands({ root, out, hosts: ['claude'] });
   const second = renderCommands({ root, out, hosts: ['claude'] });
-  assert.deepEqual(second, { written: [], removed: [] });
+  assert.deepEqual({ written: second.written, removed: second.removed }, { written: [], removed: [] });
 });
 
 // Bytes at that path that carry no Redline block are a human's, whoever put
@@ -158,7 +158,8 @@ test('a command file with no Redline block anywhere is never deleted by a desele
   mkdirSync(join(out, '.claude/commands'), { recursive: true });
   writeFileSync(join(out, relPath), 'entirely ours\n');
 
-  assert.deepEqual(renderCommands({ root, out, hosts: [] }), { written: [], removed: [] });
+  const result = renderCommands({ root, out, hosts: [] });
+  assert.deepEqual({ written: result.written, removed: result.removed }, { written: [], removed: [] });
   assert.equal(readFileSync(join(out, relPath), 'utf8'), 'entirely ours\n');
 });
 
@@ -236,7 +237,7 @@ test('the migrated command file is stable on the very next render', () => {
   renderCommands({ root, out, hosts: ['claude'] });
   const second = renderCommands({ root, out, hosts: ['claude'] });
 
-  assert.deepEqual(second, { written: [], removed: [] });
+  assert.deepEqual({ written: second.written, removed: second.removed }, { written: [], removed: [] });
 });
 
 // A team's own command file can carry a lone `description:` key, which is
@@ -291,4 +292,58 @@ test('a file that already ended in a blank line round-trips a deselect byte-for-
   renderCommands({ root, out, hosts: [] });
 
   assert.equal(readFileSync(join(out, relPath), 'utf8'), ours);
+});
+
+// Task 19 closed the double-prompt by matching a marker-less file byte-for-byte
+// against what the installed CLI would render there. That match is only as
+// stable as the CLI's own text: change `commands/<name>.md`'s body or its
+// `description:` and every repository onboarded under the old text stops being
+// recognised, taking the merge path and getting its own prompt appended to
+// itself. The recorded content identifier is the answer that does not move —
+// it says what Redline wrote there, not what Redline would write there now.
+test('a command file matching its recorded content id is rewritten whole, not appended to', () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  const ours = '---\ndescription: an older description\n---\n\nAn older prompt body.\n';
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(join(out, relPath), ours);
+
+  renderCommands({ root, out, hosts: ['claude'], known: { [relPath]: contentId(ours) } });
+
+  const after = readFileSync(join(out, relPath), 'utf8');
+  assert.ok(!after.includes('An older prompt body.'), "Redline's own earlier output is replaced, not merged into");
+  assert.match(after, HAS_BLOCK);
+});
+
+// The other half: the identifier may only ever recognise bytes Redline itself
+// recorded. A file that carries no identifier of its own is still a human's.
+test('a command file with no recorded content id is still merged into, never rewritten', () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  const theirs = '---\ndescription: our own prompt\n---\n\nOur own prompt body.\n';
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(join(out, relPath), theirs);
+
+  renderCommands({ root, out, hosts: ['claude'], known: { [relPath]: contentId('something else') } });
+
+  assert.match(readFileSync(join(out, relPath), 'utf8'), /Our own prompt body\./);
+});
+
+test('the content id of every file Redline owns whole is reported for recording', () => {
+  const out = tmp();
+  const result = renderCommands({ root, out, hosts: ['claude'] });
+  const relPath = '.claude/commands/redline-init.md';
+
+  assert.equal(result.contentIds[relPath], contentId(readFileSync(join(out, relPath), 'utf8')));
+});
+
+test('a file Redline merely merged into is not given a content id', () => {
+  const out = tmp();
+  const relPath = '.claude/commands/redline-init.md';
+  mkdirSync(join(out, '.claude/commands'), { recursive: true });
+  writeFileSync(join(out, relPath), 'Our own prompt body.\n');
+
+  const result = renderCommands({ root, out, hosts: ['claude'] });
+
+  assert.equal(result.contentIds[relPath], undefined, "a human's file is never claimed by an identifier");
 });
