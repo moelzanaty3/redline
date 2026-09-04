@@ -7,6 +7,21 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+- `scripts/build-baseline.mjs` computes the Phase 0 baseline — the numbers every later
+  roadmap phase is judged against. The roadmap says plainly that the ordering of Phases 1-4
+  is a hypothesis until this exists and that the baseline is allowed to reorder them, so the
+  instrument is built here even though only the owner can run it with org credentials.
+- **An unmeasurable figure is `null` with its reason, never `0`.** This is the whole design
+  rule. A zero that actually means "nobody measured this" reads as a finding, and makes every
+  later comparison look like progress that did not happen: 0% coverage is a crisis, an
+  unreadable register is a Tuesday. So a merge rate with no pull requests yet is absent
+  rather than 0%, cost per BLOCKER names which half is missing rather than dividing by an
+  assumption, and a repository whose workflows the token cannot list is skipped rather than
+  counted as running no scanner.
+- `scripts/` has unit tests for the first time. `npm test` now covers
+  `scripts/**/__tests__/*.test.mjs` alongside the CLI suite, and the bundle self-check fails
+  the build if the baseline instrument goes missing.
+
 - `redline verify --repo owner/name` verifies a repository over the API, with no checkout.
   This is what `workflows/verify-onboarding.yml` was missing, and it is no longer gated off:
   the weekly sweep walks the register and opens one tracking issue — updated in place, never

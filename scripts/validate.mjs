@@ -171,6 +171,14 @@ if (!verifyWorkflow.includes('verify --repo')) {
   fail('workflows/verify-onboarding.yml no longer calls `redline verify --repo` — drift detection is wired to nothing');
 }
 
+// The baseline is what every roadmap phase past 0 is judged against, and the
+// roadmap says plainly that the ordering of the later phases is a hypothesis
+// until it exists. Losing the instrument loses the ability to tell whether any
+// of them worked.
+if (!existsSync(join(ROOT, 'scripts/build-baseline.mjs'))) {
+  fail('scripts/build-baseline.mjs is missing — there is no way to compute the baseline every later roadmap phase is measured against');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

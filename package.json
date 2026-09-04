@@ -24,7 +24,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepack": "npm run build",
-    "test": "node --test 'cli/**/__tests__/*.test.ts'",
+    "test": "node --test 'cli/**/__tests__/*.test.ts' 'scripts/**/__tests__/*.test.mjs'",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

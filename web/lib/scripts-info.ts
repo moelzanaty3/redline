@@ -46,6 +46,38 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     produces: "Without --check: writes/prunes the rendered files and lists each with `write` or `prune`. With --check: exits 1 and names the stale files if the checked-in output doesn't match a fresh render; exits 0 otherwise.",
     action: "Run it (without --check) locally after editing standards/ so the checked-in AGENTS.md/CLAUDE.md/copilot-instructions.md stay in sync — otherwise CI's --check step fails your PR.",
   },
+  "build-registry": {
+    what: "Derives registry.json — the register of onboarded repositories — by walking every repo in the org for a .redline.json. The register is never hand-edited and redline init never writes it: an entry exists exactly as long as the repository's own file does, so a repo that removes Redline leaves the register on the next run.",
+    runsIn: "This (source) repo.",
+    trigger: ".github/workflows/registry.yml — nightly at 04:00 UTC, plus workflow_dispatch.",
+    command: ["npm run build && GH_TOKEN=... ORG=... SOURCE=owner/repo node scripts/build-registry.mjs"],
+    env: [
+      "GH_TOKEN — read access to org repos.",
+      "ORG — the owner whose repositories are walked.",
+      "SOURCE — owner/name of this repo, recorded in the register so a consumer knows which estate it describes.",
+      "OUT — output path, default registry.json.",
+    ],
+    produces: "registry.json, with entries ordered by org then repo so a nightly commit only diffs when the estate actually changed. Prints one line per problem — a repository whose .redline.json is malformed, one with no default branch — and exits 1 without writing anything if no onboarded repository was found at all: an empty register is indistinguishable from a token that lost access, and publishing it would erase the dashboard's coverage figure and every sync target in one commit.",
+    action: "Nothing, normally — the nightly workflow runs it. Run it by hand after onboarding a batch of repositories if you do not want to wait for the next refresh.",
+  },
+  "build-baseline": {
+    what: "Computes the Phase 0 baseline the roadmap's acceptance criteria name: acted-on rate, coverage, findings per week, the merge rate on Redline's own pull requests, which SARIF producers the estate already runs, and AI spend. It is the set of numbers every later phase is judged against.",
+    runsIn: "A maintainer's terminal, once, with org credentials — alongside a checkout of the metrics repo's data/.",
+    trigger: "Run by hand. It is a measurement, not a loop.",
+    command: [
+      "DATA_DIR=data REGISTRY=registry.json DAYS=90 node scripts/build-baseline.mjs",
+      "GH_TOKEN=... ORG=... SPEND_TOTAL=... node scripts/build-baseline.mjs   # the full picture",
+    ],
+    env: [
+      "DATA_DIR — collected telemetry, default data.",
+      "REGISTRY — the derived register, default registry.json.",
+      "DAYS — window in days, default 90.",
+      "GH_TOKEN + ORG — needed to survey Redline's own pull requests and scan for SARIF producers.",
+      "SPEND_TOTAL, SPEND_CURRENCY, SPEND_GRAIN — AI spend from the vendor's own usage reporting, which no script here can read for you.",
+    ],
+    produces: "baseline.json plus a readable summary. Every figure it cannot source is reported as unavailable WITH ITS REASON rather than as zero — a zero that means \"nobody measured this\" reads as a finding, and would make every later comparison look like progress that did not happen. Cost per BLOCKER caught is computed only when both halves exist, and names the missing half when they do not.",
+    action: "Run it before starting any roadmap phase past 0. The roadmap says plainly that the ordering of Phases 1-4 is a hypothesis until this exists, and that the baseline is allowed to reorder them.",
+  },
   "check-pins": {
     what: "Re-resolves every SHA-pinned third-party GitHub Action (`uses: owner/repo@<sha> # <tag>`) against the tag its trailing comment claims, and separately checks whether a newer release exists. The only check in the bundle that needs network access.",
     runsIn: "This (source) repo.",
