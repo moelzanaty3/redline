@@ -7,6 +7,134 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- A deselection never deletes what an earlier run installed, so the output says what remains
+  rather than describing a state the repository is not in. `redline init --skip gate` names the
+  workflow still on disk and still firing, and `redline verify`'s `gate-machinery` finding says
+  it is still present and what it still publishes instead of "Redline installs none at
+  <path>" — a sentence that was false beside an installed gate, and that invited the operator
+  to delete it by hand.
+- A blocking merge policy Redline applied and then stopped maintaining is named rather than
+  passed over. `--skip gate --skip merge-policy` walks past the deadlock guard, which only sees
+  a policy the current run would apply, and leaves a live blocking ruleset requiring the
+  Redline check. `redline init` says so on that run; `redline verify` reads the policy back for
+  exactly that case and reports two different states — while something in the repository still
+  publishes the check nothing is blocked and the hazard is named, and once nothing does, every
+  pull request is blocked forever and the finding fails.
+- `--skip gate` reports `labels` as off with it. The gate install is what creates Redline's
+  labels — GitHub pre-declares the gate's soft-fail labels there, Azure creates them on use —
+  so with the gate deselected nothing ever creates one. The effective state is what `init` and
+  `verify` report, and both say why; `.redline.json` keeps the operator's own choice, so
+  re-selecting the gate brings the labels back without a second flag.
+- Per-capability selection at onboarding. `redline init --skip <list>` deselects a capability
+  the repository already has its own answer for — `gate`, `merge-policy`, `labels`,
+  `review-ownership` — and `--with <list>` selects one again. A deselected capability is not
+  attempted, not written and not reported by `redline verify` as missing: `verify` gains a
+  `capabilities` finding naming the whole selection, and the checks a deselection governs
+  (`merge-policy`, `gate-machinery`, `pull-request-template`, `check-name-reported`) say
+  `off by choice` instead of failing, so a reader can tell "off because we chose to" from "off
+  because it broke". The selection is recorded in `.redline.json` under `capabilities` and
+  survives a re-run; flag precedence is the existing rule — a typed flag overrides the record,
+  an omitted flag keeps it. A config written before the field reads back with everything
+  selected, and only an explicit `false` deselects, so neither a missing key nor a mistyped one
+  is a way to fall below the standard. `review-ownership` maps onto the
+  `menu.sensitivePathReviewers` key that was already exactly that switch rather than growing a
+  second one to disagree with it.
+- **The security floor is not optional.** Secret scanning, push protection and dependency
+  alerts are the organisation-wide minimum, and unlike a gate pipeline or a branch policy there
+  is no "we already have our own" to respect — they are additive host settings that displace
+  nothing. `--skip security-floor` is refused by name with an exit 2 saying why, rather than
+  recorded or quietly ignored, so an operator can never come away believing they opted out of
+  it.
+- `--skip gate` with a blocking merge policy is refused before any host call or write: with no
+  gate machinery nothing in the repository publishes the check a blocking policy requires, and
+  the result would block every pull request in the repository forever. The refusal names
+  `--skip merge-policy` as the way a repository keeps both its own gate and its own policy.
+- `redline init` now says what else is already in the directory this host runs pipelines from,
+  before it installs its own gate there, and offers `--skip gate` — and the refusal both
+  adapters raise over a gate machinery file they cannot attribute to Redline now offers
+  `--skip gate` alongside `--adopt-caller`. Detection informs the operator; it does not decide
+  for them, and it is only offered while Redline's own gate is still absent.
+- `.redline.json` records a content identifier for each command file Redline owns whole, and a
+  later run recognises its own earlier output by that identifier rather than by recomputing
+  what it would write there now. This closes the residual left by the previous fix: the
+  byte-exact match against the installed CLI's command text stops recognising a repository the
+  moment `commands/<name>.md`'s body or description changes here, and that repository then
+  takes the merge path and gets its prompt appended to itself. The byte-exact match remains as
+  the fallback for repositories onboarded before the field existed. A file Redline merely
+  merged its block into is never given an identifier — recording one for a human's file is how
+  a later run would come to overwrite it — and gaining the field is not by itself work to do,
+  so a settled repository is not given a pull request just to record a hash.
+
+- Repository-local rules that Redline renders and never overwrites. A repository can now
+  state a rule that *overrides* an org rule by writing `.redline/local.md`. Redline reads that
+  file, renders it into every enabled vendor's artifact **inside** the
+  `REDLINE:BEGIN`…`REDLINE:END` block under a `# Repository-local rules` heading that states
+  the precedence in words the tool acts on — the repository's own rules win where they
+  conflict with the org standard — and never writes, rewrites or prunes the file itself, on
+  any path including a vendor deselect. Landing inside the block is the whole point: an edit a
+  human makes to the block does not survive the next render, and this does. The section is
+  absent entirely when the file is missing or empty — no heading, no placeholder — and
+  deleting the file removes the section on the next render while leaving the rest of the block
+  byte-identical. Nothing in the file can fail a run: a `REDLINE` marker line in it is escaped
+  to the characters it renders as, and content that `cli/render/markers.ts` cannot read a block
+  back through (an unclosed code fence, which would swallow the `END` marker) is quoted rather
+  than refused — a human's file is not Redline's to validate. Readability is asked of
+  `markers.ts` itself, not of a second parser. `.redline.json` records `localRules`, whether
+  the file was present at the last run, so `redline verify` can tell "never had one" from "had
+  one and it went away"; a config written before the field reads back as `false`.
+  `redline verify` reports a changed local file as work to do rather than as drift the
+  repository is failing at — `artifacts-current` stays green and names `.redline/local.md` and
+  the re-run that folds it in. The excuse is bounded three ways, because an unbounded one is a
+  drift bypass in the oversight product itself: it is per-path (only the four artifacts the
+  section is actually rendered into can be explained by it — a hand-edited
+  `.github/instructions/redline-*.instructions.md` can never carry the section and is drift),
+  it must account for the *whole* stale set, and a stale removal is never explained by a rules
+  file at all. A hand edit to an artifact that already carries the current section is still
+  drift.
+- Closed the command-file clobber. `cli/render/commands.ts` writes
+  `.github/prompts/<name>.prompt.md`, `.claude/commands/<name>.md`,
+  `.opencode/command/<name>.md` and `.cursor/commands/<name>.md`, where `<name>` is only the
+  filename in `commands/` — nothing reserves that name in a consumer repository, so adding
+  `commands/review-pr.md` here would have silently overwritten a team's own
+  `.claude/commands/review-pr.md` in every onboarded repository. Today's two command files
+  happen to be `redline-`-prefixed, so this was latent rather than live. Redline now merges its
+  block into whatever is already at the path, reusing `wrapBlock`/`stripBlock` rather than a
+  second merge implementation, and creates the file only when nothing is there. A
+  `.claude/commands/<name>.md` is a single prompt body, so `/<name>` on a file a team already
+  owned now runs both texts concatenated; that is the accepted cost of not destroying their
+  prompt, and the markers are what keep Redline's half removable and re-renderable. The
+  frontmatter header stays outside the block, because the tools that read these files parse it
+  at byte zero; a file whose only content outside the block is that header is one Redline
+  created, so its `description:` still tracks `commands/<name>.md`, while a header or any prose
+  a human wrote is never rewritten: the header carries a `# Managed by Redline` line and that
+  line, not the shape of the frontmatter, is what attributes it — a team's own command file can
+  carry an identical lone `description:` key, so shape was an indeterminate read and claimed
+  their bytes. A marker-less file that is byte-for-byte what the previous CLI rendered at that
+  path is Redline's own earlier output and is replaced rather than appended to; without that,
+  the first upgraded `redline init` in every already-onboarded repository would have appended a
+  block carrying the same body and made `/<name>` run the prompt twice. Deselecting a command
+  host now takes Redline's block back out — deleting a file that was only ever Redline's, and
+  otherwise returning the repository's own bytes plus at most the single newline `wrapBlock`
+  inserted as the block's paragraph separator, which is indistinguishable on disk from one the
+  human typed and is the same documented non-inverse `stripBlock` already carries for the
+  shared artifacts (a file that already ended in a blank line round-trips exactly). A file
+  carrying no Redline block anywhere is never touched.
+- The gate machinery files get the opposite treatment, deliberately: appending a marker block
+  to YAML gives the file a second `name:`/`on:` (or `trigger:`/`steps:`) key and it stops
+  running at all, so there the only honest answers are "replace Redline's own file" and "stop".
+  Both adapters now refuse rather than clobber — `.github/workflows/redline.yml` and
+  `.azuredevops/redline-gate.yml`, in the plan phase as well as the real run, so `--dry-run`
+  cannot promise a write the run would refuse. The refusal also fires **before** the render:
+  `redline init` plans the host file diffs ahead of writing a single vendor artifact or command
+  file, so its "Nothing was written" is true rather than leaving a half-onboarded tree behind.
+  Attribution is positive, not a substring match: a `# Managed by Redline` line (now carried by
+  both templates), the reusable-workflow reference every v3 caller has, or Azure's own
+  `ADR_DIFF_THRESHOLD` variable block. A workflow that merely mentions Redline — a repository's
+  own `Redline lint` job at that path — is a repository's file and is refused. A Redline 2.1
+  caller carries none of those and cannot be told apart from such a file by guessing, so it too
+  is refused, and `redline init --adopt-caller` is the human decision that hands the path to
+  Redline; the refusal names the flag.
+
 - Final whole-branch review fixes. **`redline init` now converges whenever a security
   capability's write answer and its read answer disagree.** `pendingAdmin` records exactly one
   fact — a write `redline init` attempted was refused — and the settled path used to revise that

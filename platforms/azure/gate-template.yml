@@ -1,3 +1,4 @@
+# Managed by Redline; regenerate with `redline init` rather than editing here.
 # Redline merge gate for Azure DevOps.
 #
 # CONTRACT: the final step publishes a pull-request status with genre `redline`

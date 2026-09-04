@@ -333,6 +333,50 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
   };
 }
 
+// The one file `redline init` writes that cannot take the marker-block merge
+// the shared markdown artifacts take: appending to YAML gives the workflow a
+// second `name:` and `on:` key, and a file that no longer parses runs nothing
+// at all. So the only two honest answers here are "replace Redline's own file"
+// and "stop" — never "overwrite whatever was there".
+//
+// Attribution is read from the bytes rather than from the path, because the
+// path alone proves nothing and the 2.1 rollout wrote its own caller here,
+// which `redline init` exists to migrate. Deliberately generous: the
+// false-negative direction destroys a repository's file, and the
+// false-positive direction only replaces something that already carries
+// Redline's name at Redline's path.
+const CALLER_PATH = '.github/workflows/redline.yml';
+// Positive attribution, not a substring test. Almost every workflow a human
+// writes at a path called `redline.yml` says "redline" somewhere — in `name:`,
+// in a job id, in a `run:` line — so matching the word protected only the
+// repository that never mentioned it, and clobbered the ones that did. Two
+// things are Redline's own: the reusable-workflow reference every v3 caller
+// carries (the same contract cli/commands/init.ts's V3_CALLER reads to tell a
+// v3 repository from a 2.1 one), and the ownership line templates/redline.yml
+// now opens with. A 2.1 caller carries neither, and no fixture of the real
+// thing exists to pin, so it is refused rather than guessed at — `adoptCaller`
+// is where that decision belongs.
+const MANAGED_BY_REDLINE = /^#[ \t]*Managed by Redline\b/m;
+const USES_REDLINE_GATE = /\.github\/workflows\/redline-gate\.yml@/;
+
+function refuseForeignCaller(cwd: string, opts: GateOptions): void {
+  if (opts.adoptCaller === true) return;
+  const target = join(cwd, CALLER_PATH);
+  if (!existsSync(target)) return;
+  const existing = readFileSync(target, 'utf8');
+  if (MANAGED_BY_REDLINE.test(existing) || USES_REDLINE_GATE.test(existing)) return;
+  throw new RedlineError(
+    'failed',
+    `${CALLER_PATH} already exists in this repository and carries nothing that attributes it to ` +
+      'Redline, so installing the merge gate there would destroy it. Nothing was written',
+    'If that workflow is already this repository\'s merge gate, re-run with --skip gate and Redline ' +
+      'will leave it in charge. Otherwise move or rename it and re-run redline init — or, if it is a ' +
+      'Redline 2.1 caller this run should replace, re-run with --adopt-caller. Redline cannot merge ' +
+      'into it the way it merges into a markdown file: a second `name:` and `on:` key would stop the ' +
+      'workflow running at all.'
+  );
+}
+
 function syncPullRequestTemplate(
   cwd: string,
   defaultPath: string,
@@ -479,6 +523,7 @@ export function createGitHubInstall(
       check = false
     ): Promise<InstallResult> {
       const files: string[] = [];
+      refuseForeignCaller(cwd, opts);
       const caller = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
         .replaceAll('<org>', ref.org)
         .replace(/adr-diff-threshold: \d+/, `adr-diff-threshold: ${opts.adrDiffThreshold}`)
@@ -510,8 +555,11 @@ export function createGitHubInstall(
 
       if (check) return { files, outcomes: [] };
 
+      // Deselected: not attempted, and no outcome either. An outcome for work
+      // that never happened is how a deliberate choice gets read back as a
+      // capability that failed.
       const labelOutcomes: CapabilityOutcome[] = [];
-      for (const label of GATE_LABELS) {
+      for (const label of opts.manageLabels === false ? [] : GATE_LABELS) {
         const res = await client.rest('POST', `${repoPath(ref)}/labels`, label);
         labelOutcomes.push(
           res.status === 422
@@ -523,7 +571,7 @@ export function createGitHubInstall(
       return {
         files,
         outcomes: [
-          worstOutcome(labelOutcomes),
+          ...(labelOutcomes.length > 0 ? [worstOutcome(labelOutcomes)] : []),
           {
             capability: 'gate',
             status: prTemplate.changed ? 'applied' : 'already',

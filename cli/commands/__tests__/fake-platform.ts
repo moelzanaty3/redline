@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { RedlineError } from '../../core/errors.ts';
 import { isPending } from '../../platforms/types.ts';
 import type {
   CapabilityOutcome,
@@ -35,6 +36,11 @@ export interface FakePlatformOptions {
   pullRequestOutcomes?: CapabilityOutcome[];
   // What the local checkout says about the gate: absent, renamed, or healthy.
   gateMachinery?: GateMachinery;
+  // Both real adapters refuse rather than clobber a gate machinery file they
+  // cannot attribute to Redline, in the plan phase as well as the real run.
+  // This models that refusal so `init`'s ordering can be tested: nothing may be
+  // on disk by the time it fires.
+  refuseGate?: string;
 }
 
 export interface FakePlatform extends Platform {
@@ -48,6 +54,9 @@ export interface FakePlatform extends Platform {
   // touched the network at all, which "no mutation" alone never proved.
   reads: string[];
   lastPolicy: MergePolicy | null;
+  // The change `openPullRequest` was handed. Labels are the only capability
+  // that is exercised nowhere else, so nothing else could observe them.
+  lastChange: Change | null;
 }
 
 /**
@@ -139,6 +148,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     planned,
     reads,
     lastPolicy: ADVISORY,
+    lastChange: null,
     localRef(): RepoRef {
       return ref;
     },
@@ -153,6 +163,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       check = false
     ): Promise<InstallResult> {
       (check ? planned : applied).push('installGate');
+      if (opts.refuseGate !== undefined) throw new RedlineError('failed', opts.refuseGate);
       const files = (opts.gateFiles ?? ['.github/workflows/redline.yml']).filter((rel) =>
         seed(cwd, rel, GATE_BODY, check)
       );
@@ -191,8 +202,9 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
         outcomes: opts.ownership ?? [ok('review-ownership')],
       };
     },
-    async openPullRequest(_ref: RepoRef, _cwd: string, _change: Change): Promise<PullRequestRef> {
+    async openPullRequest(_ref: RepoRef, _cwd: string, change: Change): Promise<PullRequestRef> {
       applied.push('openPullRequest');
+      platform.lastChange = change;
       if (opts.failPullRequest) throw new Error('nothing to commit');
       return {
         number: 1,
@@ -203,8 +215,11 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     // The real adapters read the installed gate file off the disk; this fake
     // reports the healthy answer for the host unless a test overrides it, so
     // the parsing itself is pinned where it lives — in the adapter tests.
+    // Local only — it reads the checkout, not the host — so it is NOT recorded
+    // in `reads`, for the same reason `localRef` is not. `reads` is what pins
+    // "a dry run works offline and with an unscoped token"; putting a
+    // filesystem read in it would make that assertion mean something else.
     readGateMachinery(): GateMachinery {
-      reads.push('readGateMachinery');
       const host = HOST_FILES[ref.host];
       return (
         opts.gateMachinery ?? {

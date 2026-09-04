@@ -1,12 +1,16 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { isRedlineError } from '../core/errors.ts';
+import { isRedlineError, RedlineError } from '../core/errors.ts';
 import { CLI_VERSION } from '../core/version.ts';
 import {
+  CAPABILITY_KEYS,
   CONFIG_FILE,
   MENU_KEYS,
+  deselectedCapabilities,
+  labelsCarriedByGate,
   readConfig,
   writeConfig,
+  type CapabilitySelections,
   type MenuSelections,
 } from '../config/redline-json.ts';
 import { proposeProfile } from '../detect/stack.ts';
@@ -15,10 +19,12 @@ import { loadManifest } from '../render/manifest.ts';
 import { resolveProfile } from '../render/profile.ts';
 import { render } from '../render/standards.ts';
 import { renderCommands, COMMAND_HOSTS } from '../render/commands.ts';
+import { LOCAL_RULES_FILE } from '../render/vendors.ts';
 import { isPending } from '../platforms/types.ts';
 import type {
   AdminCapability,
   CapabilityOutcome,
+  GateMachinery,
   GateOptions,
   OwnershipRule,
   Platform,
@@ -38,6 +44,12 @@ export const DEFAULT_MENU: MenuSelections = {
 // drift apart, and so web/components/journey.tsx's hardcoded SYNC_LABEL can
 // be pinned against the real source (cli/render/__tests__/vendors.test.ts).
 export const SYNC_LABEL = 'redline-sync';
+
+export const DEFAULT_CAPABILITIES: CapabilitySelections = {
+  gate: true,
+  mergePolicy: true,
+  labels: true,
+};
 
 export const FLOOR_GATE: GateOptions = {
   adrDiffThreshold: 300,
@@ -110,6 +122,33 @@ export function sensitivePathRules(org: string): OwnershipRule[] {
 
 export const ONBOARD_BRANCH = 'redline/onboard';
 
+// Local and free — both adapters read the checkout and nothing else — but the
+// path it reads is whatever is on disk by now, and with the gate deselected
+// `installGate` no longer runs first to meet an unreadable one. Everything it
+// feeds here is advisory output, so a path that cannot be read costs the notes
+// and never the run.
+function observeGateMachinery(platform: Platform, cwd: string): GateMachinery | null {
+  try {
+    return platform.readGateMachinery(cwd);
+  } catch {
+    return null;
+  }
+}
+
+// Every other pipeline definition sitting where this host keeps them. Cheap
+// (one readdir) and unambiguous as a statement — it says what is there and
+// nothing about what it does, which is the operator's to know.
+function otherPipelines(cwd: string, machineryPath: string): string[] {
+  const slash = machineryPath.lastIndexOf('/');
+  const dir = slash === -1 ? '' : machineryPath.slice(0, slash);
+  const abs = join(cwd, dir);
+  if (!existsSync(abs)) return [];
+  return readdirSync(abs)
+    .filter((file) => /\.ya?ml$/.test(file))
+    .map((file) => (dir === '' ? file : `${dir}/${file}`))
+    .filter((relPath) => relPath !== machineryPath);
+}
+
 // Deleted, not just unwritten: a 2.1 sync workflow left in place keeps running
 // against a repository that has moved to v3. The deletions ride out in the
 // same pull request as the rest of the migration.
@@ -174,6 +213,9 @@ export interface InitOptions {
   // Only the selections the caller actually asked for. Anything absent falls
   // back to what the repository already chose — see the menu precedence below.
   menu?: Partial<MenuSelections>;
+  // Same precedence, same reason: a capability the caller did not name keeps
+  // whatever `.redline.json` recorded for it.
+  capabilities?: Partial<CapabilitySelections>;
   dryRun?: boolean;
   // Bypasses the alreadyOnboarded short-circuit so every capability is
   // re-applied and pendingAdmin is recomputed from the fresh outcomes,
@@ -186,6 +228,11 @@ export interface InitOptions {
   // below), because this still reads the existing config rather than starting
   // from nothing.
   repair?: boolean;
+  // `--adopt-caller`. Hands the host's gate machinery path to Redline when the
+  // file already there carries nothing that attributes it to Redline — a 2.1
+  // caller, in practice. It is a flag rather than a guess because guessing is
+  // what overwrote a repository's own workflow.
+  adoptCaller?: boolean;
   now?: () => Date;
 }
 
@@ -209,6 +256,14 @@ export interface InitReport {
   // The menu this run resolved, and the host settings it would change. Both
   // exist so `--dry-run` can print a plan the operator can act on.
   menu: MenuSelections;
+  capabilities: CapabilitySelections;
+  // Operator-facing names of what this repository declined. Reported on every
+  // path, including the settled one, so the output describes the whole surface
+  // rather than falling silent about the parts that were never attempted.
+  optedOut: string[];
+  // What the run observed and thought the operator should know, without acting
+  // on it. Detection informs; it does not decide.
+  notes: string[];
   hostPlan: string[];
 }
 
@@ -267,6 +322,30 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ...opts.menu,
   };
 
+  // DEFAULT_CAPABILITIES <- what this repository already chose <- what the
+  // caller typed, the same precedence the menu resolves under.
+  const capabilities: CapabilitySelections = {
+    ...DEFAULT_CAPABILITIES,
+    ...existing?.capabilities,
+    ...opts.capabilities,
+  };
+
+  // Refused before a host is contacted or a byte is written, because the state
+  // it describes cannot be recovered from by re-running: with no gate
+  // machinery nothing in the repository publishes the required check, and a
+  // blocking policy that requires a check nothing publishes blocks every pull
+  // request in the repository forever. A repository that runs its own gate
+  // wants its own branch policy too — `--skip gate --skip merge-policy` — or
+  // an advisory Redline policy alongside it.
+  if (!capabilities.gate && capabilities.mergePolicy && menu.blockingGate) {
+    throw new RedlineError(
+      'usage',
+      'the merge gate is deselected, so nothing in this repository publishes the check a blocking ' +
+        'policy would require — every pull request would be blocked',
+      'either keep the gate, or add --skip merge-policy so this repository keeps its own branch policy'
+    );
+  }
+
   // A dry run must work offline and with an unscoped token: repoRef() is a
   // live GET, so the plan is built from what the local clone already knows.
   const ref = dryRun ? platform.localRef(cwd) : await platform.repoRef(cwd);
@@ -280,26 +359,11 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     .map(([k]) => k);
   const vendors = opts.vendors ?? existing?.vendors ?? detectVendors(cwd, orgVendors);
 
-  // Files first, host settings after: a denied host call must never cost the
-  // file-level work that already succeeded.
-  const rendered = render({ root, profile, out: cwd, vendors, check: dryRun });
-  // The ceiling render() applies internally, applied here too. renderCommands
-  // cannot enforce it for itself: COMMAND_HOSTS carries hosts the vendor
-  // manifest has no entry for at all (opencode), which is not the same thing
-  // as a vendor the org switched off. Without this, `redline init --vendors
-  // copilot,cursor` skipped .cursor/rules/ and still wrote .cursor/commands/,
-  // delivering half of a vendor the org had disabled.
-  const commandFiles = renderCommands({
-    root,
-    out: cwd,
-    hosts: vendors.flatMap((v) => (orgVendors.includes(v) && v in COMMAND_HOSTS ? [v] : [])),
-    check: dryRun,
-  });
-  const legacyRemovals = migratedFrom === '2.1' ? removeLegacyArtifacts(cwd, dryRun) : [];
-
   const gateOptions: GateOptions = {
     ...FLOOR_GATE,
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
+    ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
+    ...(capabilities.labels ? {} : { manageLabels: false }),
   };
   const ownershipRules = sensitivePathRules(ref.org);
 
@@ -308,18 +372,111 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // re-run had nothing to do until four host objects had already been
   // rewritten — and the answer itself was wrong, because alreadyOnboarded read
   // only the rendered files and never these two.
-  const gatePlan = await platform.installGate(ref, cwd, gateOptions, true);
+  //
+  // It also runs before the first byte reaches the working tree. `installGate`
+  // refuses rather than clobber a gate machinery file it cannot attribute to
+  // Redline, and its message says nothing was written; planning after the
+  // render made that untrue, leaving every vendor artifact and command file on
+  // disk with no .redline.json, no branch and no pull request to carry them.
+  const gatePlan = capabilities.gate
+    ? await platform.installGate(ref, cwd, gateOptions, true)
+    : { files: [], outcomes: [] };
+
   const ownershipPlan = menu.sensitivePathReviewers
     ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules, true)
     : { files: [], outcomes: [] };
 
+  // Everything this run observed and thinks the operator should know, without
+  // acting on any of it. Detection informs; it does not decide.
+  const machinery = observeGateMachinery(platform, cwd);
+  const notes: string[] = [];
+
+  // Detection, not a decision. `readGateMachinery` is local and free, and what
+  // it gives that nothing else here has is the path this host runs its gate
+  // from — so the only claim made is what else is already sitting in that
+  // directory. It is offered while Redline's own gate is still absent and
+  // never after, because a repository that already has it has answered the
+  // question.
+  const alreadyWired =
+    capabilities.gate && machinery !== null && !machinery.present
+      ? otherPipelines(cwd, machinery.path)
+      : [];
+  if (alreadyWired.length > 0) {
+    notes.push(
+      `this repository already has ${alreadyWired.join(', ')} — if one of them is already your ` +
+        'merge gate, re-run with --skip gate and Redline will leave it in charge rather than ' +
+        'writing a second one beside it'
+    );
+  }
+
+  // Deselecting the gate does not delete the workflow an earlier run installed
+  // — deleting a repository's files is not Redline's to do — so it is still
+  // there and still firing on every pull request. Saying only "opted out: gate"
+  // beside a running gate describes a state this repository is not in, and
+  // invites the operator to go and delete it by hand.
+  if (!capabilities.gate && machinery !== null && machinery.present) {
+    notes.push(
+      `${machinery.path} from an earlier run is still in this repository and still publishes ` +
+        `${machinery.expected} — Redline no longer maintains it; it is yours to keep or delete`
+    );
+  }
+
+  // The other half of the deadlock guard, and the half a refusal cannot cover:
+  // the guard only sees a blocking policy this run would apply, so deselecting
+  // the merge policy walks straight past it and leaves a Redline ruleset
+  // blocking on a check that, with the gate deselected too, nothing will ever
+  // publish. The policy is the repository's now, so this is not a refusal — but
+  // it is the last place anyone hears about it before a pull request hangs.
+  if (
+    !capabilities.mergePolicy &&
+    menu.blockingGate &&
+    existing !== null &&
+    !existing.pendingAdmin.includes('merge-policy')
+  ) {
+    notes.push(
+      'the merge policy Redline applied here is blocking and is no longer maintained by Redline — ' +
+        'it still requires the Redline gate check, so relax or delete it on the host unless ' +
+        'something in this repository still publishes that check'
+    );
+  }
+
+  if (labelsCarriedByGate(capabilities)) {
+    notes.push(
+      "labels are created by the gate install, so a deselected gate takes Redline's labels with " +
+        'it — the selection recorded in .redline.json is unchanged, and re-selecting the gate ' +
+        'brings them back'
+    );
+  }
+
+  // Files next, host settings after: a denied host call must never cost the
+  // file-level work that already succeeded.
+  const rendered = render({ root, profile, out: cwd, vendors, check: dryRun });
+  // The ceiling render() applies internally, applied here too. renderCommands
+  // cannot enforce it for itself: COMMAND_HOSTS carries hosts the vendor
+  // manifest has no entry for at all (opencode), which is not the same thing
+  // as a vendor the org switched off. Without this, `redline init --vendors
+  // copilot,cursor` skipped .cursor/rules/ and still wrote .cursor/commands/,
+  // delivering half of a vendor the org had disabled.
+  const commands = renderCommands({
+    root,
+    out: cwd,
+    hosts: vendors.flatMap((v) => (orgVendors.includes(v) && v in COMMAND_HOSTS ? [v] : [])),
+    check: dryRun,
+    known: existing?.commandFiles ?? {},
+  });
+  const legacyRemovals = migratedFrom === '2.1' ? removeLegacyArtifacts(cwd, dryRun) : [];
+
   // render() prunes stale vendor files with rmSync; those deletions must ride
   // along in the same file list as the writes, or the PR never reflects them.
-  const removals = [...(dryRun ? rendered.staleRemovals : rendered.removed), ...legacyRemovals];
+  const removals = [
+    ...(dryRun ? rendered.staleRemovals : rendered.removed),
+    ...commands.removed,
+    ...legacyRemovals,
+  ];
   const changedFiles = [
     ...(dryRun ? rendered.staleWritten : rendered.written),
     ...removals,
-    ...commandFiles,
+    ...commands.written,
     ...gatePlan.files,
     ...ownershipPlan.files,
   ];
@@ -336,6 +493,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     existing !== null &&
     (existing.vendors.length !== vendors.length ||
       [...existing.vendors].sort().join(' ') !== [...vendors].sort().join(' '));
+
+  // Same shape again: deselecting a capability moves no file of its own, and
+  // swallowing it as "nothing to change" would leave .redline.json recording a
+  // capability the operator just switched off — with Redline still maintaining it.
+  const capabilitiesChanged =
+    existing !== null &&
+    CAPABILITY_KEYS.some((key) => existing.capabilities[key] !== capabilities[key]);
 
   // "Zero host calls on a settled repository" means zero host *mutations*.
   // Reading is how the run finds out whether the repository is settled at all:
@@ -356,16 +520,25 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // computing it here would spend a host GET whose answer nothing then reads:
   // `alreadyOnboarded` is forced false for a repair run further down, never
   // mind what the read would have said.
-  const settledOnFiles = existing !== null && changedFiles.length === 0 && !menuChanged && !vendorsChanged;
+  const settledOnFiles =
+    existing !== null &&
+    changedFiles.length === 0 &&
+    !menuChanged &&
+    !vendorsChanged &&
+    !capabilitiesChanged;
   let settledOnHost = true;
   if (existing !== null && settledOnFiles && !dryRun && !repair) {
-    const policy = await platform.readPolicy(ref);
+    // Not read at all when the repository manages its own merge policy: what
+    // is on the host then is a human's, and comparing Redline's menu against
+    // it would report the repository's own deliberate configuration as drift.
+    const policy = capabilities.mergePolicy ? await platform.readPolicy(ref) : null;
     // A null policy read is not by itself drift. A repository onboarded
     // without admin rights never got a ruleset — that refusal is exactly what
     // `merge-policy` in pendingAdmin records — so null is its settled state.
     // Where the record says the ruleset was applied, null means it vanished.
-    settledOnHost =
-      policy === null
+    settledOnHost = !capabilities.mergePolicy
+      ? true
+      : policy === null
         ? existing.pendingAdmin.includes('merge-policy')
         : policy.blocking === menu.blockingGate;
   }
@@ -376,11 +549,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // null branch above — none of which a plain re-run can ever re-check.
   const alreadyOnboarded = !repair && settledOnFiles && settledOnHost;
 
+  const optedOut = deselectedCapabilities(menu, capabilities);
   const hostPlan = [
-    `merge gate machinery on ${platform.host}`,
+    ...(capabilities.gate ? [`merge gate machinery on ${platform.host}`] : []),
     ...(menu.sensitivePathReviewers ? ['review ownership for the sensitive paths'] : []),
     'security floor: secret scanning, push protection, dependency alerts',
-    `branch policy: 1 approval, gate ${menu.blockingGate ? 'blocking' : 'advisory'}`,
+    ...(capabilities.mergePolicy
+      ? [`branch policy: 1 approval, gate ${menu.blockingGate ? 'blocking' : 'advisory'}`]
+      : []),
     `pull request on ${ONBOARD_BRANCH}`,
   ];
 
@@ -400,6 +576,9 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       alreadyOnboarded: true,
       dryRun,
       menu,
+      capabilities,
+      optedOut,
+      notes,
       hostPlan,
     };
   }
@@ -421,11 +600,16 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       alreadyOnboarded: false,
       dryRun: true,
       menu,
+      capabilities,
+      optedOut,
+      notes,
       hostPlan,
     };
   }
 
-  const gate = await platform.installGate(ref, cwd, gateOptions);
+  const gate = capabilities.gate
+    ? await platform.installGate(ref, cwd, gateOptions)
+    : { files: [], outcomes: [] };
 
   const ownership = menu.sensitivePathReviewers
     ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules)
@@ -433,18 +617,20 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   const security = await platform.enableSecurityFloor(ref);
 
-  const policy = await platform.applyPolicy(ref, {
-    requiredApprovals: 1,
-    dismissStaleReviews: true,
-    requireCodeOwnerReview: menu.sensitivePathReviewers,
-    requireThreadResolution: true,
-    // Empty by design: the required check is the host's own gate check name,
-    // and each adapter supplies it (GitHub's REQUIRED_CHECK, Azure's
-    // AZURE_STATUS_NAME/GENRE). requiredChecks is the read side of
-    // MergePolicy — what verify reports back off the host.
-    requiredChecks: [],
-    blocking: menu.blockingGate,
-  });
+  const policy = capabilities.mergePolicy
+    ? await platform.applyPolicy(ref, {
+        requiredApprovals: 1,
+        dismissStaleReviews: true,
+        requireCodeOwnerReview: menu.sensitivePathReviewers,
+        requireThreadResolution: true,
+        // Empty by design: the required check is the host's own gate check
+        // name, and each adapter supplies it (GitHub's REQUIRED_CHECK, Azure's
+        // AZURE_STATUS_NAME/GENRE). requiredChecks is the read side of
+        // MergePolicy — what verify reports back off the host.
+        requiredChecks: [],
+        blocking: menu.blockingGate,
+      })
+    : { outcomes: [], policy: null };
 
   // denied -> pendingAdmin work for an administrator; unsupported -> the
   // capability doesn't exist on this repository (e.g. Advanced Security is
@@ -459,11 +645,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     profile,
     vendors,
     menu,
+    capabilities,
     pendingAdmin,
     // When the repository joined, not when it was last touched: overwriting
     // this on every run erased the only record of when the standard landed.
     onboardedAt: existing?.onboardedAt ?? now().toISOString(),
     lastRunAt: now().toISOString(),
+    localRules: existsSync(join(cwd, LOCAL_RULES_FILE)),
+    commandFiles: commands.contentIds,
   });
 
   let pullRequest: PullRequestRef | null = null;
@@ -473,7 +662,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       branch: ONBOARD_BRANCH,
       title: `chore(redline): onboard to standards v${manifest.version}`,
       body: onboardBody(profile, manifest.version, pendingAdmin),
-      labels: [SYNC_LABEL],
+      labels: capabilities.labels ? [SYNC_LABEL] : [],
       files,
     });
   } catch (error) {
@@ -502,6 +691,9 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     alreadyOnboarded: false,
     dryRun: false,
     menu,
+    capabilities,
+    optedOut,
+    notes,
     hostPlan,
   };
 }

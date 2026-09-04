@@ -10,7 +10,11 @@ import {
   type ResolvePlatformOptions,
 } from '../platforms/resolve.ts';
 import { init, ONBOARD_BRANCH } from '../commands/init.ts';
-import type { MenuSelections } from '../config/redline-json.ts';
+import {
+  capabilitySelection,
+  OPTIONAL_CAPABILITIES,
+  type MenuSelections,
+} from '../config/redline-json.ts';
 import { verify } from '../commands/verify.ts';
 import type { Platform } from '../platforms/types.ts';
 
@@ -20,6 +24,7 @@ const USAGE = [
   'redline — engineering control plane',
   '',
   '  redline init [--profile <name>] [--vendors <list>] [--blocking] [--no-a11y] [--speckit] [--dry-run] [--repair]',
+  '               [--adopt-caller] [--skip <list>] [--with <list>]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
   '      --vendors <list>  comma-separated vendor ids (copilot,agents,claude,cursor) to render for —',
@@ -30,6 +35,17 @@ const USAGE = [
   '      --repair    re-apply every capability even if this repository looks already onboarded — for',
   '                  labels, review-ownership, repo-property, gate and merge-policy, whose recorded',
   '                  pendingAdmin entry a plain re-run can never clear on its own; composes with --dry-run',
+  `      --skip <list>  comma-separated capabilities this repository does not want Redline to install:`,
+  `                  ${OPTIONAL_CAPABILITIES.join(', ')}. Use it when the repository already has its own —`,
+  '                  a deselected capability is not attempted, not written, and not reported as missing.',
+  '                  The security floor (secret scanning, push protection, dependency alerts) is the',
+  '                  organisation-wide minimum and is refused by name rather than deselected',
+  '      --with <list>  the same names, selected again — how a deselection recorded in .redline.json is',
+  '                  reversed',
+  '      --adopt-caller  let Redline take over the gate machinery file (.github/workflows/redline.yml,',
+  '                  .azuredevops/redline-gate.yml) when what is already there carries nothing that',
+  '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
+  '                  rather than overwrite a file that may be the repository\'s own',
   '      omitted flags keep whatever .redline.json already recorded',
   '',
   '  redline verify [--gate]',
@@ -94,12 +110,26 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             speckit: { type: 'boolean' },
             'dry-run': { type: 'boolean' },
             repair: { type: 'boolean' },
+            'adopt-caller': { type: 'boolean' },
+            skip: { type: 'string' },
+            with: { type: 'string' },
           },
           allowPositionals: false,
         })
       );
 
-      const menu: Partial<MenuSelections> = {};
+      const names = (list: string | undefined): string[] =>
+        list === undefined
+          ? []
+          : list
+              .split(',')
+              .map((name) => name.trim())
+              .filter((name) => name !== '');
+      // Throws a usage RedlineError on an unknown or non-optional name, before
+      // a platform is resolved or a byte is written.
+      const selection = capabilitySelection(names(values.skip), names(values.with));
+
+      const menu: Partial<MenuSelections> = { ...selection.menu };
       if (values.blocking !== undefined) menu.blockingGate = values.blocking;
       if (values['no-a11y'] !== undefined) menu.accessibility = !values['no-a11y'];
       if (values.speckit !== undefined) menu.speckit = values.speckit;
@@ -117,6 +147,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
       const dryRun = values['dry-run'] === true;
       const repair = values.repair === true;
+      const adoptCaller = values['adopt-caller'] === true;
       // A dry run sends no request, so it must not require a credential —
       // see ResolvePlatformOptions.lazyCredentials. Every other path here
       // resolves one up front, exactly as before.
@@ -128,11 +159,17 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(vendors ? { vendors } : {}),
         ...(dryRun ? { dryRun: true } : {}),
         ...(repair ? { repair: true } : {}),
+        ...(adoptCaller ? { adoptCaller: true } : {}),
         menu,
+        capabilities: selection.capabilities,
       });
 
       log.info(`profile ${report.profile}`);
       if (report.migratedFrom) log.info(`migrated from ${report.migratedFrom}`);
+      // Printed on every path, settled included: a report that falls silent
+      // about what was never attempted cannot be told from one where it broke.
+      if (report.optedOut.length > 0) log.info(`opted out: ${report.optedOut.join(', ')}`);
+      for (const note of report.notes) log.info(note);
 
       if (report.dryRun) {
         log.info('dry run — nothing was written, read or changed on the host');

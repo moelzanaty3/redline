@@ -266,6 +266,18 @@ test('installGate creates the three labels the gate depends on', async () => {
   assert.deepEqual(created, ['no-adr', 'redline-exempt', 'redline-sync']);
 });
 
+// A repository that declined Redline's labels declined the host writes too,
+// not just the label on the onboarding pull request.
+test('deselected labels are never created on the host, and no labels outcome is reported', async () => {
+  const client = fakeGitHubClient();
+  const result = await createGitHubInstall(client, gitFor).installGate(ref, tmp(), {
+    ...gateOpts,
+    manageLabels: false,
+  });
+  assert.deepEqual(client.calls.filter((c) => c.path === '/repos/acme/web/labels'), []);
+  assert.equal(result.outcomes.find((o) => o.capability === 'labels'), undefined);
+});
+
 test('a label that already exists is not an error', async () => {
   const client = fakeGitHubClient({ 'POST /repos/acme/web/labels': { status: 422 } });
   const result = await createGitHubInstall(client, gitFor).installGate(ref, tmp(), gateOpts);
@@ -523,7 +535,10 @@ test('installGate reports only the file whose content actually changed', async (
   const cwd = tmp();
   const install = createGitHubInstall(fakeGitHubClient(), gitFor);
   await install.installGate(ref, cwd, gateOpts);
-  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'left over from an older CLI\n');
+  writeFileSync(
+    join(cwd, '.github/workflows/redline.yml'),
+    '# Managed by Redline\nname: Redline\n# left over from an older CLI\n'
+  );
 
   const second = await install.installGate(ref, cwd, gateOpts);
   assert.deepEqual(second.files, ['.github/workflows/redline.yml']);
@@ -1051,4 +1066,126 @@ test('a template with a balanced fence still merges and is byte-stable across th
   assert.equal(templateAt(cwd), merged, 'byte-stable from the first run');
   assert.ok(first.files.includes('.github/pull_request_template.md'));
   assert.ok(!second.files.includes('.github/pull_request_template.md'));
+});
+
+// --- the caller workflow is refused, never merged and never clobbered --------
+//
+// The shared markdown artifacts take a REDLINE marker block appended to
+// whatever a repository already had there. A workflow cannot: appending gives
+// the YAML a second `name:` and `on:` key and the file stops running at all.
+// So the only two honest answers at this path are "replace Redline's own file"
+// and "stop".
+
+const NOT_OURS = 'name: Nightly deploy\non:\n  schedule:\n    - cron: "0 3 * * *"\njobs:\n  go:\n    runs-on: ubuntu-latest\n';
+
+test("a workflow at the caller path that Redline did not write is refused, not overwritten", async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), NOT_OURS);
+
+  await assert.rejects(
+    createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts),
+    /\.github\/workflows\/redline\.yml/
+  );
+  assert.equal(readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8'), NOT_OURS);
+});
+
+// The plan phase is what `redline init --dry-run` prints and what a re-run
+// decides "settled" from, so it has to refuse in the same place — a plan that
+// promises a write the real run will refuse is the lie this whole branch has
+// been closing.
+test('the plan phase refuses the same foreign workflow rather than promising a write', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), NOT_OURS);
+
+  await assert.rejects(
+    createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts, true),
+    /\.github\/workflows\/redline\.yml/
+  );
+});
+
+
+// The reviewer's Important 1 input. `/redline/i` was close to vacuous at a path
+// called redline.yml: almost every human-authored workflow there mentions
+// Redline somewhere. Attribution has to be positive.
+const THIRD_PARTY_CALLER = [
+  'name: Redline lint',
+  'on:',
+  '  pull_request:',
+  'jobs:',
+  '  lint:',
+  '    runs-on: ubuntu-latest',
+  '    steps:',
+  '      - run: ./scripts/redline-lint.sh',
+  '',
+].join('\n');
+
+test("a repository's own workflow that merely mentions Redline is refused, not overwritten", async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), THIRD_PARTY_CALLER);
+
+  await assert.rejects(
+    createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts),
+    /\.github\/workflows\/redline\.yml/
+  );
+  assert.equal(readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8'), THIRD_PARTY_CALLER);
+});
+
+test('a caller written by an earlier v3 CLI is attributed by its reusable-workflow reference', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(
+    join(cwd, '.github/workflows/redline.yml'),
+    'name: Redline\njobs:\n  redline-gate:\n    uses: acme/.github/.github/workflows/redline-gate.yml@main\n'
+  );
+
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
+
+  assert.ok(result.files.includes('.github/workflows/redline.yml'));
+});
+
+// A 2.1 caller carries neither the reusable-workflow reference nor an
+// ownership line, and no fixture of the real thing exists to pin. Guessing
+// from the word "redline" is what clobbered the file above, so the run stops
+// and hands the decision to a human instead.
+test('a caller Redline cannot attribute is refused until a human adopts it', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'name: Redline 2.1\non:\n  pull_request:\n');
+
+  await assert.rejects(
+    createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts),
+    (error: unknown) =>
+      isRedlineError(error) &&
+      /carries nothing that attributes it/.test(error.message) &&
+      /--adopt-caller/.test(error.hint ?? '') &&
+      // The other half of the answer: a repository whose own pipeline is
+      // already the gate should be able to say so rather than adopt or move it.
+      /--skip gate/.test(error.hint ?? '')
+  );
+});
+
+test('--adopt-caller migrates a 2.1 caller Redline cannot attribute', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'name: Redline 2.1\non:\n  pull_request:\n');
+
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, {
+    ...gateOpts,
+    adoptCaller: true,
+  });
+
+  assert.ok(result.files.includes('.github/workflows/redline.yml'));
+  assert.match(
+    readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8'),
+    /uses: acme\/\.github\/\.github\/workflows\/redline-gate\.yml@main/
+  );
+});
+
+test('the caller workflow Redline installs carries the ownership line that attributes it', async () => {
+  const cwd = tmp();
+  await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
+  assert.match(readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8'), /^# Managed by Redline\b/m);
 });
