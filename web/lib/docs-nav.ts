@@ -1,4 +1,4 @@
-import { SCRIPTS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
+import { COMMANDS, PLANS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
 
 export type DocLink = {
   title: string;
@@ -53,6 +53,13 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/onboarding",
         description: "One command per repo, on GitHub or Azure DevOps, then verify the gate is real.",
         keywords: "onboard repo redline init verify profile security floor merge policy pending admin azure github",
+      },
+      {
+        title: "CLI commands",
+        href: "/docs/cli",
+        description: "Four commands, deliberately — what init and verify do, and what sync and review would do once built.",
+        keywords: "cli command redline init verify sync review flags dry-run skip with repair blocking gate exit codes",
+        children: childrenOf(COMMANDS, "/docs/cli", "cli command"),
       },
     ],
   },
@@ -144,6 +151,13 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "templates codeowners caller ruleset branch protection json azure pull request checklist",
         children: childrenOf(TEMPLATES, "/docs/templates", "template ruleset"),
       },
+      {
+        title: "Seeded corpus",
+        href: "/docs/seeds",
+        description: "Known-bad code and known-good code beside it — how Redline measures whether the reviewer still works.",
+        keywords: "seeded corpus validation recall precision false positive canary score-seeds marker clean known bad",
+        children: childrenOf(SEEDS, "/docs/seeds", "seeded corpus validation"),
+      },
     ],
   },
   {
@@ -155,6 +169,13 @@ export const DOCS_NAV: DocSection[] = [
         description: "Internal maintainer tooling for this repo's own CI, telemetry and validation — not something an onboarded repo runs.",
         keywords: "scripts maintainer ci validate score collect digest inbox dashboard assign-rule-ids check-pins render-self internal redline-metrics",
         children: childrenOf(SCRIPTS, "/docs/scripts", "script source"),
+      },
+      {
+        title: "Roadmap & plans",
+        href: "/docs/roadmap",
+        description: "Where Redline is going, why it stops where it does, and the record of how each piece was built.",
+        keywords: "roadmap spec plan phase harness sarif skills policy tier dora cost enforcement exemptions review correlation non-goals",
+        children: childrenOf(PLANS, "/docs/roadmap", "roadmap spec plan"),
       },
     ],
   },

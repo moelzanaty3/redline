@@ -56,6 +56,40 @@ export const TEMPLATES: RegistryEntry[] = [
   { slug: "org-ruleset", title: "redline-org-ruleset.json", file: "rulesets/redline-org-ruleset.json", description: "Reference shape for a one-time manual org-level import — not applied by any code here." },
 ];
 
+// The four commands v3 fixes the surface at. Two exist; two are designed and
+// unbuilt, and are listed because "it does not exist yet" is the answer people
+// keep looking for and not finding.
+export const COMMANDS: RegistryEntry[] = [
+  { slug: "init", title: "redline init", file: "cli/commands/init.ts", description: "Onboard a repository: standards, security floor, merge gate, registration. The one command a product repo runs." },
+  { slug: "verify", title: "redline verify", file: "cli/commands/verify.ts", description: "Check a repository still matches what its .redline.json claims — and, with --gate, act as the Azure gate itself." },
+  { slug: "sync", title: "redline sync", file: "workflows/redline-sync.yml", description: "Would land a standards change on every registered repository as a pull request. Designed in v3, not built — its register now exists." },
+  { slug: "review", title: "redline review", file: "standards/core.md", description: "Would review the working tree, staged changes or a PR against the applicable rules before you push. Designed in v3 §6.2, not built." },
+];
+
+export const SEEDS: RegistryEntry[] = [
+  { slug: "clean", title: "clean", file: "seeded/clean/CleanComponent.tsx", description: "Correct code carrying no defects. Measures precision: the pass condition is zero comments, and a reviewer that flags anything here fails." },
+  { slug: "javascript", title: "javascript", file: "seeded/javascript/seeded-violations.js", description: "Seeded JavaScript defects — prototype pollution, dynamic code execution, floating promises." },
+  { slug: "react", title: "react", file: "seeded/react/SeededViolations.tsx", description: "Seeded React defects — hook discipline, state mutation, render-cycle bugs." },
+  { slug: "react-native", title: "react-native", file: "seeded/react-native/SeededViolations.native.tsx", description: "Seeded React Native defects — list performance and the JS/UI thread boundary." },
+  { slug: "nodejs", title: "nodejs", file: "seeded/nodejs/seeded-violations.service.ts", description: "Seeded NestJS defects — unvalidated DTOs, request state on singletons, a blocked event loop." },
+  { slug: "microservices", title: "microservices", file: "seeded/microservices/seeded_violations_service.ts", description: "Seeded cross-cutting service defects — missing timeouts, non-idempotent consumers, PII in traces." },
+  { slug: "java", title: "java", file: "seeded/java/SeededViolations.java", description: "Seeded Spring Boot defects — entities out of controllers, N+1 queries, self-invoked @Transactional." },
+  { slug: "go", title: "go", file: "seeded/go/seeded_violations.go", description: "Seeded Go defects — ignored errors, leaked goroutines, missing context propagation." },
+  { slug: "python", title: "python", file: "seeded/python/seeded_violations.py", description: "Seeded Python defects — mutable defaults, bare excepts, string-interpolated SQL." },
+  { slug: "csharp", title: "csharp", file: "seeded/csharp/SeededViolations.cs", description: "Seeded .NET defects — async void, sync-over-async deadlocks, per-request HttpClient." },
+  { slug: "kotlin", title: "kotlin", file: "seeded/kotlin/SeededViolations.kt", description: "Seeded Kotlin defects — GlobalScope launches, swallowed CancellationException, leaked Context." },
+  { slug: "swift", title: "swift", file: "seeded/swift/SeededViolations.swift", description: "Seeded Swift defects — UI off the main actor, uncancelled Tasks, retain cycles, force unwraps." },
+  { slug: "terraform", title: "terraform", file: "seeded/terraform/seeded_violations.tf", description: "Seeded Terraform defects — committed secrets, public exposure, a rename with no moved block." },
+];
+
+export const PLANS: RegistryEntry[] = [
+  { slug: "roadmap", title: "Roadmap after the Harness evaluation", file: "docs/superpowers/specs/2026-09-03-redline-roadmap.md", description: "Eight pieces across five phases, and the boundary between what Redline governs and what a delivery platform does. Phase 0 gates everything after it." },
+  { slug: "v3-design", title: "Redline v3 design", file: "docs/superpowers/specs/2026-09-01-redline-v3-design.md", description: "The design the roadmap builds on. Every non-goal and decision in it still holds." },
+  { slug: "registry-discovery", title: "Registry discovery (Phase 0.1)", file: "docs/superpowers/plans/2026-09-04-registry-discovery.md", description: "The plan for the derived register of onboarded repositories. Implemented — this is the record of how." },
+  { slug: "v3-hardening", title: "v3 hardening", file: "docs/superpowers/plans/2026-09-02-redline-v3-hardening.md", description: "The hardening pass executed after v3 phase 1." },
+  { slug: "v3-phase-1", title: "v3 phase 1", file: "docs/superpowers/plans/2026-09-01-redline-v3-phase-1.md", description: "The plan the v3 CLI was executed from." },
+];
+
 export function findBySlug(list: RegistryEntry[], slug: string): RegistryEntry | undefined {
   return list.find((e) => e.slug === slug);
 }
