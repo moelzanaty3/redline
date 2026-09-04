@@ -55,6 +55,7 @@ test('returns one entry per repository carrying a .redline.json', async () => {
     standardsVersion: '0.0.1',
     cliVersion: '0.0.1',
     onboardedAt: '2026-09-01T00:00:00.000Z',
+    rung: 'observe',
   });
 });
 

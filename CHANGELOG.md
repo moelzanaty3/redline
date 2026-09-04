@@ -7,6 +7,38 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Graduated enforcement — a ladder a repository climbs on evidence
+
+- Enforcement was binary: advisory, or blocking with `--blocking`. Neither end works across
+  hundreds of repositories. Rolling blocking to all of them in one step is not achievable, and
+  leaving everything advisory means the organisation can never state a guarantee about any of
+  them. Four rungs now: `observe`, `warn`, `block-blocker`, `block-high`, recorded in
+  `.redline.json`, carried in the register, and written into each repository's caller workflow
+  so the gate needs no second source of truth.
+- **Answers v3 §15 Q2: evidence-gated self-service.** A repository promotes itself when the
+  recorded evidence supports it — seed BLOCKER recall at 100%, zero false positives on the
+  clean corpus, an acted-on rate above the rung's threshold, and a sample large enough that
+  the rate is not a coincidence. It cannot promote on assertion, it cannot skip a rung (the
+  rung it would skip is where the evidence for the next one is gathered), and a refusal names
+  the specific blocker rather than saying no.
+- **Demotion never needs evidence.** The safe direction never needs permission: a repository
+  whose gate is misfiring at 3am must be able to step back without waiting for anyone, and a
+  ladder that made that hard would be switched off entirely rather than stepped down.
+- **Answers open question 3: per repository, with a per-market floor.** A market may raise its
+  minimum rung; it may not push a repository below the rung it has already reached. A
+  repository under its market's floor is reported as out of policy rather than as drift,
+  because a different person has to act.
+- A run that says nothing about enforcement never changes the rung, and an unrecognised or
+  hand-edited rung reads back as `observe`. Both failure directions point the same way: a typo
+  must never be able to make a repository stricter than anyone chose.
+- **The security floor is not on the ladder.** Dependency review and the secret scan block at
+  every rung including `observe`. The ladder governs how strictly a repository's own standards
+  are enforced, never whether the organisation's security minimum applies to it.
+- The dashboard reports how much of the estate is actually enforcing rather than watching —
+  the question the ladder exists to answer, and one no per-repository view can show. An
+  unreadable register leaves it absent rather than zeroed: zero blocking repositories and an
+  unreadable register look nothing alike to whoever has to act.
+
 ### Cost and DORA — what review cost against what it caught
 
 - Redline could prove review works and could not say what it cost. `scripts/build-roi.mjs`

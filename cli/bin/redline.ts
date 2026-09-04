@@ -6,6 +6,7 @@ import { CLI_VERSION } from '../core/version.ts';
 import { createLog, type Sink } from '../core/log.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
 import { isSeverity } from '../core/severity.ts';
+import { isRung, RUNGS } from '../enforce/ladder.ts';
 import {
   resolvePlatform as defaultResolvePlatform,
   type ResolvePlatformOptions,
@@ -52,6 +53,9 @@ const USAGE = [
   '                  organisation-wide minimum and is refused by name rather than deselected',
   '      --with <list>  the same names, selected again — how a deselection recorded in .redline.json is',
   '                  reversed',
+  `      --rung <name>  the enforcement rung: ${RUNGS.join(', ')}. A promotion needs recorded`,
+  '                  evidence and is refused without it; a demotion is always allowed. Omitting',
+  '                  the flag keeps whatever the repository already recorded',
   '      --adopt-caller  let Redline take over the gate machinery file (.github/workflows/redline.yml,',
   '                  .azuredevops/redline-gate.yml) when what is already there carries nothing that',
   '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
@@ -143,6 +147,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             'adopt-caller': { type: 'boolean' },
             skip: { type: 'string' },
             with: { type: 'string' },
+            rung: { type: 'string' },
           },
           allowPositionals: false,
         })
@@ -175,6 +180,14 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
               .filter((v) => v !== '')
           : undefined;
 
+      if (values.rung !== undefined && !isRung(values.rung)) {
+        throw new RedlineError(
+          'usage',
+          `--rung must be one of ${RUNGS.join(', ')}, not "${values.rung}"`,
+          'observe reports and blocks nothing; block-blocker stops a merge on a BLOCKER'
+        );
+      }
+
       const dryRun = values['dry-run'] === true;
       const repair = values.repair === true;
       const adoptCaller = values['adopt-caller'] === true;
@@ -190,6 +203,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(dryRun ? { dryRun: true } : {}),
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
+        ...(values.rung ? { rung: values.rung } : {}),
         menu,
         capabilities: selection.capabilities,
       });

@@ -67,6 +67,10 @@ export interface GateOptions {
   // request labels on use and so has nothing to skip. Absent means selected,
   // which is what every caller before the selection existed meant.
   manageLabels?: boolean;
+  // The enforcement rung, written into the caller workflow so the gate knows
+  // whether to block. Absent means `observe` — the rung that changes nothing,
+  // which is what every caller written before the ladder existed meant.
+  rung?: string;
 }
 
 export interface MergePolicy {

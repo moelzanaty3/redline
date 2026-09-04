@@ -49,9 +49,14 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
           "Lets Redline take over an existing gate machinery file that carries nothing attributing it to Redline — a 2.1-era caller, in practice. Without it the run refuses rather than overwrite a file that may be the repository's own.",
       },
       {
+        flag: "--rung <name>",
+        detail:
+          "Where this repository sits on the enforcement ladder: observe, warn, block-blocker, block-high. A PROMOTION needs recorded evidence — seed BLOCKER recall at 100%, no false positive on the clean corpus, an acted-on rate above the threshold, and a sample large enough that the rate is not a coincidence — and is refused with the specific reason when the evidence is not there. A DEMOTION needs nothing at all: a repository whose gate is misfiring at 3am must be able to step back without waiting for anyone, and a ladder that made the safe direction hard would be switched off entirely rather than stepped down. Omitting the flag keeps whatever the repository already recorded, because a re-run for an unrelated reason silently promoting a repository is how a ladder loses the trust it exists to build.",
+      },
+      {
         flag: "--blocking",
         detail:
-          "Promotes the merge gate from advisory to blocking. A deliberate second step after a soak period, not part of a first onboarding.",
+          "The older, binary switch: advisory or blocking. Prefer --rung, which is the same decision with evidence behind it and a step between.",
       },
     ],
     output:

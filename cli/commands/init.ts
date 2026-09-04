@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError, RedlineError } from '../core/errors.ts';
 import { CLI_VERSION } from '../core/version.ts';
+import { canPromote, type Evidence, type Rung } from '../enforce/ladder.ts';
 import {
   CAPABILITY_KEYS,
   CONFIG_FILE,
@@ -233,6 +234,18 @@ export interface InitOptions {
   // caller, in practice. It is a flag rather than a guess because guessing is
   // what overwrote a repository's own workflow.
   adoptCaller?: boolean;
+  // `--rung <name>`. Same precedence as the menu: absent keeps whatever the
+  // repository already recorded. A promotion is refused unless the evidence
+  // supports it; a demotion is always allowed, because the safe direction must
+  // never need permission.
+  rung?: Rung;
+  // Evidence for a promotion, read from collected telemetry by the caller. Absent
+  // means none was supplied, which is not the same as evidence that failed — a
+  // promotion asked for without it is refused and says so.
+  evidence?: Evidence;
+  // A market may raise a repository's minimum rung. It may not push one below
+  // the rung it has already reached.
+  marketFloor?: Rung;
   now?: () => Date;
 }
 
@@ -330,6 +343,32 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ...opts.capabilities,
   };
 
+  // The rung, resolved before anything is written. A run that says nothing about
+  // enforcement keeps what the repository already had: a re-run for an unrelated
+  // reason silently promoting a repository is how a ladder loses the trust it
+  // exists to build.
+  const currentRung: Rung = existing?.rung ?? 'observe';
+  const rungNotes: string[] = [];
+  let rung = currentRung;
+  if (opts.rung !== undefined && opts.rung !== currentRung) {
+    const check = canPromote(
+      currentRung,
+      opts.rung,
+      opts.evidence ?? { seedRecall: null, actedOnRate: null, sampleSize: 0, falsePositives: null },
+      opts.marketFloor ?? 'observe'
+    );
+    if (check.eligible) {
+      rung = opts.rung;
+      rungNotes.push(`enforcement: ${currentRung} -> ${rung}`);
+    } else {
+      // Refused, and the run continues. Everything else this command does is
+      // still worth doing, and failing the whole onboarding over a rung the
+      // repository cannot reach yet would teach people to stop asking.
+      rungNotes.push(`enforcement stays at ${currentRung} — cannot move to ${opts.rung}:`);
+      for (const blocker of check.blockers) rungNotes.push(`  ${blocker}`);
+    }
+  }
+
   // Refused before a host is contacted or a byte is written, because the state
   // it describes cannot be recovered from by re-running: with no gate
   // machinery nothing in the repository publishes the required check, and a
@@ -364,6 +403,9 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
     ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
     ...(capabilities.labels ? {} : { manageLabels: false }),
+    // Written into the caller workflow, so the gate blocks or reports according
+    // to the rung recorded here rather than needing a second source of truth.
+    rung,
   };
   const ownershipRules = sensitivePathRules(ref.org);
 
@@ -389,7 +431,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // Everything this run observed and thinks the operator should know, without
   // acting on any of it. Detection informs; it does not decide.
   const machinery = observeGateMachinery(platform, cwd);
-  const notes: string[] = [];
+  const notes: string[] = [...rungNotes];
 
   // Detection, not a decision. `readGateMachinery` is local and free, and what
   // it gives that nothing else here has is the path this host runs its gate
@@ -547,7 +589,12 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // capabilities this settled verdict would otherwise call done forever —
   // labels, review-ownership, repo-property, gate, and merge-policy's own
   // null branch above — none of which a plain re-run can ever re-check.
-  const alreadyOnboarded = !repair && settledOnFiles && settledOnHost;
+  // A rung change is work, so it must not be swallowed by the settled verdict.
+  // Without this an operator promoting an already-onboarded repository gets
+  // "nothing to change" and a rung that never moved — the flag silently doing
+  // nothing, which is worse than refusing.
+  const rungRequested = rung !== currentRung || rungNotes.length > 0;
+  const alreadyOnboarded = !repair && !rungRequested && settledOnFiles && settledOnHost;
 
   const optedOut = deselectedCapabilities(menu, capabilities);
   const hostPlan = [
@@ -653,6 +700,11 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     lastRunAt: now().toISOString(),
     localRules: existsSync(join(cwd, LOCAL_RULES_FILE)),
     commandFiles: commands.contentIds,
+    // The rung the repository asked for, or the one it already had, or the
+    // bottom. A run that says nothing about enforcement must never change it:
+    // a re-run for an unrelated reason silently promoting a repository is how a
+    // ladder loses the trust it exists to build.
+    rung,
   });
 
   let pullRequest: PullRequestRef | null = null;

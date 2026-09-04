@@ -94,6 +94,7 @@ export async function discoverGitHub(
         standardsVersion: config.standardsVersion,
         cliVersion: config.cliVersion,
         onboardedAt: config.onboardedAt,
+        rung: config.rung,
       });
     }
 

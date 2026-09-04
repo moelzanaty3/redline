@@ -1,4 +1,5 @@
 import type { Host } from '../platforms/types.ts';
+import type { Rung } from '../enforce/ladder.ts';
 
 // One onboarded repository, as discovered from its own .redline.json. Every
 // field here is read from that file or from the host's repository record —
@@ -20,6 +21,10 @@ export interface RegistryEntry {
   standardsVersion: string;
   cliVersion: string;
   onboardedAt: string;
+  // Where this repository sits on the enforcement ladder. The estate view needs
+  // it to answer the question the ladder exists for — how much of the estate is
+  // actually enforcing anything — which no per-repository view can show.
+  rung: Rung;
 }
 
 export interface Registry {

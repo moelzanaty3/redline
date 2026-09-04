@@ -13,7 +13,7 @@
 // below 3:1 contrast (the relief rule).
 //
 // Env: DATA_DIR (default data), ORG, [DAYS=90], [OUT=dist], [SEED_SCORES=data/seed-scores.jsonl],
-//      [ONBOARDED] (repo count, for coverage), [STANDARDS_VERSION]
+//      [ONBOARDED] (repo count, for coverage), [STANDARDS_VERSION], [REGISTRY=registry.json]
 
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -84,6 +84,28 @@ const esc = (s) =>
 const json = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
 const compact = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 
+// The enforcement ladder, read from the register. This is the question the ladder
+// exists to answer and no per-repository view can: how much of the estate is
+// actually enforcing anything, as opposed to watching.
+let ladder = null;
+try {
+  const registryPath = process.env.REGISTRY ?? 'registry.json';
+  if (existsSync(registryPath)) {
+    const entries = JSON.parse(readFileSync(registryPath, 'utf8')).entries ?? [];
+    const counts = { observe: 0, warn: 0, 'block-blocker': 0, 'block-high': 0 };
+    for (const entry of entries) {
+      const rung = entry.rung ?? 'observe';
+      if (rung in counts) counts[rung] += 1;
+    }
+    const total = entries.length;
+    ladder = { counts, total, blocking: counts['block-blocker'] + counts['block-high'] };
+  }
+} catch {
+  // A register that cannot be read leaves the ladder absent, not zeroed. Zero
+  // blocking repositories and an unreadable register look nothing alike to
+  // whoever has to act on the number.
+}
+
 const tiles = [
   { label: 'PRs merged', value: compact(agg.prs), sub: `${agg.repos} repo(s)${ONBOARDED ? ` of ${ONBOARDED} onboarded` : ''}` },
   { label: 'Findings', value: compact(agg.findings), sub: `${agg.blocker} BLOCKER · ${agg.high} HIGH · Redline only` },
@@ -100,6 +122,15 @@ const tiles = [
       agg.scanner.findings === 0
         ? 'no repository in this window emits any'
         : `${agg.scanner.repos} repo(s) · ${agg.scanner.byTool.map((t) => t.tool).join(', ')}`,
+  },
+  {
+    label: 'Enforcing',
+    value: ladder === null ? '—' : pct(ladder.blocking, ladder.total),
+    sub:
+      ladder === null
+        ? 'register unreadable — not zero, unknown'
+        : `${ladder.blocking} of ${ladder.total} repo(s) block a merge on a finding`,
+    status: ladder === null ? 'unknown' : undefined,
   },
   {
     label: 'Seed BLOCKER recall',
@@ -266,7 +297,36 @@ ${tiles
   </div>
 </section>
 
-<section class="card full" style="margin-bottom:1rem">
+${
+  ladder === null
+    ? ''
+    : `<section class="card full" style="margin-bottom:1rem">
+  <h2>Enforcement ladder</h2>
+  <p class="note">A repository climbs on recorded evidence, not on assertion, and steps back
+  whenever it wants — the safe direction never needs permission. The security floor is not on
+  this ladder: dependency review and the secret scan block at every rung, including observe.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Rung</th><th>Blocks on</th><th class="num">Repositories</th><th class="num">Share</th></tr></thead>
+    <tbody>
+${[
+  ['observe', 'nothing — reported and recorded'],
+  ['warn', 'nothing — reported in the merge box'],
+  ['block-blocker', 'a BLOCKER finding'],
+  ['block-high', 'a BLOCKER or a HIGH'],
+]
+  .map(
+    ([rung, blocks]) =>
+      `      <tr><td><code>${rung}</code></td><td>${blocks}</td><td class="num">${ladder.counts[rung]}</td><td class="num">${pct(ladder.counts[rung], ladder.total)}</td></tr>`
+  )
+  .join('\n')}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+`
+}<section class="card full" style="margin-bottom:1rem">
   <h2>Finding sources</h2>
   <p class="note">Two catalogues, deliberately not merged. Redline's findings drive rule tuning;
   a scanner's rule ids belong to that scanner, and folding them together would tune Redline's

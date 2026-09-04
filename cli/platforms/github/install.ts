@@ -544,7 +544,8 @@ export function createGitHubInstall(
           /fail-on-dependency-severity: \w+/,
           `fail-on-dependency-severity: ${opts.failOnDependencySeverity}`
         )
-        .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`);
+        .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`)
+        .replace(/rung: \w[\w-]*/, `rung: ${opts.rung ?? 'observe'}`);
       if (syncFile(cwd, '.github/workflows/redline.yml', caller, check)) {
         files.push('.github/workflows/redline.yml');
       }

@@ -31,6 +31,14 @@ on:
           warnings. Security checks are never downgraded.
         type: string
         default: redline-exempt,redline-sync
+      rung:
+        description: >-
+          The enforcement rung this repository sits at: observe, warn, block-blocker or
+          block-high. `observe` and `warn` report and never block; the block-* rungs stop a
+          merge on a finding at or above their severity. Written by `redline init --rung`,
+          which refuses a promotion the repository's recorded evidence does not support.
+        type: string
+        default: observe
       exemption-enforcement:
         description: >-
           What a soft-fail label without a valid "## Redline exemption" block does.
@@ -177,6 +185,7 @@ jobs:
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           SOFT_FAIL_LABELS: ${{ inputs.soft-fail-labels }}
           EXEMPTION_ENFORCEMENT: ${{ inputs.exemption-enforcement }}
+          RUNG: ${{ inputs.rung }}
           # Through the environment, never interpolated into the script body:
           # `${{ github.event.pull_request.body }}` inline is a script injection
           # anyone who can open a pull request can use.
@@ -232,13 +241,29 @@ jobs:
             jq -r 'to_entries[] | "- \(.key): \(.value.result)"' <<<"$RESULTS"
           } >> "$GITHUB_STEP_SUMMARY"
 
+          # The security floor is not on the ladder. Dependency review and the
+          # secret scan block at every rung including observe: the ladder governs
+          # how strictly a repository's own standards are enforced, not whether
+          # the organisation's security minimum applies to it.
           if [[ -n "$hard_failed" ]]; then
-            echo "::error::Redline gate failed on security checks (not label-exemptible): $hard_failed"
+            echo "::error::Redline gate failed on security checks (not label-exemptible, and not on the enforcement ladder): $hard_failed"
             exit 1
           fi
 
+          # Below block-blocker the process checks report and do not block. The
+          # findings are still produced, still commented, and still collected —
+          # observe is not "off", it is "measured and not yet enforced", which is
+          # the whole point of having a rung below blocking at all.
+          case "$RUNG" in
+            observe|warn) enforcing=false ;;
+            *) enforcing=true ;;
+          esac
+
           if [[ -n "$soft_failed" ]]; then
-            if [[ "$exempt" == true ]]; then
+            if [[ "$enforcing" != true ]]; then
+              echo "::warning::Process checks failed: $soft_failed. This repository is at rung '$RUNG', which reports and does not block. The findings are recorded either way."
+              echo "- **not enforced (rung: $RUNG):** $soft_failed" >> "$GITHUB_STEP_SUMMARY"
+            elif [[ "$exempt" == true ]]; then
               echo "::warning::Process checks failed but a valid exemption is recorded: $soft_failed. A reviewer is accepting this deliberately, with a reason and an expiry."
               echo "- **exempted:** $soft_failed" >> "$GITHUB_STEP_SUMMARY"
             else

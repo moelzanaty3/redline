@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RedlineError } from '../core/errors.ts';
 import { ADMIN_CAPABILITIES, HOSTS, type AdminCapability, type Host } from '../platforms/types.ts';
+import { isRung, type Rung } from '../enforce/ladder.ts';
 
 export const CONFIG_FILE = '.redline.json';
 
@@ -49,6 +50,12 @@ export interface RedlineConfig {
   // When `redline init` last did real work here. Absent in configs written
   // before the field existed, where it reads back as onboardedAt.
   lastRunAt: string;
+  // Where this repository sits on the enforcement ladder. Absent in configs
+  // written before the ladder existed, where it reads back as `observe` — the
+  // rung that changes nothing, which is what those repositories were already
+  // doing. A stale or hand-edited value must never be able to silently raise
+  // enforcement, so an unrecognised rung reads back as `observe` too.
+  rung: Rung;
   // Whether `.redline/local.md` was present at the last run. It is what lets
   // `verify` tell "this repository never had repo-local rules" from "it had
   // some and they are gone" — the rendered artifacts look the same in both
@@ -226,6 +233,12 @@ export function parseConfig(raw: unknown): RedlineConfig {
     }
   }
 
+  // Anything not a recognised rung reads back as `observe`. A typo must not be
+  // able to raise enforcement on a repository, and the failure direction for an
+  // unreadable value is the one that blocks nobody.
+  const rungRaw = o['rung'];
+  const rung: Rung = isRung(rungRaw) ? rungRaw : 'observe';
+
   const onboardedAt = str('onboardedAt');
   const lastRunRaw = o['lastRunAt'];
   const lastRunAt = typeof lastRunRaw === 'string' && lastRunRaw !== '' ? lastRunRaw : onboardedAt;
@@ -240,6 +253,7 @@ export function parseConfig(raw: unknown): RedlineConfig {
     pendingAdmin: pending as AdminCapability[],
     onboardedAt,
     lastRunAt,
+    rung,
     localRules: o['localRules'] === true,
     capabilities,
     commandFiles,

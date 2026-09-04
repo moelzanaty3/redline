@@ -24,6 +24,7 @@ const config = {
   pendingAdmin: [],
   onboardedAt: '2026-09-01T00:00:00.000Z',
   lastRunAt: '2026-09-02T00:00:00.000Z',
+  rung: 'observe' as const,
   localRules: false,
   capabilities: { gate: true, mergePolicy: true, labels: true },
   commandFiles: {},

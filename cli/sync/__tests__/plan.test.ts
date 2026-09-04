@@ -12,6 +12,7 @@ const entry = (repo: string, standardsVersion: string): RegistryEntry => ({
   standardsVersion,
   cliVersion: '0.0.1',
   onboardedAt: '2026-09-01T00:00:00.000Z',
+  rung: 'observe',
 });
 
 const registry = (...entries: RegistryEntry[]): Registry => ({
