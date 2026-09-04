@@ -3,7 +3,9 @@
 **Spec:** `2026-09-03-redline-roadmap.md`. This plan covers everything in it that
 `2026-09-04-registry-discovery.md` (Phase 0.1) did not.
 
-**Status:** in execution.
+**Status:** executed. Every piece below is built, tested and documented; what remains is
+listed under "What is still outstanding" at the end, and each item there needs something this
+repository cannot supply — org credentials, an Azure API, or a rollout decision.
 
 ---
 
@@ -324,3 +326,53 @@ rule-tuning telemetry** or they distort acted-on rate with runs nobody can verif
   `assign-rule-ids --check`, actionlint and the web build are all green.
 - Every roadmap open question is answered in writing, or explicitly deferred with a reason.
 - Every acceptance criterion the roadmap states is met, or its gap is named.
+
+
+---
+
+## What is still outstanding
+
+Everything in this plan is built. These are the gaps that remain, each stated with why it
+could not be closed here rather than left for someone to discover.
+
+### Needs credentials nobody has in this repository
+
+- **The Phase 0.4 baseline numbers.** `scripts/build-baseline.mjs` computes every figure the
+  roadmap's acceptance list names, and the owner has to run it once with org credentials and
+  access to the metrics repository. Until then the ordering of the phases above remains a
+  hypothesis, exactly as the roadmap says.
+- **The AI spend figure.** `scripts/build-roi.mjs` takes it; no script here can read a
+  vendor's billing, and none of it is estimated.
+- **Which SARIF producers the estate actually runs** — roadmap open question 1. The baseline
+  script surveys it; the survey needs a token that can list workflows across the org.
+
+### Needs an API this plan did not build
+
+- **Azure DevOps sync and remote verify.** Both are GitHub-only. An Azure entry in the
+  register is reported as unsupported rather than skipped silently, and **Phase 0's exit
+  condition is not met until they exist.** Azure has no GraphQL equivalent and needs a
+  per-project repository walk.
+- **Deployment frequency** for repositories that do not use the deployments API. Reported as
+  unknown rather than zero; there is no correct value to infer.
+
+### Needs a rollout decision, not code
+
+- **Promoting `exemption-enforcement` from `warn` to `require`.** The grace exists so no open
+  pull request is failed by a rule that did not exist when it was opened. Someone has to
+  decide when the estate has had long enough.
+- **Turning the `skills` vendor on.** It is measured, shipped and off. It helps multi-stack
+  profiles by 20-48% and *costs* single-stack profiles about 5%, so it is a per-repository
+  choice rather than an org default.
+- **The first `v0.0.0` tag.** Nothing has ever been published, and the release workflow
+  refuses until the release line is anchored.
+
+### Deliberately not done
+
+- **MTTR.** Refused by name in the ROI output. It needs an incident feed Redline does not have
+  and should not acquire.
+- **Ingested findings gating a merge.** Answered as a no, and `scripts/validate.mjs` fails the
+  build if the gate ever starts reading code scanning.
+- **Bus factor.** The roadmap §9 says plainly that nothing in it can address this, because it
+  is an organisational commitment rather than code. That is still true. A named second who can
+  cut a release, and a documented break-glass for disabling the gate without the owner, remain
+  the two things that make blocking enforcement survivable.
