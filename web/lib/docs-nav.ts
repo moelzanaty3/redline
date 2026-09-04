@@ -212,6 +212,12 @@ export const DOCS_NAV: DocSection[] = [
         children: childrenOf(TEMPLATES, "/docs/templates", "template ruleset"),
       },
       {
+        title: "What changed",
+        href: "/docs/changes",
+        description: "Release notes, read from CHANGELOG.md at build time so they cannot drift from the record.",
+        keywords: "changelog release notes what changed history versions unreleased upgrade",
+      },
+      {
         title: "Seeded corpus",
         href: "/docs/seeds",
         description: "Known-bad code and known-good code beside it — how Redline measures whether the reviewer still works.",

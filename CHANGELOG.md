@@ -7,6 +7,29 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### The documentation site catches up with the product
+
+- The reference layer was complete — 61 per-item pages, every command, every rule — and the
+  conceptual layer had stopped at Phase 1. Someone importing the framework read about a merge
+  gate and profiles and never learned that exemptions, an enforcement ladder, scanner
+  ingestion, cost measurement, a deterministic tier, local review or a distribution loop
+  existed. Seven concept pages now cover them, each leading with the decision rather than the
+  mechanism.
+- A **quickstart** that onboards one repository in four steps and ends with nothing blocked,
+  and an **adoption path** — day one to month two — whose answer to "when do we start
+  enforcing" is later than most people expect and on evidence rather than a date.
+- A **what changed** page, parsed from `CHANGELOG.md` at build time so it cannot drift. A
+  release-notes page maintained by hand is accurate the day it ships and misleading a month
+  later.
+- The homepage and the introduction stop describing Phase 1. The introduction now states the
+  boundary out loud — Redline governs a change while it is still a diff, has no opinion on
+  delivery or cloud spend, and its data ends at merge — and names the property that runs
+  through the whole system: **it refuses rather than approximates.** A check that could not
+  run reports `??`, an unmeasurable figure is absent with its reason, a correlation below its
+  sample threshold is withheld.
+- One homepage claim had become false and is gone: telemetry and scoring no longer "run
+  outside the CLI".
+
 ### `redline metrics` — the estate runners get a front door
 
 - Running a measurement meant cloning the metrics repo, knowing the file path, and knowing
