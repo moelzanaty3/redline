@@ -43,6 +43,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "overview what is redline oversight ai review standards architecture delivery loop",
       },
       {
+        title: "Quickstart",
+        href: "/docs/quickstart",
+        description: "Onboard one repository and see what it changed. Ten minutes, nothing blocked at the end.",
+        keywords: "quickstart quick start get started first repo onboard dry run ten minutes try it",
+      },
+      {
         title: "Installation",
         href: "/docs/installation",
         description: "Install the CLI, install the gate workflow into the org, onboard a repo.",
@@ -53,6 +59,12 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/onboarding",
         description: "One command per repo, on GitHub or Azure DevOps, then verify the gate is real.",
         keywords: "onboard repo redline init verify profile security floor merge policy pending admin azure github",
+      },
+      {
+        title: "Adopting Redline",
+        href: "/docs/adopting",
+        description: "Day one to month two: what happens in order, and when it is reasonable to start blocking merges.",
+        keywords: "adopting rollout adoption path day one week one month two pilot promote blocking evidence ownership break glass",
       },
       {
         title: "CLI commands",
