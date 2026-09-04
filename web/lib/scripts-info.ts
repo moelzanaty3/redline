@@ -60,6 +60,20 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     produces: "registry.json, with entries ordered by org then repo so a nightly commit only diffs when the estate actually changed. Prints one line per problem — a repository whose .redline.json is malformed, one with no default branch — and exits 1 without writing anything if no onboarded repository was found at all: an empty register is indistinguishable from a token that lost access, and publishing it would erase the dashboard's coverage figure and every sync target in one commit.",
     action: "Nothing, normally — the nightly workflow runs it. Run it by hand after onboarding a batch of repositories if you do not want to wait for the next refresh.",
   },
+  "build-correlation": {
+    what: "Research. Redline can say a rule was ignored; it cannot say ignoring it mattered. Where a finding was left unresolved and the same repository later attracted a revert or a hotfix, that is evidence the rule earns its place — computed from merged-pull-request history alone, with no incident feed.",
+    runsIn: "The redline-metrics repo, or a maintainer's terminal against a checkout of its data/.",
+    trigger: "Run by hand, occasionally. It is an experiment, not a loop.",
+    command: ["DATA_DIR=data DAYS=180 WINDOW_DAYS=30 node scripts/build-correlation.mjs"],
+    env: [
+      "DATA_DIR — collected telemetry, default data.",
+      "DAYS — how much history to read, default 180.",
+      "WINDOW_DAYS — how long after a merge a revert still counts as related, default 30.",
+      "MIN_SAMPLE — ignored findings a rule needs before any rate is reported, default 10.",
+    ],
+    produces: "A rate per rule, but only for rules with enough ignored findings for a rate to mean anything — and a verdict on the experiment itself. Below the threshold it reports that it CANNOT SAY rather than a number: a correlation quoted without its sample size is how a plausible story becomes a policy nobody can unwind. Where it does report, the caveat travels with it — correlation, not causation, useful for prioritising which rules to examine and never for justifying a rule on its own.",
+    action: "Read the verdict before the numbers. \"Not reportable\" is the honest output of a weak experiment rather than a failure of it, and the roadmap sequences this piece last precisely so it can be cut without regret if the signal stays thin.",
+  },
   "build-roi": {
     what: "Builds the one page a finance stakeholder can read: what AI review cost against what it caught, with lead time and change failure rate beside it. The headline is cost per BLOCKER caught — a figure nobody else in the toolchain can compute, because a cost tool has spend and no findings and a DORA tool has neither.",
     runsIn: "The redline-metrics repo, or a maintainer's terminal against a checkout of its data/.",

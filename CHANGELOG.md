@@ -7,6 +7,25 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Ignored-finding correlation — research, reported with its confidence
+
+- Redline could say a rule was ignored and not that ignoring it mattered. Where a finding was
+  left unresolved and the same repository later attracted a revert or a hotfix, that is
+  evidence the rule earns its place — computed from merged-pull-request history alone, with no
+  incident feed, which keeps it inside the roadmap's non-goals.
+- **The refusal is the feature.** The roadmap calls this the most speculative item on the list
+  and says to cut it without regret if the signal is too weak, so a rule below the sample
+  threshold gets no rate at all — just a statement of how many ignored findings it has and how
+  many are needed. Below the threshold the rate exists arithmetically and means nothing, and
+  publishing it anyway is how a coincidence becomes a rule nobody can argue with.
+- The output carries a verdict on the *experiment*, not only on each rule. "Not reportable" is
+  the honest result of a weak sample rather than a failure, and no ignored findings at all is
+  reported as a good result rather than as an empty one.
+- Where a rate is reported the caveat travels with it: correlation, not causation, and a weak
+  one. It is for prioritising which rules to examine, never for justifying a rule on its own.
+- A remediation's own ignored findings are not attributed to anything. Counting them would let
+  a single incident inflate every rule that happened to fire on the fix.
+
 ### `redline review` — the daily command, bounded to what applies
 
 - The last of v3's four commands, and the answer to every request for "catch it before I
