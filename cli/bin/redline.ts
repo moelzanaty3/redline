@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { CLI_VERSION } from '../core/version.ts';
 import { createLog, type Sink } from '../core/log.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
+import { isSeverity } from '../core/severity.ts';
+import { isRung, RUNGS } from '../enforce/ladder.ts';
 import {
   resolvePlatform as defaultResolvePlatform,
   type ResolvePlatformOptions,
@@ -16,7 +18,22 @@ import {
   type MenuSelections,
 } from '../config/redline-json.ts';
 import { verify } from '../commands/verify.ts';
+import { sync } from '../commands/sync.ts';
+import { exempt } from '../commands/exempt.ts';
+import { formatFinding, policy } from '../commands/policy.ts';
+import { review } from '../commands/review.ts';
+import { renderFinding } from '../review/schema.ts';
+import { embedded } from '../review/engines/embedded.ts';
+import { createApiEngine } from '../review/engines/api.ts';
+import { METRICS_COMMANDS, helpFor } from '../metrics/options.ts';
+import { runMetrics, specFor } from '../metrics/run.ts';
+import { createSyncHost } from '../sync/host.ts';
+import { verifyRemote } from '../verify/remote.ts';
+import { createRemoteVerifyHost } from '../verify/host.ts';
+import { standardsVersion } from '../commands/sync.ts';
 import type { Platform } from '../platforms/types.ts';
+import type { SyncHost } from '../sync/run.ts';
+import type { RemoteVerifyHost } from '../verify/remote.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -42,14 +59,47 @@ const USAGE = [
   '                  organisation-wide minimum and is refused by name rather than deselected',
   '      --with <list>  the same names, selected again — how a deselection recorded in .redline.json is',
   '                  reversed',
+  `      --rung <name>  the enforcement rung: ${RUNGS.join(', ')}. A promotion needs recorded`,
+  '                  evidence and is refused without it; a demotion is always allowed. Omitting',
+  '                  the flag keeps whatever the repository already recorded',
   '      --adopt-caller  let Redline take over the gate machinery file (.github/workflows/redline.yml,',
   '                  .azuredevops/redline-gate.yml) when what is already there carries nothing that',
   '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
   '                  rather than overwrite a file that may be the repository\'s own',
   '      omitted flags keep whatever .redline.json already recorded',
   '',
-  '  redline verify [--gate]',
+  '  redline verify [--gate] [--repo <owner/name>]',
   '      check this repository still matches what .redline.json claims',
+  '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
+  '                  that genuinely needs a working tree reports ?? rather than passing',
+  '',
+  '  redline review [--staged] [--diff-file <path>] [--base <ref>] [--engine <name>]',
+  '      review this change against ONLY the rules that apply to the files it touches',
+  '      --engine embedded  emit the bounded prompt for the assistant running this (default)',
+  '      --engine api       call a configured endpoint — local or hosted — and parse the result',
+  '      local findings are never sent to the telemetry that tunes rules',
+  '',
+  '  redline policy --diff-file <path>',
+  '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER',
+  '',
+  '  redline exempt --body-file <path> [--scope <check>]',
+  '      decide whether a pull request carries a valid exemption for a failing process',
+  '      check — a reason, an actor and an expiry, not a bare label. Exit 0 if it applies',
+  '',
+  '  redline sync [--dry-run] [--repo <owner/name>] [--force]',
+  '      open a pull request on every registered repository whose standards are behind',
+  '      --dry-run   print the plan; opens nothing, pushes nothing',
+  '      --repo <owner/name>  one repository instead of the estate',
+  '      --force     re-render a repository already at the current standards version',
+  '      run from a checkout of the Redline source repository, not a product repo',
+  '',
+  '  redline metrics <command> [--flags]',
+  `      the estate's measurement plane: ${Object.keys(METRICS_COMMANDS).join(', ')}`,
+  '      run `redline metrics <command> --help` for its flags. These act on an organisation',
+  '      or its collected telemetry, not on the repository you are standing in',
+  '',
+  '  redline registry [--flags]',
+  '      derive the register of onboarded repositories by walking the org',
   '',
   '  redline --version',
 ].join('\n');
@@ -71,6 +121,13 @@ export interface RunDeps {
   root?: string;
   sink?: Sink;
   resolvePlatform?: (cwd: string, opts?: ResolvePlatformOptions) => Promise<Platform>;
+  // Sync spans the estate rather than one repository, so it takes a host of its
+  // own instead of the single resolved platform every other command uses.
+  syncHost?: () => SyncHost;
+  remoteVerifyHost?: () => RemoteVerifyHost;
+  // Injected so the metrics dispatch can be asserted without executing a runner
+  // that talks to GitHub.
+  loadRunner?: (path: string) => Promise<unknown>;
 }
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
@@ -113,6 +170,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             'adopt-caller': { type: 'boolean' },
             skip: { type: 'string' },
             with: { type: 'string' },
+            rung: { type: 'string' },
           },
           allowPositionals: false,
         })
@@ -145,6 +203,14 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
               .filter((v) => v !== '')
           : undefined;
 
+      if (values.rung !== undefined && !isRung(values.rung)) {
+        throw new RedlineError(
+          'usage',
+          `--rung must be one of ${RUNGS.join(', ')}, not "${values.rung}"`,
+          'observe reports and blocks nothing; block-blocker stops a merge on a BLOCKER'
+        );
+      }
+
       const dryRun = values['dry-run'] === true;
       const repair = values.repair === true;
       const adoptCaller = values['adopt-caller'] === true;
@@ -160,6 +226,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(dryRun ? { dryRun: true } : {}),
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
+        ...(values.rung ? { rung: values.rung } : {}),
         menu,
         capabilities: selection.capabilities,
       });
@@ -222,10 +289,33 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const { values } = parseCliArgs(() =>
         parseArgs({
           args: rest,
-          options: { gate: { type: 'boolean', default: false } },
+          options: { gate: { type: 'boolean', default: false }, repo: { type: 'string' } },
           allowPositionals: false,
         })
       );
+
+      if (values.repo !== undefined) {
+        if (values.gate === true) {
+          throw new RedlineError(
+            'usage',
+            '--gate publishes this repository\'s merge status and cannot target another repository',
+            'drop --repo to run the gate, or drop --gate to verify a remote repository'
+          );
+        }
+        const remoteHost = deps.remoteVerifyHost?.() ?? createRemoteVerifyHost();
+        const remoteRef = await remoteHost.resolveRef(values.repo);
+        const remoteReport = await verifyRemote(remoteHost, remoteRef, {
+          root,
+          standardsVersion: standardsVersion(root),
+        });
+        log.info(`${values.repo} (${remoteRef.defaultBranch})`);
+        log.report(remoteReport.findings);
+        // Same mapping as the local path: one finding means the repository was
+        // never onboarded, which is a different thing to tell an operator than
+        // onboarded-and-drifted.
+        const never = !remoteReport.ok && remoteReport.findings.length === 1;
+        return remoteReport.ok ? 0 : never ? exitCodeFor('usage') : exitCodeFor('failed');
+      }
       // resolve is passed unevaluated: verify() must be able to report "not
       // onboarded" without a host credential — see cli/commands/verify.ts.
       const report = await verify(() => resolve(cwd), { cwd, root, gate: values.gate === true });
@@ -244,6 +334,256 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         else log.info('Redline gate failed.');
       }
       return exitCode;
+    }
+
+    if (command === 'review') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: {
+            staged: { type: 'boolean', default: false },
+            'diff-file': { type: 'string' },
+            base: { type: 'string' },
+            profile: { type: 'string' },
+            engine: { type: 'string', default: 'embedded' },
+            provider: { type: 'string', default: 'openai' },
+            model: { type: 'string' },
+            'base-url': { type: 'string' },
+          },
+          allowPositionals: false,
+        })
+      );
+
+      let engine = embedded;
+      if (values.engine === 'api') {
+        if (!values.model) {
+          throw new RedlineError(
+            'usage',
+            '--engine api needs --model <name>',
+            'a model baked into the tool is one nobody can change when it is deprecated'
+          );
+        }
+        // Not a silent fallback: `--provider anthropc` used to become openai and
+        // send the diff to a local endpoint that was not running, reporting a
+        // connection error for what was a typo.
+        if (values.provider !== 'openai' && values.provider !== 'anthropic') {
+          throw new RedlineError(
+            'usage',
+            `--provider must be openai or anthropic, not "${values.provider}"`,
+            'openai covers every OpenAI-compatible endpoint, including a local one'
+          );
+        }
+        const provider = values.provider;
+        engine = createApiEngine({
+          provider,
+          model: values.model,
+          ...(values['base-url'] ? { baseUrl: values['base-url'] } : {}),
+        });
+      } else if (values.engine !== 'embedded') {
+        throw new RedlineError('usage', `unknown engine "${values.engine}" — use embedded or api`);
+      }
+
+      const report = await review(engine, {
+        cwd,
+        root,
+        ...(values.profile ? { profile: values.profile } : {}),
+        ...(values.base ? { base: values.base } : {}),
+        source: values['diff-file']
+          ? { kind: 'diff-file', path: values['diff-file'] }
+          : values.staged
+            ? { kind: 'staged' }
+            : { kind: 'worktree' },
+      });
+
+      log.info(
+        `profile ${report.scope.profile} — rules in scope: core` +
+          (report.scope.stacks.length ? `, ${report.scope.stacks.join(', ')}` : '')
+      );
+      // A file no stack covers is a gap in the standard. Reviewing it against
+      // core alone and saying nothing hides that.
+      if (report.scope.uncovered.length > 0) {
+        log.warn(
+          `no stack covers ${report.scope.uncovered.length} changed file(s), so only the core rules ` +
+            `applied to them: ${report.scope.uncovered.slice(0, 5).join(', ')}` +
+            (report.scope.uncovered.length > 5 ? ', and more' : '')
+        );
+      }
+
+      if (report.prompt !== null) {
+        log.info('');
+        log.info(report.prompt);
+        log.info('');
+        log.info(report.note ?? '');
+        return 0;
+      }
+
+      for (const finding of report.findings) {
+        log.info(`${finding.file}:${finding.line}`);
+        log.info(`  ${renderFinding(finding)}`);
+      }
+      for (const { reason } of report.rejected) {
+        log.warn(`discarded a finding from the model: ${reason}`);
+      }
+      log.info(
+        report.findings.length === 0
+          ? 'no findings — an empty review is a valid review'
+          : `${report.findings.length} finding(s)`
+      );
+      // Said out loud on every run. A local review is opt-in and enforces
+      // nothing; the pull request review remains the system of record.
+      log.info('local review — not recorded, and not counted in rule-tuning telemetry');
+
+      // Always 0. This is a pre-flight convenience, and a non-zero exit would
+      // invite someone to wire it into CI as a second gate, where it would
+      // enforce nothing while looking like it did.
+      return 0;
+    }
+
+    if (command === 'policy') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { 'diff-file': { type: 'string' }, 'fail-on': { type: 'string' } },
+          allowPositionals: false,
+        })
+      );
+      const diffFile = values['diff-file'];
+      if (!diffFile) throw new RedlineError('usage', 'redline policy needs --diff-file <path>');
+      const failOn = values['fail-on'];
+      if (failOn !== undefined && !isSeverity(failOn)) {
+        throw new RedlineError('usage', `--fail-on must be BLOCKER, HIGH or SUGGESTION, not "${failOn}"`);
+      }
+
+      const report = policy({ root, diffFile, ...(failOn ? { failOn } : {}) });
+
+      for (const finding of report.findings) {
+        log.info(`${finding.file}:${finding.line}`);
+        log.info(`  ${formatFinding(finding)}`);
+      }
+      // Said on every run, including the clean one. A reviewer has to be able to
+      // tell "checked and clean" from "not checked", and silence looks the same
+      // as both.
+      log.info(
+        report.findings.length === 0
+          ? `no deterministic findings — ${report.evaluated.length} rule(s) evaluated with no model call`
+          : `${report.findings.length} finding(s) from ${report.evaluated.length} deterministic rule(s)`
+      );
+      for (const id of report.unimplemented) {
+        log.warn(`${id} is classified deterministic but has no check — it is enforced by nobody`);
+      }
+
+      return report.ok ? 0 : exitCodeFor('failed');
+    }
+
+    if (command === 'exempt') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { 'body-file': { type: 'string' }, scope: { type: 'string' } },
+          allowPositionals: false,
+        })
+      );
+      const bodyFile = values['body-file'];
+      if (!bodyFile) {
+        throw new RedlineError('usage', 'redline exempt needs --body-file <path>');
+      }
+
+      const report = exempt({
+        bodyFile,
+        ...(values.scope ? { scope: values.scope } : {}),
+      });
+      for (const message of report.messages) {
+        if (report.applies) log.info(message);
+        else log.warn(message);
+      }
+      // Exit 1, not 2: a pull request without a valid exemption is a normal,
+      // expected answer the gate acts on — not the caller misusing the command.
+      return report.applies ? 0 : exitCodeFor('failed');
+    }
+
+    if (command === 'sync') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: {
+            'dry-run': { type: 'boolean', default: false },
+            repo: { type: 'string' },
+            force: { type: 'boolean', default: false },
+          },
+          allowPositionals: false,
+        })
+      );
+
+      const dryRun = values['dry-run'] === true;
+      // A dry run reads the register and the target's own files but never
+      // writes, so it still needs a read credential — unlike `init --dry-run`,
+      // which contacts no host at all. Saying so beats a confusing 403.
+      const report = await sync(deps.syncHost?.() ?? createSyncHost(), {
+        root,
+        cwd,
+        ...(values.repo ? { repo: values.repo } : {}),
+        ...(values.force ? { force: true } : {}),
+        ...(dryRun ? { dryRun: true } : {}),
+      });
+
+      log.info(`standards v${report.plan.standardsVersion} — ${report.plan.targets.length} target(s), ${report.plan.skipped.length} skipped`);
+      for (const { repo, outcome } of report.results) {
+        if (outcome.kind === 'failed') log.error(`  ${repo}: ${outcome.detail}`);
+        else if (outcome.kind === 'current') log.info(`  ${repo}: already current`);
+        else if (outcome.kind === 'not-onboarded') log.warn(`  ${repo}: no .redline.json — not onboarded`);
+        else if (outcome.kind === 'stale-artifacts') {
+          // Content is current, but the target still carries files this profile
+          // no longer renders. Sync will not delete another repository's files;
+          // saying nothing reported it as healthy, which is what silent drift is.
+          log.warn(
+            `  ${repo}: current, but still carrying ${outcome.paths.join(', ')} — ` +
+              'a stack or vendor left this profile. Re-run redline init there to clear them'
+          );
+        } else log.info(`  ${repo}: ${outcome.kind} ${outcome.url}`);
+      }
+      if (dryRun) log.info('dry run — no branch was pushed and no pull request was opened');
+
+      // A partially failed estate run is a failure. Reporting 0 because most
+      // repositories succeeded is how a distribution quietly stops covering the
+      // ones it cannot reach.
+      return report.failures > 0 ? exitCodeFor('failed') : 0;
+    }
+
+    if (command === 'metrics' || command === 'registry') {
+      // The subcommand is a positional for `metrics` and absent for `registry`,
+      // so the flags are whatever follows it.
+      const [sub, ...flagArgs] = command === 'metrics' ? rest : ['registry', ...rest];
+      if (command === 'metrics' && (sub === undefined || sub === '--help' || sub === '-h')) {
+        log.info('redline metrics <command>');
+        log.info('');
+        for (const [name, spec] of Object.entries(METRICS_COMMANDS)) {
+          log.info(`  ${name.padEnd(14)} ${spec.summary}`);
+        }
+        log.info('');
+        log.info('Run `redline metrics <command> --help` for its flags.');
+        return sub === undefined ? exitCodeFor('usage') : 0;
+      }
+
+      const spec = specFor(sub!);
+      if (flagArgs.includes('--help') || flagArgs.includes('-h')) {
+        log.info(helpFor(command === 'registry' ? 'registry' : `metrics ${sub}`, spec));
+        return 0;
+      }
+
+      // Built from the same table that validates and documents them, so a flag
+      // cannot exist in one of the three and not the others.
+      const options = Object.fromEntries(
+        Object.entries(spec.options).map(([flag, option]) => [
+          flag,
+          { type: option.type === 'boolean' ? ('boolean' as const) : ('string' as const) },
+        ])
+      );
+      const { values } = parseCliArgs(() =>
+        parseArgs({ args: flagArgs, options, allowPositionals: false })
+      );
+
+      await runMetrics(sub!, { root, flags: values, ...(deps.loadRunner ? { load: deps.loadRunner } : {}) });
+      return 0;
     }
 
     log.error(`unknown command "${command}"`, 'run: redline --help');

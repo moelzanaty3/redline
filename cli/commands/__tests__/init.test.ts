@@ -1503,3 +1503,67 @@ test('the mandatory-capability refusal says "cannot be deselected" once', () => 
 const capabilitySelectionOnce = (): void => {
   capabilitySelection(['security-floor'], []);
 };
+
+// --- the enforcement ladder --------------------------------------------------
+
+test('a run that says nothing about enforcement never changes the rung', async () => {
+  // A re-run for an unrelated reason silently promoting a repository is how a
+  // ladder loses the trust it exists to build.
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now: () => new Date('2026-09-01T00:00:00Z') });
+
+  const first = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
+  assert.equal(first.rung, 'observe');
+
+  writeFileSync(
+    join(cwd, '.redline.json'),
+    JSON.stringify({ ...first, rung: 'block-blocker' }, null, 2)
+  );
+  await init(fakePlatform(), { cwd, root, repair: true, now: () => new Date('2026-09-02T00:00:00Z') });
+
+  const second = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
+  assert.equal(second.rung, 'block-blocker', 'the recorded rung survives a re-run');
+});
+
+test('a promotion without evidence is refused, and the run still succeeds', async () => {
+  // Failing the whole onboarding over a rung the repository cannot reach yet
+  // would teach people to stop asking.
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root });
+
+  const report = await init(fakePlatform(), { cwd, root, rung: 'warn' });
+
+  const config = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
+  assert.equal(config.rung, 'observe');
+  assert.ok(report.notes.some((n) => /enforcement stays at observe/.test(n)));
+  assert.ok(report.notes.some((n) => /reviewed pull requests are needed/.test(n)));
+});
+
+test('a promotion with evidence is applied and reported', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root });
+
+  const report = await init(fakePlatform(), {
+    cwd,
+    root,
+    rung: 'warn',
+    evidence: { seedRecall: 1, actedOnRate: 0.9, sampleSize: 40, falsePositives: 0 },
+  });
+
+  const config = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
+  assert.equal(config.rung, 'warn');
+  assert.ok(report.notes.some((n) => /observe -> warn/.test(n)));
+});
+
+test('a demotion needs no evidence at all', async () => {
+  // The safe direction never needs permission.
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root });
+  const config = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as Record<string, unknown>;
+  writeFileSync(join(cwd, '.redline.json'), JSON.stringify({ ...config, rung: 'block-high' }, null, 2));
+
+  await init(fakePlatform(), { cwd, root, rung: 'observe' });
+
+  const after = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
+  assert.equal(after.rung, 'observe');
+});

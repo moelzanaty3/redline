@@ -37,6 +37,27 @@ Do not delete the heading — the gate fails if the section is missing.
 
 ADR: `docs/adr/NNNN-*.md`
 
+## Redline exemption
+
+<!--
+Only fill this in if a process check above is failing and you are asking to merge anyway.
+Delete the whole section otherwise. A label alone no longer exempts anything: the gate
+reads THIS block, and an exemption with no reason and no end date is an opt-out, not an
+exemption.
+
+  - reason:  what is being accepted and why, in a sentence a reader in three months
+             can act on. "Needed for release" is not one.
+  - until:   YYYY-MM-DD, at most 90 days out. Longer than that is a standards change,
+             not an exemption — raise it in the Redline source repo.
+  - scope:   which checks it covers (checklist, adr). Omit to cover both.
+
+This can never exempt dependency review or the secret scan. Those do not soft-fail.
+-->
+
+- reason:
+- until:
+- scope:
+
 <!-- REDLINE:END -->
 
 ## Automated review
@@ -44,7 +65,8 @@ ADR: `docs/adr/NNNN-*.md`
 - [ ] Review comments addressed, or dismissed in-thread with a reason
 
 <!--
-Gate stuck on a process check you cannot satisfy? Apply the `redline-exempt` label and
-leave a comment explaining why. That downgrades the checklist and ADR checks to warnings.
+Gate stuck on a process check you cannot satisfy? Apply the `redline-exempt` label AND
+fill in the `## Redline exemption` section above. The label says a check was waived; the
+block says who accepted what, why, and until when — and the gate reads the block.
 It does NOT bypass dependency review or the secret scan — those never soft-fail.
 -->

@@ -7,6 +7,10 @@ export interface Finding {
   check: string;
   ok: boolean;
   detail: string;
+  // A check that never ran. Printed as its own marker rather than folded into
+  // ok or FAIL: an operator scanning a report has to be able to see the
+  // difference between "asserted and fine" and "not asserted".
+  unknown?: boolean;
 }
 
 export interface Log {
@@ -31,7 +35,7 @@ export function createLog(sink: Sink = consoleSink): Log {
     },
     report(findings) {
       for (const finding of findings) {
-        const marker = finding.ok ? 'ok  ' : 'FAIL';
+        const marker = finding.unknown ? '  ??' : finding.ok ? 'ok  ' : 'FAIL';
         sink.out(`${marker}  ${finding.check.padEnd(22)} ${finding.detail}`);
       }
     },

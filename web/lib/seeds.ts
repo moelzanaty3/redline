@@ -8,7 +8,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { repoRoot } from "./content";
 
-const SEED_MARKER = /SEED\s+(\d+)\s*\[(BLOCKER|HIGH|SUGGESTION)\]/;
+const SEED_MARKER = /SEED\s+(\d+)\s*\[(BLOCKER|HIGH|SUGGESTION)\]\s*\(([^)]+)\)\s*(.*)$/;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -35,4 +35,60 @@ export function seededFindingCount(): number {
     cached = count;
   }
   return cached;
+}
+
+export type SeededDefect = {
+  n: number;
+  severity: "BLOCKER" | "HIGH" | "SUGGESTION";
+  ruleId: string;
+  description: string;
+};
+
+export type SeedCorpus = {
+  slug: string;
+  // Relative to the repository root, so FileViewer can read it.
+  files: string[];
+  defects: SeededDefect[];
+};
+
+let corpora: Map<string, SeedCorpus> | null = null;
+
+// One corpus per directory under seeded/, defects parsed from the markers in the
+// files themselves. seeded/clean/ is deliberately included with zero defects:
+// it is half the measurement — a reviewer that flags everything scores perfect
+// recall and is useless — and a page that omitted it would describe only the
+// half that is easy to pass.
+export function seedCorpora(): Map<string, SeedCorpus> {
+  if (corpora) return corpora;
+  const root = repoRoot();
+  const out = new Map<string, SeedCorpus>();
+
+  for (const dir of readdirSync(join(root, "seeded"))) {
+    const full = join(root, "seeded", dir);
+    if (!statSync(full).isDirectory()) continue;
+
+    const files: string[] = [];
+    const defects: SeededDefect[] = [];
+    for (const file of walk(full)) {
+      files.push(relative(root, file));
+      for (const line of readFileSync(file, "utf8").split("\n")) {
+        const match = SEED_MARKER.exec(line);
+        if (!match) continue;
+        defects.push({
+          n: Number(match[1]),
+          severity: match[2] as SeededDefect["severity"],
+          ruleId: (match[3] ?? "").trim(),
+          description: (match[4] ?? "").trim(),
+        });
+      }
+    }
+    out.set(dir, { slug: dir, files: files.sort(), defects });
+  }
+
+  corpora = out;
+  return out;
+}
+
+export function seedCorpus(slug: string): SeedCorpus | undefined {
+  return seedCorpora().get(slug);
 }

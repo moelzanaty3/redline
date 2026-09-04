@@ -7,7 +7,7 @@ import { CONFIG_FILE, parseConfig, readConfig, writeConfig, type RedlineConfig }
 
 const valid: RedlineConfig = {
   standardsVersion: '0.0.1',
-  cliVersion: '3.0.0',
+  cliVersion: '0.0.1',
   host: 'github',
   profile: 'web',
   vendors: ['copilot', 'agents', 'claude'],
@@ -24,6 +24,7 @@ const valid: RedlineConfig = {
   localRules: true,
   capabilities: { gate: true, mergePolicy: true, labels: true },
   commandFiles: { '.claude/commands/redline-init.md': 'sha256:abc' },
+  rung: 'observe' as const,
 };
 
 test('parses a valid config', () => {
@@ -119,4 +120,22 @@ test('command content ids read back, and are empty when the field predates them'
   assert.deepEqual(parseConfig(structuredClone(valid)).commandFiles, {
     '.claude/commands/redline-init.md': 'sha256:abc',
   });
+});
+
+test('a config written before the ladder existed reads back at the rung that changes nothing', () => {
+  const { rung: _rung, ...before } = valid;
+
+  assert.equal(parseConfig(before).rung, 'observe');
+});
+
+test('an unrecognised rung reads back as observe rather than raising enforcement', () => {
+  // A typo or a hand edit must never be able to make a repository stricter than
+  // anyone chose. The failure direction for an unreadable value is the one that
+  // blocks nobody.
+  assert.equal(parseConfig({ ...valid, rung: 'block-everything' }).rung, 'observe');
+  assert.equal(parseConfig({ ...valid, rung: 42 }).rung, 'observe');
+});
+
+test('a recorded rung is preserved', () => {
+  assert.equal(parseConfig({ ...valid, rung: 'block-blocker' }).rung, 'block-blocker');
 });

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadManifest, parseManifest } from '../manifest.ts';
 import { isRedlineError } from '../../core/errors.ts';
+import { SKIP_WITHOUT_PERMISSION_ENFORCEMENT } from '../../core/__tests__/fs-permissions.ts';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -27,7 +28,7 @@ test('a missing manifest is a host-independent usage failure', () => {
   );
 });
 
-test('a manifest that cannot be read for permission reasons is a "permission" RedlineError', (t) => {
+test('a manifest that cannot be read for permission reasons is a "permission" RedlineError', { skip: SKIP_WITHOUT_PERMISSION_ENFORCEMENT }, (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'redline-manifest-'));
   t.after(() => {
     chmodSync(join(dir, 'standards', 'manifest.json'), 0o644);

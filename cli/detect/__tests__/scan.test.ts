@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanRepo } from '../scan.ts';
+import { SKIP_WITHOUT_PERMISSION_ENFORCEMENT } from '../../core/__tests__/fs-permissions.ts';
 
 const createdDirs: string[] = [];
 after(() => {
@@ -95,7 +96,7 @@ test('an .xcodeproj directory is emitted as a path marker', () => {
   assert.ok(paths.includes('App.xcodeproj'));
 });
 
-test('an unreadable subdirectory is skipped rather than fatal', () => {
+test('an unreadable subdirectory is skipped rather than fatal', { skip: SKIP_WITHOUT_PERMISSION_ENFORCEMENT }, () => {
   const dir = tempDir('redline-scan-unreadable-');
   const blocked = join(dir, 'blocked');
   mkdirSync(blocked);

@@ -18,6 +18,10 @@ export type Manifest = {
   profiles: Record<string, string[]>;
   profileAliases: Record<string, string>;
   vendors: Record<string, { title: string; enabled: boolean }>;
+  // Rule ids a checker decides without a model. Absent in a manifest written
+  // before the tier existed, where every rule is judgement — which is exactly
+  // what those manifests meant.
+  deterministic?: string[];
 };
 
 let cached: Manifest | null = null;

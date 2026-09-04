@@ -58,6 +58,12 @@ export interface VerifyFinding {
   check: string;
   ok: boolean;
   detail: string;
+  // A check that could not run at all, as opposed to one that ran and passed.
+  // Only a remote verify produces these — some assertions genuinely need a
+  // working tree — and the distinction is the whole reason the remote mode is
+  // safe to schedule: a check reported as passing when it never executed is a
+  // false all-clear across the estate, which is worse than no check.
+  unknown?: boolean;
 }
 
 export interface VerifyReport {

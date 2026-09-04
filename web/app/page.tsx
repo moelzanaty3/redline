@@ -249,10 +249,11 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
           <Reveal>
             <div className="section-head">
               <span className="pill">How it works</span>
-              <h2>One command onboards a repo. Standards do the rest.</h2>
+              <h2>Author once. It reaches the estate, and comes back measured.</h2>
               <p>
-                Rendered per vendor, installed by the CLI, gated on merge,
-                verified against what the host actually reports.
+                Rendered per vendor, installed by one command, distributed as
+                pull requests, gated on merge, and measured against whether
+                anyone acted.
               </p>
             </div>
           </Reveal>
@@ -265,8 +266,8 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
               </div>
               <div className="how-card">
                 <span className="n">02 — Render</span>
-                <h3>Four formats</h3>
-                <p>The CLI&apos;s renderer emits Copilot instructions, <code>AGENTS.md</code>, <code>CLAUDE.md</code> and Cursor rules per profile.</p>
+                <h3>Five formats</h3>
+                <p>Copilot instructions, <code>AGENTS.md</code>, <code>CLAUDE.md</code>, Cursor rules and per-stack Claude skills — from one source, per profile.</p>
               </div>
               <div className="how-card">
                 <span className="n">03 — Onboard</span>
@@ -274,9 +275,19 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
                 <p>Detects GitHub or Azure DevOps, installs the floor, opens one pull request. Never a direct push.</p>
               </div>
               <div className="how-card">
-                <span className="n">04 — Verify</span>
+                <span className="n">04 — Distribute</span>
+                <h3><code>redline sync</code></h3>
+                <p>A rule change reaches every registered repository as a pull request. Nobody re-runs anything by hand.</p>
+              </div>
+              <div className="how-card">
+                <span className="n">05 — Verify</span>
                 <h3><code>redline verify</code></h3>
-                <p>Confirms the gate reported for real, the policy still matches, and nothing is left pending an admin.</p>
+                <p>Confirms the gate reported for real, locally or across the estate. A check that could not run says so rather than passing.</p>
+              </div>
+              <div className="how-card">
+                <span className="n">06 — Measure</span>
+                <h3><code>redline metrics</code></h3>
+                <p>Acted-on rate, seed recall, how much of the estate enforces, and what review cost against what it caught.</p>
               </div>
             </div>
           </Reveal>
@@ -290,9 +301,8 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
               <span className="pill">Documentation</span>
               <h2>Everything is in the docs — and copyable.</h2>
               <p>
-                The full standards, scripts, workflows and templates ship in the
-                documentation, ready to copy into your org. Press <b>⌘K</b> to
-                search.
+                Every rule, command, workflow and template — with the decision
+                behind it, not just the mechanism. Press <b>⌘K</b> to search.
               </p>
             </div>
           </Reveal>
@@ -310,13 +320,17 @@ db.Query("SELECT id FROM users WHERE name = $1", name)`}
                 <h3>Adaptors <span>→</span></h3>
                 <p>Connect GitHub Copilot, Claude, Codex-style agents and Cursor to one rendered source of truth.</p>
               </Link>
+              <Link className="doc-card" href="/docs/cost">
+                <h3>Cost and value <span>→</span></h3>
+                <p>Cost per BLOCKER caught — a figure no cost tool and no DORA tool can compute on its own.</p>
+              </Link>
               <Link className="doc-card" href="/docs/output-contract">
                 <h3>Output contract <span>→</span></h3>
                 <p>Machine-readable severities and rule ids — the part that turns review comments into metrics.</p>
               </Link>
-              <Link className="doc-card" href="/docs/scripts">
-                <h3>Scripts <span>→</span></h3>
-                <p>Validation, scoring and telemetry scripts still run outside the CLI — ready to copy.</p>
+              <Link className="doc-card" href="/docs/enforcement">
+                <h3>Enforcement ladder <span>→</span></h3>
+                <p>Four rungs a repository climbs on recorded evidence — and steps back from without asking anyone.</p>
               </Link>
               <Link className="doc-card" href="/docs/workflows">
                 <h3>Workflows <span>→</span></h3>

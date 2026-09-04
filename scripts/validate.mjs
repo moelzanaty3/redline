@@ -135,6 +135,132 @@ if (!gate.includes('pull-requests: write')) {
   fail('workflows/redline-gate.yml: dependency-review needs pull-requests: write to comment');
 }
 
+// --- the derived register -----------------------------------------------------
+// The register is the estate's only source of truth for which repositories are
+// onboarded. It was lost once already — scripts/setup-repo.sh was its only writer
+// and sync-targets.txt went with it — and nothing failed, which is why the dashboard
+// quietly stopped reporting coverage. These two assertions are what makes that
+// silent again impossible.
+if (!existsSync(join(ROOT, 'scripts/build-registry.mjs'))) {
+  fail('scripts/build-registry.mjs is missing — the register cannot be derived, so redline sync has no targets and the dashboard loses its coverage figure');
+}
+
+// --- the estate command surface -------------------------------------------------
+// Every runner the metrics commands dispatch to must ship, because the commands
+// locate them inside the installed package rather than in a checkout. A runner
+// missing from package.json "files" is an installation where `redline metrics
+// dashboard` exists, is documented, and cannot run — the exact broken promise the
+// command surface was built to remove.
+const optionsSource = read('cli/metrics/options.ts');
+for (const match of optionsSource.matchAll(/script: '([^']+)'/g)) {
+  if (!existsSync(join(ROOT, match[1]))) {
+    fail(`cli/metrics/options.ts points at ${match[1]}, which does not exist`);
+  }
+}
+const shippedPaths = JSON.parse(read('package.json')).files ?? [];
+if (!shippedPaths.includes('scripts/')) {
+  fail('package.json "files" no longer ships scripts/ — every redline metrics command would be present, documented, and unable to run');
+}
+if (!existsSync(join(ROOT, '.github/workflows/registry.yml'))) {
+  fail('.github/workflows/registry.yml is missing — the register would silently stop refreshing and go stale without a single failing build');
+}
+
+// --- distribution -------------------------------------------------------------
+// Sync is what makes a standards change reach the estate. Without it every rule
+// change here is a change nobody receives, and the failure is silent by nature:
+// the repositories that did not get it look exactly like the ones that did.
+const syncWorkflow = read('workflows/redline-sync.yml');
+if (/^\s*if:\s*false\s*$/m.test(syncWorkflow)) {
+  fail('workflows/redline-sync.yml is gated off — a standards change would reach no onboarded repository');
+}
+if (!syncWorkflow.includes('redline.js sync')) {
+  fail('workflows/redline-sync.yml no longer calls `redline sync` — distribution is wired to nothing');
+}
+
+// Drift re-detection is the other half of distribution: sync makes a change
+// available, this is what notices a repository that never took it, or that had
+// its gate quietly weakened afterwards.
+const verifyWorkflow = read('workflows/verify-onboarding.yml');
+if (/^\s*if:\s*false\s*$/m.test(verifyWorkflow)) {
+  fail('workflows/verify-onboarding.yml is gated off — estate drift would go undetected');
+}
+if (!verifyWorkflow.includes('verify --repo')) {
+  fail('workflows/verify-onboarding.yml no longer calls `redline verify --repo` — drift detection is wired to nothing');
+}
+
+// The baseline is what every roadmap phase past 0 is judged against, and the
+// roadmap says plainly that the ordering of the later phases is a hypothesis
+// until it exists. Losing the instrument loses the ability to tell whether any
+// of them worked.
+if (!existsSync(join(ROOT, 'scripts/build-baseline.mjs'))) {
+  fail('scripts/build-baseline.mjs is missing — there is no way to compute the baseline every later roadmap phase is measured against');
+}
+if (!existsSync(join(ROOT, 'scripts/build-roi.mjs'))) {
+  fail('scripts/build-roi.mjs is missing — the one page that says what AI review cost against what it caught');
+}
+
+// --- exemptions ---------------------------------------------------------------
+// The exemption block is parsed twice, deliberately: the CLI enforces it at the
+// gate, and the collector reads it for telemetry in the metrics repo where there
+// is no build step to import dist/ from. The failure this guards is the gate
+// accepting a block the audit cannot read — an exemption enforced and then never
+// reported, which is precisely the state F exists to end.
+const exemptCli = read('cli/exempt/parse.ts');
+const exemptCollector = read('scripts/lib/exemptions.mjs');
+for (const token of ['## Redline exemption', 'reason', 'until', 'scope']) {
+  if (!exemptCli.includes(token) || !exemptCollector.includes(token)) {
+    fail(`the exemption block's "${token}" is missing from cli/exempt/parse.ts or scripts/lib/exemptions.mjs — the gate and the audit would read different blocks`);
+  }
+}
+if (!read('.github/pull_request_template.md').includes('Redline exemption')) {
+  fail('.github/pull_request_template.md does not mention the exemption block — an author asked to justify a waiver has nowhere to write it');
+}
+
+// --- ingestion ----------------------------------------------------------------
+// Same two-implementation arrangement as the exemption block, and the same guard.
+// The property being protected is different and larger: an ingested finding must
+// always be distinguishable from a Redline one. A collector that stopped tagging
+// the source would tune Redline's rules on another tool's noise, silently, and
+// nothing else in the system would notice.
+const sarifCli = read('cli/sarif/types.ts');
+const sarifCollector = read('scripts/lib/sarif.mjs');
+for (const token of ["'sarif'", 'severity']) {
+  if (!sarifCli.includes(token) || !sarifCollector.includes(token)) {
+    fail(`ingestion lost "${token}" from cli/sarif/ or scripts/lib/sarif.mjs — an ingested finding must always be distinguishable from a Redline one`);
+  }
+}
+if (!read('scripts/lib/metrics.mjs').includes('scanner')) {
+  fail('scripts/lib/metrics.mjs no longer aggregates ingested findings separately — they would be folded into Redline\'s own rule tuning');
+}
+if (read('workflows/redline-gate.yml').includes('code-scanning')) {
+  fail('workflows/redline-gate.yml reads code scanning — ingested findings are measured only and must never gate a merge (roadmap open question 4)');
+}
+
+// --- the deterministic tier ----------------------------------------------------
+// A rule classified as machine-checked and then checked by nobody is worse than
+// one left to the model: everybody believes it is covered, and the model was told
+// nothing, so it is enforced by no one at all.
+const deterministic = manifest.deterministic ?? [];
+const checksSource = read('cli/policy/checks.ts');
+for (const id of deterministic) {
+  if (!rules.has(id)) {
+    fail(`manifest "deterministic" lists "${id}", which is not a rule in standards/ — ids are permanent and this one does not exist`);
+  }
+  if (!checksSource.includes(`'${id}'`)) {
+    fail(`rule "${id}" is classified deterministic but cli/policy/checks.ts implements no check for it — it is enforced by nobody`);
+  }
+}
+
+// --- local review ---------------------------------------------------------------
+// A local review is opt-in and enforces nothing; the pull request review is the
+// system of record. Its findings must never reach the telemetry that tunes rules,
+// or acted-on rate is computed partly from runs nobody can verify — a local run
+// has no thread to resolve, no reviewer to attribute, and no way to tell a fixed
+// finding from one the author never read.
+if (!read('cli/commands/review.ts').includes('excludedFromTelemetry')) {
+  fail('cli/commands/review.ts no longer marks local reviews as excluded from telemetry — local findings would distort acted-on rate');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

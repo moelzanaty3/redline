@@ -44,14 +44,15 @@ jobs:
           echo "stale=$stale_prs" >> "$GITHUB_OUTPUT"
 
       - name: Build Adaptive Card
-        env:
-          ORG: ${{ github.repository_owner }}
-          DAYS: '7'
-          OPEN_PRS: ${{ steps.prs.outputs.open }}
-          STALE_PRS: ${{ steps.prs.outputs.stale }}
-          SEED_SCORES: data/seed-scores.jsonl
-          DASHBOARD_URL: ${{ vars.REDLINE_DASHBOARD_URL }}
-        run: node scripts/build-digest.mjs --out digest.json
+        run: |
+          npx --yes "redline-cli@0.0.1" metrics digest \
+            --org "${{ github.repository_owner }}" \
+            --days 7 \
+            --open-prs "${{ steps.prs.outputs.open }}" \
+            --stale-prs "${{ steps.prs.outputs.stale }}" \
+            --seed-scores data/seed-scores.jsonl \
+            --dashboard-url "${{ vars.REDLINE_DASHBOARD_URL }}" \
+            --out digest.json
 
       - name: Post to Teams
         env:

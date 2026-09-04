@@ -17,6 +17,14 @@ export interface Git {
   hasStagedChanges(): boolean;
   commit(message: string): void;
   push(branch: string): void;
+  // Read-only. A diff that cannot be produced — a ref that does not exist, a
+  // repository with no commits — is a usage problem the caller can act on, not
+  // an internal defect.
+  diff(range: string): string;
+  diffStaged(): string;
+  // The merge base of a ref and HEAD, so a working-tree diff can be taken
+  // against it directly.
+  mergeBase(ref: string): string;
 }
 
 // git is a real system boundary: a rejected push, a protected branch, an
@@ -87,6 +95,37 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
       }
     },
     currentBranch,
+    diff(range) {
+      try {
+        // No colour, no external diff tool, full context off: the output is
+        // parsed and shown to a model, not to a terminal.
+        return g('diff', '--no-color', '--no-ext-diff', range);
+      } catch (error) {
+        throw new RedlineError(
+          'usage',
+          `cannot diff ${range}: ${stderrText(error)}`,
+          'check the ref exists — `git fetch` first if it is a branch you have not pulled'
+        );
+      }
+    },
+    mergeBase(ref) {
+      try {
+        return g('merge-base', ref, 'HEAD');
+      } catch (error) {
+        throw new RedlineError(
+          'usage',
+          `cannot find the merge base with ${ref}: ${stderrText(error)}`,
+          'fetch the base branch first, or pass --base with one you have'
+        );
+      }
+    },
+    diffStaged() {
+      try {
+        return g('diff', '--no-color', '--no-ext-diff', '--cached');
+      } catch (error) {
+        throw new RedlineError('usage', `cannot read the staged diff: ${stderrText(error)}`);
+      }
+    },
     checkoutNewBranch(name) {
       try {
         g('checkout', '-B', name);

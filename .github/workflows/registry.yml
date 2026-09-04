@@ -1,0 +1,67 @@
+# Publishes registry.json — the derived register of onboarded repositories.
+#
+# The register is discovered from .redline.json across the org, so it is always a
+# statement about the estate's current state rather than a list somebody maintained.
+# redline sync (Phase 0.2) and verify-onboarding (Phase 0.3) both read it, and the
+# dashboard reports coverage from it.
+#
+# This job commits to the default branch of THIS repository. That is a deliberate
+# exception for a derived artifact in Redline's own repo, not a precedent: the
+# principle Redline holds for repositories it governs — it never pushes to a default
+# branch — is unchanged. If the source repo is ever onboarded to its own ruleset the
+# push is refused and this job fails loudly, which is the intended behaviour: the
+# fallback is to publish the register to the metrics repo, never to open a nightly
+# pull request nobody merges.
+name: Redline Registry
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: redline-registry
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci
+
+      - name: Build CLI
+        run: npm run build
+
+      - name: Discover onboarded repositories
+        env:
+          GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          SOURCE: ${{ github.repository }}
+        run: node dist/bin/redline.js registry
+
+      - name: Commit the register if it changed
+        run: |
+          set -euo pipefail
+          # `git diff --quiet` reports NO change for an untracked file, so on the very
+          # first run — when registry.json does not exist in the tree yet — it would
+          # exit 0 and the register would never be committed at all. Ask git what it
+          # actually sees instead.
+          if [ -z "$(git status --porcelain -- registry.json)" ]; then
+            echo "Register unchanged."
+            exit 0
+          fi
+          git config user.name  'redline-bot'
+          git config user.email 'redline-bot@users.noreply.github.com'
+          git add registry.json
+          git commit -m 'chore(registry): refresh onboarded repository register'
+          git push

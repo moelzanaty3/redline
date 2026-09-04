@@ -1,6 +1,6 @@
 {
   "$comment": "Single source of truth for Redline. scripts/render.mjs turns this into vendor-specific artifacts. Never hand-edit generated output.",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "core": {
     "title": "Redline Core Engineering Standards",
     "source": "standards/core.md"
@@ -9,7 +9,12 @@
     "javascript": {
       "title": "JavaScript",
       "source": "standards/stacks/javascript.md",
-      "globs": ["**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"]
+      "globs": [
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.mjs",
+        "**/*.cjs"
+      ]
     },
     "react": {
       "title": "React (web)",
@@ -26,7 +31,9 @@
     "react-native": {
       "title": "React Native",
       "source": "standards/stacks/react-native.md",
-      "extends": ["react"],
+      "extends": [
+        "react"
+      ],
       "globs": [
         "**/*.tsx",
         "**/*.native.ts",
@@ -64,53 +71,106 @@
     "java": {
       "title": "Java (Spring Boot)",
       "source": "standards/stacks/java.md",
-      "globs": ["**/*.java"]
+      "globs": [
+        "**/*.java"
+      ]
     },
     "go": {
       "title": "Go",
       "source": "standards/stacks/go.md",
-      "globs": ["**/*.go"]
+      "globs": [
+        "**/*.go"
+      ]
     },
     "python": {
       "title": "Python",
       "source": "standards/stacks/python.md",
-      "globs": ["**/*.py"]
+      "globs": [
+        "**/*.py"
+      ]
     },
     "csharp": {
       "title": "C# (.NET)",
       "source": "standards/stacks/csharp.md",
-      "globs": ["**/*.cs"]
+      "globs": [
+        "**/*.cs"
+      ]
     },
     "kotlin": {
       "title": "Kotlin",
       "source": "standards/stacks/kotlin.md",
-      "globs": ["**/*.kt", "**/*.kts"]
+      "globs": [
+        "**/*.kt",
+        "**/*.kts"
+      ]
     },
     "swift": {
       "title": "Swift (iOS)",
       "source": "standards/stacks/swift.md",
-      "globs": ["**/*.swift"]
+      "globs": [
+        "**/*.swift"
+      ]
     },
     "terraform": {
       "title": "Terraform / HCL",
       "source": "standards/stacks/terraform.md",
-      "globs": ["**/*.tf", "**/*.tfvars", "**/*.hcl"]
+      "globs": [
+        "**/*.tf",
+        "**/*.tfvars",
+        "**/*.hcl"
+      ]
     }
   },
   "$profileComment": "A repo installs exactly one profile. Profiles are the disambiguation mechanism: glob negation is not portable across vendors, so we never install two rule sets that would contradict each other in the same repo.",
   "profiles": {
-    "tooling": ["javascript"],
-    "web": ["javascript", "react"],
-    "mobile-rn": ["javascript", "react", "react-native"],
-    "mobile-android": ["kotlin"],
-    "mobile-ios": ["swift"],
-    "service-java": ["microservices", "java"],
-    "service-go": ["microservices", "go"],
-    "service-node": ["javascript", "microservices", "nodejs"],
-    "service-python": ["microservices", "python"],
-    "service-dotnet": ["microservices", "csharp"],
-    "infra": ["terraform"],
-    "fullstack-node": ["javascript", "react", "microservices", "nodejs"]
+    "tooling": [
+      "javascript"
+    ],
+    "web": [
+      "javascript",
+      "react"
+    ],
+    "mobile-rn": [
+      "javascript",
+      "react",
+      "react-native"
+    ],
+    "mobile-android": [
+      "kotlin"
+    ],
+    "mobile-ios": [
+      "swift"
+    ],
+    "service-java": [
+      "microservices",
+      "java"
+    ],
+    "service-go": [
+      "microservices",
+      "go"
+    ],
+    "service-node": [
+      "javascript",
+      "microservices",
+      "nodejs"
+    ],
+    "service-python": [
+      "microservices",
+      "python"
+    ],
+    "service-dotnet": [
+      "microservices",
+      "csharp"
+    ],
+    "infra": [
+      "terraform"
+    ],
+    "fullstack-node": [
+      "javascript",
+      "react",
+      "microservices",
+      "nodejs"
+    ]
   },
   "$aliasComment": "Legacy profile names accepted by sync-targets.txt for backwards compatibility.",
   "profileAliases": {
@@ -137,6 +197,18 @@
     "cursor": {
       "title": "Cursor rules",
       "enabled": false
+    },
+    "skills": {
+      "$comment": "Ships off. It renders the same rules as the claude vendor in a different shape, and a repository selecting both loads every stack twice. Select it INSTEAD of claude where per-stack loading is wanted: redline init --vendors skills,copilot,agents.",
+      "title": "Claude skills (per-stack, loaded on demand)",
+      "enabled": false
     }
-  }
+  },
+  "$deterministicComment": "Rules a checker decides without a model. The classification lives HERE and not in the markdown deliberately: standards/*.md is what a reviewer reads, and removing a rule from it because a checker also covers it would narrow what the model considers. Every rule is classified by construction \u2014 listed here means deterministic, absent means judgement. Ids are permanent and are never rewritten by this list. scripts/validate.mjs fails the build if an id here has no implementation in cli/policy/checks.ts, which is the failure mode where a rule is silently enforced by nobody.",
+  "deterministic": [
+    "core/untracked-todo",
+    "core/type-checker-suppression",
+    "javascript/var-in-new-code",
+    "javascript/unsafe-numeric-coercion"
+  ]
 }

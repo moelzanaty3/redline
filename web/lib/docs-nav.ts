@@ -1,16 +1,36 @@
-import { SCRIPTS, STANDARDS, TEMPLATES, WORKFLOWS } from "@/lib/registry";
+import { COMMANDS, PLANS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
 
 export type DocLink = {
   title: string;
   href: string;
   description: string;
   keywords: string;
+  // Every item in a reference category gets its own page, and the sidebar lists
+  // them rather than hiding them behind an index of cards. A category page that
+  // only fans out to cards reads as "workflows are one page", which is exactly
+  // what it is not — there are eight of them and each has its own onboarding,
+  // edit loop and output.
+  children?: DocLink[];
 };
 
 export type DocSection = {
   label: string;
   links: DocLink[];
 };
+
+// A registry entry becomes a child link under its category. Keywords carry the
+// category word so ⌘K finds "javascript standard" as readily as "javascript".
+const childrenOf = (
+  entries: RegistryEntry[],
+  base: string,
+  keywords: string,
+): DocLink[] =>
+  entries.map((e) => ({
+    title: e.title,
+    href: `${base}/${e.slug}`,
+    description: e.description,
+    keywords: `${keywords} ${e.file} ${e.slug}`,
+  }));
 
 export const DOCS_NAV: DocSection[] = [
   {
@@ -23,6 +43,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "overview what is redline oversight ai review standards architecture delivery loop",
       },
       {
+        title: "Quickstart",
+        href: "/docs/quickstart",
+        description: "Onboard one repository and see what it changed. Ten minutes, nothing blocked at the end.",
+        keywords: "quickstart quick start get started first repo onboard dry run ten minutes try it",
+      },
+      {
         title: "Installation",
         href: "/docs/installation",
         description: "Install the CLI, install the gate workflow into the org, onboard a repo.",
@@ -33,6 +59,19 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/onboarding",
         description: "One command per repo, on GitHub or Azure DevOps, then verify the gate is real.",
         keywords: "onboard repo redline init verify profile security floor merge policy pending admin azure github",
+      },
+      {
+        title: "Adopting Redline",
+        href: "/docs/adopting",
+        description: "Day one to month two: what happens in order, and when it is reasonable to start blocking merges.",
+        keywords: "adopting rollout adoption path day one week one month two pilot promote blocking evidence ownership break glass",
+      },
+      {
+        title: "CLI commands",
+        href: "/docs/cli",
+        description: "Four commands, deliberately — what init and verify do, and what sync and review would do once built.",
+        keywords: "cli command redline init verify sync review flags dry-run skip with repair blocking gate exit codes",
+        children: childrenOf(COMMANDS, "/docs/cli", "cli command"),
       },
     ],
   },
@@ -58,10 +97,52 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "gate merge redline-gate redline/gate required check ruleset checklist adr secret scan exempt label azure github advisory blocking",
       },
       {
+        title: "Deterministic rules",
+        href: "/docs/deterministic",
+        description: "The share of the standard a checker decides without a model — and why the classification is not in the markdown.",
+        keywords: "deterministic policy tier checker no model todo ticket suppression radix added lines classification manifest",
+      },
+      {
+        title: "Exemptions",
+        href: "/docs/exemptions",
+        description: "Merging with a failing process check, on the record: who accepted what, why, and until when.",
+        keywords: "exemption redline-exempt label reason until scope expiry 90 days waiver process checks security floor grace warn require",
+      },
+      {
+        title: "Enforcement ladder",
+        href: "/docs/enforcement",
+        description: "Four rungs a repository climbs on evidence — and steps back from without asking.",
+        keywords: "enforcement ladder rung observe warn block-blocker block-high promotion evidence demotion market floor advisory blocking",
+      },
+      {
+        title: "Reviewing before you push",
+        href: "/docs/local-review",
+        description: "redline review: only the rules that apply to what you changed, in either engine.",
+        keywords: "local review redline review staged diff engine embedded api ollama local model bounded prompt findings schema telemetry excluded",
+      },
+      {
+        title: "Distribution & drift",
+        href: "/docs/distribution",
+        description: "How a standards change reaches the estate, and how a repository that ignores it becomes visible.",
+        keywords: "distribution sync registry register drift verify remote weekly sweep tracking issue coverage markers agents.md",
+      },
+      {
+        title: "Scanner ingestion",
+        href: "/docs/ingestion",
+        description: "Consuming CodeQL, Snyk and Semgrep under one severity contract — measured, never gating.",
+        keywords: "sarif ingestion code scanning codeql snyk semgrep severity map provenance source tool aggregation acted-on",
+      },
+      {
         title: "Telemetry & validation",
         href: "/docs/telemetry",
         description: "Acted-on findings, seeded corpus scoring, digest and inbox.",
         keywords: "telemetry metrics digest teams inbox acted-on noise recall precision seeded corpus validation score",
+      },
+      {
+        title: "Cost and value",
+        href: "/docs/cost",
+        description: "Cost per BLOCKER caught, DORA beside it, and every figure that refuses rather than approximates.",
+        keywords: "cost roi value spend dora lead time change failure rate deployment frequency mttr finance stakeholder blocker caught",
       },
     ],
   },
@@ -87,6 +168,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "agents.md adaptor codex jules devin cursor agent openai concatenated",
       },
       {
+        title: "Claude skills",
+        href: "/docs/adaptors/skills",
+        description: "Per-stack rules that load only when that stack is in play — measured, and not always worth it.",
+        keywords: "claude skills adaptor per-stack conditional loading context window SKILL.md frontmatter description trigger",
+      },
+      {
         title: "Cursor rules",
         href: "/docs/adaptors/cursor",
         description: "Scoped .mdc rules for the Cursor IDE.",
@@ -108,18 +195,34 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/standards",
         description: "What a standard is, what a developer actually sees, and a rule reference per stack.",
         keywords: "standards rules source copy core stacks markdown severity output contract rule id profile",
+        children: childrenOf(STANDARDS, "/docs/standards", "standard rules source"),
       },
       {
         title: "Workflows",
         href: "/docs/workflows",
         description: "What each workflow does, what triggers it, where it lives, and whether it works in Phase 1.",
         keywords: "workflows github actions gate sync collect digest inbox canary phase 1 disabled azure",
+        children: childrenOf(WORKFLOWS, "/docs/workflows", "workflow github actions"),
       },
       {
         title: "Templates & rulesets",
         href: "/docs/templates",
         description: "What each template is, who installs it and where, and what's a live ruleset vs. a reference shape.",
         keywords: "templates codeowners caller ruleset branch protection json azure pull request checklist",
+        children: childrenOf(TEMPLATES, "/docs/templates", "template ruleset"),
+      },
+      {
+        title: "What changed",
+        href: "/docs/changes",
+        description: "Release notes, read from CHANGELOG.md at build time so they cannot drift from the record.",
+        keywords: "changelog release notes what changed history versions unreleased upgrade",
+      },
+      {
+        title: "Seeded corpus",
+        href: "/docs/seeds",
+        description: "Known-bad code and known-good code beside it — how Redline measures whether the reviewer still works.",
+        keywords: "seeded corpus validation recall precision false positive canary score-seeds marker clean known bad",
+        children: childrenOf(SEEDS, "/docs/seeds", "seeded corpus validation"),
       },
     ],
   },
@@ -131,46 +234,33 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/scripts",
         description: "Internal maintainer tooling for this repo's own CI, telemetry and validation — not something an onboarded repo runs.",
         keywords: "scripts maintainer ci validate score collect digest inbox dashboard assign-rule-ids check-pins render-self internal redline-metrics",
+        children: childrenOf(SCRIPTS, "/docs/scripts", "script source"),
+      },
+      {
+        title: "Roadmap & plans",
+        href: "/docs/roadmap",
+        description: "Where Redline is going, why it stops where it does, and the record of how each piece was built.",
+        keywords: "roadmap spec plan phase harness sarif skills policy tier dora cost enforcement exemptions review correlation non-goals",
+        children: childrenOf(PLANS, "/docs/roadmap", "roadmap spec plan"),
       },
     ],
   },
 ];
 
-export const FLAT_DOCS: DocLink[] = DOCS_NAV.flatMap((s) => s.links);
+// Children are inlined directly after their parent, so prev/next walks the docs
+// in reading order: Standards → core → manifest → javascript → … → Workflows.
+export const FLAT_DOCS: DocLink[] = DOCS_NAV.flatMap((s) =>
+  s.links.flatMap((l) => [l, ...(l.children ?? [])]),
+);
 
 export type SearchEntry = DocLink & { group: string };
 
-export const SEARCH_INDEX: SearchEntry[] = [
-  ...DOCS_NAV.flatMap((s) => s.links.map((l) => ({ ...l, group: s.label }))),
-  ...STANDARDS.map((e) => ({
-    title: e.title,
-    href: `/docs/standards/${e.slug}`,
-    description: e.description,
-    keywords: `standard rules source ${e.file} ${e.slug}`,
-    group: "Standards",
-  })),
-  ...SCRIPTS.map((e) => ({
-    title: e.title,
-    href: `/docs/scripts/${e.slug}`,
-    description: e.description,
-    keywords: `script source ${e.file} ${e.slug}`,
-    group: "Scripts",
-  })),
-  ...WORKFLOWS.map((e) => ({
-    title: e.title,
-    href: `/docs/workflows/${e.slug}`,
-    description: e.description,
-    keywords: `workflow github actions ${e.file} ${e.slug}`,
-    group: "Workflows",
-  })),
-  ...TEMPLATES.map((e) => ({
-    title: e.title,
-    href: `/docs/templates/${e.slug}`,
-    description: e.description,
-    keywords: `template ruleset ${e.file} ${e.slug}`,
-    group: "Templates",
-  })),
-];
+export const SEARCH_INDEX: SearchEntry[] = DOCS_NAV.flatMap((s) =>
+  s.links.flatMap((l) => [
+    { ...l, group: s.label },
+    ...(l.children ?? []).map((c) => ({ ...c, group: l.title })),
+  ]),
+);
 
 export function adjacentDocs(href: string): {
   prev: DocLink | null;

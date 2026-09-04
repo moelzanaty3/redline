@@ -161,12 +161,18 @@ export function render(opts: RenderOptions): RenderResult {
     for (const file of readdirSync(abs)) {
       if (!rule.matches(file)) continue;
       const relPath = join(rule.dir, file);
-      if (planned.has(relPath)) continue;
+      // A directory-shaped artifact is still planned when anything planned lives
+      // inside it. Asking whether the directory itself is planned is always
+      // false, which would delete every one of them on every render.
+      const stillPlanned = rule.directories
+        ? [...planned.keys()].some((p) => p.startsWith(`${relPath}/`))
+        : planned.has(relPath);
+      if (stillPlanned) continue;
       if (check) {
         staleRemovals.push(relPath);
         continue;
       }
-      rmSync(join(abs, file));
+      rmSync(join(abs, file), rule.directories ? { recursive: true, force: true } : {});
       removed.push(relPath);
     }
   }

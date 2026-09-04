@@ -5,7 +5,454 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
-## Unreleased — hardening
+## Unreleased — first release, 0.0.1
+
+### Review pass — fourteen defects found before merge
+
+- **Every exemption was rejected.** The pull request template explains each field in a
+  comment that necessarily contains the words `reason:`, `until:` and `scope:`, and the
+  parser read the instructions instead of the author's answer. A correctly filled exemption
+  parsed `until` as the sentence describing it. Both parsers now strip HTML comments, and the
+  regression test reads the real shipped template rather than a fixture — a fixture is exactly
+  what would have kept passing.
+- **`redline review` with no flags reviewed nothing uncommitted.** It ran
+  `git diff base...HEAD`, which compares two commits and cannot see the working tree — so the
+  daily command failed at the case it exists for. It now diffs against the merge base
+  directly, which keeps the property three dots was chosen for and includes uncommitted work.
+- **A deleted file became a phantom added line.** `+++ /dev/null` did not match the file
+  header, fell through to the added-line branch, and was attributed to the *previous* file —
+  so deleting a file could raise a finding on a file the change never touched. The
+  `/dev/null` guard that was supposed to prevent this was unreachable.
+- **Ingested scanner counts were multiplied by pull request volume.** Code-scanning alerts
+  are a fact about a repository; stamping the snapshot on every merged pull request and
+  summing them turned 12 alerts across 40 merges into 480. Counted once per repository now.
+- **A scoped exemption waived everything.** The gate called `redline exempt` without
+  `--scope`, so the field was recorded, displayed, and never evaluated.
+- **`block-high` did nothing `block-blocker` did not.** The rung was never passed to
+  `redline policy`, so the strictest rung on the ladder was behaviourally identical to the one
+  below it.
+- **An unrecognised rung enforced in the gate and observed in the CLI.** Two halves
+  disagreeing meant a typo blocked every pull request in a repository the CLI reported as
+  observing. Both now fail toward not enforcing.
+- Smaller: a partly unreadable security floor verified as healthy; sync computed stale
+  artifacts and discarded them, reporting a drifted repository as current; the deterministic
+  checker flagged its own correct `parseInt` calls and fired on the word "var" inside
+  comments; an exemption exactly at the 90-day maximum was refused as 91; a mistyped
+  `--provider` silently became `openai`.
+- **Process:** `actionlint` silently skips shell linting when `shellcheck` is absent, which it
+  was in the environment this branch was developed in. Local runs reported clean on a strictly
+  weaker check than CI's.
+
+### The documentation site catches up with the product
+
+- The reference layer was complete — 61 per-item pages, every command, every rule — and the
+  conceptual layer had stopped at Phase 1. Someone importing the framework read about a merge
+  gate and profiles and never learned that exemptions, an enforcement ladder, scanner
+  ingestion, cost measurement, a deterministic tier, local review or a distribution loop
+  existed. Seven concept pages now cover them, each leading with the decision rather than the
+  mechanism.
+- A **quickstart** that onboards one repository in four steps and ends with nothing blocked,
+  and an **adoption path** — day one to month two — whose answer to "when do we start
+  enforcing" is later than most people expect and on evidence rather than a date.
+- A **what changed** page, parsed from `CHANGELOG.md` at build time so it cannot drift. A
+  release-notes page maintained by hand is accurate the day it ships and misleading a month
+  later.
+- The homepage and the introduction stop describing Phase 1. The introduction now states the
+  boundary out loud — Redline governs a change while it is still a diff, has no opinion on
+  delivery or cloud spend, and its data ends at merge — and names the property that runs
+  through the whole system: **it refuses rather than approximates.** A check that could not
+  run reports `??`, an unmeasurable figure is absent with its reason, a correlation below its
+  sample threshold is withheld.
+- One homepage claim had become false and is gone: telemetry and scoring no longer "run
+  outside the CLI".
+
+### `redline metrics` — the estate runners get a front door
+
+- Running a measurement meant cloning the metrics repo, knowing the file path, and knowing
+  that `SPEND_GRAIN` existed at all. Env-var-only configuration is the genuinely
+  old-fashioned part, not the file extension: there is no `--help`, so the only way to
+  discover an option was to read the source. `redline metrics <command>` and
+  `redline registry` own configuration now, with a flag surface declared as data — which is
+  what makes it testable, and what guarantees help and validation cannot disagree, because
+  they are generated from the same table.
+- **Every refusal here used to be silent.** A mistyped `--spend-grain per-seat` became
+  `unknown` and made the resulting number quietly less trustworthy than it looked; a
+  non-numeric `--days` became `NaN` and produced an empty window; a missing token surfaced as
+  a 401 halfway through an org walk. All three are now refused by name before anything runs.
+- **The metrics repo no longer needs a copy of `scripts/`.** It checked itself out and ran
+  `node scripts/build-dashboard.mjs`, which meant keeping the runners duplicated there. Those
+  workflows call `npx redline-cli@<version> metrics …` and own nothing but their own `data/`.
+  The inbox workflow, which runs in the source repo, deliberately uses the local build
+  instead: a broken command there should fail before the release, not after it.
+- A runner that throws is reported as a host failure with a hint, not as "redline failed
+  unexpectedly" — that catch-all is for internal defects, and telling a reader the tool is
+  broken when their token is wastes an afternoon.
+- Credentials are never forwarded on a command line, even for the runner that parses its own
+  argv. A command line is visible in the process table and lands in shell history.
+- **The four build internals stay scripts** — `validate`, `assign-rule-ids`, `render-self`,
+  `check-pins`. They act on this repository's own `standards/`, and a command that exists but
+  cannot work on your repository is a worse promise than one that does not exist.
+
+### Ignored-finding correlation — research, reported with its confidence
+
+- Redline could say a rule was ignored and not that ignoring it mattered. Where a finding was
+  left unresolved and the same repository later attracted a revert or a hotfix, that is
+  evidence the rule earns its place — computed from merged-pull-request history alone, with no
+  incident feed, which keeps it inside the roadmap's non-goals.
+- **The refusal is the feature.** The roadmap calls this the most speculative item on the list
+  and says to cut it without regret if the signal is too weak, so a rule below the sample
+  threshold gets no rate at all — just a statement of how many ignored findings it has and how
+  many are needed. Below the threshold the rate exists arithmetically and means nothing, and
+  publishing it anyway is how a coincidence becomes a rule nobody can argue with.
+- The output carries a verdict on the *experiment*, not only on each rule. "Not reportable" is
+  the honest result of a weak sample rather than a failure, and no ignored findings at all is
+  reported as a good result rather than as an empty one.
+- Where a rate is reported the caveat travels with it: correlation, not causation, and a weak
+  one. It is for prioritising which rules to examine, never for justifying a rule on its own.
+- A remediation's own ignored findings are not attributed to anything. Counting them would let
+  a single incident inflate every rule that happened to fire on the fix.
+
+### `redline review` — the daily command, bounded to what applies
+
+- The last of v3's four commands, and the answer to every request for "catch it before I
+  push". It reviews the working tree, staged changes or any diff against **only** the rules
+  that apply to the files it touches. That bound is the product: anyone can ask an assistant
+  to review a diff, and a model handed the composed standard for a twelve-stack profile
+  spends most of its attention on languages the change never touches — the findings get
+  worse, not better.
+- **Two engines, and `embedded` is the default because it calls no model at all.** It emits
+  the bounded prompt for the assistant already running the command, which is the common case
+  in Claude Code, Copilot or Cursor. That is the design rather than a stub: calling a second
+  model from inside the first one's session pays twice for a worse answer. `--engine api`
+  speaks OpenAI-compatible and Anthropic, and the OpenAI-compatible half covers the fully
+  local case for free — Ollama, LM Studio and vLLM all expose it, and a local endpoint needs
+  no key. A review that must send a diff to a third party is one several markets cannot run.
+- **The output contract is rendered by code, never free-typed by the model.** The model
+  returns JSON against a published schema; the CLI validates it and writes the
+  `Redline/<SEVERITY> [rule-id]:` line itself. A model that writes that prefix will eventually
+  write a severity that does not exist or an id it invented, and every aggregate keyed on that
+  line becomes fiction. A finding citing a rule the prompt did not carry is discarded and the
+  reason is said out loud.
+- **Local findings never reach rule-tuning telemetry**, and the report says so on every run.
+  A local run has no thread to resolve, no reviewer to attribute, and no way to tell a finding
+  that was fixed from one the author never read — counting it would compute acted-on rate
+  partly from runs nobody can verify. `scripts/validate.mjs` fails the build if that exclusion
+  is ever removed.
+- It always exits 0. A non-zero exit would invite someone to wire it into CI as a second gate,
+  where it would enforce nothing while looking like it did — the pull request review remains
+  the system of record.
+- A changed file no stack covers is reported rather than dropped: that is a gap in the
+  standard, and reviewing it against the core rules alone while saying nothing hides it.
+
+### Graduated enforcement — a ladder a repository climbs on evidence
+
+- Enforcement was binary: advisory, or blocking with `--blocking`. Neither end works across
+  hundreds of repositories. Rolling blocking to all of them in one step is not achievable, and
+  leaving everything advisory means the organisation can never state a guarantee about any of
+  them. Four rungs now: `observe`, `warn`, `block-blocker`, `block-high`, recorded in
+  `.redline.json`, carried in the register, and written into each repository's caller workflow
+  so the gate needs no second source of truth.
+- **Answers v3 §15 Q2: evidence-gated self-service.** A repository promotes itself when the
+  recorded evidence supports it — seed BLOCKER recall at 100%, zero false positives on the
+  clean corpus, an acted-on rate above the rung's threshold, and a sample large enough that
+  the rate is not a coincidence. It cannot promote on assertion, it cannot skip a rung (the
+  rung it would skip is where the evidence for the next one is gathered), and a refusal names
+  the specific blocker rather than saying no.
+- **Demotion never needs evidence.** The safe direction never needs permission: a repository
+  whose gate is misfiring at 3am must be able to step back without waiting for anyone, and a
+  ladder that made that hard would be switched off entirely rather than stepped down.
+- **Answers open question 3: per repository, with a per-market floor.** A market may raise its
+  minimum rung; it may not push a repository below the rung it has already reached. A
+  repository under its market's floor is reported as out of policy rather than as drift,
+  because a different person has to act.
+- A run that says nothing about enforcement never changes the rung, and an unrecognised or
+  hand-edited rung reads back as `observe`. Both failure directions point the same way: a typo
+  must never be able to make a repository stricter than anyone chose.
+- **The security floor is not on the ladder.** Dependency review and the secret scan block at
+  every rung including `observe`. The ladder governs how strictly a repository's own standards
+  are enforced, never whether the organisation's security minimum applies to it.
+- The dashboard reports how much of the estate is actually enforcing rather than watching —
+  the question the ladder exists to answer, and one no per-repository view can show. An
+  unreadable register leaves it absent rather than zeroed: zero blocking repositories and an
+  unreadable register look nothing alike to whoever has to act.
+
+### Cost and DORA — what review cost against what it caught
+
+- Redline could prove review works and could not say what it cost. `scripts/build-roi.mjs`
+  now produces the page the roadmap's exit condition asks for: one page a finance stakeholder
+  can read, sourced entirely from collected data. The headline is **cost per BLOCKER caught**
+  — a figure nobody else in the toolchain can compute, because a cost-management tool knows
+  spend and has no findings, and a DORA tool has neither.
+- **Value is what was acted on, not what was reported.** A finding nobody acted on caught
+  nothing, and counting it would let the return be inflated by producing more noise — the
+  exact behaviour the guardrails exist to prevent.
+- **Answers open question 2 by refusing to guess.** Spend carries its grain, and an org-level
+  figure will not answer a per-repository question: it says to publish org-level cost against
+  org-level value instead. Org spend divided by repository count and presented as
+  per-repository cost looks precise, is invented, and is the number a stakeholder would act on.
+- Lead time and change failure rate come from merged-pull-request data the collector already
+  pulls. Deployment frequency is reported as **unknown, not zero**, where a repository does
+  not use the deployments API — assuming one deploy per merge reports a trunk-based team and a
+  quarterly-release team as identical, which is the exact distinction the metric draws.
+- **MTTR is refused by name**, so nobody wonders whether it was forgotten. It needs an
+  incident feed Redline does not have and should not acquire, and a wrong MTTR is the number
+  most likely to be quoted at someone who will act on it.
+- The change-failure caveat travels with the number rather than living in a doc: it is a
+  floor, not the true rate, because a revert or hotfix is evidence of a failed change rather
+  than proof, and a team that fixes forward without saying "hotfix" scores better than one
+  that labels honestly.
+- The collector now records each pull request's title and first commit timestamp, which is
+  what lead time and change failure rate are derived from. A pull request whose first commit
+  the API did not return is left absent rather than defaulted to the merge time, which would
+  report a lead time of zero and drag the median toward a number no team achieved.
+
+### Standards v0.0.3 — the deterministic policy tier
+
+- A share of what the standard asserts needs no model. A ticket reference is present or it
+  is not; a type-checker suppression carries one or it does not. Sending those to an LLM
+  costs tokens and invites a false positive on a *fact*, which is the worst kind — an author
+  cannot argue with a model about whether the word TODO appears on a line. `redline policy`
+  evaluates them directly, and the gate runs it on every pull request.
+- **The classification lives in `standards/manifest.json`, not in the markdown.** The roadmap
+  rates this the highest-risk item because it changes the shape of the source of truth, and
+  this is the change that removes most of that risk: `standards/*.md` is what a reviewer
+  reads, and deleting a rule from it because a checker also covers it would narrow what the
+  model considers. Every rule is classified by construction — listed means deterministic,
+  absent means judgement — and **not one rule id changed**, because every historical
+  telemetry record is keyed on them.
+- **No rule changed meaning.** Where a check can only decide part of a rule it decides that
+  part and the model still sees the whole rule. `javascript/unsafe-numeric-coercion` is
+  checked for a missing `parseInt` radix; whether a `Number()` coercion is applied to user
+  input is judgement and stays with the model.
+- Only ADDED lines are examined, which is a rule rather than an optimisation. Flagging an
+  existing `var` in a file the author merely renamed is exactly what the standard's "what NOT
+  to flag" section forbids, and an author who is right to ignore one finding learns to ignore
+  the next one too.
+- `scripts/validate.mjs` fails the build if a rule is classified deterministic and has no
+  implementation. That failure — a rule everyone believes is machine-checked and which is in
+  fact checked by nobody — is worse than leaving it to the model, because the model would at
+  least have looked.
+- The floor is BLOCKER, not HIGH. A deterministic tier that failed merges over a missing
+  ticket reference on day one would be switched off by week two, and then nothing it decides
+  is enforced at all. A repository can raise it with `--fail-on`.
+- `core/hardcoded-secrets` is deliberately NOT in the tier. A regex over added lines is how a
+  secret scanner earns a reputation for false positives; the gate already runs a real one
+  against verified secrets, and the model keeps the rule for what a scanner misses.
+- Verified against the seeded corpus: the tier flags `seeded/javascript`'s SEED 8 at the
+  right line, and seed recall is unaffected because nothing was removed from what the model
+  is asked to consider.
+
+### Claude skills — per-stack rules, and an honest measurement of what they cost
+
+- A fifth render target closes a real asymmetry. Copilot gets `applyTo` globs and loads a
+  stack's rules only when that stack's files are in play; Claude got `CLAUDE.md` →
+  `@AGENTS.md` — the whole composed standard, every turn, for the life of every session. The
+  `skills` vendor renders one `.claude/skills/redline-<stack>/SKILL.md` per stack plus a core
+  skill, and a skill loads on its description, so the description names the stack and its
+  file extensions.
+- **`standards/` is unchanged by this work.** It is packaging, not authoring: each skill body
+  is the stack's own markdown byte for byte, and no Claude-shaped concept leaks backward into
+  how a rule is written.
+- **The measurement, including where it loses.** `scripts/measure-context.mjs` reproduces it:
+  multi-stack profiles save 19.7% to 48.3%, and **single-stack profiles cost about 5% more** —
+  with one stack there is no second one to avoid loading, so the frontmatter is pure overhead.
+  Both directions are pinned by tests. The roadmap makes this piece conditional on paying for
+  itself, so quoting only the wins would have been marketing.
+- It ships **disabled** at the org level and is selected *instead of* `claude`, never
+  alongside it: the two render the same rules in different shapes, and a repository with both
+  loads every stack twice. A render target that changes what every Claude session loads should
+  not switch itself on across an estate in a patch release.
+- `PruneRule` grew a `directories` flag, because a skill is a directory rather than a file.
+  Without it every skill directory looked unplanned on every render and would have been
+  deleted and rewritten each time.
+
+### SARIF ingestion — one severity contract across every producer
+
+- Redline was one more finding producer competing with scanners it should have been
+  consuming. Its own diff secret scan and dependency review are weaker than a real scanner
+  stack and always will be. The collector now ingests code-scanning alerts from repositories
+  that already run one, puts them through the same three-severity contract, and reports them
+  beside Redline's own — so the estate has one picture instead of five dashboards.
+- **Ingested findings are always distinguishable from Redline's, everywhere.** This is the
+  one way this piece could make things worse than not doing it: rule tuning reads the finding
+  stream, and a view that could not tell a CodeQL finding from a Redline one would tune
+  Redline's rules on another tool's noise. So an ingested finding keeps the producer's own
+  rule id — never rewritten into a Redline id, which would make every rule aggregate in the
+  estate fiction — carries its tool, and aggregates in its own bucket. Acted-on rate is
+  computed within each source and never across: Redline's is a resolved review thread, a
+  scanner's is a closed alert, and averaging two definitions describes neither.
+- **Answers roadmap open question 4: ingested findings never gate a merge.** They are
+  measured only. Gating on another tool's output makes Redline responsible for that tool's
+  false positives, and `scripts/validate.mjs` fails the build if the gate ever starts reading
+  code scanning.
+- Severity mapping is configurable per repository and visible in every record. The roadmap
+  names this as Phase 1's risk and it is right — it is a judgement call that will be wrong
+  somewhere. So each finding carries both the mapped severity and the producer's own word, a
+  severity the map does not know is reported rather than absorbed, and an unrecognised one
+  falls back to SUGGESTION and never BLOCKER: a wrong BLOCKER blocks a merge and teaches
+  people the gate is noise, a wrong SUGGESTION is a line in a report.
+- Redline never runs a scanner and no repository is asked to change which ones it runs. A
+  repository with code scanning disabled, or a token that cannot see security data, is a fact
+  about that repository rather than a failed collection run.
+- The dashboard gains a Finding sources view showing both catalogues side by side. When it
+  is empty, that is the answer to the roadmap's open question 1 — and the signal that SARIF
+  ingestion was not where the next effort belonged.
+
+### Standards v0.0.2 — structured exemptions
+
+- `redline-exempt` was a bare label. It downgraded the process checks to warnings and
+  recorded nothing: not who accepted the failing check, not why, not until when. An
+  exemption nobody has to justify and nobody revisits is not an exemption, it is an opt-out.
+  The gate now reads a `## Redline exemption` block carrying a **reason** (at least 20
+  characters — "needed for release" tells a later reader nothing), a **scope**, and an
+  **expiry** of at most 90 days. Longer than 90 days is a standards change, not an
+  exemption.
+- **This is a behaviour change for every onboarded repository, and it ships behind a
+  grace.** The gate's new `exemption-enforcement` input defaults to `warn`: a label without
+  a valid block is accepted and told what is missing. A repository moves to `require` one
+  standards version later, so nobody's open pull request is failed by a rule that did not
+  exist when they opened it.
+- **Unchanged, and load-bearing:** an exemption still touches the process checks only. It
+  has never been able to waive dependency review or the diff secret scan, and it still
+  cannot.
+- Redline's own sync pull requests carry a real exemption block rather than being a special
+  case in the gate — one rule for everyone is worth more than a convenience for the tool
+  that wrote the rule. The generated exemption expires after 30 days, so **a sync pull
+  request nobody merges starts failing its own gate**, which is exactly what should happen
+  to a standards change a repository is quietly refusing.
+- The pull request template gains the section, but only where Redline is already writing a
+  block. A team whose own template already answers the gate keeps it untouched: no gate job
+  fails for the section's absence, so it must never be the reason a marker block appears in
+  a file somebody else wrote. `verify` does not report its absence as drift either.
+- The collector records the parsed exemption per pull request, so standing exemptions trend
+  and a team routing around the gate shows up as the same scope recurring — the guardrail
+  the roadmap asks for, and one a per-pull-request view can never show. The block is parsed
+  twice on purpose (the CLI enforces, the collector audits, and the collector has no build
+  step to import from), and `scripts/validate.mjs` fails the build if the two ever diverge.
+
+- `scripts/build-baseline.mjs` computes the Phase 0 baseline — the numbers every later
+  roadmap phase is judged against. The roadmap says plainly that the ordering of Phases 1-4
+  is a hypothesis until this exists and that the baseline is allowed to reorder them, so the
+  instrument is built here even though only the owner can run it with org credentials.
+- **An unmeasurable figure is `null` with its reason, never `0`.** This is the whole design
+  rule. A zero that actually means "nobody measured this" reads as a finding, and makes every
+  later comparison look like progress that did not happen: 0% coverage is a crisis, an
+  unreadable register is a Tuesday. So a merge rate with no pull requests yet is absent
+  rather than 0%, cost per BLOCKER names which half is missing rather than dividing by an
+  assumption, and a repository whose workflows the token cannot list is skipped rather than
+  counted as running no scanner.
+- `scripts/` has unit tests for the first time. `npm test` now covers
+  `scripts/**/__tests__/*.test.mjs` alongside the CLI suite, and the bundle self-check fails
+  the build if the baseline instrument goes missing.
+
+- `redline verify --repo owner/name` verifies a repository over the API, with no checkout.
+  This is what `workflows/verify-onboarding.yml` was missing, and it is no longer gated off:
+  the weekly sweep walks the register and opens one tracking issue — updated in place, never
+  one per run — naming every repository that drifted and quoting its failing checks.
+- **A check that could not run reports `??`, never `ok`.** Some assertions genuinely need a
+  working tree, and a token can be structurally unable to read a setting without that being
+  a refusal. Reporting either as a pass produces a false all-clear across the whole estate
+  at once, which is worse than not checking. An `??` also never fails a repository on its
+  own: failing on the absence of evidence trains an operator to ignore the weekly issue.
+- Both verify paths parse the gate caller with the same function. Two independent answers to
+  "what check does this file publish" would eventually disagree, and that disagreement is
+  exactly the difference between a repository reported healthy and one reported broken.
+- `--gate` and `--repo` together are refused rather than one being silently ignored: `--gate`
+  publishes *this* repository's merge status and cannot speak for another one.
+- `scripts/validate.mjs` fails the build if either distribution or drift detection is gated
+  off again or stops calling its command. Both failures are silent by nature — a repository
+  that never received a change looks exactly like one that did.
+- **Azure DevOps remote verification is outstanding**, as its sync is. An Azure entry in the
+  register is reported as unsupported rather than skipped silently.
+
+- `redline sync` — the third of v3's four commands, and the one Phase 0 exists for. A
+  standards change now reaches every onboarded repository as a pull request instead of
+  waiting for someone to re-run `redline init` there by hand. Targets come from
+  `registry.json`; each target's profile and vendors are read from its own `.redline.json`
+  live rather than from the register, so a repository that changed since the last nightly
+  walk is rendered correctly rather than confidently wrong.
+- Three properties sync holds, each of which is a way this could have gone wrong. It seeds
+  the render with the target's **current** files, so everything a team wrote above a
+  `REDLINE:BEGIN` marker survives — rendering into an empty directory would have produced a
+  correct-looking `AGENTS.md` that deleted every repository's own context section at once.
+  It **branches from the default branch, never from a stale sync branch**, so an unmerged
+  pull request from an older standards version cannot carry its changes forward. And it
+  **updates an open sync pull request rather than opening a second**, because a scheduled
+  job that opens a new pull request every night is one nobody reads.
+- A repository already carrying the current render gets nothing — no branch, no empty pull
+  request. One unreachable repository is reported and the rest of the estate still syncs,
+  but the run exits non-zero: a distribution that reports success while quietly missing
+  repositories is exactly how coverage rots.
+- `workflows/redline-sync.yml` is no longer gated off, and `scripts/validate.mjs` fails the
+  build if it is gated off again or stops calling the command. The failure it guards is
+  silent by nature — the repositories that did not receive a change look exactly like the
+  ones that did.
+- **Azure DevOps sync is outstanding.** A registered Azure repository is reported as
+  unsupported rather than skipped silently, and Phase 0's exit condition is not met until it
+  exists. Sync also never merges and never pushes to a default branch: it makes the change
+  available, and the dashboard's coverage figure is what makes an ignored one visible.
+
+- Every reference item on the documentation site is its own page, listed in the sidebar under
+  its category rather than reachable only through a wall of cards, and each answers the same
+  four questions in the same order: how to onboard it, how to use it, what output to expect,
+  and how to edit it. The edit loop is derived from the CI steps that actually guard each kind
+  of file rather than restated per item, a standard's page shows the output contract filled in
+  with one of its own rule ids and its real severity counts, and prev/next now walks items in
+  reading order instead of skipping between categories. Templates and workflows gained an
+  expected-output field they had no equivalent of — several templates are reference shapes
+  that produce nothing at all, which is worth stating rather than leaving to inference.
+- Three things the site had no page for: the CLI commands, documented only inside the
+  onboarding walkthrough; the 13 seeded corpora that decide whether the reviewer still works;
+  and the roadmap, specs and plans under `docs/`. A seed page parses its own markers, so its
+  defect table and rule links are the file's current contents rather than a copy that drifts.
+  `redline sync` and `redline review` are listed and marked not built — two of the four
+  commands v3 fixes the surface at, and whether they exist is a question the docs should
+  answer.
+- The install page asks the npm registry at build time instead of asserting a version.
+  `npx redline-cli init` could not resolve for any reader: the package has never been
+  published, and with no `v*` tag the release workflow's own first-release guard refuses to
+  publish. Published, unpublished and could-not-check are worded apart deliberately — a
+  network blip must not read as a missing release — and the lookup has a timeout, never fails
+  a build, and honours `REDLINE_NPM_VERSION` and `REDLINE_NPM_REGISTRY` for an air-gapped
+  runner or a private mirror. This also separates the two version lines that were being
+  conflated: the npm package version, which `package.json` never carries because
+  semantic-release computes it at publish time, and the standards version in
+  `standards/manifest.json`, which is what rendered artifacts name.
+- CI builds the documentation site. It reads `standards/manifest.json`, the rule catalogue and
+  `scripts/lib/rules.mjs` at build time, so a standards change can break it — and nothing in
+  CI touched `web/`, so it would have broken silently.
+- Two permission tests asserted nothing when the suite runs as root. Both stage an unreadable
+  path with `chmod 000` and check the code degrades rather than throwing; root ignores
+  permission bits, so the read succeeded, the degradation never happened, and the suite was
+  red for a reason unrelated to the code under test. They now probe whether `chmod` can deny
+  this process a read at all and skip with that reason when it cannot — verified as a non-root
+  user, where both run and pass rather than skipping.
+
+- A register of onboarded repositories exists again, and it is derived rather than
+  maintained. `registry.json` is discovered nightly from the `.redline.json` each onboarded
+  repository already carries, so an entry exists exactly as long as that file does and a
+  repository that removes Redline leaves the register on the next run. Nothing hand-edits it
+  and `redline init` does not write it — the previous register, `sync-targets.txt`, was
+  appended to by `scripts/setup-repo.sh`, lost its only writer when that script was deleted,
+  and then went with it; the dashboard's coverage figure has been absent ever since. The
+  dashboard reads the register in its place, and `scripts/validate.mjs` now fails the build if
+  either the runner or its workflow goes missing, so the same silent loss cannot repeat.
+- The register's schema is deliberately the minimum its consumers need today — host, org,
+  repo, default branch, profile, standards and CLI versions, onboarding date. Because it is
+  re-derived from scratch on every run, adding a field later costs one nightly walk and no
+  migration, so fields are added when a consumer needs them rather than designed ahead.
+- Two caveats this does not close. **Azure DevOps discovery is outstanding**: the walk is
+  GraphQL and GitHub-only, Azure has no equivalent and needs a per-project repository walk, so
+  Phase 0's exit condition — sync working on both hosts — is not met until that exists.
+  `RegistryEntry.host` and its optional `project` already carry the Azure shape so the schema
+  will not need changing. And `workflows/dashboard.yml` runs in the metrics repo, not this one:
+  until `redline sync` can distribute it, restoring the live coverage figure needs that file
+  copied across by hand.
+- The registry workflow commits to this repository's default branch. That is a deliberate
+  exception for a derived artifact in Redline's own repository and not a precedent: Redline
+  still never pushes to the default branch of a repository it governs. If this repo is ever
+  onboarded to its own ruleset the push is refused and the job fails loudly rather than
+  quietly ceasing to refresh.
 
 - A deselection never deletes what an earlier run installed, so the output says what remains
   rather than describing a state the repository is not in. `redline init --skip gate` names the
@@ -248,8 +695,9 @@ Record seed scores here. A standards change with no measurement is an opinion.
 - Release flow hardened. `semantic-release` is pinned exactly (25.0.9) in
   `devDependencies`, so the publish job runs the lockfile-resolved version instead of
   whatever `npx --yes` fetches that day. The release job now fails loudly if no `v*`
-  tag exists — the history must be seeded with `v2.1.0` once so the first computed
-  release is 3.0.0, matching this file — and prints the exact seed command. Same-repo
+  tag exists — the history must be seeded with `v0.0.0` once so the first computed
+  release is 0.0.1 rather than semantic-release's default 1.0.0 — and prints the exact
+  seed command. Same-repo
   pull requests run `semantic-release --dry-run` with no secrets in the job: because
   semantic-release exits early on PR context before verifying credentials, this proves
   the pinned toolchain resolves from the lockfile, no more (fork PRs are skipped
@@ -763,7 +1211,7 @@ Record seed scores here. A standards change with no measurement is an opinion.
   repository's own `.github/instructions/*.instructions.md` file is never written or
   pruned by it — the prune rule matches only that prefix and extension.
 
-## 3.0.0 — 2026-09-02
+## Development history — 2026-09-02 (never published)
 
 The shell rollout is retired. Onboarding a repository is one command:
 
@@ -869,9 +1317,9 @@ npx redline-cli init
      failing the run), and a repository onboarded `--blocking` blocks its own onboarding pull
      request, because the gate can never read a soft-fail label to exempt it.
 
-## 0.0.1 — 2026-09-01
+## Development history — 2026-09-01 (never published)
 
-Initial release.
+The first body of work, and what every later section builds on.
 
 - Vendor-neutral standards in `standards/` (core + 12 stacks, 249 rules, each with a
   permanent `<stack>/<slug>` rule id), rendered to Copilot, AGENTS.md, Claude and Cursor

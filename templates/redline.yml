@@ -29,3 +29,7 @@ jobs:
       adr-diff-threshold: 300
       fail-on-dependency-severity: high
       soft-fail-labels: redline-exempt,redline-sync
+      # Written by `redline init --rung`. observe and warn report without blocking;
+      # block-blocker and block-high stop a merge. The security floor — dependency
+      # review and the secret scan — is not on this ladder and blocks at every rung.
+      rung: observe

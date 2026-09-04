@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { DocsPage } from "@/components/docs-page";
 
 export const metadata: Metadata = { title: "The merge gate" };
@@ -8,23 +9,43 @@ export default function Page() {
     <DocsPage
       crumb="Core Concepts"
       title="The merge gate"
-      intro="Installed by redline init on every onboarded repo, on either host, running advisory in Phase 1: it reports on merge readiness, it does not block, until a repo deliberately promotes it."
+      intro="Installed by redline init on every onboarded repo, on either host. What it blocks on is set by the repository's rung on the enforcement ladder — except the security floor, which blocks everywhere."
       href="/docs/gate"
     >
       <h2>What it checks</h2>
       <ul>
         <li><b>Merge-readiness checklist</b> — the PR template&apos;s checklist section must be fully ticked; the gate fails loudly if the heading was deleted.</li>
         <li><b>ADR for big diffs</b> — large changes must link a decision record.</li>
+        <li>
+          <b>Deterministic policy</b> — the{" "}
+          <Link href="/docs/deterministic">rules a checker can decide</Link>,
+          evaluated over the added lines with no model call.
+        </li>
         <li><b>Dependency review</b> — new vulnerable or malicious dependencies block.</li>
         <li><b>Diff secret scan</b> — a SHA-pinned scanner over the PR diff, verified results only.</li>
       </ul>
 
+      <h2>How much of it blocks</h2>
+      <p>
+        The process checks — checklist, ADR and policy — block according to the
+        repository&apos;s <Link href="/docs/enforcement">rung</Link>. At{" "}
+        <code>observe</code> and <code>warn</code> they report and never block;
+        the findings are produced and recorded either way, because{" "}
+        <code>observe</code> means &ldquo;measured and not yet enforced&rdquo;
+        rather than &ldquo;off&rdquo;.
+      </p>
+      <p>
+        Dependency review and the secret scan are <b>not on that ladder</b>. They
+        block at every rung, including <code>observe</code>.
+      </p>
+
       <h2>Process vs security</h2>
       <p>
-        The <code>redline-exempt</code> label downgrades the <b>process</b>{" "}
-        checks — checklist and ADR — to warnings, for a reviewer who accepts
-        the trade-off. It does nothing to dependency review or the secret scan.{" "}
-        <b>Security checks can never be label-exempted.</b>
+        The <code>redline-exempt</code> label, together with a{" "}
+        <Link href="/docs/exemptions">recorded exemption</Link> naming a reason
+        and an expiry, downgrades the <b>process</b> checks to warnings for a
+        reviewer who accepts the trade-off. It does nothing to dependency review
+        or the secret scan. <b>Security checks can never be exempted.</b>
       </p>
 
       <h2>Two hosts, two gate contracts</h2>

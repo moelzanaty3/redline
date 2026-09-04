@@ -13,7 +13,7 @@
 // below 3:1 contrast (the relief rule).
 //
 // Env: DATA_DIR (default data), ORG, [DAYS=90], [OUT=dist], [SEED_SCORES=data/seed-scores.jsonl],
-//      [ONBOARDED] (repo count, for coverage), [STANDARDS_VERSION]
+//      [ONBOARDED] (repo count, for coverage), [STANDARDS_VERSION], [REGISTRY=registry.json]
 
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -84,12 +84,54 @@ const esc = (s) =>
 const json = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
 const compact = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 
+// The enforcement ladder, read from the register. This is the question the ladder
+// exists to answer and no per-repository view can: how much of the estate is
+// actually enforcing anything, as opposed to watching.
+let ladder = null;
+try {
+  const registryPath = process.env.REGISTRY ?? 'registry.json';
+  if (existsSync(registryPath)) {
+    const entries = JSON.parse(readFileSync(registryPath, 'utf8')).entries ?? [];
+    const counts = { observe: 0, warn: 0, 'block-blocker': 0, 'block-high': 0 };
+    for (const entry of entries) {
+      const rung = entry.rung ?? 'observe';
+      if (rung in counts) counts[rung] += 1;
+    }
+    const total = entries.length;
+    ladder = { counts, total, blocking: counts['block-blocker'] + counts['block-high'] };
+  }
+} catch {
+  // A register that cannot be read leaves the ladder absent, not zeroed. Zero
+  // blocking repositories and an unreadable register look nothing alike to
+  // whoever has to act on the number.
+}
+
 const tiles = [
   { label: 'PRs merged', value: compact(agg.prs), sub: `${agg.repos} repo(s)${ONBOARDED ? ` of ${ONBOARDED} onboarded` : ''}` },
-  { label: 'Findings', value: compact(agg.findings), sub: `${agg.blocker} BLOCKER · ${agg.high} HIGH` },
+  { label: 'Findings', value: compact(agg.findings), sub: `${agg.blocker} BLOCKER · ${agg.high} HIGH · Redline only` },
   { label: 'PRs with findings', value: pct(agg.prsWithFindings, agg.prs), sub: `${agg.prsWithFindings} of ${agg.prs}` },
   { label: 'Ignored', value: pct(agg.stale, agg.findings), sub: `${agg.stale} left stale and outdated` },
   { label: 'Gate exemptions', value: pct(agg.exempted, agg.prs), sub: `${agg.exempted} PR(s) used a soft-fail label` },
+  {
+    // Ingested, not produced. The label says so, because a tile reading
+    // "Findings 900" that silently included another tool's output would make
+    // Redline look nine times more productive than it is.
+    label: 'Scanner findings (ingested)',
+    value: compact(agg.scanner.findings),
+    sub:
+      agg.scanner.findings === 0
+        ? 'no repository in this window emits any'
+        : `${agg.scanner.repos} repo(s) · ${agg.scanner.byTool.map((t) => t.tool).join(', ')}`,
+  },
+  {
+    label: 'Enforcing',
+    value: ladder === null ? '—' : pct(ladder.blocking, ladder.total),
+    sub:
+      ladder === null
+        ? 'register unreadable — not zero, unknown'
+        : `${ladder.blocking} of ${ladder.total} repo(s) block a merge on a finding`,
+    status: ladder === null ? 'unknown' : undefined,
+  },
   {
     label: 'Seed BLOCKER recall',
     value: worstRecall === null ? '—' : `${Math.round(worstRecall * 100)}%`,
@@ -165,6 +207,8 @@ const html = `<!doctype html><meta charset="utf-8">
   .card.full { grid-column: 1 / -1; }
   figure { margin: 0; }
   figcaption { color: var(--muted); font-size: .78rem; margin-top: .55rem; }
+  .note { color: var(--ink-2); font-size: .82rem; margin: -.2rem 0 .9rem; max-width: 62ch; line-height: 1.55; }
+  td.muted { color: var(--muted); }
   svg { display: block; width: 100%; height: auto; overflow: visible; }
 
   .legend { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin: .1rem 0 .6rem; font-size: .78rem; color: var(--ink-2); }
@@ -250,6 +294,61 @@ ${tiles
     <h2>Noisiest rules — the tuning queue</h2>
     <figure><svg id="c-noisy" role="img" aria-label="Rules by share of findings ignored"></svg>
     <figcaption>Rules that fire often and are rarely acted on. Cut, narrow, or downgrade these before adding new rules.</figcaption></figure>
+  </div>
+</section>
+
+${
+  ladder === null
+    ? ''
+    : `<section class="card full" style="margin-bottom:1rem">
+  <h2>Enforcement ladder</h2>
+  <p class="note">A repository climbs on recorded evidence, not on assertion, and steps back
+  whenever it wants — the safe direction never needs permission. The security floor is not on
+  this ladder: dependency review and the secret scan block at every rung, including observe.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Rung</th><th>Blocks on</th><th class="num">Repositories</th><th class="num">Share</th></tr></thead>
+    <tbody>
+${[
+  ['observe', 'nothing — reported and recorded'],
+  ['warn', 'nothing — reported in the merge box'],
+  ['block-blocker', 'a BLOCKER finding'],
+  ['block-high', 'a BLOCKER or a HIGH'],
+]
+  .map(
+    ([rung, blocks]) =>
+      `      <tr><td><code>${rung}</code></td><td>${blocks}</td><td class="num">${ladder.counts[rung]}</td><td class="num">${pct(ladder.counts[rung], ladder.total)}</td></tr>`
+  )
+  .join('\n')}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+`
+}<section class="card full" style="margin-bottom:1rem">
+  <h2>Finding sources</h2>
+  <p class="note">Two catalogues, deliberately not merged. Redline's findings drive rule tuning;
+  a scanner's rule ids belong to that scanner, and folding them together would tune Redline's
+  rules on another tool's noise. Ingested findings are measured only — they never gate a merge,
+  because gating on another tool's output makes Redline responsible for its false positives.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Source</th><th>Tool</th><th class="num">Findings</th><th class="num">BLOCKER</th><th class="num">HIGH</th></tr></thead>
+    <tbody>
+      <tr><td>Redline</td><td>LLM review</td><td class="num">${agg.findings}</td><td class="num">${agg.blocker}</td><td class="num">${agg.high}</td></tr>
+${
+  agg.scanner.byTool.length === 0
+    ? '      <tr><td colspan="5" class="muted">No repository in this window emits code-scanning alerts. Roadmap open question 1 is answered by this row: if it stays empty, SARIF ingestion is not where the next effort belongs.</td></tr>'
+    : agg.scanner.byTool
+        .map(
+          (t) =>
+            `      <tr><td>Ingested</td><td>${esc(t.tool)}</td><td class="num">${t.findings}</td><td class="num">—</td><td class="num">—</td></tr>`
+        )
+        .join('\n')
+}
+    </tbody>
+  </table>
   </div>
 </section>
 

@@ -9,8 +9,18 @@
 // Vendor-neutral by design: findings are attributed by reviewer login, so Copilot,
 // Claude, Codex or a human reviewer are all measured the same way.
 //
+// SARIF ingestion: where a repository already runs a scanner, its code-scanning
+// alerts are ingested alongside Redline's own findings and put through the same
+// severity contract. Ingested findings are ALWAYS tagged `source: "sarif"` with the
+// producing tool — a view that cannot tell them apart would tune Redline's rules on
+// another tool's noise, which is the one way this makes things worse than not doing
+// it. Redline never runs a scanner and never asks a repository to change which ones
+// it runs; and per the roadmap's open question 4, ingested findings are MEASURED
+// ONLY. They never gate a merge: gating on another tool's output makes Redline
+// responsible for that tool's false positives.
+//
 // Env: GH_TOKEN (read access to org repos + PRs), ORG, [SINCE=YYYY-MM-DD], [DAYS=8],
-//      [OUT=data], [DRY_RUN=1]
+//      [OUT=data], [DRY_RUN=1], [SKIP_SARIF=1]
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,6 +32,8 @@ import {
   emptyBySeverity,
   RESERVED_RULE_IDS,
 } from './lib/rules.mjs';
+import { readExemption } from './lib/exemptions.mjs';
+import { ingestAlerts } from './lib/sarif.mjs';
 
 const { GH_TOKEN, ORG, SINCE, DAYS = '8', OUT = 'data', DRY_RUN } = process.env;
 if (!GH_TOKEN || !ORG) throw new Error('GH_TOKEN and ORG are required');
@@ -69,6 +81,13 @@ query($q: String!, $cursor: String) {
         changedFiles
         repository { nameWithOwner }
         author { login }
+        title
+        body
+        # Lead time is first commit to merge. The first commit, not the branch
+        # creation: a branch that sat unused for a week did not take a week of
+        # lead time, and reporting that it did makes every team look slower than
+        # it is.
+        commits(first: 1) { nodes { commit { committedDate } } }
         labels(first: 30) { nodes { name } }
         reviewThreads(first: 100) {
           nodes {
@@ -134,11 +153,21 @@ function summarise(pr) {
   return {
     repo: pr.repository.nameWithOwner,
     pr: pr.number,
+    title: pr.title ?? '',
     merged_at: pr.mergedAt,
+    // Absent where the API did not return it. Left absent rather than defaulted
+    // to the merge time, which would report a lead time of zero for every one of
+    // them and drag the median toward a number no team achieved.
+    first_commit_at: pr.commits?.nodes?.[0]?.commit?.committedDate ?? null,
     author: pr.author?.login ?? null,
     reviewers: [...reviewers],
     labels: (pr.labels?.nodes ?? []).map((l) => l.name),
     exempted: (pr.labels?.nodes ?? []).some((l) => ['redline-exempt', 'no-adr'].includes(l.name)),
+    // The structured exemption, when the pull request carried one. A label says
+    // a check was waived; this says who accepted what, why, and until when — the
+    // difference between an exemption and an opt-out, and the only version of it
+    // that can be audited or trended.
+    exemption: readExemption(pr.body),
     size: { additions: pr.additions, deletions: pr.deletions, files: pr.changedFiles },
     findings: { total, ...findings },
     // Acted-on rate. total > 0 and acted_on near 0 means the review is being ignored,
@@ -153,6 +182,35 @@ function summarise(pr) {
   };
 }
 
+// Code-scanning alerts per repository, fetched once and cached: several merged
+// pull requests share a repository, and the alerts API is per-repo not per-PR.
+const alertCache = new Map();
+async function scannerFindings(repo) {
+  if (process.env.SKIP_SARIF) return { findings: [], problems: [] };
+  if (alertCache.has(repo)) return alertCache.get(repo);
+
+  let result = { findings: [], problems: [] };
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${repo}/code-scanning/alerts?per_page=100&state=open`,
+      { headers: { authorization: `Bearer ${GH_TOKEN}`, accept: 'application/vnd.github+json', 'user-agent': 'redline' } }
+    );
+    // 404 means code scanning is not enabled here, which is a fact about the
+    // repository and not a failure of this run. 403 usually means the token
+    // cannot see security data — also not a failure worth stopping for.
+    if (response.ok) {
+      result = ingestAlerts(await response.json(), { where: repo });
+    } else if (response.status !== 404 && response.status !== 403) {
+      result = { findings: [], problems: [`${repo}: code-scanning alerts returned ${response.status}`] };
+    }
+  } catch (error) {
+    result = { findings: [], problems: [`${repo}: could not read code-scanning alerts (${error.message})`] };
+  }
+
+  alertCache.set(repo, result);
+  return result;
+}
+
 const records = [];
 let cursor = null;
 let page = 0;
@@ -161,7 +219,31 @@ do {
   const search = data.search;
   for (const pr of search.nodes) {
     if (!pr?.repository) continue;
-    records.push(summarise(pr));
+    const record = summarise(pr);
+    const scanner = await scannerFindings(record.repo);
+    for (const problem of scanner.problems) console.warn(`  ${problem}`);
+    // Kept as its own key, never folded into `findings` or `rules`. Those two are
+    // Redline's own catalogue and drive rule tuning; mixing a scanner's rule ids
+    // into them is exactly the distortion this design exists to prevent.
+    //
+    // `repo_scoped` says what this number is: code-scanning alerts are a fact
+    // about the REPOSITORY, not about this pull request. Stamping the same count
+    // on every merged PR and then summing them multiplied the estate's ingested
+    // findings by the number of pull requests per repo — a repo with 12 alerts
+    // and 40 merges reported 480. The aggregate counts each repository once.
+    record.scanner = {
+      repo_scoped: true,
+      findings: scanner.findings.length,
+      by_tool: scanner.findings.reduce((acc, f) => {
+        acc[f.tool] = (acc[f.tool] ?? 0) + 1;
+        return acc;
+      }, {}),
+      by_severity: scanner.findings.reduce((acc, f) => {
+        acc[f.severity.toLowerCase()] = (acc[f.severity.toLowerCase()] ?? 0) + 1;
+        return acc;
+      }, {}),
+    };
+    records.push(record);
   }
   cursor = search.pageInfo.hasNextPage ? search.pageInfo.endCursor : null;
   page += 1;
