@@ -14,12 +14,22 @@
 //
 // Env: [ROOT=.], [OUT] (write JSON here as well as printing)
 
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { render } from '../dist/render/standards.js';
 
 const { ROOT = process.cwd(), OUT } = process.env;
+
+// This measures the standards package, so it needs one. Running it in a product
+// repository is a reasonable mistake — the command surface does not hide that it
+// exists — and an ENOENT stack trace is the worst possible answer to it.
+if (!existsSync(join(ROOT, 'standards/manifest.json'))) {
+  console.error(`No standards/manifest.json under ${resolve(ROOT)}.`);
+  console.error('This measures the Redline standards themselves, so it runs in the source repo.');
+  console.error('Point it somewhere else with --root <path>.');
+  process.exit(2);
+}
 
 // A scratch root whose manifest has skills enabled, so the measurement does not
 // depend on whether the org has switched it on yet.

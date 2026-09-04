@@ -25,6 +25,8 @@ import { review } from '../commands/review.ts';
 import { renderFinding } from '../review/schema.ts';
 import { embedded } from '../review/engines/embedded.ts';
 import { createApiEngine } from '../review/engines/api.ts';
+import { METRICS_COMMANDS, helpFor } from '../metrics/options.ts';
+import { runMetrics, specFor } from '../metrics/run.ts';
 import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
@@ -91,6 +93,14 @@ const USAGE = [
   '      --force     re-render a repository already at the current standards version',
   '      run from a checkout of the Redline source repository, not a product repo',
   '',
+  '  redline metrics <command> [--flags]',
+  `      the estate's measurement plane: ${Object.keys(METRICS_COMMANDS).join(', ')}`,
+  '      run `redline metrics <command> --help` for its flags. These act on an organisation',
+  '      or its collected telemetry, not on the repository you are standing in',
+  '',
+  '  redline registry [--flags]',
+  '      derive the register of onboarded repositories by walking the org',
+  '',
   '  redline --version',
 ].join('\n');
 
@@ -115,6 +125,9 @@ export interface RunDeps {
   // own instead of the single resolved platform every other command uses.
   syncHost?: () => SyncHost;
   remoteVerifyHost?: () => RemoteVerifyHost;
+  // Injected so the metrics dispatch can be asserted without executing a runner
+  // that talks to GitHub.
+  loadRunner?: (path: string) => Promise<unknown>;
 }
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
@@ -516,6 +529,43 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // repositories succeeded is how a distribution quietly stops covering the
       // ones it cannot reach.
       return report.failures > 0 ? exitCodeFor('failed') : 0;
+    }
+
+    if (command === 'metrics' || command === 'registry') {
+      // The subcommand is a positional for `metrics` and absent for `registry`,
+      // so the flags are whatever follows it.
+      const [sub, ...flagArgs] = command === 'metrics' ? rest : ['registry', ...rest];
+      if (command === 'metrics' && (sub === undefined || sub === '--help' || sub === '-h')) {
+        log.info('redline metrics <command>');
+        log.info('');
+        for (const [name, spec] of Object.entries(METRICS_COMMANDS)) {
+          log.info(`  ${name.padEnd(14)} ${spec.summary}`);
+        }
+        log.info('');
+        log.info('Run `redline metrics <command> --help` for its flags.');
+        return sub === undefined ? exitCodeFor('usage') : 0;
+      }
+
+      const spec = specFor(sub!);
+      if (flagArgs.includes('--help') || flagArgs.includes('-h')) {
+        log.info(helpFor(command === 'registry' ? 'registry' : `metrics ${sub}`, spec));
+        return 0;
+      }
+
+      // Built from the same table that validates and documents them, so a flag
+      // cannot exist in one of the three and not the others.
+      const options = Object.fromEntries(
+        Object.entries(spec.options).map(([flag, option]) => [
+          flag,
+          { type: option.type === 'boolean' ? ('boolean' as const) : ('string' as const) },
+        ])
+      );
+      const { values } = parseCliArgs(() =>
+        parseArgs({ args: flagArgs, options, allowPositionals: false })
+      );
+
+      await runMetrics(sub!, { root, flags: values, ...(deps.loadRunner ? { load: deps.loadRunner } : {}) });
+      return 0;
     }
 
     log.error(`unknown command "${command}"`, 'run: redline --help');
