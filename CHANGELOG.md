@@ -5,7 +5,7 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
-## Unreleased — hardening
+## Unreleased — first release, 0.0.1
 
 - Every reference item on the documentation site is its own page, listed in the sidebar under
   its category rather than reachable only through a wall of cards, and each answers the same
@@ -310,8 +310,9 @@ Record seed scores here. A standards change with no measurement is an opinion.
 - Release flow hardened. `semantic-release` is pinned exactly (25.0.9) in
   `devDependencies`, so the publish job runs the lockfile-resolved version instead of
   whatever `npx --yes` fetches that day. The release job now fails loudly if no `v*`
-  tag exists — the history must be seeded with `v2.1.0` once so the first computed
-  release is 3.0.0, matching this file — and prints the exact seed command. Same-repo
+  tag exists — the history must be seeded with `v0.0.0` once so the first computed
+  release is 0.0.1 rather than semantic-release's default 1.0.0 — and prints the exact
+  seed command. Same-repo
   pull requests run `semantic-release --dry-run` with no secrets in the job: because
   semantic-release exits early on PR context before verifying credentials, this proves
   the pinned toolchain resolves from the lockfile, no more (fork PRs are skipped
@@ -825,7 +826,7 @@ Record seed scores here. A standards change with no measurement is an opinion.
   repository's own `.github/instructions/*.instructions.md` file is never written or
   pruned by it — the prune rule matches only that prefix and extension.
 
-## 3.0.0 — 2026-09-02
+## Development history — 2026-09-02 (never published)
 
 The shell rollout is retired. Onboarding a repository is one command:
 
@@ -931,9 +932,9 @@ npx redline-cli init
      failing the run), and a repository onboarded `--blocking` blocks its own onboarding pull
      request, because the gate can never read a soft-fail label to exempt it.
 
-## 0.0.1 — 2026-09-01
+## Development history — 2026-09-01 (never published)
 
-Initial release.
+The first body of work, and what every later section builds on.
 
 - Vendor-neutral standards in `standards/` (core + 12 stacks, 249 rules, each with a
   permanent `<stack>/<slug>` rule id), rendered to Copilot, AGENTS.md, Claude and Cursor

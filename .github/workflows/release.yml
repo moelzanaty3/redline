@@ -49,15 +49,18 @@ jobs:
 
       - run: npm ci
 
-      # With no v* tag, semantic-release computes 1.0.0 while CHANGELOG.md is at
-      # 3.0.0. Seeding v2.1.0 once makes the first computed release 3.0.0.
+      # Nothing has ever been published. With no v* tag semantic-release treats this
+      # as a first release and computes 1.0.0 — a number this project has not earned
+      # and cannot walk back once npm has it. Seeding v0.0.0 once anchors the line at
+      # zero, so the first published version is 0.0.1 from a fix: commit (or 0.1.0
+      # from a feat:), which is what CHANGELOG.md says it will be.
       - name: First-release guard
         run: |
           set -euo pipefail
           if [ -z "$(git tag -l 'v*')" ]; then
-            echo "::error::No v* tag exists — semantic-release would publish 1.0.0, contradicting CHANGELOG.md (3.0.0)."
-            echo "::error::Seed the release history once (pick a pre-v3 sha), then re-run this workflow:"
-            echo "::error::  git tag v2.1.0 <sha> && git push origin v2.1.0"
+            echo "::error::No v* tag exists — semantic-release would publish 1.0.0, not the 0.0.1 CHANGELOG.md declares."
+            echo "::error::Anchor the release line at zero once, then re-run this workflow:"
+            echo "::error::  git tag v0.0.0 \$(git rev-list --max-parents=0 HEAD | tail -1) && git push origin v0.0.0"
             exit 1
           fi
 

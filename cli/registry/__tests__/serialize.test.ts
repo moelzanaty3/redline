@@ -10,7 +10,7 @@ const entry = (org: string, repo: string): RegistryEntry => ({
   defaultBranch: 'main',
   profile: 'web',
   standardsVersion: '0.0.1',
-  cliVersion: '3.0.0',
+  cliVersion: '0.0.1',
   onboardedAt: '2026-09-01T00:00:00.000Z',
 });
 

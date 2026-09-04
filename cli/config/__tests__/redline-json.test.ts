@@ -7,7 +7,7 @@ import { CONFIG_FILE, parseConfig, readConfig, writeConfig, type RedlineConfig }
 
 const valid: RedlineConfig = {
   standardsVersion: '0.0.1',
-  cliVersion: '3.0.0',
+  cliVersion: '0.0.1',
   host: 'github',
   profile: 'web',
   vendors: ['copilot', 'agents', 'claude'],

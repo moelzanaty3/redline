@@ -126,10 +126,12 @@ export default async function Page() {
         {!published && (
           <li>
             <b>The package is unpublished.</b> Nothing installs by{" "}
-            <code>npx</code> today. Seeding one <code>v*</code> tag satisfies the
-            release workflow&apos;s first-release guard — without it,
-            semantic-release would compute <code>1.0.0</code> against a changelog
-            already at <code>3.0.0</code>, which is why the guard exists.
+            <code>npx</code> today. The release workflow refuses to publish until
+            the release line is anchored — <code>git tag v0.0.0</code> on the root
+            commit, once — because without a <code>v*</code> tag semantic-release
+            treats this as a first release and computes <code>1.0.0</code>, a
+            number npm will not let you take back. Anchored at zero, the first
+            published version is <code>0.0.1</code>.
           </li>
         )}
         <li>
