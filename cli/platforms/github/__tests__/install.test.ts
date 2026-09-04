@@ -1192,7 +1192,7 @@ test('the caller workflow Redline installs carries the ownership line that attri
 
 test('the caller workflow carries the rung, so the gate needs no second source of truth', async () => {
   const cwd = tmp();
-  const install = createGitHubInstall(fakeGitHubClient({}), gitFor, '0.0.1');
+  const install = createGitHubInstall(fakeGitHubClient({}), gitFor);
 
   await install.installGate(ref, cwd, { ...gateOpts, rung: 'block-blocker' });
 
@@ -1203,7 +1203,7 @@ test('the caller workflow carries the rung, so the gate needs no second source o
 test('a caller written without a rung says observe — the rung that changes nothing', async () => {
   // Which is what every caller written before the ladder existed meant.
   const cwd = tmp();
-  const install = createGitHubInstall(fakeGitHubClient({}), gitFor, '0.0.1');
+  const install = createGitHubInstall(fakeGitHubClient({}), gitFor);
 
   await install.installGate(ref, cwd, gateOpts);
 

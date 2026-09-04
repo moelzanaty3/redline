@@ -173,14 +173,36 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     edit: "cli/sync/ — plan.ts decides who is behind, render.ts produces each target's artifacts, run.ts drives the estate. The host calls live in cli/platforms/github/push.ts.",
   },
   review: {
-    what: "Would review the working tree, staged changes or an existing pull request against exactly the rules that apply to the changed files, in either an embedded or an API engine, returning findings against a published schema. Designed in full in v3 §6.2; not built.",
-    built: false,
+    what: "Reviews a change against ONLY the rules that apply to the files it touches. Anyone can ask an assistant to review a diff; what this adds is the bound — a model handed the composed standard for a twelve-stack profile spends most of its attention on languages the diff never touches, and the findings get worse rather than better.",
+    built: true,
     onboard:
-      "Nothing to onboard — the command does not exist. Every request for \"catch it before I push\" is a request for this.",
-    usage: ["# not implemented"],
-    flags: [],
+      "Nothing to install. It reads the profile from the repository's .redline.json, or takes --profile. The embedded engine is the default and calls no model at all: it emits the bounded prompt for the assistant already running the command, which is the common case in Claude Code, Copilot or Cursor. --engine api makes the CLI call an endpoint itself.",
+    usage: [
+      "redline review                                  # working tree against the merge base",
+      "redline review --staged                         # staged changes, before you commit",
+      "redline review --diff-file change.diff          # any unified diff",
+      "redline review --engine api --model qwen2.5-coder:14b   # a local model, no data leaves the machine",
+      "redline review --engine api --provider anthropic --model <id>",
+    ],
+    flags: [
+      {
+        flag: "--engine embedded | api",
+        detail:
+          "embedded (the default) hands the prompt back for the assistant running the command to apply. That is the design, not a stub: the CLI is usually being run BY an assistant that already has a model and a context, and calling a second model from inside that session pays twice for a worse answer. api makes the CLI call an endpoint — OpenAI-compatible or Anthropic.",
+      },
+      {
+        flag: "--provider openai | anthropic, --model, --base-url",
+        detail:
+          "openai covers every OpenAI-compatible endpoint, which is the fully local case for free: Ollama, LM Studio and vLLM all expose it, and a local endpoint needs no API key. That matters — a review that has to send a diff to a third party is a review several markets cannot run at all. The model is never baked in: one that is would be a model nobody can change when it is deprecated or when a regulator objects.",
+      },
+      {
+        flag: "--base <ref>",
+        detail:
+          "What to diff against, the repository's default branch otherwise. The comparison is a three-dot merge-base diff: two dots would hand the model every commit that landed on the base branch since yours started, and it would dutifully review someone else's work.",
+      },
+    ],
     output:
-      "Nothing today. When it exists, its findings will carry the same output contract as a PR review — severity, rule id, one-line problem. One thing is settled in advance: local findings must be excluded from, or separately tagged in, rule-tuning telemetry, because a local run nobody can verify would distort acted-on rate. A local command is also opt-in and therefore enforces nothing; the merge gate stays the system of record.",
-    edit: "Unbuilt. Specified in the v3 design, sequenced last in the roadmap because its value depends on voluntary adoption.",
+      "One line per finding in the output contract, with the file and line. The CLI renders that line itself from the validated rule id and severity — a model that writes the prefix will eventually write a severity that does not exist or an id it invented, and every aggregate keyed on that line becomes fiction. A finding citing a rule the prompt did not carry is discarded with the reason said out loud. A changed file no stack covers is reported too, because that is a gap in the standard and reviewing it against core alone while saying nothing hides it. It always exits 0: a non-zero exit would invite someone to wire this into CI as a second gate, where it would enforce nothing while looking like it did.",
+    edit: "cli/review/ — scope.ts resolves the applicable rules, prompt.ts builds the bounded prompt, schema.ts is the published findings contract, engines/ holds the two engines. Local findings are excluded from rule-tuning telemetry by construction and the report says so on every run: a local run has no thread to resolve and no reviewer to attribute, so counting it would compute acted-on rate partly from runs nobody can verify.",
   },
 };

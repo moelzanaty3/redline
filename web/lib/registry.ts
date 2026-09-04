@@ -69,7 +69,7 @@ export const COMMANDS: RegistryEntry[] = [
   { slug: "sync", title: "redline sync", file: "cli/commands/sync.ts", description: "Lands the current standards on every registered repository as a pull request, from the register derived nightly off the estate." },
   { slug: "policy", title: "redline policy", file: "cli/policy/checks.ts", description: "Evaluates the rules a checker can decide, with no model call — a ticket reference is present or it is not." },
   { slug: "exempt", title: "redline exempt", file: "cli/commands/exempt.ts", description: "Decides whether a pull request carries a valid exemption for a failing process check — a reason, a scope and an expiry, not a bare label." },
-  { slug: "review", title: "redline review", file: "standards/core.md", description: "Would review the working tree, staged changes or a PR against the applicable rules before you push. Designed in v3 §6.2, not built." },
+  { slug: "review", title: "redline review", file: "cli/commands/review.ts", description: "Reviews a change against only the rules that apply to the files it touches — locally, in either engine, before you push." },
 ];
 
 export const SEEDS: RegistryEntry[] = [

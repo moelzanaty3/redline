@@ -7,6 +7,38 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### `redline review` — the daily command, bounded to what applies
+
+- The last of v3's four commands, and the answer to every request for "catch it before I
+  push". It reviews the working tree, staged changes or any diff against **only** the rules
+  that apply to the files it touches. That bound is the product: anyone can ask an assistant
+  to review a diff, and a model handed the composed standard for a twelve-stack profile
+  spends most of its attention on languages the change never touches — the findings get
+  worse, not better.
+- **Two engines, and `embedded` is the default because it calls no model at all.** It emits
+  the bounded prompt for the assistant already running the command, which is the common case
+  in Claude Code, Copilot or Cursor. That is the design rather than a stub: calling a second
+  model from inside the first one's session pays twice for a worse answer. `--engine api`
+  speaks OpenAI-compatible and Anthropic, and the OpenAI-compatible half covers the fully
+  local case for free — Ollama, LM Studio and vLLM all expose it, and a local endpoint needs
+  no key. A review that must send a diff to a third party is one several markets cannot run.
+- **The output contract is rendered by code, never free-typed by the model.** The model
+  returns JSON against a published schema; the CLI validates it and writes the
+  `Redline/<SEVERITY> [rule-id]:` line itself. A model that writes that prefix will eventually
+  write a severity that does not exist or an id it invented, and every aggregate keyed on that
+  line becomes fiction. A finding citing a rule the prompt did not carry is discarded and the
+  reason is said out loud.
+- **Local findings never reach rule-tuning telemetry**, and the report says so on every run.
+  A local run has no thread to resolve, no reviewer to attribute, and no way to tell a finding
+  that was fixed from one the author never read — counting it would compute acted-on rate
+  partly from runs nobody can verify. `scripts/validate.mjs` fails the build if that exclusion
+  is ever removed.
+- It always exits 0. A non-zero exit would invite someone to wire it into CI as a second gate,
+  where it would enforce nothing while looking like it did — the pull request review remains
+  the system of record.
+- A changed file no stack covers is reported rather than dropped: that is a gap in the
+  standard, and reviewing it against the core rules alone while saying nothing hides it.
+
 ### Graduated enforcement — a ladder a repository climbs on evidence
 
 - Enforcement was binary: advisory, or blocking with `--blocking`. Neither end works across

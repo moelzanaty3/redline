@@ -234,6 +234,16 @@ for (const id of deterministic) {
   }
 }
 
+// --- local review ---------------------------------------------------------------
+// A local review is opt-in and enforces nothing; the pull request review is the
+// system of record. Its findings must never reach the telemetry that tunes rules,
+// or acted-on rate is computed partly from runs nobody can verify — a local run
+// has no thread to resolve, no reviewer to attribute, and no way to tell a fixed
+// finding from one the author never read.
+if (!read('cli/commands/review.ts').includes('excludedFromTelemetry')) {
+  fail('cli/commands/review.ts no longer marks local reviews as excluded from telemetry — local findings would distort acted-on rate');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

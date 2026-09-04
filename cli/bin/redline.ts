@@ -21,6 +21,10 @@ import { verify } from '../commands/verify.ts';
 import { sync } from '../commands/sync.ts';
 import { exempt } from '../commands/exempt.ts';
 import { formatFinding, policy } from '../commands/policy.ts';
+import { review } from '../commands/review.ts';
+import { renderFinding } from '../review/schema.ts';
+import { embedded } from '../review/engines/embedded.ts';
+import { createApiEngine } from '../review/engines/api.ts';
 import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
@@ -66,6 +70,12 @@ const USAGE = [
   '      check this repository still matches what .redline.json claims',
   '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
   '                  that genuinely needs a working tree reports ?? rather than passing',
+  '',
+  '  redline review [--staged] [--diff-file <path>] [--base <ref>] [--engine <name>]',
+  '      review this change against ONLY the rules that apply to the files it touches',
+  '      --engine embedded  emit the bounded prompt for the assistant running this (default)',
+  '      --engine api       call a configured endpoint — local or hosted — and parse the result',
+  '      local findings are never sent to the telemetry that tunes rules',
   '',
   '  redline policy --diff-file <path>',
   '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER',
@@ -311,6 +321,99 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         else log.info('Redline gate failed.');
       }
       return exitCode;
+    }
+
+    if (command === 'review') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: {
+            staged: { type: 'boolean', default: false },
+            'diff-file': { type: 'string' },
+            base: { type: 'string' },
+            profile: { type: 'string' },
+            engine: { type: 'string', default: 'embedded' },
+            provider: { type: 'string', default: 'openai' },
+            model: { type: 'string' },
+            'base-url': { type: 'string' },
+          },
+          allowPositionals: false,
+        })
+      );
+
+      let engine = embedded;
+      if (values.engine === 'api') {
+        if (!values.model) {
+          throw new RedlineError(
+            'usage',
+            '--engine api needs --model <name>',
+            'a model baked into the tool is one nobody can change when it is deprecated'
+          );
+        }
+        const provider = values.provider === 'anthropic' ? 'anthropic' : 'openai';
+        engine = createApiEngine({
+          provider,
+          model: values.model,
+          ...(values['base-url'] ? { baseUrl: values['base-url'] } : {}),
+        });
+      } else if (values.engine !== 'embedded') {
+        throw new RedlineError('usage', `unknown engine "${values.engine}" — use embedded or api`);
+      }
+
+      const report = await review(engine, {
+        cwd,
+        root,
+        ...(values.profile ? { profile: values.profile } : {}),
+        ...(values.base ? { base: values.base } : {}),
+        source: values['diff-file']
+          ? { kind: 'diff-file', path: values['diff-file'] }
+          : values.staged
+            ? { kind: 'staged' }
+            : { kind: 'worktree' },
+      });
+
+      log.info(
+        `profile ${report.scope.profile} — rules in scope: core` +
+          (report.scope.stacks.length ? `, ${report.scope.stacks.join(', ')}` : '')
+      );
+      // A file no stack covers is a gap in the standard. Reviewing it against
+      // core alone and saying nothing hides that.
+      if (report.scope.uncovered.length > 0) {
+        log.warn(
+          `no stack covers ${report.scope.uncovered.length} changed file(s), so only the core rules ` +
+            `applied to them: ${report.scope.uncovered.slice(0, 5).join(', ')}` +
+            (report.scope.uncovered.length > 5 ? ', and more' : '')
+        );
+      }
+
+      if (report.prompt !== null) {
+        log.info('');
+        log.info(report.prompt);
+        log.info('');
+        log.info(report.note ?? '');
+        return 0;
+      }
+
+      for (const finding of report.findings) {
+        log.info(`${finding.file}:${finding.line}`);
+        log.info(`  ${renderFinding(finding)}`);
+      }
+      for (const { reason } of report.rejected) {
+        log.warn(`discarded a finding from the model: ${reason}`);
+      }
+      log.info(
+        report.findings.length === 0
+          ? 'no findings — an empty review is a valid review'
+          : `${report.findings.length} finding(s)`
+      );
+      // Said out loud on every run. A local review is opt-in and enforces
+      // nothing; the pull request review remains the system of record.
+      log.info('local review — not recorded, and not counted in rule-tuning telemetry');
+
+      // Always 0. This is a pre-flight convenience, and a non-zero exit would
+      // invite someone to wire it into CI as a second gate, where it would
+      // enforce nothing while looking like it did.
+      return 0;
     }
 
     if (command === 'policy') {
