@@ -22,7 +22,7 @@ export default function Home() {
   const ruleCount = getRules().length;
   const manifest = loadManifest();
   const stackCount = Object.keys(manifest.stacks).length;
-  const vendorCount = Object.keys(manifest.vendors).length;
+  const vendorCount = Object.values(manifest.vendors).filter((v) => v.enabled).length;
   const seedCount = seededFindingCount();
   return (
     <main>

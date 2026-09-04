@@ -10,7 +10,7 @@ import { capabilitySelection } from '../../config/redline-json.ts';
 import { contentId } from '../../render/commands.ts';
 import { isRedlineError, RedlineError } from '../../core/errors.ts';
 import { readConfig } from '../../config/redline-json.ts';
-import type { AdminCapability, CapabilityOutcome } from '../../platforms/types.ts';
+import type { AdminCapability, CapabilityOutcome, RepoRef } from '../../platforms/types.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const now = (): Date => new Date('2026-09-01T00:00:00.000Z');
@@ -537,10 +537,10 @@ test('a ruleset that vanished from the host is re-applied on a plain re-run', as
   assert.ok(second.applied.includes('applyPolicy'));
 });
 
-// `redline verify` tells the operator "<capability> now granted — rerun
-// redline init to clear it from .redline.json". That instruction has to be
-// true: a short-circuited re-run would leave the stale entry forever.
-test('a capability granted since the last run is cleared from .redline.json by a re-run', async () => {
+// `redline verify` tells the operator to run `redline init --repair` for a
+// capability the host now reports enabled. That instruction has to be true:
+// only a run that retries the write can clear a record of a refused write.
+test('a capability granted since the last run is cleared from .redline.json by --repair', async () => {
   const cwd = repo();
   await init(
     fakePlatform({
@@ -554,20 +554,21 @@ test('a capability granted since the last run is cleared from .redline.json by a
   );
   assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['secret-scanning']);
 
-  const second = fakePlatform({
-    securityState: [
-      { capability: 'secret-scanning', status: 'applied', detail: '' },
-      { capability: 'push-protection', status: 'applied', detail: '' },
-    ],
-  });
-  const report = await init(second, { cwd, root, now });
+  const plain = fakePlatform();
+  const settled = await init(plain, { cwd, root, now });
+  assert.equal(settled.alreadyOnboarded, true, 'a read that the setting is on is not work to do');
+  assert.deepEqual(plain.applied, []);
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['secret-scanning']);
 
-  assert.equal(report.alreadyOnboarded, false, 'the recorded admin list is stale — that is work to do');
+  const granted = fakePlatform();
+  const report = await init(granted, { cwd, root, now, repair: true });
+
+  assert.ok(granted.applied.includes('enableSecurityFloor'), 'only a retried write answers the record');
   assert.deepEqual(readConfig(cwd)?.pendingAdmin, []);
   assert.deepEqual(report.pendingAdmin, []);
 });
 
-test('a capability the host still denies keeps the repository settled and is reported from a fresh read', async () => {
+test('a capability the host still denies keeps the repository settled and is reported from the record', async () => {
   const cwd = repo();
   const denied: CapabilityOutcome[] = [
     { capability: 'secret-scanning', status: 'denied', detail: 'needs admin' },
@@ -587,8 +588,9 @@ test('a capability the host still denies keeps the repository settled and is rep
   assert.equal(report.alreadyOnboarded, true);
   assert.deepEqual(second.applied, [], 'reading the host is not mutating it');
   // repoRef is the identity read every real run needs; the plan phase adds
-  // exactly two more, and no more. A third would go unnoticed without this.
-  assert.deepEqual(second.reads, ['repoRef', 'readPolicy', 'readSecurityState']);
+  // exactly one more, and no more. A second would go unnoticed without this —
+  // and readSecurityState is not it: nothing it can say revises the record.
+  assert.deepEqual(second.reads, ['repoRef', 'readPolicy']);
   assert.deepEqual(report.pendingAdmin, ['secret-scanning']);
 });
 
@@ -756,6 +758,107 @@ test('a ruleset the token can read but not write settles instead of re-applying 
     );
     assert.deepEqual(report.pendingAdmin, ['merge-policy'], `run ${run} lost the recorded refusal`);
   }
+});
+
+// C1. `pendingAdmin` records what a WRITE was refused; `readSecurityState`
+// answers a different question ("is the setting on?"). Where the two answers
+// disagree the old settled path cleared or created the record from the read,
+// the apply path re-derived it from the write, and the repository never
+// converged: four host mutations and another commit on the onboarding pull
+// request, on every run, exiting 0 throughout.
+//
+// GitHub reaches this with a fine-grained token holding `administration: read`
+// but not `write`: GET /vulnerability-alerts answers 204 (`applied`) while
+// PUT /automated-security-fixes answers 403 (`denied`), and `worstOutcome`
+// folds the pair into a denied `dependency-alerts`.
+const READ_ON: CapabilityOutcome[] = [
+  { capability: 'secret-scanning', status: 'applied', detail: '' },
+  { capability: 'push-protection', status: 'applied', detail: '' },
+  { capability: 'dependency-alerts', status: 'applied', detail: '' },
+];
+
+async function settledPerRun(
+  cwd: string,
+  opts: { security: CapabilityOutcome[]; securityState: CapabilityOutcome[]; ref?: RepoRef }
+): Promise<boolean[]> {
+  const settled: boolean[] = [];
+  for (const _run of [1, 2, 3, 4]) {
+    const report = await init(fakePlatform(opts), { cwd, root, now });
+    settled.push(report.alreadyOnboarded);
+  }
+  return settled;
+}
+
+test('a security write the host refuses while the read reports it on settles on the second run', async () => {
+  const cwd = repo();
+  const settled = await settledPerRun(cwd, {
+    security: [
+      { capability: 'secret-scanning', status: 'applied', detail: '' },
+      { capability: 'push-protection', status: 'applied', detail: '' },
+      { capability: 'dependency-alerts', status: 'denied', detail: 'automated security fixes' },
+    ],
+    securityState: READ_ON,
+  });
+
+  assert.deepEqual(settled, [false, true, true, true]);
+  assert.deepEqual(
+    readConfig(cwd)?.pendingAdmin,
+    ['dependency-alerts'],
+    'a read that the setting is on is no evidence about whether this token may write it'
+  );
+});
+
+test('a security write the host accepts while the read reports it off settles on the second run', async () => {
+  const cwd = repo();
+  const settled = await settledPerRun(cwd, {
+    security: READ_ON,
+    securityState: [
+      { capability: 'secret-scanning', status: 'applied', detail: '' },
+      { capability: 'push-protection', status: 'applied', detail: '' },
+      { capability: 'dependency-alerts', status: 'denied', detail: 'not enabled' },
+    ],
+  });
+
+  assert.deepEqual(settled, [false, true, true, true]);
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, [], 'a read never files work against an administrator');
+});
+
+// Azure reads all three capabilities off the single `advSecEnabled` flag and
+// writes all three through one PATCH, so a PAT with `vso.advsec` but no
+// Project Administrator role oscillates every capability at once.
+const AZURE_REF: RepoRef = { host: 'azure', org: 'acme', repo: 'web', defaultBranch: 'main' };
+const AZURE_DENIED: CapabilityOutcome[] = [
+  { capability: 'secret-scanning', status: 'denied', detail: 'needs Project Administrator' },
+  { capability: 'push-protection', status: 'denied', detail: 'needs Project Administrator' },
+  { capability: 'dependency-alerts', status: 'denied', detail: 'needs Project Administrator' },
+];
+
+test('an Azure PAT that can read Advanced Security but not write it settles on the second run', async () => {
+  const cwd = repo();
+  const settled = await settledPerRun(cwd, {
+    ref: AZURE_REF,
+    security: AZURE_DENIED,
+    securityState: READ_ON,
+  });
+
+  assert.deepEqual(settled, [false, true, true, true]);
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, [
+    'secret-scanning',
+    'push-protection',
+    'dependency-alerts',
+  ]);
+});
+
+test('an Azure enablement write that reports success while the read reports it off settles on the second run', async () => {
+  const cwd = repo();
+  const settled = await settledPerRun(cwd, {
+    ref: AZURE_REF,
+    security: READ_ON,
+    securityState: AZURE_DENIED,
+  });
+
+  assert.deepEqual(settled, [false, true, true, true]);
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, []);
 });
 
 test('a refused policy write leaves the host without the ruleset it was refused', async () => {
@@ -935,6 +1038,20 @@ test('an org-disabled vendor is recorded but never rendered', async () => {
   await init(fakePlatform(), { cwd, root, now });
   assert.deepEqual(readConfig(cwd)?.vendors, ['cursor']);
   assert.equal(existsSync(join(cwd, '.cursor/rules/redline-core.mdc')), false);
+});
+
+// I4. The ceiling has to cover both renderers. render() filtered cursor out of
+// .cursor/rules/ while renderCommands wrote .cursor/commands/ regardless, so
+// the run delivered half of a vendor the org had switched off — and its slash
+// commands then went stale in a tool the repository never opted into.
+test('an org-disabled vendor gets no command files either', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, vendors: ['copilot', 'cursor'] });
+
+  assert.equal(existsSync(join(cwd, '.github/prompts/redline-init.prompt.md')), true);
+  assert.equal(existsSync(join(cwd, '.cursor/commands/redline-init.md')), false);
+  assert.equal(existsSync(join(cwd, '.cursor/commands/redline-verify.md')), false);
+  assert.ok(!report.files.some((f) => f.startsWith('.cursor/')), report.files.join(', '));
 });
 
 test('deselecting a vendor removes what it wrote and makes a settled repository not settled', async () => {

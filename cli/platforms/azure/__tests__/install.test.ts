@@ -184,6 +184,52 @@ test('an existing redline policy is updated in place rather than duplicated', as
   assert.ok(client.calls.some((c) => c.method === 'PUT' && c.path === '/Payments/_apis/policy/configurations/99'));
 });
 
+// m2. Parity with github/install.ts's 422 guard: a 400 means Azure rejected
+// the payload — a Redline bug or a project-settings conflict — and folding it
+// into `outcome()` made it `merge-policy: denied`, printed "an administrator
+// must still enable: merge-policy" and exited 0, sending an operator to check
+// permissions that were already correct.
+test('a 400 from the policy configuration create throws a host error naming the endpoint', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } },
+    'POST /Payments/_apis/policy/configurations': { status: 400, body: { message: 'Invalid settings' } },
+  });
+  await assert.rejects(
+    createAzureInstall(client, gitFor).applyPolicy(ref, advisory),
+    (err: unknown) =>
+      isRedlineError(err) &&
+      err.kind === 'host' &&
+      err.message.includes('POST /Payments/_apis/policy/configurations')
+  );
+});
+
+test('a 400 from the policy configuration update throws a host error naming the endpoint', async () => {
+  const client = fakeAzure({
+    ...typesRoute,
+    'GET /Payments/_apis/policy/configurations': {
+      status: 200,
+      body: {
+        value: [
+          {
+            id: 99,
+            type: { id: 'status-id' },
+            settings: { statusGenre: 'redline', statusName: 'gate', scope: [{ repositoryId: 'repo-guid' }] },
+          },
+        ],
+      },
+    },
+    'PUT /Payments/_apis/policy/configurations/99': { status: 400, body: { message: 'Invalid settings' } },
+  });
+  await assert.rejects(
+    createAzureInstall(client, gitFor).applyPolicy(ref, advisory),
+    (err: unknown) =>
+      isRedlineError(err) &&
+      err.kind === 'host' &&
+      err.message.includes('PUT /Payments/_apis/policy/configurations/99')
+  );
+});
+
 test('the repository property capability is unsupported on azure, never denied', async () => {
   const client = fakeAzure({ ...typesRoute, 'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } } });
   const result = await createAzureInstall(client, gitFor).applyPolicy(ref, advisory);

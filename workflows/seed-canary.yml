@@ -171,8 +171,12 @@ jobs:
           set -euo pipefail
           # Cleanup must not be skippable: the branch contains fake credentials and code
           # that exists only to fail review.
-          [[ -n "${PR:-}" ]] && gh pr close "$PR" --repo "$TARGET_REPO" --delete-branch --comment "Scored automatically by the Redline seed canary. Closing." || true
-          [[ -n "${BRANCH:-}" ]] && gh api -X DELETE "repos/$TARGET_REPO/git/refs/heads/$BRANCH" >/dev/null 2>&1 || true
+          if [[ -n "${PR:-}" ]]; then
+            gh pr close "$PR" --repo "$TARGET_REPO" --delete-branch --comment "Scored automatically by the Redline seed canary. Closing." || true
+          fi
+          if [[ -n "${BRANCH:-}" ]]; then
+            gh api -X DELETE "repos/$TARGET_REPO/git/refs/heads/$BRANCH" >/dev/null 2>&1 || true
+          fi
           echo "cleanup done"
 
       - uses: actions/upload-artifact@v4

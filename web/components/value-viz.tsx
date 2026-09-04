@@ -45,7 +45,7 @@ export function ValueViz() {
   for (const r of rules) sev[r.severity] += 1;
   const stackCount = Object.keys(manifest.stacks).length;
   const profileCount = Object.keys(manifest.profiles).length;
-  const vendorCount = Object.keys(manifest.vendors).length;
+  const vendorCount = Object.values(manifest.vendors).filter((v) => v.enabled).length;
   const severities: Severity[] = ["BLOCKER", "HIGH", "SUGGESTION"];
 
   return (
