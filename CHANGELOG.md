@@ -7,6 +7,42 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- Every reference item on the documentation site is its own page, listed in the sidebar under
+  its category rather than reachable only through a wall of cards, and each answers the same
+  four questions in the same order: how to onboard it, how to use it, what output to expect,
+  and how to edit it. The edit loop is derived from the CI steps that actually guard each kind
+  of file rather than restated per item, a standard's page shows the output contract filled in
+  with one of its own rule ids and its real severity counts, and prev/next now walks items in
+  reading order instead of skipping between categories. Templates and workflows gained an
+  expected-output field they had no equivalent of — several templates are reference shapes
+  that produce nothing at all, which is worth stating rather than leaving to inference.
+- Three things the site had no page for: the CLI commands, documented only inside the
+  onboarding walkthrough; the 13 seeded corpora that decide whether the reviewer still works;
+  and the roadmap, specs and plans under `docs/`. A seed page parses its own markers, so its
+  defect table and rule links are the file's current contents rather than a copy that drifts.
+  `redline sync` and `redline review` are listed and marked not built — two of the four
+  commands v3 fixes the surface at, and whether they exist is a question the docs should
+  answer.
+- The install page asks the npm registry at build time instead of asserting a version.
+  `npx redline-cli init` could not resolve for any reader: the package has never been
+  published, and with no `v*` tag the release workflow's own first-release guard refuses to
+  publish. Published, unpublished and could-not-check are worded apart deliberately — a
+  network blip must not read as a missing release — and the lookup has a timeout, never fails
+  a build, and honours `REDLINE_NPM_VERSION` and `REDLINE_NPM_REGISTRY` for an air-gapped
+  runner or a private mirror. This also separates the two version lines that were being
+  conflated: the npm package version, which `package.json` never carries because
+  semantic-release computes it at publish time, and the standards version in
+  `standards/manifest.json`, which is what rendered artifacts name.
+- CI builds the documentation site. It reads `standards/manifest.json`, the rule catalogue and
+  `scripts/lib/rules.mjs` at build time, so a standards change can break it — and nothing in
+  CI touched `web/`, so it would have broken silently.
+- Two permission tests asserted nothing when the suite runs as root. Both stage an unreadable
+  path with `chmod 000` and check the code degrades rather than throwing; root ignores
+  permission bits, so the read succeeded, the degradation never happened, and the suite was
+  red for a reason unrelated to the code under test. They now probe whether `chmod` can deny
+  this process a read at all and skip with that reason when it cannot — verified as a non-root
+  user, where both run and pass rather than skipping.
+
 - A register of onboarded repositories exists again, and it is derived rather than
   maintained. `registry.json` is discovered nightly from the `.redline.json` each onboarded
   repository already carries, so an entry exists exactly as long as that file does and a
