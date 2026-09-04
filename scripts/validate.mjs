@@ -148,6 +148,18 @@ if (!existsSync(join(ROOT, '.github/workflows/registry.yml'))) {
   fail('.github/workflows/registry.yml is missing — the register would silently stop refreshing and go stale without a single failing build');
 }
 
+// --- distribution -------------------------------------------------------------
+// Sync is what makes a standards change reach the estate. Without it every rule
+// change here is a change nobody receives, and the failure is silent by nature:
+// the repositories that did not get it look exactly like the ones that did.
+const syncWorkflow = read('workflows/redline-sync.yml');
+if (/^\s*if:\s*false\s*$/m.test(syncWorkflow)) {
+  fail('workflows/redline-sync.yml is gated off — a standards change would reach no onboarded repository');
+}
+if (!syncWorkflow.includes('redline.js sync')) {
+  fail('workflows/redline-sync.yml no longer calls `redline sync` — distribution is wired to nothing');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

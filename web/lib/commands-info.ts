@@ -79,15 +79,36 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     edit: "cli/commands/verify.ts, with per-host assertions in cli/platforms/github/verify.ts and cli/platforms/azure/verify.ts.",
   },
   sync: {
-    what: "Would land a standards change on every registered repository as a pull request, quoting the standards version it came from. Designed as the third of v3's four commands; not built.",
-    built: false,
+    what: "Lands the current standards on every registered repository as a pull request, quoting the version it came from. Targets come from registry.json, the register derived nightly from the estate — nobody maintains a list.",
+    built: true,
     onboard:
-      "Nothing to onboard — the command does not exist. workflows/redline-sync.yml is left in place as a shape to rewire, not something to un-comment: its job carries if: false and the script it called was deleted.",
-    usage: ["# not implemented"],
-    flags: [],
+      "Nothing to install in a product repository: sync runs in the Redline source repo, on a push to standards/ and on demand. It needs REDLINE_SYNC_TOKEN with contents:write, pull_requests:write and workflows:write on every target — without the workflows scope the push of .github/workflows/redline.yml is rejected and the whole pull request fails.",
+    usage: [
+      "redline sync --dry-run              # print the plan; pushes nothing, opens nothing",
+      "redline sync                        # open a pull request on every repo that is behind",
+      "redline sync --repo acme/web-app    # one repository",
+      "redline sync --force                # re-render a repo already at the current version",
+    ],
+    flags: [
+      {
+        flag: "--dry-run",
+        detail:
+          "Plans and renders but never pushes a branch or opens a pull request. Unlike redline init --dry-run it still reads from the host — it has to fetch each target's .redline.json and current artifacts to know what would change — so it needs a read credential.",
+      },
+      {
+        flag: "--repo <owner/name>",
+        detail:
+          "One repository instead of the estate. Every other registered repository is reported as skipped with the reason, so a narrowed run still shows you the whole picture.",
+      },
+      {
+        flag: "--force",
+        detail:
+          "Re-renders a repository already recording the current standards version. For a renderer change that alters output without moving the standards version — otherwise nothing would be behind and nothing would sync.",
+      },
+    ],
     output:
-      "Nothing today. Until it exists, an onboarded repository picks up a standards change only by re-running redline init by hand — which is why the roadmap makes distribution Phase 0 and gates everything else behind it. The half that was missing is no longer missing: registry.json now derives the list of repositories to target from the estate itself.",
-    edit: "Unbuilt. The roadmap's Phase 0.2 is where it is specified; nothing in cli/commands/ implements it yet.",
+      "One pull request per target that is behind, titled with the standards version and listing the generated files it changes. A repository whose artifacts already match gets nothing — no branch, no empty pull request. A target with an unmerged sync pull request already open has its branch updated and that pull request's body refreshed, never a second one opened. One unreachable repository is reported and the rest of the estate still syncs, but the run exits non-zero, because a distribution that reports success while missing repositories is how coverage silently rots.",
+    edit: "cli/sync/ — plan.ts decides who is behind, render.ts produces each target's artifacts, run.ts drives the estate. The host calls live in cli/platforms/github/push.ts.",
   },
   review: {
     what: "Would review the working tree, staged changes or an existing pull request against exactly the rules that apply to the changed files, in either an embedded or an API engine, returning findings against a published schema. Designed in full in v3 §6.2; not built.",

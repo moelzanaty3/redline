@@ -478,3 +478,118 @@ test('--help documents the per-capability selection', async () => {
   assert.match(usage, /--with/);
   assert.match(usage, /merge-policy/);
 });
+
+// --- redline sync ------------------------------------------------------------
+
+function registerWith(standardsVersion: string, repoName = 'web-app'): string {
+  const dir = tmp('redline-sync-cli-');
+  writeFileSync(
+    join(dir, 'registry.json'),
+    JSON.stringify({
+      generatedAt: 'x',
+      source: 'acme/redline',
+      entries: [
+        {
+          host: 'github',
+          org: 'acme',
+          repo: repoName,
+          defaultBranch: 'main',
+          profile: 'web',
+          standardsVersion,
+          cliVersion: '0.0.1',
+          onboardedAt: '2026-09-01T00:00:00.000Z',
+        },
+      ],
+    })
+  );
+  return dir;
+}
+
+test('sync --dry-run plans without pushing or opening anything', async () => {
+  const cwd = registerWith('0.0.0');
+  const lines: string[] = [];
+  const code = await run(['sync', '--dry-run'], {
+    cwd,
+    root,
+    sink: { out: (l: string) => lines.push(l), err: (l: string) => lines.push(l) },
+    syncHost: () => ({
+      async readRemoteConfig() {
+        return { config: { profile: 'web', vendors: ['agents'] } };
+      },
+      async readRemoteFile() {
+        return null;
+      },
+      async pushFiles() {
+        throw new Error('a dry run must not push');
+      },
+      async openPullRequest() {
+        throw new Error('a dry run must not open a pull request');
+      },
+    }),
+  });
+
+  assert.equal(code, 0);
+  assert.match(lines.join('\n'), /dry run/);
+});
+
+test('sync exits non-zero when any repository in the estate failed', async () => {
+  // Reporting 0 because most repositories succeeded is how a distribution
+  // quietly stops covering the ones it cannot reach.
+  const cwd = registerWith('0.0.0', 'broken');
+  const lines: string[] = [];
+  const code = await run(['sync'], {
+    cwd,
+    root,
+    sink: { out: (l: string) => lines.push(l), err: (l: string) => lines.push(l) },
+    syncHost: () => ({
+      async readRemoteConfig() {
+        throw new RedlineError('host', 'unreachable');
+      },
+      async readRemoteFile() {
+        return null;
+      },
+      async pushFiles() {
+        return { commit: null };
+      },
+      async openPullRequest() {
+        return { number: 0, url: '', created: false };
+      },
+    }),
+  });
+
+  assert.equal(code, 1);
+  assert.match(lines.join('\n'), /unreachable/);
+});
+
+test('sync without a register is a usage error, not a crash', async () => {
+  const cwd = tmp('redline-sync-cli-');
+  const lines: string[] = [];
+  const code = await run(['sync'], {
+    cwd,
+    root,
+    sink: { out: (l: string) => lines.push(l), err: (l: string) => lines.push(l) },
+    syncHost: () => ({
+      async readRemoteConfig() {
+        return { config: null };
+      },
+      async readRemoteFile() {
+        return null;
+      },
+      async pushFiles() {
+        return { commit: null };
+      },
+      async openPullRequest() {
+        return { number: 0, url: '', created: false };
+      },
+    }),
+  });
+
+  assert.equal(code, 2);
+  assert.match(lines.join('\n'), /register of onboarded repositories/);
+});
+
+test('usage names sync as a real command', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['--help'], opts);
+  assert.match(lines.join('\n'), /redline sync/);
+});

@@ -7,6 +7,33 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+- `redline sync` — the third of v3's four commands, and the one Phase 0 exists for. A
+  standards change now reaches every onboarded repository as a pull request instead of
+  waiting for someone to re-run `redline init` there by hand. Targets come from
+  `registry.json`; each target's profile and vendors are read from its own `.redline.json`
+  live rather than from the register, so a repository that changed since the last nightly
+  walk is rendered correctly rather than confidently wrong.
+- Three properties sync holds, each of which is a way this could have gone wrong. It seeds
+  the render with the target's **current** files, so everything a team wrote above a
+  `REDLINE:BEGIN` marker survives — rendering into an empty directory would have produced a
+  correct-looking `AGENTS.md` that deleted every repository's own context section at once.
+  It **branches from the default branch, never from a stale sync branch**, so an unmerged
+  pull request from an older standards version cannot carry its changes forward. And it
+  **updates an open sync pull request rather than opening a second**, because a scheduled
+  job that opens a new pull request every night is one nobody reads.
+- A repository already carrying the current render gets nothing — no branch, no empty pull
+  request. One unreachable repository is reported and the rest of the estate still syncs,
+  but the run exits non-zero: a distribution that reports success while quietly missing
+  repositories is exactly how coverage rots.
+- `workflows/redline-sync.yml` is no longer gated off, and `scripts/validate.mjs` fails the
+  build if it is gated off again or stops calling the command. The failure it guards is
+  silent by nature — the repositories that did not receive a change look exactly like the
+  ones that did.
+- **Azure DevOps sync is outstanding.** A registered Azure repository is reported as
+  unsupported rather than skipped silently, and Phase 0's exit condition is not met until it
+  exists. Sync also never merges and never pushes to a default branch: it makes the change
+  available, and the dashboard's coverage figure is what makes an ignored one visible.
+
 - Every reference item on the documentation site is its own page, listed in the sidebar under
   its category rather than reachable only through a wall of cards, and each answers the same
   four questions in the same order: how to onboard it, how to use it, what output to expect,

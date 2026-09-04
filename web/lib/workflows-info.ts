@@ -42,20 +42,20 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     action: "Nothing directly — it's called by the caller workflow your repo already has. If it fails, see The merge gate for what each check expects and how to satisfy or exempt it.",
   },
   "redline-sync": {
-    what: "Would distribute standards, the gate caller and the PR template to already-onboarded repos as pull requests. Its old register, sync-targets.txt, was deleted; registry.json replaces it — derived nightly from the .redline.json each onboarded repo carries, rather than a list anyone maintains.",
-    disabled: true,
+    what: "Distributes the rendered standards to onboarded repos as pull requests — never as pushes, never as merges. Targets come from registry.json, derived nightly from the .redline.json each onboarded repo carries rather than a list anyone maintains.",
+    disabled: false,
     livesIn: "This (source) repo.",
-    trigger: "push to main touching standards/**, templates/**, etc., or workflow_dispatch (dry-run, only <repo>) — but the sync job carries if: false, so neither trigger runs it.",
+    trigger: "push to main touching standards/**, cli/render/**, templates/** or the PR template, plus workflow_dispatch with dry-run and only <owner/name> inputs.",
     onboard:
       "Nothing to install: it lives in this repository and would run here. It has never distributed anything, because its job carries if: false.",
     steps: [
-      "Would verify this repo's own rendered artifacts are current (scripts/render-self.mjs --check).",
-      "Would open sync pull requests on every target repo by running bash scripts/sync.sh — but scripts/sync.sh was deleted this release with no replacement, so even removing if: false would not make this job run; the script it calls no longer exists.",
+      "Verifies this repo's own rendered artifacts are current (scripts/render-self.mjs --check) before distributing anything — a sync of stale artifacts would propagate the staleness to every onboarded repo at once, as a pull request each team is asked to trust.",
+      "Builds the CLI and runs `redline sync`, which reads registry.json, renders each target's artifacts against its own recorded profile and vendors, and opens or updates one pull request per repo that is behind.",
     ],
-    phase1: "Disabled (if: false). redline sync is a control-plane command that ships in Phase 3, alongside telemetry. Until then, an already-onboarded repo picks up a standards change only by re-running redline init by hand.",
+    phase1: "Active. GitHub only — Azure DevOps sync is outstanding, and a registered Azure repository is reported as unsupported rather than skipped silently.",
     output:
-      "Nothing today — the job never runs. When it does, one pull request per registered repository carrying the standards change, quoting the standards version it came from. The register those targets come from now exists again (registry.json), which was the missing half; the command it would call, redline sync, is still unbuilt.",
-    action: "Nothing to run. Re-enabling it needs redline sync built first — the workflow's shape is left in place to rewire, not to un-comment. Its register is no longer the blocker.",
+      "One pull request per registered repository that is behind, titled with the standards version and listing the generated files it changes. A repository already carrying the current render gets nothing rather than an empty pull request, and one whose previous sync pull request is still open has that one updated rather than a second opened. Content above each REDLINE:BEGIN marker is never touched.",
+    action: "Nothing, normally — a push to standards/ triggers it. Run it by hand with the dry-run input first when changing the renderer itself, and use only <owner/name> to rehearse against a single repository before the estate.",
   },
   "redline-collect": {
     what: "Pulls review outcomes for merged PRs across the org and commits them as monthly JSONL, via scripts/collect-telemetry.mjs.",

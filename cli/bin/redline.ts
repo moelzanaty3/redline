@@ -16,7 +16,10 @@ import {
   type MenuSelections,
 } from '../config/redline-json.ts';
 import { verify } from '../commands/verify.ts';
+import { sync } from '../commands/sync.ts';
+import { createSyncHost } from '../sync/host.ts';
 import type { Platform } from '../platforms/types.ts';
+import type { SyncHost } from '../sync/run.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -51,6 +54,13 @@ const USAGE = [
   '  redline verify [--gate]',
   '      check this repository still matches what .redline.json claims',
   '',
+  '  redline sync [--dry-run] [--repo <owner/name>] [--force]',
+  '      open a pull request on every registered repository whose standards are behind',
+  '      --dry-run   print the plan; opens nothing, pushes nothing',
+  '      --repo <owner/name>  one repository instead of the estate',
+  '      --force     re-render a repository already at the current standards version',
+  '      run from a checkout of the Redline source repository, not a product repo',
+  '',
   '  redline --version',
 ].join('\n');
 
@@ -71,6 +81,9 @@ export interface RunDeps {
   root?: string;
   sink?: Sink;
   resolvePlatform?: (cwd: string, opts?: ResolvePlatformOptions) => Promise<Platform>;
+  // Sync spans the estate rather than one repository, so it takes a host of its
+  // own instead of the single resolved platform every other command uses.
+  syncHost?: () => SyncHost;
 }
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
@@ -244,6 +257,46 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         else log.info('Redline gate failed.');
       }
       return exitCode;
+    }
+
+    if (command === 'sync') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: {
+            'dry-run': { type: 'boolean', default: false },
+            repo: { type: 'string' },
+            force: { type: 'boolean', default: false },
+          },
+          allowPositionals: false,
+        })
+      );
+
+      const dryRun = values['dry-run'] === true;
+      // A dry run reads the register and the target's own files but never
+      // writes, so it still needs a read credential — unlike `init --dry-run`,
+      // which contacts no host at all. Saying so beats a confusing 403.
+      const report = await sync(deps.syncHost?.() ?? createSyncHost(), {
+        root,
+        cwd,
+        ...(values.repo ? { repo: values.repo } : {}),
+        ...(values.force ? { force: true } : {}),
+        ...(dryRun ? { dryRun: true } : {}),
+      });
+
+      log.info(`standards v${report.plan.standardsVersion} — ${report.plan.targets.length} target(s), ${report.plan.skipped.length} skipped`);
+      for (const { repo, outcome } of report.results) {
+        if (outcome.kind === 'failed') log.error(`  ${repo}: ${outcome.detail}`);
+        else if (outcome.kind === 'current') log.info(`  ${repo}: already current`);
+        else if (outcome.kind === 'not-onboarded') log.warn(`  ${repo}: no .redline.json — not onboarded`);
+        else log.info(`  ${repo}: ${outcome.kind} ${outcome.url}`);
+      }
+      if (dryRun) log.info('dry run — no branch was pushed and no pull request was opened');
+
+      // A partially failed estate run is a failure. Reporting 0 because most
+      // repositories succeeded is how a distribution quietly stops covering the
+      // ones it cannot reach.
+      return report.failures > 0 ? exitCodeFor('failed') : 0;
     }
 
     log.error(`unknown command "${command}"`, 'run: redline --help');
