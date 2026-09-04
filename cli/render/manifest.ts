@@ -26,6 +26,10 @@ export interface Manifest {
   profiles: Record<string, string[]>;
   profileAliases: Record<string, string>;
   vendors: Record<string, VendorDef>;
+  // Rule ids a checker decides without a model. Absent in manifests written
+  // before the tier existed, where it reads back as empty — every rule is
+  // judgement, which is exactly what those manifests meant.
+  deterministic: string[];
 }
 
 function isNonNullObject(value: unknown): value is Record<string, unknown> {
@@ -66,6 +70,18 @@ export function parseManifest(raw: unknown): Manifest {
     throw new RedlineError('usage', 'standards manifest "profileAliases" must be an object');
   }
   const profileAliases = (profileAliasesRaw ?? {}) as Record<string, string>;
+
+  const deterministicRaw = raw['deterministic'];
+  if (deterministicRaw !== undefined && !Array.isArray(deterministicRaw)) {
+    throw new RedlineError('usage', 'standards manifest "deterministic" must be an array of rule ids');
+  }
+  const deterministic = (deterministicRaw ?? []) as string[];
+  for (const id of deterministic) {
+    if (typeof id !== 'string') {
+      throw new RedlineError('usage', 'standards manifest "deterministic" must contain only rule ids');
+    }
+  }
+
   return {
     version,
     core: { title: coreTitle, source: coreSource },
@@ -73,6 +89,7 @@ export function parseManifest(raw: unknown): Manifest {
     profiles: profiles as Record<string, string[]>,
     profileAliases,
     vendors: vendors as Record<string, VendorDef>,
+    deterministic,
   };
 }
 

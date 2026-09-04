@@ -216,6 +216,21 @@ if (read('workflows/redline-gate.yml').includes('code-scanning')) {
   fail('workflows/redline-gate.yml reads code scanning — ingested findings are measured only and must never gate a merge (roadmap open question 4)');
 }
 
+// --- the deterministic tier ----------------------------------------------------
+// A rule classified as machine-checked and then checked by nobody is worse than
+// one left to the model: everybody believes it is covered, and the model was told
+// nothing, so it is enforced by no one at all.
+const deterministic = manifest.deterministic ?? [];
+const checksSource = read('cli/policy/checks.ts');
+for (const id of deterministic) {
+  if (!rules.has(id)) {
+    fail(`manifest "deterministic" lists "${id}", which is not a rule in standards/ — ids are permanent and this one does not exist`);
+  }
+  if (!checksSource.includes(`'${id}'`)) {
+    fail(`rule "${id}" is classified deterministic but cli/policy/checks.ts implements no check for it — it is enforced by nobody`);
+  }
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

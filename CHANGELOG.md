@@ -7,6 +7,42 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Standards v0.0.3 — the deterministic policy tier
+
+- A share of what the standard asserts needs no model. A ticket reference is present or it
+  is not; a type-checker suppression carries one or it does not. Sending those to an LLM
+  costs tokens and invites a false positive on a *fact*, which is the worst kind — an author
+  cannot argue with a model about whether the word TODO appears on a line. `redline policy`
+  evaluates them directly, and the gate runs it on every pull request.
+- **The classification lives in `standards/manifest.json`, not in the markdown.** The roadmap
+  rates this the highest-risk item because it changes the shape of the source of truth, and
+  this is the change that removes most of that risk: `standards/*.md` is what a reviewer
+  reads, and deleting a rule from it because a checker also covers it would narrow what the
+  model considers. Every rule is classified by construction — listed means deterministic,
+  absent means judgement — and **not one rule id changed**, because every historical
+  telemetry record is keyed on them.
+- **No rule changed meaning.** Where a check can only decide part of a rule it decides that
+  part and the model still sees the whole rule. `javascript/unsafe-numeric-coercion` is
+  checked for a missing `parseInt` radix; whether a `Number()` coercion is applied to user
+  input is judgement and stays with the model.
+- Only ADDED lines are examined, which is a rule rather than an optimisation. Flagging an
+  existing `var` in a file the author merely renamed is exactly what the standard's "what NOT
+  to flag" section forbids, and an author who is right to ignore one finding learns to ignore
+  the next one too.
+- `scripts/validate.mjs` fails the build if a rule is classified deterministic and has no
+  implementation. That failure — a rule everyone believes is machine-checked and which is in
+  fact checked by nobody — is worse than leaving it to the model, because the model would at
+  least have looked.
+- The floor is BLOCKER, not HIGH. A deterministic tier that failed merges over a missing
+  ticket reference on day one would be switched off by week two, and then nothing it decides
+  is enforced at all. A repository can raise it with `--fail-on`.
+- `core/hardcoded-secrets` is deliberately NOT in the tier. A regex over added lines is how a
+  secret scanner earns a reputation for false positives; the gate already runs a real one
+  against verified secrets, and the model keeps the rule for what a scanner misses.
+- Verified against the seeded corpus: the tier flags `seeded/javascript`'s SEED 8 at the
+  right line, and seed recall is unaffected because nothing was removed from what the model
+  is asked to consider.
+
 ### Claude skills — per-stack rules, and an honest measurement of what they cost
 
 - A fifth render target closes a real asymmetry. Copilot gets `applyTo` globs and loads a

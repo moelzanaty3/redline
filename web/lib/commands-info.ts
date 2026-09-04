@@ -84,6 +84,32 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       "One line per check: ok, FAIL, or ?? for a check that could not run. Findings name what was checked and what was found — a gate that no longer publishes its check, a merge policy that exists but was switched out of enforcement, zero required approvals, artifacts left stale by an ignored sync pull request, work still waiting on an administrator. Exit 0 when clean, 1 on drift, 2 when the repository was never onboarded — a distinction that matters, because those two need different people to act.",
     edit: "cli/commands/verify.ts for the local path and cli/verify/remote.ts for --repo. Both parse the gate caller with the same function, deliberately: two independent answers to \"what does this file publish\" would eventually disagree, and that disagreement is the difference between a repository reported healthy and one reported broken.",
   },
+  policy: {
+    what: "Evaluates the rules a checker can decide, with no model call. A share of what the standard asserts needs no judgement — a ticket reference is present or it is not, a suppression carries one or it does not — and sending those to an LLM costs tokens and invites a false positive on a fact, which is the worst kind: an author cannot argue with a model about whether the word TODO appears.",
+    built: true,
+    onboard:
+      "Nothing to install. The gate runs it as the `policy` job on every pull request. Which rules it evaluates is decided by standards/manifest.json → deterministic, not by the checker: a rule with an implementation but no classification does not run.",
+    usage: [
+      "git diff main...HEAD > change.diff",
+      "redline policy --diff-file change.diff              # exit 1 on a BLOCKER",
+      "redline policy --diff-file change.diff --fail-on HIGH",
+    ],
+    flags: [
+      {
+        flag: "--diff-file <path>",
+        detail:
+          "A unified diff. Only ADDED lines are examined, and that is a rule rather than an optimisation: flagging an existing `var` in a file the author merely renamed is exactly the noise the standard's \"what NOT to flag\" section forbids, and an author who is right to ignore one finding learns to ignore the next.",
+      },
+      {
+        flag: "--fail-on <severity>",
+        detail:
+          "The floor, BLOCKER by default. Deliberately not HIGH: a deterministic tier that failed merges over a missing ticket reference on day one would be switched off by week two, and then nothing it decides is enforced at all.",
+      },
+    ],
+    output:
+      "One finding per violation in the output contract — severity, rule id, and the problem — each with the file and line a reviewer can open. The run always states how many rules were evaluated, including when it found nothing: silence has to be distinguishable from not having checked. A rule the manifest classifies as deterministic but which has no implementation is warned about by name, because a rule everyone believes is machine-checked and is in fact checked by nobody is worse than one left to the model.",
+    edit: "cli/policy/checks.ts holds the checks and cli/policy/diff.ts the diff parse. The classification lives in standards/manifest.json → deterministic, NOT in the markdown: standards/*.md is what a reviewer reads, and removing a rule from it because a checker also covers it would narrow what the model considers. scripts/validate.mjs fails the build if a classified rule has no check.",
+  },
   exempt: {
     what: "Decides whether a pull request carries a valid exemption for a failing process check. The gate calls it; you rarely will. It exists because `redline-exempt` was a bare label that recorded nothing — not who accepted the failing check, not why, not until when.",
     built: true,

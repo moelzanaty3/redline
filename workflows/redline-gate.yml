@@ -102,6 +102,37 @@ jobs:
             exit 1
           fi
 
+  policy:
+    # The deterministic tier: the rules a checker can decide, evaluated with no
+    # model call. They cost nothing to run and they cannot hallucinate, which is
+    # the point — an author cannot argue with a model about whether the word TODO
+    # appears on a line.
+    #
+    # Soft-fail, like the other process checks. The never-exemptible set is
+    # exactly dependency-review and secrets and this does not join it: these are
+    # code-standard findings, not a security boundary.
+    name: Deterministic policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Evaluate the deterministic rules
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          REDLINE_CLI_VERSION: '0.0.1'
+        run: |
+          set -euo pipefail
+          # Three dots: the diff against the merge base, not against the tip of
+          # the base branch. Two dots would attribute every commit that landed on
+          # main since this branch started to this pull request's author.
+          git diff "${BASE}...${HEAD}" > /tmp/redline.diff
+          npx --yes "redline-cli@${REDLINE_CLI_VERSION}" policy --diff-file /tmp/redline.diff
+
   dependency-review:
     name: Dependency review
     runs-on: ubuntu-latest
@@ -136,7 +167,7 @@ jobs:
   gate:
     # Aggregate. The branch ruleset requires the check "redline-gate / gate".
     name: gate
-    needs: [checklist, adr, dependency-review, secrets]
+    needs: [checklist, adr, policy, dependency-review, secrets]
     if: always()
     runs-on: ubuntu-latest
     steps:

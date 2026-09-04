@@ -1,6 +1,6 @@
 {
   "$comment": "Single source of truth for Redline. scripts/render.mjs turns this into vendor-specific artifacts. Never hand-edit generated output.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "core": {
     "title": "Redline Core Engineering Standards",
     "source": "standards/core.md"
@@ -203,5 +203,12 @@
       "title": "Claude skills (per-stack, loaded on demand)",
       "enabled": false
     }
-  }
+  },
+  "$deterministicComment": "Rules a checker decides without a model. The classification lives HERE and not in the markdown deliberately: standards/*.md is what a reviewer reads, and removing a rule from it because a checker also covers it would narrow what the model considers. Every rule is classified by construction \u2014 listed here means deterministic, absent means judgement. Ids are permanent and are never rewritten by this list. scripts/validate.mjs fails the build if an id here has no implementation in cli/policy/checks.ts, which is the failure mode where a rule is silently enforced by nobody.",
+  "deterministic": [
+    "core/untracked-todo",
+    "core/type-checker-suppression",
+    "javascript/var-in-new-code",
+    "javascript/unsafe-numeric-coercion"
+  ]
 }

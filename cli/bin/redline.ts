@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { CLI_VERSION } from '../core/version.ts';
 import { createLog, type Sink } from '../core/log.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
+import { isSeverity } from '../core/severity.ts';
 import {
   resolvePlatform as defaultResolvePlatform,
   type ResolvePlatformOptions,
@@ -18,6 +19,7 @@ import {
 import { verify } from '../commands/verify.ts';
 import { sync } from '../commands/sync.ts';
 import { exempt } from '../commands/exempt.ts';
+import { formatFinding, policy } from '../commands/policy.ts';
 import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
@@ -60,6 +62,9 @@ const USAGE = [
   '      check this repository still matches what .redline.json claims',
   '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
   '                  that genuinely needs a working tree reports ?? rather than passing',
+  '',
+  '  redline policy --diff-file <path>',
+  '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER',
   '',
   '  redline exempt --body-file <path> [--scope <check>]',
   '      decide whether a pull request carries a valid exemption for a failing process',
@@ -292,6 +297,42 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         else log.info('Redline gate failed.');
       }
       return exitCode;
+    }
+
+    if (command === 'policy') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { 'diff-file': { type: 'string' }, 'fail-on': { type: 'string' } },
+          allowPositionals: false,
+        })
+      );
+      const diffFile = values['diff-file'];
+      if (!diffFile) throw new RedlineError('usage', 'redline policy needs --diff-file <path>');
+      const failOn = values['fail-on'];
+      if (failOn !== undefined && !isSeverity(failOn)) {
+        throw new RedlineError('usage', `--fail-on must be BLOCKER, HIGH or SUGGESTION, not "${failOn}"`);
+      }
+
+      const report = policy({ root, diffFile, ...(failOn ? { failOn } : {}) });
+
+      for (const finding of report.findings) {
+        log.info(`${finding.file}:${finding.line}`);
+        log.info(`  ${formatFinding(finding)}`);
+      }
+      // Said on every run, including the clean one. A reviewer has to be able to
+      // tell "checked and clean" from "not checked", and silence looks the same
+      // as both.
+      log.info(
+        report.findings.length === 0
+          ? `no deterministic findings — ${report.evaluated.length} rule(s) evaluated with no model call`
+          : `${report.findings.length} finding(s) from ${report.evaluated.length} deterministic rule(s)`
+      );
+      for (const id of report.unimplemented) {
+        log.warn(`${id} is classified deterministic but has no check — it is enforced by nobody`);
+      }
+
+      return report.ok ? 0 : exitCodeFor('failed');
     }
 
     if (command === 'exempt') {
