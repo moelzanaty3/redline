@@ -142,19 +142,19 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     action: "Nothing, normally — it runs itself weekly. Trigger it by hand with workflow_dispatch and a targets override when validating a new AI reviewer vendor or a standards change.",
   },
   "verify-onboarding": {
-    what: "Would re-verify every onboarded repo on a schedule and open an issue on drift — a ruleset edited by hand, a renamed caller job, push protection turned off.",
-    disabled: true,
+    what: "Re-verifies every onboarded repo weekly and opens one tracking issue on drift — a ruleset edited by hand, a renamed caller job, push protection turned off, artifacts left stale by an ignored sync pull request.",
+    disabled: false,
     livesIn: "This (source) repo.",
-    trigger: "Weekly, Tuesday 06:00 UTC, plus workflow_dispatch with a single-repo override — but the verify job carries if: false, so neither trigger runs it.",
+    trigger: "Weekly, Tuesday 06:00 UTC, plus workflow_dispatch with an only <owner/name> override.",
     onboard:
       "It lives in this repository and is already here. It has never verified anything: its job carries if: false, and the script it called was deleted.",
     steps: [
-      "Would loop over its register (or one --repo override) calling bash scripts/setup-repo.sh <repo> --verify. The register exists again as registry.json, but scripts/setup-repo.sh is deleted, so removing if: false still would not make this job run.",
-      "Would open or update a single tracking issue naming every repo that failed verification.",
+      "Loops over registry.json (or one only <owner/name> override) calling `redline verify --repo` for each. The loop deliberately does not abort on a failure: a drifted repository exits non-zero by design, and stopping at the first one would leave the rest of the estate unverified every week.",
+      "Opens or updates a single tracking issue naming every repo that drifted, with the failing checks quoted. One issue updated in place, never one per run — a new issue per run turns a standing problem into a backlog nobody reads.",
     ],
-    phase1: "Disabled (if: false). redline verify reads .redline.json from a local checkout of the target repo; it has no --repo owner/name mode that works over the API alone. A scheduled cross-repo verify needs a clone-then-verify loop, which is control-plane work alongside redline sync in Phase 3.",
+    phase1: "Active. GitHub only — Azure DevOps remote verification is outstanding, and an Azure entry in the register is reported as unsupported rather than skipped silently.",
     output:
-      "Nothing today. When it runs, a single tracking issue naming every repository that failed verification — opened once and updated in place, not one issue per run.",
-    action: "Nothing to run. Verify a single repo yourself instead: npx redline-cli verify from a checkout of it.",
+      "A single tracking issue naming every repository that drifted, with its failing checks quoted — opened once and updated in place. A check that could not run appears as ?? and never fails a repository on its own: failing on the absence of evidence trains an operator to ignore the weekly issue, which costs more than the check is worth. No drift means no issue and no comment.",
+    action: "Nothing, normally — it runs itself weekly. Use the only <owner/name> input to check one repository on demand, or run `redline verify --repo owner/name` yourself; neither needs a checkout of the target.",
   },
 };

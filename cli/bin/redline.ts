@@ -18,8 +18,12 @@ import {
 import { verify } from '../commands/verify.ts';
 import { sync } from '../commands/sync.ts';
 import { createSyncHost } from '../sync/host.ts';
+import { verifyRemote } from '../verify/remote.ts';
+import { createRemoteVerifyHost } from '../verify/host.ts';
+import { standardsVersion } from '../commands/sync.ts';
 import type { Platform } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
+import type { RemoteVerifyHost } from '../verify/remote.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -51,8 +55,10 @@ const USAGE = [
   '                  rather than overwrite a file that may be the repository\'s own',
   '      omitted flags keep whatever .redline.json already recorded',
   '',
-  '  redline verify [--gate]',
+  '  redline verify [--gate] [--repo <owner/name>]',
   '      check this repository still matches what .redline.json claims',
+  '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
+  '                  that genuinely needs a working tree reports ?? rather than passing',
   '',
   '  redline sync [--dry-run] [--repo <owner/name>] [--force]',
   '      open a pull request on every registered repository whose standards are behind',
@@ -84,6 +90,7 @@ export interface RunDeps {
   // Sync spans the estate rather than one repository, so it takes a host of its
   // own instead of the single resolved platform every other command uses.
   syncHost?: () => SyncHost;
+  remoteVerifyHost?: () => RemoteVerifyHost;
 }
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
@@ -235,10 +242,33 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const { values } = parseCliArgs(() =>
         parseArgs({
           args: rest,
-          options: { gate: { type: 'boolean', default: false } },
+          options: { gate: { type: 'boolean', default: false }, repo: { type: 'string' } },
           allowPositionals: false,
         })
       );
+
+      if (values.repo !== undefined) {
+        if (values.gate === true) {
+          throw new RedlineError(
+            'usage',
+            '--gate publishes this repository\'s merge status and cannot target another repository',
+            'drop --repo to run the gate, or drop --gate to verify a remote repository'
+          );
+        }
+        const remoteHost = deps.remoteVerifyHost?.() ?? createRemoteVerifyHost();
+        const remoteRef = await remoteHost.resolveRef(values.repo);
+        const remoteReport = await verifyRemote(remoteHost, remoteRef, {
+          root,
+          standardsVersion: standardsVersion(root),
+        });
+        log.info(`${values.repo} (${remoteRef.defaultBranch})`);
+        log.report(remoteReport.findings);
+        // Same mapping as the local path: one finding means the repository was
+        // never onboarded, which is a different thing to tell an operator than
+        // onboarded-and-drifted.
+        const never = !remoteReport.ok && remoteReport.findings.length === 1;
+        return remoteReport.ok ? 0 : never ? exitCodeFor('usage') : exitCodeFor('failed');
+      }
       // resolve is passed unevaluated: verify() must be able to report "not
       // onboarded" without a host credential — see cli/commands/verify.ts.
       const report = await verify(() => resolve(cwd), { cwd, root, gate: values.gate === true });

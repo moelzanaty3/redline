@@ -7,6 +7,26 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+- `redline verify --repo owner/name` verifies a repository over the API, with no checkout.
+  This is what `workflows/verify-onboarding.yml` was missing, and it is no longer gated off:
+  the weekly sweep walks the register and opens one tracking issue — updated in place, never
+  one per run — naming every repository that drifted and quoting its failing checks.
+- **A check that could not run reports `??`, never `ok`.** Some assertions genuinely need a
+  working tree, and a token can be structurally unable to read a setting without that being
+  a refusal. Reporting either as a pass produces a false all-clear across the whole estate
+  at once, which is worse than not checking. An `??` also never fails a repository on its
+  own: failing on the absence of evidence trains an operator to ignore the weekly issue.
+- Both verify paths parse the gate caller with the same function. Two independent answers to
+  "what check does this file publish" would eventually disagree, and that disagreement is
+  exactly the difference between a repository reported healthy and one reported broken.
+- `--gate` and `--repo` together are refused rather than one being silently ignored: `--gate`
+  publishes *this* repository's merge status and cannot speak for another one.
+- `scripts/validate.mjs` fails the build if either distribution or drift detection is gated
+  off again or stops calling its command. Both failures are silent by nature — a repository
+  that never received a change looks exactly like one that did.
+- **Azure DevOps remote verification is outstanding**, as its sync is. An Azure entry in the
+  register is reported as unsupported rather than skipped silently.
+
 - `redline sync` — the third of v3's four commands, and the one Phase 0 exists for. A
   standards change now reaches every onboarded repository as a pull request instead of
   waiting for someone to re-run `redline init` there by hand. Targets come from

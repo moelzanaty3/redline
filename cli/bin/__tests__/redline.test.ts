@@ -593,3 +593,54 @@ test('usage names sync as a real command', async () => {
   await run(['--help'], opts);
   assert.match(lines.join('\n'), /redline sync/);
 });
+
+// --- redline verify --repo ---------------------------------------------------
+
+test('verify --repo reports drift over the API and exits 1', async () => {
+  const lines: string[] = [];
+  const code = await run(['verify', '--repo', 'acme/web-app'], {
+    cwd: repo(),
+    root,
+    sink: { out: (l: string) => lines.push(l), err: (l: string) => lines.push(l) },
+    remoteVerifyHost: () => ({
+      async resolveRef(repo: string) {
+        const [org, name] = repo.split('/');
+        return { host: 'github' as const, org: org ?? '', repo: name ?? '', defaultBranch: 'main' };
+      },
+      async readRemoteConfig() {
+        return { config: null };
+      },
+      async readRemoteFile() {
+        return null;
+      },
+      machineryFromBody() {
+        return { path: 'x', expected: 'y', present: false, publishes: null };
+      },
+      async readPolicy() {
+        return null;
+      },
+      async readSecurityState() {
+        return { outcomes: [] };
+      },
+      async latestPullRequestNumber() {
+        return null;
+      },
+      async readReportedCheckNames() {
+        return [];
+      },
+    }),
+  });
+
+  // A repository that was never onboarded is usage (2), not drift (1) — the
+  // same distinction the local path draws.
+  assert.equal(code, 2);
+  assert.match(lines.join('\n'), /not onboarded/);
+});
+
+test('--gate and --repo together are refused rather than silently ignoring one', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(['verify', '--gate', '--repo', 'acme/web-app'], opts);
+
+  assert.equal(code, 2);
+  assert.match(lines.join('\n'), /cannot target another repository/);
+});

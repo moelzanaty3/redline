@@ -1,15 +1,15 @@
-# Lives in the Redline source repo. Re-verifies every onboarded repo on a schedule.
+# Lives in the Redline source repo. Re-verifies every onboarded repo on a schedule and
+# opens one tracking issue when any of them has drifted — a ruleset edited by hand, a
+# renamed caller job, push protection switched off, artifacts left stale by an ignored
+# sync pull request.
 #
-# Onboarding is verified once, by hand, at setup — and then quietly rots: someone edits
-# the ruleset, renames the caller job, or turns off push protection, and the gate becomes
-# decorative without a single failing build anywhere. This turns that from a thing
-# somebody was supposed to remember into a thing that opens an issue.
+# Drift is silent by nature: a repository whose gate stopped publishing looks exactly
+# like one whose gate is green and quiet. This loop is what makes the difference visible
+# without anyone going to look.
 #
-# DISABLED as of redline v3 Phase 1: `redline verify` (unlike scripts/setup-repo.sh
-# --verify) reads .redline.json from a local checkout of the target repo — it has no
-# `--repo owner/name` mode that works purely over the API. Re-enabling this on a schedule
-# needs a clone-then-verify loop, which is control-plane work alongside `redline sync` in
-# Phase 3. See CHANGELOG.md.
+# Targets come from registry.json — the same derived register sync uses. A check that
+# genuinely needs a working tree reports `??` rather than passing, so a repository is
+# never reported healthy on the strength of a check that did not run.
 name: Redline Verify Onboarding
 
 on:
@@ -17,8 +17,8 @@ on:
     - cron: '0 6 * * 2'
   workflow_dispatch:
     inputs:
-      repo:
-        description: Verify a single repo (owner/name) instead of every sync target
+      only:
+        description: Verify a single repo, as owner/name
         type: string
         required: false
 
@@ -27,83 +27,85 @@ permissions:
   issues: write
 
 concurrency:
-  group: verify-onboarding
+  group: redline-verify-onboarding
   cancel-in-progress: false
 
 jobs:
   verify:
-    # Dead in Phase 1: the steps below still call the deleted scripts/setup-repo.sh
-    # (twice — the verify loop and the drift-issue body text). Left in place, not
-    # deleted, purely as the shape to rewire once a clone-then-verify loop lands in
-    # Phase 3 — see the DISABLED note above and CHANGELOG.md.
-    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      - name: Verify each onboarded repo
+      - name: Install
+        run: npm ci
+
+      - name: Build CLI
+        run: npm run build
+
+      - name: Verify every registered repository
         id: verify
         env:
-          # Read-only is enough: --verify only reads rulesets, check runs and repo settings.
           GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
-          ORG: ${{ github.repository_owner }}
-          SINGLE: ${{ inputs.repo }}
+          ONLY: ${{ inputs.only }}
         run: |
           set -uo pipefail
-          failures=()
-          checked=0
-
-          verify_one() {
-            local repo="$1"
-            echo "::group::$repo"
-            if bash scripts/setup-repo.sh "$repo" --verify; then
-              echo "::endgroup::"
-              return 0
-            fi
-            echo "::endgroup::"
-            return 1
-          }
-
-          if [[ -n "${SINGLE:-}" ]]; then
-            checked=1
-            verify_one "$SINGLE" || failures+=("$SINGLE")
-          else
-            exec 3< sync-targets.txt
-            while read -r name _profile _rest <&3; do
-              [[ -z "${name// /}" || "$name" == \#* ]] && continue
-              checked=$(( checked + 1 ))
-              verify_one "$ORG/$name" || failures+=("$ORG/$name")
-            done
-            exec 3<&-
+          if [ ! -f registry.json ]; then
+            echo "::error::registry.json is missing — the register has not been derived yet."
+            exit 1
           fi
 
-          {
-            echo "### Redline onboarding verification"
-            echo
-            echo "Checked **$checked** repo(s); **${#failures[@]}** failing."
-            for repo in ${failures[@]+"${failures[@]}"}; do echo "- $repo"; done
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$ONLY" ]; then
+            repos="$ONLY"
+          else
+            repos=$(node -e 'const r=require("./registry.json");for(const e of r.entries)if(e.host==="github")console.log(`${e.org}/${e.repo}`)')
+          fi
 
-          printf 'checked=%s\n' "$checked" >> "$GITHUB_OUTPUT"
-          printf 'failures=%s\n' "${failures[*]:-}" >> "$GITHUB_OUTPUT"
-          [[ ${#failures[@]} -eq 0 ]]
+          : > drift.txt
+          # `set -e` is deliberately NOT on for this loop: a drifted repository
+          # exits non-zero by design, and aborting on the first one would leave
+          # the rest of the estate unverified every week.
+          while read -r repo; do
+            [ -z "$repo" ] && continue
+            echo "--- $repo"
+            if ! node dist/bin/redline.js verify --repo "$repo" 2>&1 | tee /tmp/out.txt; then
+              {
+                echo "### $repo"
+                echo '```'
+                grep -E '^(FAIL|  \?\?)' /tmp/out.txt || cat /tmp/out.txt
+                echo '```'
+              } >> drift.txt
+            fi
+          done <<< "$repos"
 
-      - name: Open or update a drift issue
-        if: failure() && steps.verify.outputs.failures != ''
+          if [ -s drift.txt ]; then
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the drift issue
+        if: steps.verify.outputs.drift == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          FAILURES: ${{ steps.verify.outputs.failures }}
-          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: 'Redline: onboarded repositories have drifted'
         run: |
           set -euo pipefail
-          title="Redline onboarding drift detected"
-          body=$(printf 'These repos no longer verify. Their gate may be reporting a check name the ruleset does not require, or their security floor has been turned off.\n\n%s\n\nRun: %s\n\nInvestigate by checking out each repo and running: npx redline-cli verify\n' \
-            "$(for r in $FAILURES; do echo "- $r"; done)" "$RUN")
-          existing=$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // ""')
-          if [[ -n "$existing" ]]; then
-            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          # One issue, updated in place. A new issue per run turns a standing
+          # problem into a backlog nobody reads.
+          body=$(cat drift.txt)
+          existing=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
           else
-            gh issue create --repo "$REPO" --title "$title" --body "$body"
+            gh issue create --title "$TITLE" --body "$body"
           fi
+
+      - name: Summarise
+        if: always()
+        run: |
+          if [ -s drift.txt ]; then cat drift.txt >> "$GITHUB_STEP_SUMMARY";
+          else echo "No drift detected." >> "$GITHUB_STEP_SUMMARY"; fi

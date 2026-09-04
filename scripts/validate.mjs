@@ -160,6 +160,17 @@ if (!syncWorkflow.includes('redline.js sync')) {
   fail('workflows/redline-sync.yml no longer calls `redline sync` — distribution is wired to nothing');
 }
 
+// Drift re-detection is the other half of distribution: sync makes a change
+// available, this is what notices a repository that never took it, or that had
+// its gate quietly weakened afterwards.
+const verifyWorkflow = read('workflows/verify-onboarding.yml');
+if (/^\s*if:\s*false\s*$/m.test(verifyWorkflow)) {
+  fail('workflows/verify-onboarding.yml is gated off — estate drift would go undetected');
+}
+if (!verifyWorkflow.includes('verify --repo')) {
+  fail('workflows/verify-onboarding.yml no longer calls `redline verify --repo` — drift detection is wired to nothing');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

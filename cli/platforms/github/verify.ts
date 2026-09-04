@@ -152,7 +152,7 @@ function parsePullRequestNumbers(body: unknown): number[] {
 // for exactly this reason — so reading it back is what separates "the gate has
 // not run on this pull request yet" from "nothing here can ever publish that
 // check".
-const CALLER_WORKFLOW = '.github/workflows/redline.yml';
+export const CALLER_WORKFLOW = '.github/workflows/redline.yml';
 
 // The other half: whatever REQUIRED_CHECK puts after the separator, which is
 // the aggregate job id inside workflows/redline-gate.yml. Derived rather than
@@ -195,7 +195,7 @@ function lines(body: string): string[] {
 // will never send. `on:` is quoted in some hand-edited workflows because bare
 // `on` is a YAML boolean, and the trigger may be inline (`on: [pull_request]`)
 // or a key in the block below it.
-function triggersOnPullRequest(body: string): boolean {
+export function triggersOnPullRequest(body: string): boolean {
   const all = lines(body);
   for (let i = 0; i < all.length; i += 1) {
     const line = all[i] ?? '';
@@ -212,7 +212,7 @@ function triggersOnPullRequest(body: string): boolean {
   return false;
 }
 
-function callerJobId(body: string): string | null {
+export function callerJobId(body: string): string | null {
   const all = lines(body);
   let jobsIndent: number | null = null;
   let jobIdIndent: number | null = null;
@@ -245,6 +245,22 @@ function callerJobId(body: string): string | null {
     if (indent === jobIdIndent) jobId = name;
   }
   return null;
+}
+
+// The same parse for a local file and a remote read. Sharing it is the point:
+// a remote verify that re-derived "what does this file publish" independently
+// would eventually disagree with the local one, and the two answers are the
+// difference between a repository being reported healthy and being reported
+// broken.
+export function machineryFromBody(body: string | null): GateMachinery {
+  const base = { path: CALLER_WORKFLOW, expected: REQUIRED_CHECK };
+  if (body === null) return { ...base, present: false, publishes: null };
+  const jobId = triggersOnPullRequest(body) ? callerJobId(body) : null;
+  return {
+    ...base,
+    present: true,
+    publishes: jobId === null ? null : `${jobId}${CHECK_SEPARATOR}${AGGREGATE_JOB}`,
+  };
 }
 
 export function createGitHubVerify(client: GitHubClient): PlatformVerify {
@@ -293,8 +309,7 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
 
     readGateMachinery(cwd: string): GateMachinery {
       const abs = join(cwd, CALLER_WORKFLOW);
-      const base = { path: CALLER_WORKFLOW, expected: REQUIRED_CHECK };
-      if (!existsSync(abs)) return { ...base, present: false, publishes: null };
+      if (!existsSync(abs)) return machineryFromBody(null);
       // A local read that cannot be completed — a directory at the path, a
       // file the process cannot open — is a finding about this repository, not
       // an internal defect. Unguarded it escaped verify() as "redline failed
@@ -310,12 +325,7 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
           'restore it from redline init, or make it readable'
         );
       }
-      const jobId = triggersOnPullRequest(body) ? callerJobId(body) : null;
-      return {
-        ...base,
-        present: true,
-        publishes: jobId === null ? null : `${jobId}${CHECK_SEPARATOR}${AGGREGATE_JOB}`,
-      };
+      return machineryFromBody(body);
     },
 
     async readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]> {

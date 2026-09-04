@@ -62,21 +62,27 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     what: "Checks that a repository still matches what its own .redline.json claims — the gate still reports, the ruleset was not edited by hand, push protection is still on, the rendered artifacts are not stale. With --gate it is also the Azure gate itself.",
     built: true,
     onboard:
-      "Nothing to install: it ships with the CLI and reads .redline.json from the current checkout. That is also its limitation — it has no --repo owner/name mode that works over the API, so verifying the estate on a schedule needs a clone-then-verify loop. That is why workflows/verify-onboarding.yml is switched off.",
+      "Nothing to install: it ships with the CLI. It runs against the current checkout by default, or against any repository over the API with --repo owner/name — which is what lets the weekly drift sweep verify the whole estate without cloning it.",
     usage: [
-      "redline verify          # report drift in this checkout",
-      "redline verify --gate   # run as the Azure DevOps merge gate",
+      "redline verify                        # report drift in this checkout",
+      "redline verify --repo acme/web-app    # over the API, no checkout needed",
+      "redline verify --gate                 # run as the Azure DevOps merge gate",
     ],
     flags: [
       {
+        flag: "--repo <owner/name>",
+        detail:
+          "Verifies a repository over the API. Every check that can be sourced from the host is; one that genuinely needs a working tree reports ?? rather than passing, and an ?? never fails the report. That distinction is what makes this safe to schedule across an estate — a check reported as passing when it never ran is a false all-clear on every repository at once.",
+      },
+      {
         flag: "--gate",
         detail:
-          "The mode the Azure pipeline template invokes. Materially weaker than the GitHub gate: it runs none of GitHub's dependency review or diff secret scan, which are the two hard-fail, never-exemptible checks there.",
+          "The mode the Azure pipeline template invokes. Materially weaker than the GitHub gate: it runs none of GitHub's dependency review or diff secret scan, which are the two hard-fail, never-exemptible checks there. It publishes this repository's own merge status, so it is refused together with --repo rather than silently ignoring one of them.",
       },
     ],
     output:
-      "One finding per drift, each naming what it checked and what it found — a gate that no longer publishes its check, a merge policy Redline applied and stopped maintaining, artifacts stale against the current standards version, repo-local rules that were present at the last run and are now gone. A clean repository produces no findings and exits 0.",
-    edit: "cli/commands/verify.ts, with per-host assertions in cli/platforms/github/verify.ts and cli/platforms/azure/verify.ts.",
+      "One line per check: ok, FAIL, or ?? for a check that could not run. Findings name what was checked and what was found — a gate that no longer publishes its check, a merge policy that exists but was switched out of enforcement, zero required approvals, artifacts left stale by an ignored sync pull request, work still waiting on an administrator. Exit 0 when clean, 1 on drift, 2 when the repository was never onboarded — a distinction that matters, because those two need different people to act.",
+    edit: "cli/commands/verify.ts for the local path and cli/verify/remote.ts for --repo. Both parse the gate caller with the same function, deliberately: two independent answers to \"what does this file publish\" would eventually disagree, and that disagreement is the difference between a repository reported healthy and one reported broken.",
   },
   sync: {
     what: "Lands the current standards on every registered repository as a pull request, quoting the version it came from. Targets come from registry.json, the register derived nightly from the estate — nobody maintains a list.",
