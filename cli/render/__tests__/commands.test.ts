@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { contentId, loadCommands, renderCommands } from '../commands.ts';
+import { BEGIN, END } from '../markers.ts';
 
 // Anchored: `commands/redline-init.md` quotes the marker inline, and an
 // inline mention is exactly what markers.ts does not treat as a block either.
@@ -64,21 +65,36 @@ test('every rendered command body is identical across hosts', () => {
 // equality were asserted, the assembly and the trailing shape were not, so a
 // renderer emitting a stray blank line or dropping the final newline changed
 // every repository in the estate without failing a test.
-test('a rendered command file is exactly its frontmatter, one blank line, the body, and one final newline', () => {
+//
+// The shape this pins is the marker-wrapped one. Redline no longer owns the
+// whole file: it writes its frontmatter, then its block, so a repository that
+// already has a command file of its own keeps every byte outside the block.
+// The assembly is spelled out here rather than composed with wrapBlock, so a
+// renderer that changes it cannot satisfy the test by changing both together.
+const MANAGED_BY = '# Managed by Redline; regenerate with `redline init` rather than editing here.';
+
+test('a rendered command file is its frontmatter, then the Redline block, and one final newline', () => {
   const out = tmp();
   renderCommands({ root, out, hosts: ['claude', 'copilot', 'opencode', 'cursor'] });
   const source = loadCommands(root).find((c) => c.name === 'redline-init');
   assert.ok(source);
-  const body = `${source.body.trimEnd()}\n`;
+  const block = `${BEGIN}\n\n${source.body.trimEnd()}\n\n${END}\n`;
+  const wrapped = (header: string): string => `${header}\n${block}`;
 
   const files: [string, string][] = [
-    ['.claude/commands/redline-init.md', `---\ndescription: ${source.description}\n---\n\n${body}`],
-    ['.opencode/command/redline-init.md', `---\ndescription: ${source.description}\n---\n\n${body}`],
+    [
+      '.claude/commands/redline-init.md',
+      wrapped(`---\ndescription: ${source.description}\n${MANAGED_BY}\n---\n`),
+    ],
+    [
+      '.opencode/command/redline-init.md',
+      wrapped(`---\ndescription: ${source.description}\n${MANAGED_BY}\n---\n`),
+    ],
     [
       '.github/prompts/redline-init.prompt.md',
-      `---\nmode: agent\ndescription: ${source.description}\n---\n\n${body}`,
+      wrapped(`---\nmode: agent\ndescription: ${source.description}\n${MANAGED_BY}\n---\n`),
     ],
-    ['.cursor/commands/redline-init.md', body],
+    ['.cursor/commands/redline-init.md', block],
   ];
   for (const [path, expected] of files) {
     const actual = readFileSync(join(out, path), 'utf8');
