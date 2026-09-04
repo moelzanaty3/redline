@@ -51,6 +51,14 @@ const GATED_SECTIONS = [
   { heading: '## Architecture decision', satisfied: (body: string): boolean => body.includes('docs/adr/') },
 ];
 
+// `## Redline exemption` is deliberately NOT in the list above. `redline init`
+// offers the section (see GATED_SECTIONS in cli/platforms/github/install.ts, which
+// does include it) because an author who needs a waiver must have somewhere to
+// write one. But `verify` must not report a repository as drifted for lacking it:
+// no gate job fails for its absence, only for a label applied without it, and
+// flagging every repository whose own template already answers the gate would be
+// noise on a section most pull requests should delete.
+
 export type TemplateState =
   // Carries Redline's marker block: whatever else the file says, the gated
   // sections inside the block are Redline's and are refreshed by `init`.

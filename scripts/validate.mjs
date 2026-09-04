@@ -179,6 +179,23 @@ if (!existsSync(join(ROOT, 'scripts/build-baseline.mjs'))) {
   fail('scripts/build-baseline.mjs is missing — there is no way to compute the baseline every later roadmap phase is measured against');
 }
 
+// --- exemptions ---------------------------------------------------------------
+// The exemption block is parsed twice, deliberately: the CLI enforces it at the
+// gate, and the collector reads it for telemetry in the metrics repo where there
+// is no build step to import dist/ from. The failure this guards is the gate
+// accepting a block the audit cannot read — an exemption enforced and then never
+// reported, which is precisely the state F exists to end.
+const exemptCli = read('cli/exempt/parse.ts');
+const exemptCollector = read('scripts/lib/exemptions.mjs');
+for (const token of ['## Redline exemption', 'reason', 'until', 'scope']) {
+  if (!exemptCli.includes(token) || !exemptCollector.includes(token)) {
+    fail(`the exemption block's "${token}" is missing from cli/exempt/parse.ts or scripts/lib/exemptions.mjs — the gate and the audit would read different blocks`);
+  }
+}
+if (!read('.github/pull_request_template.md').includes('Redline exemption')) {
+  fail('.github/pull_request_template.md does not mention the exemption block — an author asked to justify a waiver has nowhere to write it');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

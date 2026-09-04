@@ -22,6 +22,7 @@ import {
   emptyBySeverity,
   RESERVED_RULE_IDS,
 } from './lib/rules.mjs';
+import { readExemption } from './lib/exemptions.mjs';
 
 const { GH_TOKEN, ORG, SINCE, DAYS = '8', OUT = 'data', DRY_RUN } = process.env;
 if (!GH_TOKEN || !ORG) throw new Error('GH_TOKEN and ORG are required');
@@ -69,6 +70,7 @@ query($q: String!, $cursor: String) {
         changedFiles
         repository { nameWithOwner }
         author { login }
+        body
         labels(first: 30) { nodes { name } }
         reviewThreads(first: 100) {
           nodes {
@@ -139,6 +141,11 @@ function summarise(pr) {
     reviewers: [...reviewers],
     labels: (pr.labels?.nodes ?? []).map((l) => l.name),
     exempted: (pr.labels?.nodes ?? []).some((l) => ['redline-exempt', 'no-adr'].includes(l.name)),
+    // The structured exemption, when the pull request carried one. A label says
+    // a check was waived; this says who accepted what, why, and until when — the
+    // difference between an exemption and an opt-out, and the only version of it
+    // that can be audited or trended.
+    exemption: readExemption(pr.body),
     size: { additions: pr.additions, deletions: pr.deletions, files: pr.changedFiles },
     findings: { total, ...findings },
     // Acted-on rate. total > 0 and acted_on near 0 means the review is being ignored,

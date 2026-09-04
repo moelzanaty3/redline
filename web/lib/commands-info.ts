@@ -84,6 +84,31 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       "One line per check: ok, FAIL, or ?? for a check that could not run. Findings name what was checked and what was found — a gate that no longer publishes its check, a merge policy that exists but was switched out of enforcement, zero required approvals, artifacts left stale by an ignored sync pull request, work still waiting on an administrator. Exit 0 when clean, 1 on drift, 2 when the repository was never onboarded — a distinction that matters, because those two need different people to act.",
     edit: "cli/commands/verify.ts for the local path and cli/verify/remote.ts for --repo. Both parse the gate caller with the same function, deliberately: two independent answers to \"what does this file publish\" would eventually disagree, and that disagreement is the difference between a repository reported healthy and one reported broken.",
   },
+  exempt: {
+    what: "Decides whether a pull request carries a valid exemption for a failing process check. The gate calls it; you rarely will. It exists because `redline-exempt` was a bare label that recorded nothing — not who accepted the failing check, not why, not until when.",
+    built: true,
+    onboard:
+      "Nothing to install. The gate invokes it when a soft-fail label is present and a process check has failed, and the pull request template carries the `## Redline exemption` section an author fills in. A repository moves from `warn` to `require` one standards version after the block was introduced, so nobody's open pull request is failed by a rule that did not exist when they opened it.",
+    usage: [
+      "redline exempt --body-file pr-body.md                 # is there a valid exemption at all?",
+      "redline exempt --body-file pr-body.md --scope adr     # does it cover this check?",
+    ],
+    flags: [
+      {
+        flag: "--body-file <path>",
+        detail:
+          "The pull request body, as a file. A file rather than an argument on purpose: a pull request body is attacker-controlled text full of backticks and $(...), and anyone who can open a pull request can write it — interpolating that into a command is how a body becomes a command.",
+      },
+      {
+        flag: "--scope <check>",
+        detail:
+          "The failing check the exemption is being asked to cover. An exemption scoped to `checklist` does not silently cover `adr`; omitting `scope:` in the block covers both, which is what the bare label meant implicitly.",
+      },
+    ],
+    output:
+      "Exit 0 and a line naming the expiry, scope and reason when a valid exemption applies. Exit 1 and the specific problem when it does not — no block at all, a reason under 20 characters, a missing or unparseable expiry, an expiry in the past, an expiry more than 90 days out, or a scope that does not cover the failing check. Exit 1, not 2: a pull request without a valid exemption is a normal answer the gate acts on, not the caller misusing the command.",
+    edit: "cli/exempt/parse.ts holds the parse; scripts/lib/exemptions.mjs mirrors it for the collector, which runs in the metrics repo with no build step to import from. scripts/validate.mjs fails the build if the two diverge — the failure it guards is the gate accepting a block the audit cannot read, which is exactly the state this piece exists to end.",
+  },
   sync: {
     what: "Lands the current standards on every registered repository as a pull request, quoting the version it came from. Targets come from registry.json, the register derived nightly from the estate — nobody maintains a list.",
     built: true,

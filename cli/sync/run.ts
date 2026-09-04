@@ -41,13 +41,25 @@ export interface SyncRunOptions extends PlanOptions {
   // command whose whole job is distribution should do it when asked, and every
   // caller here passes the flag explicitly.
   dryRun?: boolean;
+  // Injected so the generated exemption's expiry is testable, and so a rerun of
+  // the same sync reaches the same verdict about the same pull request.
+  now?: Date;
 }
 
 export const SYNC_BRANCH = 'redline/sync';
 export const SYNC_LABEL = 'redline-sync';
 
-const body = (target: SyncTarget, version: string, files: string[]): string =>
-  [
+// How long a sync pull request may sit before its own gate starts failing it.
+// A sync pull request nobody merges is drift, and drift that fails nothing is
+// drift nobody sees. Thirty days is long enough for a team to schedule the merge
+// and short enough that "we'll get to it" has to be said out loud again.
+export const SYNC_EXEMPTION_DAYS = 30;
+
+const body = (target: SyncTarget, version: string, files: string[], now: Date): string => {
+  const until = new Date(now.getTime() + SYNC_EXEMPTION_DAYS * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  return [
     `Redline standards **v${version}** — this repository was on v${target.from}.`,
     '',
     'Rendered from the organisation standard. Everything in this diff is generated:',
@@ -57,8 +69,20 @@ const body = (target: SyncTarget, version: string, files: string[]): string =>
     'Content above each `<!-- REDLINE:BEGIN -->` marker is yours and is untouched.',
     '',
     'Merging keeps this repository current. Not merging is a decision the estate',
-    "dashboard records as drift — it is not a silent one, which is the point.",
+    'dashboard records as drift — it is not a silent one, which is the point.',
+    '',
+    // A generated pull request carries its own exemption rather than being a
+    // special case in the gate. One rule for everyone is worth more than a
+    // convenience for the tool that wrote the rule — and it means this pull
+    // request starts failing its own gate if it is left unmerged, which is
+    // exactly what should happen to standards a repository is quietly refusing.
+    '## Redline exemption',
+    '',
+    `- reason: generated standards sync to v${version}; the launch-readiness checklist does not apply to a diff no human wrote`,
+    `- until: ${until}`,
+    '- scope: checklist, adr',
   ].join('\n');
+};
 
 async function syncTarget(
   host: SyncHost,
@@ -114,7 +138,7 @@ async function syncTarget(
   const pr = await host.openPullRequest(ref, {
     branch: SYNC_BRANCH,
     title: `Redline: standards v${opts.standardsVersion}`,
-    body: body(target, opts.standardsVersion, rendered.files.map((f) => f.path)),
+    body: body(target, opts.standardsVersion, rendered.files.map((f) => f.path), opts.now ?? new Date()),
     labels: [SYNC_LABEL],
   });
 

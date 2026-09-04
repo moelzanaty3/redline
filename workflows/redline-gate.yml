@@ -31,6 +31,15 @@ on:
           warnings. Security checks are never downgraded.
         type: string
         default: redline-exempt,redline-sync
+      exemption-enforcement:
+        description: >-
+          What a soft-fail label without a valid "## Redline exemption" block does.
+          `warn` accepts it and says what is missing; `require` refuses it. Repos move
+          from warn to require one standards version after the block was introduced, so
+          nobody's open pull request is failed by a rule that did not exist when they
+          opened it.
+        type: string
+        default: warn
 
 permissions:
   contents: read
@@ -136,6 +145,14 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           SOFT_FAIL_LABELS: ${{ inputs.soft-fail-labels }}
+          EXEMPTION_ENFORCEMENT: ${{ inputs.exemption-enforcement }}
+          # Through the environment, never interpolated into the script body:
+          # `${{ github.event.pull_request.body }}` inline is a script injection
+          # anyone who can open a pull request can use.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          # Pinned, not @latest: the gate's behaviour must not change under a
+          # repository because a release happened overnight.
+          REDLINE_CLI_VERSION: '0.0.1'
         run: |
           set -euo pipefail
 
@@ -147,13 +164,36 @@ jobs:
           soft_failed=$(jq -r --argjson hard "$HARD_JOBS" \
             'to_entries[] | select(.value.result != "success") | select(.key as $k | $hard | index($k) | not) | .key' <<<"$RESULTS")
 
-          exempt=false
+          labelled=false
           for label in ${SOFT_FAIL_LABELS//,/ }; do
             if jq -e --arg l "$label" 'index($l)' <<<"$LABELS" >/dev/null; then
-              exempt=true
+              labelled=true
               echo "Soft-fail label present: $label"
             fi
           done
+
+          # A label alone records nothing: not who accepted the failing check, not
+          # why, not until when. The pull request must also carry a
+          # "## Redline exemption" block with a reason and an expiry, and the CLI
+          # is what reads it — re-implementing that parse here would eventually
+          # disagree with the audit that reads the same block later.
+          #
+          # The body is written to a file rather than passed as an argument: a
+          # pull request body is attacker-controlled text full of backticks and
+          # $(...), and interpolating it into a command is how one becomes a
+          # command.
+          exempt=false
+          if [[ "$labelled" == true ]]; then
+            printf '%s' "$PR_BODY" > /tmp/redline-pr-body.md
+            if npx --yes "redline-cli@${REDLINE_CLI_VERSION}" exempt --body-file /tmp/redline-pr-body.md; then
+              exempt=true
+            elif [[ "$EXEMPTION_ENFORCEMENT" != "require" ]]; then
+              echo "::warning::This exemption has no valid \`## Redline exemption\` block. It is being accepted this time; once this repository moves to require, it will not be."
+              exempt=true
+            else
+              echo "::error::A soft-fail label was applied without a valid \`## Redline exemption\` block (reason and expiry required)."
+            fi
+          fi
 
           {
             echo "### Redline gate"
@@ -168,7 +208,7 @@ jobs:
 
           if [[ -n "$soft_failed" ]]; then
             if [[ "$exempt" == true ]]; then
-              echo "::warning::Process checks failed but a soft-fail label is applied: $soft_failed. A reviewer is accepting this deliberately."
+              echo "::warning::Process checks failed but a valid exemption is recorded: $soft_failed. A reviewer is accepting this deliberately, with a reason and an expiry."
               echo "- **exempted:** $soft_failed" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "::error::Redline gate failed: $soft_failed"

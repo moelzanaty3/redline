@@ -172,6 +172,19 @@ const GATED_SECTIONS = [
   },
 ];
 
+// The gate reads a `## Redline exemption` block, so a template without one
+// leaves an author who needs a waiver with nowhere to write it. It rides along in
+// any block Redline is writing anyway, but it is deliberately NOT in
+// GATED_SECTIONS: no gate job fails for its absence, so it must never be the
+// reason a marker block appears in a template a team wrote for themselves.
+const EXEMPTION_HEADING = 'Redline exemption';
+
+// The headings to put inside a block, given the gated ones that still need
+// covering. Empty in, empty out: no block is created just to carry the optional
+// section.
+const blockSections = (headings: string[]): string[] =>
+  headings.length === 0 ? [] : [...headings, EXEMPTION_HEADING];
+
 function gatedSections(template: string, headings: string[]): string {
   const kept: string[] = [];
   let inside = false;
@@ -300,7 +313,7 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
         detail: `${relPath} satisfies the gate outside the Redline block — left untouched`,
       };
     }
-    const contents = wrapBlock(existing, gatedSections(packaged, wanted), relPath);
+    const contents = wrapBlock(existing, gatedSections(packaged, blockSections(wanted)), relPath);
     const changed = syncFile(cwd, relPath, contents, check);
     return {
       path: relPath,
@@ -324,7 +337,7 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
       detail: `${relPath} already satisfies the gate on its own — left untouched`,
     };
   }
-  const contents = wrapBlock(existing, gatedSections(packaged, missing), relPath);
+  const contents = wrapBlock(existing, gatedSections(packaged, blockSections(missing)), relPath);
   const appended = missing.map((heading) => `"## ${heading}"`).join(' and ');
   return {
     path: relPath,

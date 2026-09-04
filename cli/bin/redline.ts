@@ -17,6 +17,7 @@ import {
 } from '../config/redline-json.ts';
 import { verify } from '../commands/verify.ts';
 import { sync } from '../commands/sync.ts';
+import { exempt } from '../commands/exempt.ts';
 import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
@@ -59,6 +60,10 @@ const USAGE = [
   '      check this repository still matches what .redline.json claims',
   '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
   '                  that genuinely needs a working tree reports ?? rather than passing',
+  '',
+  '  redline exempt --body-file <path> [--scope <check>]',
+  '      decide whether a pull request carries a valid exemption for a failing process',
+  '      check — a reason, an actor and an expiry, not a bare label. Exit 0 if it applies',
   '',
   '  redline sync [--dry-run] [--repo <owner/name>] [--force]',
   '      open a pull request on every registered repository whose standards are behind',
@@ -287,6 +292,32 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         else log.info('Redline gate failed.');
       }
       return exitCode;
+    }
+
+    if (command === 'exempt') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { 'body-file': { type: 'string' }, scope: { type: 'string' } },
+          allowPositionals: false,
+        })
+      );
+      const bodyFile = values['body-file'];
+      if (!bodyFile) {
+        throw new RedlineError('usage', 'redline exempt needs --body-file <path>');
+      }
+
+      const report = exempt({
+        bodyFile,
+        ...(values.scope ? { scope: values.scope } : {}),
+      });
+      for (const message of report.messages) {
+        if (report.applies) log.info(message);
+        else log.warn(message);
+      }
+      // Exit 1, not 2: a pull request without a valid exemption is a normal,
+      // expected answer the gate acts on — not the caller misusing the command.
+      return report.applies ? 0 : exitCodeFor('failed');
     }
 
     if (command === 'sync') {

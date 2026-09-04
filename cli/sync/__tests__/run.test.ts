@@ -145,3 +145,56 @@ test('a repository already at the current version is never contacted at all', as
   assert.deepEqual(pushed, []);
   assert.match(report.plan.skipped[0]?.reason ?? '', /already at standards/);
 });
+
+test('a sync pull request carries its own exemption, so the gate has one rule for everyone', async () => {
+  let body = '';
+  const { host } = fakeHost();
+  const wrapped: SyncHost = {
+    ...host,
+    async openPullRequest(ref, pr) {
+      body = pr.body;
+      return host.openPullRequest(ref, pr);
+    },
+  };
+
+  await runSync(wrapped, registry(entry('web-app')), {
+    root: ROOT,
+    standardsVersion: '0.0.1',
+    now: new Date('2026-09-04T00:00:00.000Z'),
+  });
+
+  assert.match(body, /## Redline exemption/);
+  // Scoped to the process checks only. It must never reach dependency review or
+  // the secret scan, which no label and no block has ever been able to exempt.
+  assert.match(body, /scope: checklist, adr/);
+  assert.match(body, /until: 2026-10-04/);
+});
+
+test('the generated exemption expires, so an unmerged sync pull request starts failing', async () => {
+  // A sync pull request nobody merges is drift, and drift that fails nothing is
+  // drift nobody sees.
+  let body = '';
+  const { host } = fakeHost();
+  const wrapped: SyncHost = {
+    ...host,
+    async openPullRequest(ref, pr) {
+      body = pr.body;
+      return host.openPullRequest(ref, pr);
+    },
+  };
+  const opened = new Date('2026-09-04T00:00:00.000Z');
+
+  await runSync(wrapped, registry(entry('web-app')), {
+    root: ROOT,
+    standardsVersion: '0.0.1',
+    now: opened,
+  });
+
+  const { parseExemption } = await import('../../exempt/parse.ts');
+  const stillValid = parseExemption(body, new Date('2026-10-01T00:00:00.000Z'));
+  assert.notEqual(stillValid.exemption, null);
+
+  const expired = parseExemption(body, new Date('2026-11-01T00:00:00.000Z'));
+  assert.equal(expired.exemption, null);
+  assert.equal(expired.problems[0]?.problem, 'until-past');
+});

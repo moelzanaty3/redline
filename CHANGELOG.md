@@ -7,6 +7,38 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Standards v0.0.2 — structured exemptions
+
+- `redline-exempt` was a bare label. It downgraded the process checks to warnings and
+  recorded nothing: not who accepted the failing check, not why, not until when. An
+  exemption nobody has to justify and nobody revisits is not an exemption, it is an opt-out.
+  The gate now reads a `## Redline exemption` block carrying a **reason** (at least 20
+  characters — "needed for release" tells a later reader nothing), a **scope**, and an
+  **expiry** of at most 90 days. Longer than 90 days is a standards change, not an
+  exemption.
+- **This is a behaviour change for every onboarded repository, and it ships behind a
+  grace.** The gate's new `exemption-enforcement` input defaults to `warn`: a label without
+  a valid block is accepted and told what is missing. A repository moves to `require` one
+  standards version later, so nobody's open pull request is failed by a rule that did not
+  exist when they opened it.
+- **Unchanged, and load-bearing:** an exemption still touches the process checks only. It
+  has never been able to waive dependency review or the diff secret scan, and it still
+  cannot.
+- Redline's own sync pull requests carry a real exemption block rather than being a special
+  case in the gate — one rule for everyone is worth more than a convenience for the tool
+  that wrote the rule. The generated exemption expires after 30 days, so **a sync pull
+  request nobody merges starts failing its own gate**, which is exactly what should happen
+  to a standards change a repository is quietly refusing.
+- The pull request template gains the section, but only where Redline is already writing a
+  block. A team whose own template already answers the gate keeps it untouched: no gate job
+  fails for the section's absence, so it must never be the reason a marker block appears in
+  a file somebody else wrote. `verify` does not report its absence as drift either.
+- The collector records the parsed exemption per pull request, so standing exemptions trend
+  and a team routing around the gate shows up as the same scope recurring — the guardrail
+  the roadmap asks for, and one a per-pull-request view can never show. The block is parsed
+  twice on purpose (the CLI enforces, the collector audits, and the collector has no build
+  step to import from), and `scripts/validate.mjs` fails the build if the two ever diverge.
+
 - `scripts/build-baseline.mjs` computes the Phase 0 baseline — the numbers every later
   roadmap phase is judged against. The roadmap says plainly that the ordering of Phases 1-4
   is a hypothesis until this exists and that the baseline is allowed to reorder them, so the
