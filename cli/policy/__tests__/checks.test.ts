@@ -139,3 +139,26 @@ test('a clean diff produces nothing', () => {
     []
   );
 });
+
+// --- regressions -------------------------------------------------------------
+
+test('a correctly written parseInt with a nested call is not flagged', () => {
+  // The old pattern scanned for a comma with [^,)]*, which a nested call hid —
+  // so the checker flagged its own source.
+  assert.deepEqual(ids(runChecks(ctx([line('const n = parseInt(String(x), 10);')]))), []);
+  assert.deepEqual(ids(runChecks(ctx([line('const n = parseInt(raw.trim(), 10);')]))), []);
+});
+
+test('a missing radix is still caught, nested call or not', () => {
+  assert.deepEqual(ids(runChecks(ctx([line('const n = parseInt(String(x));')]))), [
+    'javascript/unsafe-numeric-coercion',
+  ]);
+});
+
+test('prose about var is not a var declaration', () => {
+  // Reporting "use const" on the sentence "avoid var declarations here" is the
+  // kind of finding that teaches a team the checker is noise.
+  assert.deepEqual(ids(runChecks(ctx([line('// avoid var declarations here')]))), []);
+  assert.deepEqual(ids(runChecks(ctx([line(' * var is function-scoped')]))), []);
+  assert.deepEqual(ids(runChecks(ctx([line('# var in a python comment', 'a.js')]))), []);
+});

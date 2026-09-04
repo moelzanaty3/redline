@@ -225,7 +225,14 @@ do {
     // Kept as its own key, never folded into `findings` or `rules`. Those two are
     // Redline's own catalogue and drive rule tuning; mixing a scanner's rule ids
     // into them is exactly the distortion this design exists to prevent.
+    //
+    // `repo_scoped` says what this number is: code-scanning alerts are a fact
+    // about the REPOSITORY, not about this pull request. Stamping the same count
+    // on every merged PR and then summing them multiplied the estate's ingested
+    // findings by the number of pull requests per repo — a repo with 12 alerts
+    // and 40 merges reported 480. The aggregate counts each repository once.
     record.scanner = {
+      repo_scoped: true,
       findings: scanner.findings.length,
       by_tool: scanner.findings.reduce((acc, f) => {
         acc[f.tool] = (acc[f.tool] ?? 0) + 1;

@@ -101,9 +101,20 @@ const typeCheckerSuppression: DeterministicCheck = ({ added }) =>
 //
 // Added lines only. Flagging `var` in a legacy file the author merely moved is
 // exactly the noise the standard's "what NOT to flag" section forbids.
+// A line whose content begins a comment. Not a parser — a checker that reported
+// "use const" on the sentence "avoid var declarations here" is worse than one
+// that misses a `var` on the same line as a trailing comment, and this is the
+// cheap way to avoid the embarrassing half.
+const COMMENT_LINE = /^\s*(\/\/|\/\*|\*|#)/;
+
 const varInNewCode: DeterministicCheck = ({ added }) =>
   added
-    .filter((l) => JS_LIKE.test(l.file) && /(^|[^.\w])var\s+[A-Za-z_$]/.test(l.text))
+    .filter(
+      (l) =>
+        JS_LIKE.test(l.file) &&
+        !COMMENT_LINE.test(l.text) &&
+        /(^|[^.\w])var\s+[A-Za-z_$]/.test(l.text)
+    )
     .map((l) =>
       finding(
         l,
@@ -118,9 +129,15 @@ const varInNewCode: DeterministicCheck = ({ added }) =>
 // Only the radix half. The rest of the rule ("Number() coercion of user input
 // without Number.isFinite") needs to know what is user input, which is judgement,
 // and the model still sees the whole rule.
+// Nested parentheses in the argument — `parseInt(String(x), 10)` — hid the comma
+// from a `[^,)]*` scan, so a correctly-written call was reported as missing its
+// radix. This checker flagged its own source, which is the clearest possible
+// signal that the pattern was wrong.
+const PARSE_INT_NO_RADIX = /\bparseInt\s*\((?:[^(),]|\([^()]*\))*\)/;
+
 const parseIntWithoutRadix: DeterministicCheck = ({ added }) =>
   added
-    .filter((l) => JS_LIKE.test(l.file) && /\bparseInt\s*\([^,)]*\)/.test(l.text))
+    .filter((l) => JS_LIKE.test(l.file) && PARSE_INT_NO_RADIX.test(l.text))
     .map((l) =>
       finding(
         l,

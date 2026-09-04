@@ -15,7 +15,12 @@ export interface AddedLine {
   text: string;
 }
 
-const FILE_HEADER = /^\+\+\+ b\/(.+)$/;
+// `b/` OR `/dev/null`: the prefixed form is a real destination path, the second
+// is a deletion. Matching only the prefixed form left `+++ /dev/null` falling
+// through to the added-line branch below, where it became a phantom line of
+// content attributed to the PREVIOUS file — so a deleted file could produce a
+// finding on a file the change never touched.
+const FILE_HEADER = /^\+\+\+ (?:b\/(.+)|(\/dev\/null))$/;
 const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
 export function parseDiff(diff: string): AddedLine[] {
@@ -26,9 +31,9 @@ export function parseDiff(diff: string): AddedLine[] {
   for (const raw of diff.split('\n')) {
     const header = FILE_HEADER.exec(raw);
     if (header) {
-      // /dev/null as the destination is a deletion. Nothing was added, and the
-      // path is not a real one.
-      file = header[1] === '/dev/null' ? null : (header[1] ?? null);
+      // A deletion has no destination path, so nothing after it is an addition
+      // until the next file header.
+      file = header[2] ? null : (header[1] ?? null);
       continue;
     }
     const hunk = HUNK.exec(raw);

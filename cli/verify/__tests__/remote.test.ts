@@ -294,3 +294,27 @@ test('stale artifacts are named, so an ignored sync pull request is visible', as
   assert.equal(artifacts?.ok, false);
   assert.match(artifacts?.detail ?? '', /stale against standards/);
 });
+
+test('a partly unreadable security floor is unknown, not a clean pass', async () => {
+  // The combination this check exists to catch: something genuinely off, plus a
+  // token that cannot see it. Reporting the readable half as plain ok verified
+  // that repository as healthy.
+  const report = await verifyRemote(
+    host({
+      async readSecurityState() {
+        return {
+          outcomes: [
+            { capability: 'push-protection' as const, status: 'already' as const, detail: 'on' },
+            { capability: 'secret-scanning' as const, status: 'unknown' as const, detail: '403' },
+          ],
+        };
+      },
+    }),
+    ref,
+    opts
+  );
+
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.unknown, true);
+  assert.match(floor?.detail ?? '', /cannot read/);
+});

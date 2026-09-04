@@ -67,15 +67,26 @@ export function aggregate(records) {
   // Redline's rules on that tool's noise. Reported separately, they answer a
   // question neither tool can answer alone: what the estate's whole finding
   // surface looks like under one severity contract.
+  // Once per repository, not once per pull request. A scanner alert count is a
+  // fact about the repository; every merged PR in that repo carries the same
+  // snapshot, so summing them multiplied the estate's ingested findings by the
+  // number of merges. The most recent record per repo wins — records are sorted
+  // by merge time, so that is the freshest snapshot.
+  const scannerByRepo = new Map();
+  for (const record of records) {
+    if (!record.scanner) continue;
+    scannerByRepo.set(record.repo, record.scanner);
+  }
+
   const scannerByTool = new Map();
   const scannerBySeverity = { blocker: 0, high: 0, suggestion: 0 };
   let scannerTotal = 0;
-  for (const record of records) {
-    scannerTotal += record.scanner?.findings ?? 0;
-    for (const [tool, n] of Object.entries(record.scanner?.by_tool ?? {})) {
+  for (const scanner of scannerByRepo.values()) {
+    scannerTotal += scanner.findings ?? 0;
+    for (const [tool, n] of Object.entries(scanner.by_tool ?? {})) {
       scannerByTool.set(tool, (scannerByTool.get(tool) ?? 0) + n);
     }
-    for (const [severity, n] of Object.entries(record.scanner?.by_severity ?? {})) {
+    for (const [severity, n] of Object.entries(scanner.by_severity ?? {})) {
       if (severity in scannerBySeverity) scannerBySeverity[severity] += n;
     }
   }
@@ -90,7 +101,7 @@ export function aggregate(records) {
       // How many repositories in this window emit anything at all. This is the
       // number that decides whether Phase 1 was worth doing, and the roadmap's
       // open question 1 asks for exactly it.
-      repos: new Set(records.filter((r) => (r.scanner?.findings ?? 0) > 0).map((r) => r.repo)).size,
+      repos: [...scannerByRepo.values()].filter((s) => (s.findings ?? 0) > 0).length,
     },
     prs: records.length,
     prsWithFindings: records.filter((r) => (r.findings?.total ?? 0) > 0).length,

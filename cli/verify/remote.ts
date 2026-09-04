@@ -164,14 +164,19 @@ export async function verifyRemote(
       `this token cannot read: ${unreadable.map((o) => o.capability).join(', ')}`,
       true
     );
-  } else {
+  } else if (unreadable.length > 0) {
+    // Partly unreadable is still an indeterminate answer about the part that
+    // could not be read. Reporting it plainly `ok` meant a repository with
+    // secret scanning genuinely off, plus a token unable to see it, verified as
+    // healthy — the one combination this check exists to catch.
     add(
       'security-floor',
       true,
-      unreadable.length === 0
-        ? 'the security floor is enabled'
-        : `enabled, except ${unreadable.map((o) => o.capability).join(', ')} which this token cannot read`
+      `enabled, except ${unreadable.map((o) => o.capability).join(', ')} which this token cannot read`,
+      true
     );
+  } else {
+    add('security-floor', true, 'the security floor is enabled');
   }
 
   // --- the check actually reporting ------------------------------------------

@@ -132,6 +132,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          RUNG: ${{ inputs.rung }}
           REDLINE_CLI_VERSION: '0.0.1'
         run: |
           set -euo pipefail
@@ -139,7 +140,15 @@ jobs:
           # the base branch. Two dots would attribute every commit that landed on
           # main since this branch started to this pull request's author.
           git diff "${BASE}...${HEAD}" > /tmp/redline.diff
-          npx --yes "redline-cli@${REDLINE_CLI_VERSION}" policy --diff-file /tmp/redline.diff
+          # The rung decides the floor. Without passing it, block-high behaved
+          # exactly like block-blocker — the strictest rung on the ladder did
+          # nothing the one below it did not already do.
+          case "$RUNG" in
+            block-high) fail_on=HIGH ;;
+            *) fail_on=BLOCKER ;;
+          esac
+          npx --yes "redline-cli@${REDLINE_CLI_VERSION}" policy \
+            --diff-file /tmp/redline.diff --fail-on "$fail_on"
 
   dependency-review:
     name: Dependency review
@@ -225,8 +234,20 @@ jobs:
           exempt=false
           if [[ "$labelled" == true ]]; then
             printf '%s' "$PR_BODY" > /tmp/redline-pr-body.md
-            if npx --yes "redline-cli@${REDLINE_CLI_VERSION}" exempt --body-file /tmp/redline-pr-body.md; then
-              exempt=true
+            # Every failing soft check must be covered, one at a time. Calling
+            # exempt without --scope never evaluated the scope at all, so an
+            # exemption written for `checklist` silently waived `adr` and the
+            # deterministic `policy` job too — the field was recorded and ignored.
+            exempt=true
+            for check in $soft_failed; do
+              if ! npx --yes "redline-cli@${REDLINE_CLI_VERSION}" exempt \
+                   --body-file /tmp/redline-pr-body.md --scope "$check"; then
+                exempt=false
+                break
+              fi
+            done
+            if [[ "$exempt" == true ]]; then
+              :
             elif [[ "$EXEMPTION_ENFORCEMENT" != "require" ]]; then
               echo "::warning::This exemption has no valid \`## Redline exemption\` block. It is being accepted this time; once this repository moves to require, it will not be."
               exempt=true
@@ -254,9 +275,14 @@ jobs:
           # findings are still produced, still commented, and still collected —
           # observe is not "off", it is "measured and not yet enforced", which is
           # the whole point of having a rung below blocking at all.
+          # A rung this gate does not recognise is NOT enforcing. cli/config
+          # reads an unrecognised value back as `observe` for the same reason: a
+          # typo must never be able to make a repository stricter than anyone
+          # chose, and the two halves disagreeing meant a typo blocked every pull
+          # request here while the CLI reported the repository as observing.
           case "$RUNG" in
-            observe|warn) enforcing=false ;;
-            *) enforcing=true ;;
+            block-blocker|block-high) enforcing=true ;;
+            *) enforcing=false ;;
           esac
 
           if [[ -n "$soft_failed" ]]; then

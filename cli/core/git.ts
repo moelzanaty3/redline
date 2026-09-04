@@ -22,6 +22,9 @@ export interface Git {
   // an internal defect.
   diff(range: string): string;
   diffStaged(): string;
+  // The merge base of a ref and HEAD, so a working-tree diff can be taken
+  // against it directly.
+  mergeBase(ref: string): string;
 }
 
 // git is a real system boundary: a rejected push, a protected branch, an
@@ -102,6 +105,17 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
           'usage',
           `cannot diff ${range}: ${stderrText(error)}`,
           'check the ref exists — `git fetch` first if it is a branch you have not pulled'
+        );
+      }
+    },
+    mergeBase(ref) {
+      try {
+        return g('merge-base', ref, 'HEAD');
+      } catch (error) {
+        throw new RedlineError(
+          'usage',
+          `cannot find the merge base with ${ref}: ${stderrText(error)}`,
+          'fetch the base branch first, or pass --base with one you have'
         );
       }
     },

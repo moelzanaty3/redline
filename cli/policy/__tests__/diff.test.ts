@@ -101,3 +101,29 @@ test('several hunks in one file each reset the line counter', () => {
     [2, 52]
   );
 });
+
+test('a deleted file contributes nothing and does not leak onto the previous file', () => {
+  // `+++ /dev/null` did not match the file header, fell through to the
+  // added-line branch, and became a phantom line of content attributed to the
+  // file before it — so deleting a file could raise a finding on a file the
+  // change never touched.
+  const mixed = `--- a/keep.ts
++++ b/keep.ts
+@@ -1,1 +1,2 @@
+ x
++real line
+--- a/gone.ts
++++ /dev/null
+@@ -1,1 +0,0 @@
+-was here
+--- /dev/null
++++ b/new.ts
+@@ -0,0 +1 @@
++created
+`;
+
+  assert.deepEqual(parseDiff(mixed), [
+    { file: 'keep.ts', line: 2, text: 'real line' },
+    { file: 'new.ts', line: 1, text: 'created' },
+  ]);
+});

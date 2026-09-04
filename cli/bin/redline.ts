@@ -363,7 +363,17 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             'a model baked into the tool is one nobody can change when it is deprecated'
           );
         }
-        const provider = values.provider === 'anthropic' ? 'anthropic' : 'openai';
+        // Not a silent fallback: `--provider anthropc` used to become openai and
+        // send the diff to a local endpoint that was not running, reporting a
+        // connection error for what was a typo.
+        if (values.provider !== 'openai' && values.provider !== 'anthropic') {
+          throw new RedlineError(
+            'usage',
+            `--provider must be openai or anthropic, not "${values.provider}"`,
+            'openai covers every OpenAI-compatible endpoint, including a local one'
+          );
+        }
+        const provider = values.provider;
         engine = createApiEngine({
           provider,
           model: values.model,
@@ -521,7 +531,15 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         if (outcome.kind === 'failed') log.error(`  ${repo}: ${outcome.detail}`);
         else if (outcome.kind === 'current') log.info(`  ${repo}: already current`);
         else if (outcome.kind === 'not-onboarded') log.warn(`  ${repo}: no .redline.json — not onboarded`);
-        else log.info(`  ${repo}: ${outcome.kind} ${outcome.url}`);
+        else if (outcome.kind === 'stale-artifacts') {
+          // Content is current, but the target still carries files this profile
+          // no longer renders. Sync will not delete another repository's files;
+          // saying nothing reported it as healthy, which is what silent drift is.
+          log.warn(
+            `  ${repo}: current, but still carrying ${outcome.paths.join(', ')} — ` +
+              'a stack or vendor left this profile. Re-run redline init there to clear them'
+          );
+        } else log.info(`  ${repo}: ${outcome.kind} ${outcome.url}`);
       }
       if (dryRun) log.info('dry run — no branch was pushed and no pull request was opened');
 

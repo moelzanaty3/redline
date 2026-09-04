@@ -36,6 +36,15 @@ export const EXEMPTION_HEADING = '## Redline exemption';
 export const MAX_DAYS = 90;
 export const MIN_REASON_LENGTH = 20;
 
+// HTML comments are guidance, not content.
+//
+// The shipped pull request template explains each field with a commented block
+// that necessarily contains the words `reason:`, `until:` and `scope:` — so a
+// parser reading the first match found the instructions instead of the author's
+// answer, and rejected every correctly filled exemption. The template cannot
+// stop describing its own fields, so the parser has to know what a comment is.
+const withoutComments = (text: string): string => text.replace(/<!--[\s\S]*?-->/g, '');
+
 const field = (block: string, name: string): string | null => {
   const match = new RegExp(`^\\s*[-*]?\\s*${name}\\s*:\\s*(.+)$`, 'im').exec(block);
   return match?.[1]?.trim() ?? null;
@@ -55,7 +64,8 @@ export function parseExemption(body: string, now: Date): ExemptionResult {
     return { exemption: null, problems };
   };
 
-  const start = body.toLowerCase().indexOf(EXEMPTION_HEADING.toLowerCase());
+  const searchable = withoutComments(body);
+  const start = searchable.toLowerCase().indexOf(EXEMPTION_HEADING.toLowerCase());
   if (start === -1) {
     return fail(
       'no-block',
@@ -65,7 +75,7 @@ export function parseExemption(body: string, now: Date): ExemptionResult {
 
   // Everything until the next heading of the same or higher level. A reason that
   // runs into the next section would otherwise swallow the rest of the body.
-  const rest = body.slice(start + EXEMPTION_HEADING.length);
+  const rest = searchable.slice(start + EXEMPTION_HEADING.length);
   const next = /^#{1,2}\s/m.exec(rest);
   const block = next ? rest.slice(0, next.index) : rest;
 
@@ -91,7 +101,10 @@ export function parseExemption(body: string, now: Date): ExemptionResult {
   if (parsed.getTime() < now.getTime()) {
     return fail('until-past', `this exemption expired on ${until} — renew it deliberately or fix the finding`);
   }
-  const days = (parsed.getTime() - now.getTime()) / 86400000;
+  // Ceil, not the raw fraction: `until` is a whole day and is inclusive to its
+  // end, so a date exactly MAX_DAYS out measures as slightly over and was
+  // refused as "91 days away" for asking for 90.
+  const days = Math.ceil((parsed.getTime() - now.getTime()) / 86400000 - 1);
   if (days > MAX_DAYS) {
     return fail(
       'until-too-far',

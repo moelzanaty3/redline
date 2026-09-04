@@ -51,11 +51,17 @@ function readDiff(opts: ReviewOptions): string {
   }
 
   const git = createGit(opts.cwd);
-  // Three dots against the merge base, not two: two dots would hand the model
-  // every commit that landed on the base branch since this one started, and it
-  // would dutifully review someone else's work.
   const base = opts.base ?? git.defaultBranch();
-  return source.kind === 'staged' ? git.diffStaged() : git.diff(`${base}...HEAD`);
+  if (source.kind === 'staged') return git.diffStaged();
+
+  // Against the merge base itself, not `base...HEAD`. The three-dot form diffs
+  // two commits, so it cannot see work that is not committed yet — which made
+  // the default mode review nothing at all in the case the command exists for:
+  // "check this before I commit it". Diffing the working tree against the merge
+  // base keeps the property three dots was chosen for (never review commits that
+  // landed on the base branch since this one started) and includes uncommitted
+  // and staged work as well.
+  return git.diff(git.mergeBase(base));
 }
 
 export async function review(engine: ReviewEngine, opts: ReviewOptions): Promise<ReviewReport> {

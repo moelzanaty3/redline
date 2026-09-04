@@ -9,6 +9,10 @@
 
 export const EXEMPTION_HEADING = '## Redline exemption';
 
+// See cli/exempt/parse.ts: the template's own guidance comment contains the field
+// names, so a parser that does not strip comments reads the instructions.
+const withoutComments = (text) => text.replace(/<!--[\s\S]*?-->/g, '');
+
 const field = (block, name) => {
   const match = new RegExp(`^\\s*[-*]?\\s*${name}\\s*:\\s*(.+)$`, 'im').exec(block);
   return match?.[1]?.trim() ?? null;
@@ -19,16 +23,20 @@ const field = (block, name) => {
  */
 export function readExemption(body) {
   if (!body) return null;
-  const start = body.toLowerCase().indexOf(EXEMPTION_HEADING.toLowerCase());
+  const searchable = withoutComments(body);
+  const start = searchable.toLowerCase().indexOf(EXEMPTION_HEADING.toLowerCase());
   if (start === -1) return null;
 
-  const rest = body.slice(start + EXEMPTION_HEADING.length);
+  const rest = searchable.slice(start + EXEMPTION_HEADING.length);
   const next = /^#{1,2}\s/m.exec(rest);
   const block = next ? rest.slice(0, next.index) : rest;
 
   const reason = field(block, 'reason');
   const until = field(block, 'until');
   if (!reason || !until) return null;
+  // A string compare against today treats an unparseable date as standing
+  // forever, which is the direction that quietly hides a problem.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || Number.isNaN(Date.parse(until))) return null;
 
   const scopeField = field(block, 'scope');
   return {

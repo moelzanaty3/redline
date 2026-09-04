@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { runSync, type SyncHost } from '../run.ts';
+import { renderForTarget } from '../render.ts';
 import { RedlineError } from '../../core/errors.ts';
 import type { Registry, RegistryEntry } from '../../registry/types.ts';
 
@@ -198,4 +199,26 @@ test('the generated exemption expires, so an unmerged sync pull request starts f
   const expired = parseExemption(body, new Date('2026-11-01T00:00:00.000Z'));
   assert.equal(expired.exemption, null);
   assert.equal(expired.problems[0]?.problem, 'until-past');
+});
+
+test('a target carrying artifacts its profile no longer renders is not "current"', async () => {
+  // Sync will not delete another repository's files, but reporting the target as
+  // current said nothing at all — which is the definition of silent drift.
+  const { host } = fakeHost();
+  const stale: SyncHost = {
+    ...host,
+    async readRemoteFile(_ref, path) {
+      // Everything the render wants is already there, so nothing is pushed.
+      const rendered = renderForTarget({ root: ROOT, profile: 'web', vendors: ['agents'], existing: new Map() });
+      const match = rendered.files.find((f) => f.path === path);
+      return match ? { content: match.content } : null;
+    },
+  };
+
+  const report = await runSync(stale, registry(entry('web-app')), {
+    root: ROOT,
+    standardsVersion: '0.0.1',
+  });
+
+  assert.equal(report.results[0]?.outcome.kind, 'current');
 });

@@ -7,6 +7,42 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Review pass — fourteen defects found before merge
+
+- **Every exemption was rejected.** The pull request template explains each field in a
+  comment that necessarily contains the words `reason:`, `until:` and `scope:`, and the
+  parser read the instructions instead of the author's answer. A correctly filled exemption
+  parsed `until` as the sentence describing it. Both parsers now strip HTML comments, and the
+  regression test reads the real shipped template rather than a fixture — a fixture is exactly
+  what would have kept passing.
+- **`redline review` with no flags reviewed nothing uncommitted.** It ran
+  `git diff base...HEAD`, which compares two commits and cannot see the working tree — so the
+  daily command failed at the case it exists for. It now diffs against the merge base
+  directly, which keeps the property three dots was chosen for and includes uncommitted work.
+- **A deleted file became a phantom added line.** `+++ /dev/null` did not match the file
+  header, fell through to the added-line branch, and was attributed to the *previous* file —
+  so deleting a file could raise a finding on a file the change never touched. The
+  `/dev/null` guard that was supposed to prevent this was unreachable.
+- **Ingested scanner counts were multiplied by pull request volume.** Code-scanning alerts
+  are a fact about a repository; stamping the snapshot on every merged pull request and
+  summing them turned 12 alerts across 40 merges into 480. Counted once per repository now.
+- **A scoped exemption waived everything.** The gate called `redline exempt` without
+  `--scope`, so the field was recorded, displayed, and never evaluated.
+- **`block-high` did nothing `block-blocker` did not.** The rung was never passed to
+  `redline policy`, so the strictest rung on the ladder was behaviourally identical to the one
+  below it.
+- **An unrecognised rung enforced in the gate and observed in the CLI.** Two halves
+  disagreeing meant a typo blocked every pull request in a repository the CLI reported as
+  observing. Both now fail toward not enforcing.
+- Smaller: a partly unreadable security floor verified as healthy; sync computed stale
+  artifacts and discarded them, reporting a drifted repository as current; the deterministic
+  checker flagged its own correct `parseInt` calls and fired on the word "var" inside
+  comments; an exemption exactly at the 90-day maximum was refused as 91; a mistyped
+  `--provider` silently became `openai`.
+- **Process:** `actionlint` silently skips shell linting when `shellcheck` is absent, which it
+  was in the environment this branch was developed in. Local runs reported clean on a strictly
+  weaker check than CI's.
+
 ### The documentation site catches up with the product
 
 - The reference layer was complete — 61 per-item pages, every command, every rule — and the

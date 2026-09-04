@@ -8,6 +8,9 @@ export type SyncOutcome =
   | { kind: 'opened'; number: number; url: string }
   | { kind: 'updated'; number: number; url: string }
   | { kind: 'current' }
+  // Up to date on content, but carrying files this profile no longer renders.
+  // Sync will not delete them; the repository clears them by re-running init.
+  | { kind: 'stale-artifacts'; paths: string[] }
   | { kind: 'not-onboarded' }
   | { kind: 'failed'; detail: string };
 
@@ -121,8 +124,14 @@ async function syncTarget(
   // A render that would delete a file is reported and not pushed. Removal is a
   // vendor being turned off or a stack leaving the profile — a decision the
   // repository makes by re-running init, not something a scheduled sync should
-  // do to it from the outside.
-  if (rendered.files.length === 0) return { kind: 'current' };
+  // do to it from the outside. But it must be SAID: a target carrying artifacts
+  // for a stack it no longer has was reported as "current" by both sync and
+  // verify, which is the definition of silent drift.
+  if (rendered.files.length === 0) {
+    return rendered.removed.length > 0
+      ? { kind: 'stale-artifacts', paths: rendered.removed }
+      : { kind: 'current' };
+  }
 
   if (opts.dryRun) {
     return { kind: 'opened', number: 0, url: `(dry run) ${rendered.files.length} file(s)` };
