@@ -42,11 +42,11 @@ export interface CapabilityOutcome {
   detail: string;
 }
 
-// Exactly `denied`. `unknown` must behave like `unsupported` here — neither
-// ever reaches pendingAdmin, and neither ever clears an entry already
-// recorded there (cli/commands/init.ts's refreshPendingAdmin keys off this
-// same function) — because an indeterminate read has told nobody anything
-// they can act on.
+// Exactly `denied`. `unknown` must behave like `unsupported` here: neither
+// ever reaches pendingAdmin, because an indeterminate read has told nobody
+// anything they can act on. Nothing clears an entry already recorded there
+// either — no read revises pendingAdmin in either direction, so only
+// `redline init --repair` retries the write that recorded it.
 export function isPending(outcome: CapabilityOutcome): boolean {
   return outcome.status === 'denied';
 }
