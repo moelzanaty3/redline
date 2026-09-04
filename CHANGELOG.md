@@ -7,6 +7,30 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Claude skills — per-stack rules, and an honest measurement of what they cost
+
+- A fifth render target closes a real asymmetry. Copilot gets `applyTo` globs and loads a
+  stack's rules only when that stack's files are in play; Claude got `CLAUDE.md` →
+  `@AGENTS.md` — the whole composed standard, every turn, for the life of every session. The
+  `skills` vendor renders one `.claude/skills/redline-<stack>/SKILL.md` per stack plus a core
+  skill, and a skill loads on its description, so the description names the stack and its
+  file extensions.
+- **`standards/` is unchanged by this work.** It is packaging, not authoring: each skill body
+  is the stack's own markdown byte for byte, and no Claude-shaped concept leaks backward into
+  how a rule is written.
+- **The measurement, including where it loses.** `scripts/measure-context.mjs` reproduces it:
+  multi-stack profiles save 19.7% to 48.3%, and **single-stack profiles cost about 5% more** —
+  with one stack there is no second one to avoid loading, so the frontmatter is pure overhead.
+  Both directions are pinned by tests. The roadmap makes this piece conditional on paying for
+  itself, so quoting only the wins would have been marketing.
+- It ships **disabled** at the org level and is selected *instead of* `claude`, never
+  alongside it: the two render the same rules in different shapes, and a repository with both
+  loads every stack twice. A render target that changes what every Claude session loads should
+  not switch itself on across an estate in a patch release.
+- `PruneRule` grew a `directories` flag, because a skill is a directory rather than a file.
+  Without it every skill directory looked unplanned on every render and would have been
+  deleted and rewritten each time.
+
 ### SARIF ingestion — one severity contract across every producer
 
 - Redline was one more finding producer competing with scanners it should have been

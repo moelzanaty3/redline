@@ -60,6 +60,15 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     produces: "registry.json, with entries ordered by org then repo so a nightly commit only diffs when the estate actually changed. Prints one line per problem — a repository whose .redline.json is malformed, one with no default branch — and exits 1 without writing anything if no onboarded repository was found at all: an empty register is indistinguishable from a token that lost access, and publishing it would erase the dashboard's coverage figure and every sync target in one commit.",
     action: "Nothing, normally — the nightly workflow runs it. Run it by hand after onboarding a batch of repositories if you do not want to wait for the next refresh.",
   },
+  "measure-context": {
+    what: "Measures what the skills render target saves, per profile: the composed AGENTS.md a Claude session loads every turn, against the core skill plus the one stack whose files are actually in play.",
+    runsIn: "This (source) repo.",
+    trigger: "Run by hand. The roadmap makes the skills target conditional on this number, so it is a script anyone can re-run rather than a claim asserted once.",
+    command: ["npm run build && node scripts/measure-context.mjs", "OUT=context.json node scripts/measure-context.mjs"],
+    env: ["ROOT — the repo to measure, default the working directory.", "OUT — also write the rows as JSON here."],
+    produces: "A row per profile with the byte counts and the reduction, and the finding stated rather than left for the reader to spot: multi-stack profiles save 20-48%, and single-stack profiles LOSE about 5% because there is no second stack to avoid loading and the frontmatter is pure overhead.",
+    action: "Run it before deciding whether to select the skills vendor for a repository. If the repository's profile has one stack, do not — the measurement says it makes things worse, and no amount of rollout enthusiasm changes that.",
+  },
   "build-baseline": {
     what: "Computes the Phase 0 baseline the roadmap's acceptance criteria name: acted-on rate, coverage, findings per week, the merge rate on Redline's own pull requests, which SARIF producers the estate already runs, and AI spend. It is the set of numbers every later phase is judged against.",
     runsIn: "A maintainer's terminal, once, with org credentials — alongside a checkout of the metrics repo's data/.",

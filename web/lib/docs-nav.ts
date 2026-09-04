@@ -114,6 +114,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "agents.md adaptor codex jules devin cursor agent openai concatenated",
       },
       {
+        title: "Claude skills",
+        href: "/docs/adaptors/skills",
+        description: "Per-stack rules that load only when that stack is in play — measured, and not always worth it.",
+        keywords: "claude skills adaptor per-stack conditional loading context window SKILL.md frontmatter description trigger",
+      },
+      {
         title: "Cursor rules",
         href: "/docs/adaptors/cursor",
         description: "Scoped .mdc rules for the Cursor IDE.",

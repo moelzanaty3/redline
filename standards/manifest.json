@@ -197,6 +197,11 @@
     "cursor": {
       "title": "Cursor rules",
       "enabled": false
+    },
+    "skills": {
+      "$comment": "Ships off. It renders the same rules as the claude vendor in a different shape, and a repository selecting both loads every stack twice. Select it INSTEAD of claude where per-stack loading is wanted: redline init --vendors skills,copilot,agents.",
+      "title": "Claude skills (per-stack, loaded on demand)",
+      "enabled": false
     }
   }
 }
