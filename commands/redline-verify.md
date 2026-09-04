@@ -23,14 +23,19 @@ Each line is a check. For any `FAIL`, explain what it means and what fixes it:
   matching Build Validation policy to queue the gate pipeline, so the status is never
   published and every pull request sits blocked; re-run `redline init` with build
   administrator rights. Settings the host cannot attribute to Redline are listed as
-  "not compared here" rather than held against the repository.
+  "not compared here" rather than held against the repository. A repository that deselected
+  the merge policy is not compared at all — except where Redline itself applied a blocking
+  policy before the deselection: that ruleset is still live, still requires the Redline check,
+  and fails here while nothing in the repository publishes it.
 - `gate-machinery` — the file that runs the gate is missing from this repository, the job that
   publishes the required check has been renamed, the file is present and correctly named but no
   pull request will ever trigger it, or the job is unchanged but the merge policy now requires a
   different check name. Nothing will ever report the gate, so a blocking policy blocks every pull
   request forever. Re-run `redline init` to restore the file or reapply the policy. Only rename
   the job back if the workflow itself was the thing that changed — if the policy is what moved,
-  the job is already correct, and renaming it is the wrong fix.
+  the job is already correct, and renaming it is the wrong fix. A repository that deselected the
+  gate passes here, and is told whether the workflow an earlier run installed is still sitting
+  there — a deselection never deletes it.
 - `check-name-reported` — a check ran on the pull request but the required name was never among
   the ones reported. Where the policy blocks, this blocks every pull request in the repository.
   Fix the caller job id, or the policy. "No gate run observed yet" is not a failure: no Redline

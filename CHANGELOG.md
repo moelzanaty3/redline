@@ -7,6 +7,24 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- A deselection never deletes what an earlier run installed, so the output says what remains
+  rather than describing a state the repository is not in. `redline init --skip gate` names the
+  workflow still on disk and still firing, and `redline verify`'s `gate-machinery` finding says
+  it is still present and what it still publishes instead of "Redline installs none at
+  <path>" — a sentence that was false beside an installed gate, and that invited the operator
+  to delete it by hand.
+- A blocking merge policy Redline applied and then stopped maintaining is named rather than
+  passed over. `--skip gate --skip merge-policy` walks past the deadlock guard, which only sees
+  a policy the current run would apply, and leaves a live blocking ruleset requiring the
+  Redline check. `redline init` says so on that run; `redline verify` reads the policy back for
+  exactly that case and reports two different states — while something in the repository still
+  publishes the check nothing is blocked and the hazard is named, and once nothing does, every
+  pull request is blocked forever and the finding fails.
+- `--skip gate` reports `labels` as off with it. The gate install is what creates Redline's
+  labels — GitHub pre-declares the gate's soft-fail labels there, Azure creates them on use —
+  so with the gate deselected nothing ever creates one. The effective state is what `init` and
+  `verify` report, and both say why; `.redline.json` keeps the operator's own choice, so
+  re-selecting the gate brings the labels back without a second flag.
 - Per-capability selection at onboarding. `redline init --skip <list>` deselects a capability
   the repository already has its own answer for — `gate`, `merge-policy`, `labels`,
   `review-ownership` — and `--with <list>` selects one again. A deselected capability is not

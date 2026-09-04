@@ -8,7 +8,7 @@ import { fakePlatform } from './fake-platform.ts';
 import { init, sensitivePathRules } from '../init.ts';
 import { capabilitySelection } from '../../config/redline-json.ts';
 import { contentId } from '../../render/commands.ts';
-import { isRedlineError } from '../../core/errors.ts';
+import { isRedlineError, RedlineError } from '../../core/errors.ts';
 import { readConfig } from '../../config/redline-json.ts';
 import type { AdminCapability, CapabilityOutcome } from '../../platforms/types.ts';
 
@@ -1181,7 +1181,7 @@ test('--dry-run names what a deselection changes and writes nothing', async () =
   const platform = fakePlatform();
   const report = await init(platform, { cwd, root, now, dryRun: true, capabilities: { gate: false } });
 
-  assert.deepEqual(report.optedOut, ['gate']);
+  assert.deepEqual(report.optedOut, ['gate', 'labels']);
   assert.equal(report.capabilities.gate, false);
   assert.deepEqual(platform.applied, []);
   assert.equal(existsSync(join(cwd, '.redline.json')), false);
@@ -1288,3 +1288,101 @@ test('the content id of every command file it wrote is recorded', async () => {
     contentId(readFileSync(join(cwd, '.claude/commands/redline-init.md'), 'utf8'))
   );
 });
+
+// Deselecting the gate does not delete the workflow an earlier run installed —
+// the brownfield rule holds — but a run that says nothing about a Redline
+// workflow still sitting there and still firing on every pull request invites
+// the operator to go and delete it by hand.
+test('deselecting the gate names the workflow an earlier run left behind', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+
+  const report = await init(fakePlatform(), { cwd, root, now, capabilities: { gate: false } });
+
+  assert.ok(
+    report.notes.some(
+      (note) => note.includes('.github/workflows/redline.yml') && note.includes('still')
+    ),
+    `expected the leftover workflow to be named, got ${JSON.stringify(report.notes)}`
+  );
+});
+
+// The two-flag route past the deadlock guard: the guard only refuses a blocking
+// policy this run would apply, so deselecting the policy as well walks straight
+// past it and leaves a live blocking ruleset requiring a check nothing will
+// publish. Not a refusal — the policy is the repository's now — but it cannot
+// go unsaid.
+test('deselecting the merge policy names the blocking ruleset Redline leaves behind', async () => {
+  const cwd = repo();
+  const platform = fakePlatform();
+  await init(platform, { cwd, root, now, menu: { blockingGate: true } });
+
+  const report = await init(platform, {
+    cwd,
+    root,
+    now,
+    capabilities: { gate: false, mergePolicy: false },
+  });
+
+  assert.ok(
+    report.notes.some((note) => note.includes('blocking')),
+    `expected the live blocking policy to be named, got ${JSON.stringify(report.notes)}`
+  );
+});
+
+// A repository that was never given a blocking policy has nothing to warn about.
+test('deselecting an advisory merge policy says nothing about a blocking one', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+
+  const report = await init(fakePlatform(), { cwd, root, now, capabilities: { mergePolicy: false } });
+
+  assert.ok(!report.notes.some((note) => note.includes('blocking')), JSON.stringify(report.notes));
+});
+
+// GitHub pre-declares the gate's soft-fail labels inside the gate install, so a
+// deselected gate takes the labels with it. Recording and reporting `labels` as
+// selected while nothing will ever create one is the silence this selection
+// exists to end.
+test('deselecting the gate reports labels as off with it, and says why', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, capabilities: { gate: false } });
+
+  assert.deepEqual(report.optedOut, ['gate', 'labels']);
+  assert.ok(
+    report.notes.some((note) => note.includes('labels')),
+    `expected the reason to be given, got ${JSON.stringify(report.notes)}`
+  );
+  // The operator's own choice is what is recorded, so re-selecting the gate
+  // brings the labels back rather than needing a second flag.
+  assert.equal(readConfig(cwd)?.capabilities.labels, true);
+});
+
+// With the gate deselected `installGate` no longer runs first, so nothing else
+// touches that path before this does. What it feeds is two advisory notes.
+test('a gate machinery path that cannot be read costs the notes, never the run', async () => {
+  const platform = fakePlatform();
+  platform.readGateMachinery = () => {
+    throw new RedlineError('failed', 'cannot read .github/workflows/redline.yml: EISDIR');
+  };
+
+  const report = await init(platform, { cwd: repo(), root, now, capabilities: { gate: false } });
+
+  assert.ok(
+    !report.notes.some((note) => note.includes('.github/workflows/redline.yml')),
+    'nothing was observed, so nothing is claimed about that path'
+  );
+  assert.equal(report.alreadyOnboarded, false);
+});
+
+test('the mandatory-capability refusal says "cannot be deselected" once', () => {
+  assert.throws(capabilitySelectionOnce, (error: unknown) => {
+    const message = isRedlineError(error) ? error.message : '';
+    assert.equal((message.match(/cannot be deselected/g) ?? []).length, 1, message);
+    return true;
+  });
+});
+
+const capabilitySelectionOnce = (): void => {
+  capabilitySelection(['security-floor'], []);
+};

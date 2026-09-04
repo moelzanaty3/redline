@@ -1,7 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError } from '../core/errors.ts';
-import { deselectedCapabilities, readConfig, type RedlineConfig } from '../config/redline-json.ts';
+import {
+  deselectedCapabilities,
+  labelsCarriedByGate,
+  readConfig,
+  type RedlineConfig,
+} from '../config/redline-json.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { render } from '../render/standards.ts';
 import { LOCAL_HEADING, LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
@@ -113,15 +118,49 @@ export async function verify(
     true,
     optedOut.length === 0
       ? 'every capability selected'
-      : `${OFF_BY_CHOICE} at onboarding, so Redline neither installs nor checks them: ${optedOut.join(', ')}`
+      : `${OFF_BY_CHOICE} at onboarding, so Redline neither installs nor checks them: ${optedOut.join(
+          ', '
+        )}${
+          labelsCarriedByGate(config.capabilities)
+            ? '. labels was not deselected: the gate install is what creates them, so a deselected ' +
+              'gate takes them with it'
+            : ''
+        }`
   );
 
   const platform = await platformFor();
   const ref = await platform.repoRef(opts.cwd);
-  // Not read at all when the repository declined it: whatever policy is on the
-  // host then belongs to a human, and every comparison below would report
-  // their own configuration as Redline's drift.
-  const policy = config.capabilities.mergePolicy ? await platform.readPolicy(ref) : null;
+
+  // Read before the policy, because whether anything in this repository can
+  // publish the Redline check is what decides whether a blocking policy is a
+  // working gate or a repository-wide deadlock. Local: no host call.
+  const machinery = platform.readGateMachinery(opts.cwd);
+  const gateOwned = config.capabilities.gate;
+  // A fact about the repository, not about who owns it: a gate file a
+  // deselection stopped maintaining still fires on every pull request until
+  // someone deletes it. Tying this to `gateOwned` made verify say the check was
+  // published and unpublishable in two findings of the same report.
+  const publishesExpected = machinery.present && machinery.publishes === machinery.expected;
+
+  // Normally not read at all when the repository declined it: whatever policy
+  // is on the host then belongs to a human, and every comparison below would
+  // report their own configuration as Redline's drift. The exception is a
+  // repository Redline itself gave a blocking policy to before the deselection
+  // — that ruleset is still live, still requires the Redline check, and this is
+  // the last place anyone finds out before a pull request hangs forever.
+  const leftBlocking =
+    !config.capabilities.mergePolicy &&
+    config.menu.blockingGate &&
+    !config.pendingAdmin.includes('merge-policy');
+  const policy =
+    config.capabilities.mergePolicy || leftBlocking ? await platform.readPolicy(ref) : null;
+  // Redline applied it, Redline no longer maintains it, and it still requires
+  // the Redline check. Two states, and they are not the same sentence: while
+  // something still publishes that check nothing is blocked and this is a
+  // hazard to name, and once nothing does, every pull request in the repository
+  // is blocked forever and it is a failure.
+  const leftBlockingPolicy = leftBlocking && policy !== null && policy.blocking;
+  const orphanedBlocking = leftBlockingPolicy && !publishesExpected;
 
   // Every setting `redline init` applies, not just the blocking flag: an
   // administrator who turns off code-owner review or approvals leaves the gate
@@ -184,10 +223,18 @@ export async function verify(
   }
   add(
     'merge-policy',
-    !config.capabilities.mergePolicy || (policy !== null && weakened.length === 0),
+    config.capabilities.mergePolicy ? policy !== null && weakened.length === 0 : !orphanedBlocking,
     !config.capabilities.mergePolicy
-      ? `${OFF_BY_CHOICE} — this repository manages its own branch policy, so Redline applies none ` +
-        'and compares none'
+      ? orphanedBlocking
+        ? 'the merge policy Redline applied here is still blocking and still requires ' +
+          `${machinery.expected}, which nothing in this repository publishes — every pull request ` +
+          'is blocked until you relax or delete it on the host, or re-select the gate'
+        : leftBlockingPolicy
+          ? `${OFF_BY_CHOICE}, but the merge policy Redline applied here is still blocking and ` +
+            `still requires ${machinery.expected} — only ${machinery.path} publishes that, and ` +
+            'Redline no longer maintains it, so deleting it blocks every pull request'
+          : `${OFF_BY_CHOICE} — this repository manages its own branch policy, so Redline applies none ` +
+            'and compares none'
       : policy === null
         ? 'no Redline merge policy found on the host — if this is a repository that was refused ' +
           'admin rights at onboarding, a plain redline init treats that as settled and will not ' +
@@ -213,8 +260,6 @@ export async function verify(
   // from "the gate is gone or renamed", which is an outage nothing else in
   // this command observes. render() covers rendered standards artifacts only,
   // so before this the deletion was invisible.
-  const machinery = platform.readGateMachinery(opts.cwd);
-  const gateOwned = config.capabilities.gate;
   const requiredChecks = policy?.requiredChecks ?? [];
   // Three separate failures, and they need three different sentences. The
   // renamed case is not "the policy requires something else": telling an
@@ -232,8 +277,23 @@ export async function verify(
     'gate-machinery',
     !gateOwned || machineryHealthy,
     !gateOwned
-      ? `${OFF_BY_CHOICE} — this repository publishes its own merge gate, so Redline installs none ` +
-        `at ${machinery.path}`
+      ? machinery.present
+        ? // The file is not deleted by a deselection — deleting a repository's
+          // files is not Redline's to do — so saying Redline installs none here
+          // would describe a state this repository is not in, and would invite
+          // the operator to delete a workflow that is still running. Where a
+          // blocking policy Redline left behind still needs it, this must not
+          // invite that deletion at all: the merge-policy finding above says
+          // the same deletion blocks every pull request.
+          `${OFF_BY_CHOICE} — Redline no longer maintains a gate here, but ${machinery.path} from ` +
+          `an earlier run is still present and still publishes ${machinery.publishes ?? machinery.expected}` +
+          `${
+            leftBlockingPolicy
+              ? ', which the still-blocking merge policy needs — see the merge-policy finding'
+              : '; it is yours to keep or delete'
+          }`
+        : `${OFF_BY_CHOICE} — this repository publishes its own merge gate, so Redline installs none ` +
+          `at ${machinery.path}`
       : !machinery.present
         ? `${machinery.path} is not in this repository, so nothing will ever publish ${machinery.expected}` +
           `${requiredChecks.includes(machinery.expected) ? ' — which the policy requires' : ''}` +

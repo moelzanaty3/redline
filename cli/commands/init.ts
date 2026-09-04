@@ -7,6 +7,7 @@ import {
   CONFIG_FILE,
   MENU_KEYS,
   deselectedCapabilities,
+  labelsCarriedByGate,
   readConfig,
   writeConfig,
   type CapabilitySelections,
@@ -23,6 +24,7 @@ import { isPending } from '../platforms/types.ts';
 import type {
   AdminCapability,
   CapabilityOutcome,
+  GateMachinery,
   GateOptions,
   OwnershipRule,
   Platform,
@@ -119,6 +121,19 @@ export function sensitivePathRules(org: string): OwnershipRule[] {
 }
 
 export const ONBOARD_BRANCH = 'redline/onboard';
+
+// Local and free — both adapters read the checkout and nothing else — but the
+// path it reads is whatever is on disk by now, and with the gate deselected
+// `installGate` no longer runs first to meet an unreadable one. Everything it
+// feeds here is advisory output, so a path that cannot be read costs the notes
+// and never the run.
+function observeGateMachinery(platform: Platform, cwd: string): GateMachinery | null {
+  try {
+    return platform.readGateMachinery(cwd);
+  } catch {
+    return null;
+  }
+}
 
 // Every other pipeline definition sitting where this host keeps them. Cheap
 // (one readdir) and unambiguous as a statement — it says what is there and
@@ -384,23 +399,67 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules, true)
     : { files: [], outcomes: [] };
 
+  // Everything this run observed and thinks the operator should know, without
+  // acting on any of it. Detection informs; it does not decide.
+  const machinery = observeGateMachinery(platform, cwd);
+  const notes: string[] = [];
+
   // Detection, not a decision. `readGateMachinery` is local and free, and what
   // it gives that nothing else here has is the path this host runs its gate
   // from — so the only claim made is what else is already sitting in that
   // directory. It is offered while Redline's own gate is still absent and
   // never after, because a repository that already has it has answered the
   // question.
-  const machinery = platform.readGateMachinery(cwd);
   const alreadyWired =
-    capabilities.gate && !machinery.present ? otherPipelines(cwd, machinery.path) : [];
-  const notes =
-    alreadyWired.length > 0
-      ? [
-          `this repository already has ${alreadyWired.join(', ')} — if one of them is already your ` +
-            'merge gate, re-run with --skip gate and Redline will leave it in charge rather than ' +
-            'writing a second one beside it',
-        ]
+    capabilities.gate && machinery !== null && !machinery.present
+      ? otherPipelines(cwd, machinery.path)
       : [];
+  if (alreadyWired.length > 0) {
+    notes.push(
+      `this repository already has ${alreadyWired.join(', ')} — if one of them is already your ` +
+        'merge gate, re-run with --skip gate and Redline will leave it in charge rather than ' +
+        'writing a second one beside it'
+    );
+  }
+
+  // Deselecting the gate does not delete the workflow an earlier run installed
+  // — deleting a repository's files is not Redline's to do — so it is still
+  // there and still firing on every pull request. Saying only "opted out: gate"
+  // beside a running gate describes a state this repository is not in, and
+  // invites the operator to go and delete it by hand.
+  if (!capabilities.gate && machinery !== null && machinery.present) {
+    notes.push(
+      `${machinery.path} from an earlier run is still in this repository and still publishes ` +
+        `${machinery.expected} — Redline no longer maintains it; it is yours to keep or delete`
+    );
+  }
+
+  // The other half of the deadlock guard, and the half a refusal cannot cover:
+  // the guard only sees a blocking policy this run would apply, so deselecting
+  // the merge policy walks straight past it and leaves a Redline ruleset
+  // blocking on a check that, with the gate deselected too, nothing will ever
+  // publish. The policy is the repository's now, so this is not a refusal — but
+  // it is the last place anyone hears about it before a pull request hangs.
+  if (
+    !capabilities.mergePolicy &&
+    menu.blockingGate &&
+    existing !== null &&
+    !existing.pendingAdmin.includes('merge-policy')
+  ) {
+    notes.push(
+      'the merge policy Redline applied here is blocking and is no longer maintained by Redline — ' +
+        'it still requires the Redline gate check, so relax or delete it on the host unless ' +
+        'something in this repository still publishes that check'
+    );
+  }
+
+  if (labelsCarriedByGate(capabilities)) {
+    notes.push(
+      "labels are created by the gate install, so a deselected gate takes Redline's labels with " +
+        'it — the selection recorded in .redline.json is unchanged, and re-selecting the gate ' +
+        'brings them back'
+    );
+  }
 
   // Files next, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.

@@ -96,16 +96,29 @@ const CAPABILITY_NAMES: Record<string, keyof CapabilitySelections | 'reviewOwner
 // thing a silent ignore could never do, tell the operator it did not happen.
 export const MANDATORY_CAPABILITIES: Record<string, string> = {
   'security-floor':
-    'the security floor is the organisation-wide minimum and cannot be deselected: secret scanning, ' +
-    'push protection and dependency alerts are additive host settings, so nothing a repository ' +
-    'already runs is displaced by them',
+    'the security floor is the organisation-wide minimum: secret scanning, push protection and ' +
+    'dependency alerts are additive host settings, so nothing a repository already runs is ' +
+    'displaced by them',
 };
 
 export const OPTIONAL_CAPABILITIES = Object.keys(CAPABILITY_NAMES);
 
-// The operator-facing names of everything this repository declined, in the
-// order they are documented. `redline verify` reports the same list, which is
-// how a reader tells "off because we chose to" from "off because it broke".
+// The gate install is what creates Redline's labels — GitHub pre-declares the
+// gate's soft-fail labels there, and Azure creates pull request labels on use —
+// so a deselected gate takes the labels with it whatever the operator chose for
+// them. True of the effective state, never of the record: `.redline.json` keeps
+// the operator's own choice, so re-selecting the gate brings the labels back
+// without a second flag.
+export function labelsCarriedByGate(capabilities: CapabilitySelections): boolean {
+  return !capabilities.gate && capabilities.labels;
+}
+
+// The operator-facing names of everything that is off, in the order they are
+// documented. `redline verify` reports the same list, which is how a reader
+// tells "off because we chose to" from "off because it broke" — so it reports
+// what is actually off, not only what was asked for: a capability reported as
+// on while nothing will ever create it is the silence this selection exists to
+// end. `labelsCarriedByGate` above is the one place the two differ.
 export function deselectedCapabilities(
   menu: MenuSelections,
   capabilities: CapabilitySelections
@@ -113,6 +126,7 @@ export function deselectedCapabilities(
   return OPTIONAL_CAPABILITIES.filter((name) => {
     const key = CAPABILITY_NAMES[name];
     if (key === 'reviewOwnership') return !menu.sensitivePathReviewers;
+    if (key === 'labels') return !capabilities.labels || labelsCarriedByGate(capabilities);
     return key !== undefined && !capabilities[key];
   });
 }

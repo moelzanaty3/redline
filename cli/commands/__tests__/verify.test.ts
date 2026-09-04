@@ -911,3 +911,100 @@ test('a deselected gate takes the pull request template with it, off by choice',
   assert.equal(find(report, 'pull-request-template')?.ok, true, JSON.stringify(report.findings, null, 2));
   assert.match(find(report, 'pull-request-template')?.detail ?? '', /off by choice/);
 });
+
+// A message telling an operator no gate is installed, beside an installed and
+// still-firing gate, invites them to go and delete it by hand. The file stays —
+// deleting a repository's files is not Redline's to do — so the sentence has to
+// be true instead.
+test('a deselected gate whose workflow is still on disk says the workflow remains', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, capabilities: { ...config.capabilities, gate: false } });
+
+  const report = await verify(() => fakePlatform(), { cwd, root });
+  const detail = find(report, 'gate-machinery')?.detail ?? '';
+
+  assert.match(detail, /still present/);
+  assert.match(detail, /\.github\/workflows\/redline\.yml/);
+  assert.equal(find(report, 'gate-machinery')?.ok, true, 'the repository is in the state it chose');
+});
+
+// The two-flag route past the deadlock guard leaves a Redline ruleset blocking
+// on the Redline check while Redline stops maintaining the only thing that
+// publishes it. The workflow is still there, so nothing is blocked yet — but
+// verify is the last place anyone hears about it, and reporting the policy as
+// "not compared" says nothing at all.
+test('a blocking policy Redline left behind is named even while the leftover gate still reports it', async () => {
+  const cwd = tempRepo('redline-verify-left-');
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  const platform = fakePlatform();
+  await init(platform, { cwd, root, now, menu: { blockingGate: true } });
+  await init(platform, { cwd, root, now, capabilities: { gate: false, mergePolicy: false } });
+
+  const report = await verify(() => platform, { cwd, root });
+  const detail = find(report, 'merge-policy')?.detail ?? '';
+
+  assert.match(detail, /still blocking/);
+  assert.equal(
+    find(report, 'merge-policy')?.ok,
+    true,
+    'the leftover workflow still publishes the check, so nothing is blocked yet'
+  );
+  // One report must not invite the deletion the other says blocks every pull
+  // request.
+  assert.ok(
+    !(find(report, 'gate-machinery')?.detail ?? '').includes('keep or delete'),
+    find(report, 'gate-machinery')?.detail
+  );
+});
+
+// And the `rm` that turns it into a deadlock. Nothing publishes the check the
+// live blocking policy requires, so every pull request in the repository is
+// blocked forever — that cannot be reported clean.
+test('a live blocking policy with nothing left to publish its check fails', async () => {
+  const cwd = tempRepo('redline-verify-orphan-');
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  const platform = fakePlatform();
+  await init(platform, { cwd, root, now, menu: { blockingGate: true } });
+  await init(platform, { cwd, root, now, capabilities: { gate: false, mergePolicy: false } });
+  rmSync(join(cwd, '.github/workflows/redline.yml'));
+  platform.readGateMachinery = () => ({
+    path: '.github/workflows/redline.yml',
+    present: false,
+    publishes: null,
+    expected: 'redline-gate / gate',
+  });
+
+  const report = await verify(() => platform, { cwd, root });
+
+  assert.equal(find(report, 'merge-policy')?.ok, false, JSON.stringify(report.findings, null, 2));
+  assert.match(find(report, 'merge-policy')?.detail ?? '', /nothing in this repository publishes/);
+  assert.equal(report.ok, false);
+});
+
+// The same deselection on a repository whose policy was only ever advisory is
+// exactly what "off by choice" is for, and must stay a pass.
+test('a deselected advisory merge policy stays off by choice', async () => {
+  const cwd = tempRepo('redline-verify-advisory-');
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  const platform = fakePlatform();
+  await init(platform, { cwd, root, now });
+  await init(platform, { cwd, root, now, capabilities: { mergePolicy: false } });
+
+  const report = await verify(() => platform, { cwd, root });
+
+  assert.equal(find(report, 'merge-policy')?.ok, true, JSON.stringify(report.findings, null, 2));
+  assert.match(find(report, 'merge-policy')?.detail ?? '', /off by choice/);
+});
+
+test('a deselected gate reports labels as off with it, and says why', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, capabilities: { ...config.capabilities, gate: false } });
+
+  const report = await verify(() => fakePlatform(), { cwd, root });
+  const detail = find(report, 'capabilities')?.detail ?? '';
+
+  assert.match(detail, /labels/);
+  assert.match(detail, /gate install/);
+});
