@@ -61,7 +61,37 @@ export function aggregate(records) {
 
   const findings = sum((r) => r.findings?.total);
 
+  // Ingested scanner findings, aggregated ALONGSIDE Redline's own and never into
+  // them. Every number above this line describes Redline's own catalogue and is
+  // what rule tuning reads; folding another tool's rule ids in would tune
+  // Redline's rules on that tool's noise. Reported separately, they answer a
+  // question neither tool can answer alone: what the estate's whole finding
+  // surface looks like under one severity contract.
+  const scannerByTool = new Map();
+  const scannerBySeverity = { blocker: 0, high: 0, suggestion: 0 };
+  let scannerTotal = 0;
+  for (const record of records) {
+    scannerTotal += record.scanner?.findings ?? 0;
+    for (const [tool, n] of Object.entries(record.scanner?.by_tool ?? {})) {
+      scannerByTool.set(tool, (scannerByTool.get(tool) ?? 0) + n);
+    }
+    for (const [severity, n] of Object.entries(record.scanner?.by_severity ?? {})) {
+      if (severity in scannerBySeverity) scannerBySeverity[severity] += n;
+    }
+  }
+
   return {
+    scanner: {
+      findings: scannerTotal,
+      bySeverity: scannerBySeverity,
+      byTool: [...scannerByTool.entries()]
+        .map(([tool, findings]) => ({ tool, findings }))
+        .sort((a, b) => b.findings - a.findings),
+      // How many repositories in this window emit anything at all. This is the
+      // number that decides whether Phase 1 was worth doing, and the roadmap's
+      // open question 1 asks for exactly it.
+      repos: new Set(records.filter((r) => (r.scanner?.findings ?? 0) > 0).map((r) => r.repo)).size,
+    },
     prs: records.length,
     prsWithFindings: records.filter((r) => (r.findings?.total ?? 0) > 0).length,
     findings,

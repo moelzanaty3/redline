@@ -196,6 +196,26 @@ if (!read('.github/pull_request_template.md').includes('Redline exemption')) {
   fail('.github/pull_request_template.md does not mention the exemption block — an author asked to justify a waiver has nowhere to write it');
 }
 
+// --- ingestion ----------------------------------------------------------------
+// Same two-implementation arrangement as the exemption block, and the same guard.
+// The property being protected is different and larger: an ingested finding must
+// always be distinguishable from a Redline one. A collector that stopped tagging
+// the source would tune Redline's rules on another tool's noise, silently, and
+// nothing else in the system would notice.
+const sarifCli = read('cli/sarif/types.ts');
+const sarifCollector = read('scripts/lib/sarif.mjs');
+for (const token of ["'sarif'", 'severity']) {
+  if (!sarifCli.includes(token) || !sarifCollector.includes(token)) {
+    fail(`ingestion lost "${token}" from cli/sarif/ or scripts/lib/sarif.mjs — an ingested finding must always be distinguishable from a Redline one`);
+  }
+}
+if (!read('scripts/lib/metrics.mjs').includes('scanner')) {
+  fail('scripts/lib/metrics.mjs no longer aggregates ingested findings separately — they would be folded into Redline\'s own rule tuning');
+}
+if (read('workflows/redline-gate.yml').includes('code-scanning')) {
+  fail('workflows/redline-gate.yml reads code scanning — ingested findings are measured only and must never gate a merge (roadmap open question 4)');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

@@ -7,6 +7,38 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### SARIF ingestion — one severity contract across every producer
+
+- Redline was one more finding producer competing with scanners it should have been
+  consuming. Its own diff secret scan and dependency review are weaker than a real scanner
+  stack and always will be. The collector now ingests code-scanning alerts from repositories
+  that already run one, puts them through the same three-severity contract, and reports them
+  beside Redline's own — so the estate has one picture instead of five dashboards.
+- **Ingested findings are always distinguishable from Redline's, everywhere.** This is the
+  one way this piece could make things worse than not doing it: rule tuning reads the finding
+  stream, and a view that could not tell a CodeQL finding from a Redline one would tune
+  Redline's rules on another tool's noise. So an ingested finding keeps the producer's own
+  rule id — never rewritten into a Redline id, which would make every rule aggregate in the
+  estate fiction — carries its tool, and aggregates in its own bucket. Acted-on rate is
+  computed within each source and never across: Redline's is a resolved review thread, a
+  scanner's is a closed alert, and averaging two definitions describes neither.
+- **Answers roadmap open question 4: ingested findings never gate a merge.** They are
+  measured only. Gating on another tool's output makes Redline responsible for that tool's
+  false positives, and `scripts/validate.mjs` fails the build if the gate ever starts reading
+  code scanning.
+- Severity mapping is configurable per repository and visible in every record. The roadmap
+  names this as Phase 1's risk and it is right — it is a judgement call that will be wrong
+  somewhere. So each finding carries both the mapped severity and the producer's own word, a
+  severity the map does not know is reported rather than absorbed, and an unrecognised one
+  falls back to SUGGESTION and never BLOCKER: a wrong BLOCKER blocks a merge and teaches
+  people the gate is noise, a wrong SUGGESTION is a line in a report.
+- Redline never runs a scanner and no repository is asked to change which ones it runs. A
+  repository with code scanning disabled, or a token that cannot see security data, is a fact
+  about that repository rather than a failed collection run.
+- The dashboard gains a Finding sources view showing both catalogues side by side. When it
+  is empty, that is the answer to the roadmap's open question 1 — and the signal that SARIF
+  ingestion was not where the next effort belonged.
+
 ### Standards v0.0.2 — structured exemptions
 
 - `redline-exempt` was a bare label. It downgraded the process checks to warnings and

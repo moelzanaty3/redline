@@ -86,10 +86,21 @@ const compact = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 
 const tiles = [
   { label: 'PRs merged', value: compact(agg.prs), sub: `${agg.repos} repo(s)${ONBOARDED ? ` of ${ONBOARDED} onboarded` : ''}` },
-  { label: 'Findings', value: compact(agg.findings), sub: `${agg.blocker} BLOCKER · ${agg.high} HIGH` },
+  { label: 'Findings', value: compact(agg.findings), sub: `${agg.blocker} BLOCKER · ${agg.high} HIGH · Redline only` },
   { label: 'PRs with findings', value: pct(agg.prsWithFindings, agg.prs), sub: `${agg.prsWithFindings} of ${agg.prs}` },
   { label: 'Ignored', value: pct(agg.stale, agg.findings), sub: `${agg.stale} left stale and outdated` },
   { label: 'Gate exemptions', value: pct(agg.exempted, agg.prs), sub: `${agg.exempted} PR(s) used a soft-fail label` },
+  {
+    // Ingested, not produced. The label says so, because a tile reading
+    // "Findings 900" that silently included another tool's output would make
+    // Redline look nine times more productive than it is.
+    label: 'Scanner findings (ingested)',
+    value: compact(agg.scanner.findings),
+    sub:
+      agg.scanner.findings === 0
+        ? 'no repository in this window emits any'
+        : `${agg.scanner.repos} repo(s) · ${agg.scanner.byTool.map((t) => t.tool).join(', ')}`,
+  },
   {
     label: 'Seed BLOCKER recall',
     value: worstRecall === null ? '—' : `${Math.round(worstRecall * 100)}%`,
@@ -165,6 +176,8 @@ const html = `<!doctype html><meta charset="utf-8">
   .card.full { grid-column: 1 / -1; }
   figure { margin: 0; }
   figcaption { color: var(--muted); font-size: .78rem; margin-top: .55rem; }
+  .note { color: var(--ink-2); font-size: .82rem; margin: -.2rem 0 .9rem; max-width: 62ch; line-height: 1.55; }
+  td.muted { color: var(--muted); }
   svg { display: block; width: 100%; height: auto; overflow: visible; }
 
   .legend { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin: .1rem 0 .6rem; font-size: .78rem; color: var(--ink-2); }
@@ -250,6 +263,32 @@ ${tiles
     <h2>Noisiest rules — the tuning queue</h2>
     <figure><svg id="c-noisy" role="img" aria-label="Rules by share of findings ignored"></svg>
     <figcaption>Rules that fire often and are rarely acted on. Cut, narrow, or downgrade these before adding new rules.</figcaption></figure>
+  </div>
+</section>
+
+<section class="card full" style="margin-bottom:1rem">
+  <h2>Finding sources</h2>
+  <p class="note">Two catalogues, deliberately not merged. Redline's findings drive rule tuning;
+  a scanner's rule ids belong to that scanner, and folding them together would tune Redline's
+  rules on another tool's noise. Ingested findings are measured only — they never gate a merge,
+  because gating on another tool's output makes Redline responsible for its false positives.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Source</th><th>Tool</th><th class="num">Findings</th><th class="num">BLOCKER</th><th class="num">HIGH</th></tr></thead>
+    <tbody>
+      <tr><td>Redline</td><td>LLM review</td><td class="num">${agg.findings}</td><td class="num">${agg.blocker}</td><td class="num">${agg.high}</td></tr>
+${
+  agg.scanner.byTool.length === 0
+    ? '      <tr><td colspan="5" class="muted">No repository in this window emits code-scanning alerts. Roadmap open question 1 is answered by this row: if it stays empty, SARIF ingestion is not where the next effort belongs.</td></tr>'
+    : agg.scanner.byTool
+        .map(
+          (t) =>
+            `      <tr><td>Ingested</td><td>${esc(t.tool)}</td><td class="num">${t.findings}</td><td class="num">—</td><td class="num">—</td></tr>`
+        )
+        .join('\n')
+}
+    </tbody>
+  </table>
   </div>
 </section>
 
