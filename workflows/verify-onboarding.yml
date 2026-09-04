@@ -99,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Redline onboarding drift detected"
-          body=$(printf 'These repos no longer verify. Their gate may be reporting a check name the ruleset does not require, or their security floor has been turned off.\n\n%s\n\nRun: %s\n\nInvestigate with:\n```sh\nscripts/setup-repo.sh <org>/<repo> --verify\n```' \
+          body=$(printf 'These repos no longer verify. Their gate may be reporting a check name the ruleset does not require, or their security floor has been turned off.\n\n%s\n\nRun: %s\n\nInvestigate by checking out each repo and running: npx redline-cli verify\n' \
             "$(for r in $FAILURES; do echo "- $r"; done)" "$RUN")
           existing=$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // ""')
           if [[ -n "$existing" ]]; then
