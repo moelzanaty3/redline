@@ -135,6 +135,19 @@ if (!gate.includes('pull-requests: write')) {
   fail('workflows/redline-gate.yml: dependency-review needs pull-requests: write to comment');
 }
 
+// --- the derived register -----------------------------------------------------
+// The register is the estate's only source of truth for which repositories are
+// onboarded. It was lost once already — scripts/setup-repo.sh was its only writer
+// and sync-targets.txt went with it — and nothing failed, which is why the dashboard
+// quietly stopped reporting coverage. These two assertions are what makes that
+// silent again impossible.
+if (!existsSync(join(ROOT, 'scripts/build-registry.mjs'))) {
+  fail('scripts/build-registry.mjs is missing — the register cannot be derived, so redline sync has no targets and the dashboard loses its coverage figure');
+}
+if (!existsSync(join(ROOT, '.github/workflows/registry.yml'))) {
+  fail('.github/workflows/registry.yml is missing — the register would silently stop refreshing and go stale without a single failing build');
+}
+
 // --- pull request template ----------------------------------------------------
 // Two copies of one file, deliberately, kept identical by this check.
 //

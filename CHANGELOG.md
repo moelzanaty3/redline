@@ -7,6 +7,32 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — hardening
 
+- A register of onboarded repositories exists again, and it is derived rather than
+  maintained. `registry.json` is discovered nightly from the `.redline.json` each onboarded
+  repository already carries, so an entry exists exactly as long as that file does and a
+  repository that removes Redline leaves the register on the next run. Nothing hand-edits it
+  and `redline init` does not write it — the previous register, `sync-targets.txt`, was
+  appended to by `scripts/setup-repo.sh`, lost its only writer when that script was deleted,
+  and then went with it; the dashboard's coverage figure has been absent ever since. The
+  dashboard reads the register in its place, and `scripts/validate.mjs` now fails the build if
+  either the runner or its workflow goes missing, so the same silent loss cannot repeat.
+- The register's schema is deliberately the minimum its consumers need today — host, org,
+  repo, default branch, profile, standards and CLI versions, onboarding date. Because it is
+  re-derived from scratch on every run, adding a field later costs one nightly walk and no
+  migration, so fields are added when a consumer needs them rather than designed ahead.
+- Two caveats this does not close. **Azure DevOps discovery is outstanding**: the walk is
+  GraphQL and GitHub-only, Azure has no equivalent and needs a per-project repository walk, so
+  Phase 0's exit condition — sync working on both hosts — is not met until that exists.
+  `RegistryEntry.host` and its optional `project` already carry the Azure shape so the schema
+  will not need changing. And `workflows/dashboard.yml` runs in the metrics repo, not this one:
+  until `redline sync` can distribute it, restoring the live coverage figure needs that file
+  copied across by hand.
+- The registry workflow commits to this repository's default branch. That is a deliberate
+  exception for a derived artifact in Redline's own repository and not a precedent: Redline
+  still never pushes to the default branch of a repository it governs. If this repo is ever
+  onboarded to its own ruleset the push is refused and the job fails loudly rather than
+  quietly ceasing to refresh.
+
 - A deselection never deletes what an earlier run installed, so the output says what remains
   rather than describing a state the repository is not in. `redline init --skip gate` names the
   workflow still on disk and still firing, and `redline verify`'s `gate-machinery` finding says
