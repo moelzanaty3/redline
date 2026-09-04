@@ -8,8 +8,16 @@ export type WorkflowInfo = {
   disabled: boolean;
   livesIn: string;
   trigger: string;
+  // How this workflow gets into the repository that runs it. Redline installs
+  // some of these and a human copies others by hand — omitting the difference
+  // is how a workflow ends up assumed present and never installed.
+  onboard: string;
   steps: string[];
   phase1: string;
+  // What a run leaves behind: a status check, a commit, a deployed page, an
+  // issue. Where a workflow is disabled this says what you get instead, which
+  // is usually nothing at all.
+  output: string;
   action: string;
 };
 
@@ -19,6 +27,8 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     disabled: false,
     livesIn: "The org .github repo, at .github/workflows/redline-gate.yml — copied there once by hand (see Installation). Every onboarded repo's caller workflow (templates/redline.yml) references it by org path as <org>/.github/.github/workflows/redline-gate.yml@main.",
     trigger: "workflow_call, invoked by the calling repo's Redline workflow on every pull request.",
+    onboard:
+      "Installed in two places, once each. The reusable workflow is copied by hand into the org's .github repository as .github/workflows/redline-gate.yml — see Installation. The per-repo caller is written by redline init on every onboarded GitHub repo, so after the one-time org step no repository needs manual work.",
     steps: [
       "checklist (\"PR checklist\") — passes only if the PR body has a ## Launch readiness section with every box ticked. Fails loudly, not silently, if the heading is missing entirely.",
       "adr (\"ADR required for significant changes\") — passes if changed lines are at or below adr-diff-threshold (default 300), or the PR body links docs/adr/, or the no-adr label is applied.",
@@ -27,30 +37,40 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
       "gate (aggregate, name: gate) — needs all four. dependency-review and secrets are hard-fail and never label-exemptible. checklist and adr are soft-fail: the redline-exempt or redline-sync label downgrades a failure there to a warning. The branch ruleset requires the check context redline-gate / gate — the caller job id plus this aggregate job's id.",
     ],
     phase1: "Active — this is what redline init wires up on GitHub today.",
+    output:
+      "One required status check, redline-gate / gate, on every pull request. The four sub-checks report individually beside it. dependency-review comments its findings on the PR; the secret scan fails the check without echoing what it found. A soft-fail check downgraded by the redline-exempt or redline-sync label reports as a warning rather than a failure, and the aggregate still passes.",
     action: "Nothing directly — it's called by the caller workflow your repo already has. If it fails, see The merge gate for what each check expects and how to satisfy or exempt it.",
   },
   "redline-sync": {
-    what: "Would distribute standards, the gate caller and the PR template to already-onboarded repos as pull requests. The register it read its targets from, sync-targets.txt, is deleted — Phase 3 has to reintroduce one that redline init actually writes.",
+    what: "Would distribute standards, the gate caller and the PR template to already-onboarded repos as pull requests. Its old register, sync-targets.txt, was deleted; registry.json replaces it — derived nightly from the .redline.json each onboarded repo carries, rather than a list anyone maintains.",
     disabled: true,
     livesIn: "This (source) repo.",
     trigger: "push to main touching standards/**, templates/**, etc., or workflow_dispatch (dry-run, only <repo>) — but the sync job carries if: false, so neither trigger runs it.",
+    onboard:
+      "Nothing to install: it lives in this repository and would run here. It has never distributed anything, because its job carries if: false.",
     steps: [
       "Would verify this repo's own rendered artifacts are current (scripts/render-self.mjs --check).",
       "Would open sync pull requests on every target repo by running bash scripts/sync.sh — but scripts/sync.sh was deleted this release with no replacement, so even removing if: false would not make this job run; the script it calls no longer exists.",
     ],
     phase1: "Disabled (if: false). redline sync is a control-plane command that ships in Phase 3, alongside telemetry. Until then, an already-onboarded repo picks up a standards change only by re-running redline init by hand.",
-    action: "Nothing to run. If you're re-enabling this in Phase 3, scripts/sync.sh needs rewriting first — the workflow's shape is left in place for that, not the script.",
+    output:
+      "Nothing today — the job never runs. When it does, one pull request per registered repository carrying the standards change, quoting the standards version it came from. The register those targets come from now exists again (registry.json), which was the missing half; the command it would call, redline sync, is still unbuilt.",
+    action: "Nothing to run. Re-enabling it needs redline sync built first — the workflow's shape is left in place to rewire, not to un-comment. Its register is no longer the blocker.",
   },
   "redline-collect": {
     what: "Pulls review outcomes for merged PRs across the org and commits them as monthly JSONL, via scripts/collect-telemetry.mjs.",
     disabled: false,
     livesIn: "The redline-metrics repo — not this one.",
     trigger: "Daily at 05:00 UTC, plus workflow_dispatch with a days input (default 8).",
+    onboard:
+      "Copy this file into the redline-metrics repository as .github/workflows/redline-collect.yml and set REDLINE_ORG_READ_TOKEN there. It is org infrastructure, not something a product repo installs.",
     steps: [
       "Runs scripts/collect-telemetry.mjs with GH_TOKEN, ORG and DAYS from the environment.",
       "Commits any changed files under data/ as \"data: telemetry through <date>\", rebasing against the branch before pushing so a concurrent digest commit doesn't collide.",
     ],
     phase1: "Works, but only where installed: needs REDLINE_ORG_READ_TOKEN configured on the redline-metrics repo. It is org infrastructure for telemetry, not something a product repo runs.",
+    output:
+      "Monthly JSONL files under data/, committed as \"data: telemetry through <date>\". One record per reviewed pull request, carrying the rule ids cited and whether each finding was acted on. Nothing is published — the dashboard and digest read these files.",
     action: "Nothing, normally — it runs itself nightly. Trigger it by hand with workflow_dispatch to backfill a gap after an outage.",
   },
   "weekly-digest": {
@@ -58,12 +78,16 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     disabled: false,
     livesIn: "The redline-metrics repo — not this one.",
     trigger: "Every Monday at 07:00 UTC, plus workflow_dispatch.",
+    onboard:
+      "Copy this file into the redline-metrics repository and set REDLINE_ORG_READ_TOKEN and TEAMS_WEBHOOK_URL there. The webhook must be a Power Automate \"When a Teams webhook request is received\" flow; the retired Office 365 connector shape no longer delivers.",
     steps: [
       "Counts open and stale (>7 days untouched) org PRs via the GitHub search API.",
       "Builds the Adaptive Card with scripts/build-digest.mjs --out digest.json.",
       "POSTs it to TEAMS_WEBHOOK_URL — a Power Automate \"When a Teams webhook request is received\" flow; the old Office 365 connector shape no longer delivers. Fails the step outright if the webhook secret isn't set.",
     ],
     phase1: "Works, but only where installed: needs REDLINE_ORG_READ_TOKEN and TEAMS_WEBHOOK_URL. Delivers an empty-looking digest on a repo with no collected telemetry yet.",
+    output:
+      "An Adaptive Card posted to Teams each Monday: open and stale PR counts, seed recall, and a dashboard link. With no collected telemetry yet the card still posts and reads empty. A missing webhook secret fails the step outright rather than posting nothing quietly.",
     action: "Nothing, normally — it runs itself every Monday. Run scripts/build-digest.mjs locally to preview digest.json before changing what the card reports.",
   },
   inbox: {
@@ -71,12 +95,16 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     disabled: false,
     livesIn: "This (source) repo.",
     trigger: "Every 30 minutes, 06:00-19:00 UTC, Monday-Friday, plus workflow_dispatch.",
+    onboard:
+      "It lives in this repository and is already installed here. Before it will build, set the repository variable PAGES_VISIBILITY_ACKNOWLEDGED to private or internal and provide REDLINE_ORG_READ_TOKEN.",
     steps: [
       "Refuses to build unless the repository variable PAGES_VISIBILITY_ACKNOWLEDGED is set to private or internal — the page lists PR titles, authors and repo names, and a public Pages site would leak them.",
       "Builds dist/index.html with scripts/build-inbox.mjs.",
       "Deploys to GitHub Pages, then opens or updates a tracking issue if the build or deploy failed.",
     ],
     phase1: "Works, once Pages visibility is acknowledged and REDLINE_ORG_READ_TOKEN is set.",
+    output:
+      "A static page on GitHub Pages listing open org pull requests in priority order. On a build or deploy failure it opens or updates a single tracking issue rather than failing silently. Without the visibility acknowledgement it refuses to build at all — the page carries PR titles, authors and repo names, and a public Pages site would leak them.",
     action: "Nothing, normally — it runs itself. Run scripts/build-inbox.mjs locally with a scoped GH_TOKEN to preview a layout change before it ships.",
   },
   dashboard: {
@@ -84,12 +112,16 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     disabled: false,
     livesIn: "The redline-metrics repo — not this one.",
     trigger: "Daily at 05:30 UTC, plus workflow_dispatch, plus automatically once Redline Collect or Redline Seed Canary finishes.",
+    onboard:
+      "Copy this file into the redline-metrics repository, set REDLINE_ORG_READ_TOKEN and acknowledge Pages visibility there. Coverage additionally needs registry.json readable from the source repo — which the Redline Registry workflow now publishes nightly.",
     steps: [
       "Same Pages-visibility gate as the inbox.",
-      "Would count onboarded repos by reading sync-targets.txt from the source repo, for a coverage figure — that file is deleted, so this read always fails.",
+      "Counts onboarded repos by reading registry.json from the source repo, for a coverage figure. A failed read omits the figure rather than reporting zero.",
       "Builds dist/index.html with scripts/build-dashboard.mjs, then deploys, then opens or updates a tracking issue on failure.",
     ],
-    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise. The coverage figure is omitted entirely: sync-targets.txt was the register it counted, scripts/setup-repo.sh used to append to it on each onboarding, redline init never did, and the file is now deleted — so the guarded read fails and the dashboard warns instead of publishing a number.",
+    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise. The coverage figure works again now that registry.json exists — but this workflow file lives in the metrics repo, so the fix reaches the live dashboard only once someone copies it across; redline sync, which would do that, is still unbuilt.",
+    output:
+      "A static dashboard on GitHub Pages: acted-on rate, weekly trend, seed recall history, and the rules most worth tuning. Coverage is reported as instrumented-against-onboarded, read from registry.json; if that read fails the figure is omitted rather than shown as zero, because zero would look like a finding.",
     action: "Nothing, normally — it runs itself daily. Run scripts/build-dashboard.mjs locally against a copy of data/ to preview a metric or chart change.",
   },
   "seed-canary": {
@@ -97,12 +129,16 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     disabled: false,
     livesIn: "The redline-metrics repo — not this one.",
     trigger: "Weekly, Monday 03:00 UTC, plus workflow_dispatch with a targets override.",
+    onboard:
+      "Copy this file into the redline-metrics repository and set CANARY_TARGETS, REDLINE_CANARY_TOKEN (scoped to the canary repos only) and REDLINE_ORG_READ_TOKEN. It opens and closes pull requests on the targets, so scope that token narrowly.",
     steps: [
       "plan — reads the CANARY_TARGETS repo variable (or a dispatch override), a JSON array of {repo, stack}.",
       "score (matrix, one run per target) — opens a branch on the target repo carrying seeded/<stack> and seeded/clean, labelled redline-exempt so the readiness gate doesn't block a PR nobody will merge; waits for review comments to stop arriving (two stable polls, up to 40 minutes); scores with scripts/score-seeds.mjs --json; always closes and deletes the PR/branch afterward, even on failure.",
       "record — appends every score to data/seed-scores.jsonl and fails the run if any target's BLOCKER recall is below 1.0 or produced a false positive on the clean corpus.",
     ],
     phase1: "Works, but only where installed: needs CANARY_TARGETS, REDLINE_CANARY_TOKEN scoped to the canary repos only, and REDLINE_ORG_READ_TOKEN to check out this repo's seeded corpus.",
+    output:
+      "One score per target appended to data/seed-scores.jsonl, and a failed run if any target's BLOCKER recall drops below 1.0 or the clean corpus attracts a false positive. Every throwaway PR and branch it opens is closed and deleted afterwards, including when the run fails.",
     action: "Nothing, normally — it runs itself weekly. Trigger it by hand with workflow_dispatch and a targets override when validating a new AI reviewer vendor or a standards change.",
   },
   "verify-onboarding": {
@@ -110,11 +146,15 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     disabled: true,
     livesIn: "This (source) repo.",
     trigger: "Weekly, Tuesday 06:00 UTC, plus workflow_dispatch with a single-repo override — but the verify job carries if: false, so neither trigger runs it.",
+    onboard:
+      "It lives in this repository and is already here. It has never verified anything: its job carries if: false, and the script it called was deleted.",
     steps: [
-      "Would loop over sync-targets.txt (or one --repo override) calling bash scripts/setup-repo.sh <repo> --verify — but both sync-targets.txt and scripts/setup-repo.sh are deleted, so even removing if: false would not make this job run.",
+      "Would loop over its register (or one --repo override) calling bash scripts/setup-repo.sh <repo> --verify. The register exists again as registry.json, but scripts/setup-repo.sh is deleted, so removing if: false still would not make this job run.",
       "Would open or update a single tracking issue naming every repo that failed verification.",
     ],
     phase1: "Disabled (if: false). redline verify reads .redline.json from a local checkout of the target repo; it has no --repo owner/name mode that works over the API alone. A scheduled cross-repo verify needs a clone-then-verify loop, which is control-plane work alongside redline sync in Phase 3.",
+    output:
+      "Nothing today. When it runs, a single tracking issue naming every repository that failed verification — opened once and updated in place, not one issue per run.",
     action: "Nothing to run. Verify a single repo yourself instead: npx redline-cli verify from a checkout of it.",
   },
 };

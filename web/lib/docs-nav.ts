@@ -1,16 +1,36 @@
-import { SCRIPTS, STANDARDS, TEMPLATES, WORKFLOWS } from "@/lib/registry";
+import { SCRIPTS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
 
 export type DocLink = {
   title: string;
   href: string;
   description: string;
   keywords: string;
+  // Every item in a reference category gets its own page, and the sidebar lists
+  // them rather than hiding them behind an index of cards. A category page that
+  // only fans out to cards reads as "workflows are one page", which is exactly
+  // what it is not — there are eight of them and each has its own onboarding,
+  // edit loop and output.
+  children?: DocLink[];
 };
 
 export type DocSection = {
   label: string;
   links: DocLink[];
 };
+
+// A registry entry becomes a child link under its category. Keywords carry the
+// category word so ⌘K finds "javascript standard" as readily as "javascript".
+const childrenOf = (
+  entries: RegistryEntry[],
+  base: string,
+  keywords: string,
+): DocLink[] =>
+  entries.map((e) => ({
+    title: e.title,
+    href: `${base}/${e.slug}`,
+    description: e.description,
+    keywords: `${keywords} ${e.file} ${e.slug}`,
+  }));
 
 export const DOCS_NAV: DocSection[] = [
   {
@@ -108,18 +128,21 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/standards",
         description: "What a standard is, what a developer actually sees, and a rule reference per stack.",
         keywords: "standards rules source copy core stacks markdown severity output contract rule id profile",
+        children: childrenOf(STANDARDS, "/docs/standards", "standard rules source"),
       },
       {
         title: "Workflows",
         href: "/docs/workflows",
         description: "What each workflow does, what triggers it, where it lives, and whether it works in Phase 1.",
         keywords: "workflows github actions gate sync collect digest inbox canary phase 1 disabled azure",
+        children: childrenOf(WORKFLOWS, "/docs/workflows", "workflow github actions"),
       },
       {
         title: "Templates & rulesets",
         href: "/docs/templates",
         description: "What each template is, who installs it and where, and what's a live ruleset vs. a reference shape.",
         keywords: "templates codeowners caller ruleset branch protection json azure pull request checklist",
+        children: childrenOf(TEMPLATES, "/docs/templates", "template ruleset"),
       },
     ],
   },
@@ -131,46 +154,26 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/scripts",
         description: "Internal maintainer tooling for this repo's own CI, telemetry and validation — not something an onboarded repo runs.",
         keywords: "scripts maintainer ci validate score collect digest inbox dashboard assign-rule-ids check-pins render-self internal redline-metrics",
+        children: childrenOf(SCRIPTS, "/docs/scripts", "script source"),
       },
     ],
   },
 ];
 
-export const FLAT_DOCS: DocLink[] = DOCS_NAV.flatMap((s) => s.links);
+// Children are inlined directly after their parent, so prev/next walks the docs
+// in reading order: Standards → core → manifest → javascript → … → Workflows.
+export const FLAT_DOCS: DocLink[] = DOCS_NAV.flatMap((s) =>
+  s.links.flatMap((l) => [l, ...(l.children ?? [])]),
+);
 
 export type SearchEntry = DocLink & { group: string };
 
-export const SEARCH_INDEX: SearchEntry[] = [
-  ...DOCS_NAV.flatMap((s) => s.links.map((l) => ({ ...l, group: s.label }))),
-  ...STANDARDS.map((e) => ({
-    title: e.title,
-    href: `/docs/standards/${e.slug}`,
-    description: e.description,
-    keywords: `standard rules source ${e.file} ${e.slug}`,
-    group: "Standards",
-  })),
-  ...SCRIPTS.map((e) => ({
-    title: e.title,
-    href: `/docs/scripts/${e.slug}`,
-    description: e.description,
-    keywords: `script source ${e.file} ${e.slug}`,
-    group: "Scripts",
-  })),
-  ...WORKFLOWS.map((e) => ({
-    title: e.title,
-    href: `/docs/workflows/${e.slug}`,
-    description: e.description,
-    keywords: `workflow github actions ${e.file} ${e.slug}`,
-    group: "Workflows",
-  })),
-  ...TEMPLATES.map((e) => ({
-    title: e.title,
-    href: `/docs/templates/${e.slug}`,
-    description: e.description,
-    keywords: `template ruleset ${e.file} ${e.slug}`,
-    group: "Templates",
-  })),
-];
+export const SEARCH_INDEX: SearchEntry[] = DOCS_NAV.flatMap((s) =>
+  s.links.flatMap((l) => [
+    { ...l, group: s.label },
+    ...(l.children ?? []).map((c) => ({ ...c, group: l.title })),
+  ]),
+);
 
 export function adjacentDocs(href: string): {
   prev: DocLink | null;

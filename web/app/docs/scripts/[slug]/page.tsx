@@ -5,6 +5,8 @@ import { DocsPage } from "@/components/docs-page";
 import { FileViewer } from "@/components/file-viewer";
 import { SCRIPTS, findBySlug } from "@/lib/registry";
 import { SCRIPTS_INFO } from "@/lib/scripts-info";
+import { LifecycleSteps } from "@/components/lifecycle-steps";
+import { SCRIPT_EDIT } from "@/lib/lifecycle";
 
 export function generateStaticParams() {
   return SCRIPTS.map((s) => ({ slug: s.slug }));
@@ -36,17 +38,33 @@ export default async function Page({
       crumb={`Maintaining Redline / Scripts / ${entry.title}`}
       title={entry.title}
       intro={entry.description}
-      href="/docs/scripts"
+      href={`/docs/scripts/${slug}`}
     >
       <h2>What this is</h2>
       <p>{info.what}</p>
 
-      <h2>When it applies to you</h2>
+      <h2>How to onboard it</h2>
       <p>
-        Runs in: {info.runsIn} Trigger: {info.trigger}
+        Nothing to onboard, and nothing an onboarded repository ever runs. This is
+        maintainer tooling: it ships in this repository and runs where it already
+        has an environment.
+      </p>
+      <ul>
+        <li>
+          <b>Runs in:</b> {info.runsIn}
+        </li>
+        <li>
+          <b>Trigger:</b> {info.trigger}
+        </li>
+      </ul>
+      <p>
+        To run it yourself you need a checkout of this repository and Node 22 or
+        newer. There are no runtime dependencies to install — every script uses
+        only Node builtins — so a clone and the environment below is the whole
+        setup.
       </p>
 
-      <h2>What it actually does</h2>
+      <h2>How to use it</h2>
       <CodeWindow title="terminal" copyText={info.command.join("\n")}>
         {info.command.map((line, i) => (
           <span key={i}>
@@ -67,12 +85,13 @@ export default async function Page({
           </ul>
         </>
       )}
-      <p>
-        <b>Produces:</b> {info.produces}
-      </p>
-
-      <h2>What you do with it</h2>
       <p>{info.action}</p>
+
+      <h2>Expected output</h2>
+      <p>{info.produces}</p>
+
+      <h2>How to edit it</h2>
+      <LifecycleSteps steps={SCRIPT_EDIT} />
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={720} />

@@ -4,6 +4,8 @@ import { DocsPage } from "@/components/docs-page";
 import { FileViewer } from "@/components/file-viewer";
 import { WORKFLOWS, findBySlug } from "@/lib/registry";
 import { WORKFLOWS_INFO } from "@/lib/workflows-info";
+import { LifecycleSteps } from "@/components/lifecycle-steps";
+import { WORKFLOW_EDIT } from "@/lib/lifecycle";
 
 export function generateStaticParams() {
   return WORKFLOWS.map((w) => ({ slug: w.slug }));
@@ -35,7 +37,7 @@ export default async function Page({
       crumb={`Reference / Workflows / ${entry.title}`}
       title={entry.title}
       intro={entry.description}
-      href="/docs/workflows"
+      href={`/docs/workflows/${slug}`}
     >
       {info.disabled && (
         <div className="callout info">
@@ -50,15 +52,22 @@ export default async function Page({
       <h2>What this is</h2>
       <p>{info.what}</p>
 
-      <h2>When it applies to you</h2>
-      <p>
-        <b>Lives in:</b> {info.livesIn}
-      </p>
-      <p>
-        <b>Trigger:</b> {info.trigger}
-      </p>
+      <h2>How to onboard it</h2>
+      <p>{info.onboard}</p>
+      <ul>
+        <li>
+          <b>Lives in:</b> {info.livesIn}
+        </li>
+        <li>
+          <b>Trigger:</b> {info.trigger}
+        </li>
+      </ul>
 
-      <h2>What it actually does</h2>
+      <h2>How to use it</h2>
+      <p>{info.action}</p>
+      <p>
+        <b>What a run does, in order:</b>
+      </p>
       <ul>
         {info.steps.map((step) => (
           <li key={step}>{step}</li>
@@ -66,8 +75,11 @@ export default async function Page({
       </ul>
       <p>{info.phase1}</p>
 
-      <h2>What you do with it</h2>
-      <p>{info.action}</p>
+      <h2>Expected output</h2>
+      <p>{info.output}</p>
+
+      <h2>How to edit it</h2>
+      <LifecycleSteps steps={WORKFLOW_EDIT} />
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={720} />
