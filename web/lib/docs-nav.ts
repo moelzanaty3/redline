@@ -67,6 +67,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "adopting rollout adoption path day one week one month two pilot promote blocking evidence ownership break glass",
       },
       {
+        title: "Removing Redline",
+        href: "/docs/removing",
+        description: "Every file and host setting redline init created, and how to take it back out without losing the security floor.",
+        keywords: "remove removing uninstall undo revert back out delete rollback offboard redline remove markers codeowners ruleset labels repository property security floor exit",
+      },
+      {
         title: "CLI commands",
         href: "/docs/cli",
         description: "Four commands, deliberately — what init and verify do, and what sync and review would do once built.",

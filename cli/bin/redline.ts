@@ -17,6 +17,8 @@ import {
   OPTIONAL_CAPABILITIES,
   type MenuSelections,
 } from '../config/redline-json.ts';
+import { remove, REMOVE_BRANCH } from '../commands/remove.ts';
+import { createHostWithdrawal } from '../remove/host.ts';
 import { verify } from '../commands/verify.ts';
 import { sync } from '../commands/sync.ts';
 import { exempt } from '../commands/exempt.ts';
@@ -34,6 +36,7 @@ import { standardsVersion } from '../commands/sync.ts';
 import type { Platform } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
 import type { RemoteVerifyHost } from '../verify/remote.ts';
+import type { HostWithdrawal } from '../remove/host.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -67,6 +70,15 @@ const USAGE = [
   '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
   '                  rather than overwrite a file that may be the repository\'s own',
   '      omitted flags keep whatever .redline.json already recorded',
+  '',
+  '  redline remove [--dry-run]',
+  '      take Redline back out of this repository: rendered standards, gate machinery, slash',
+  '      commands, the host state it applied, and .redline.json last of all — as a pull request',
+  '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
+  '      only content Redline can prove it wrote is removed. A merged file keeps every byte',
+  '      outside its REDLINE block; anything unattributable is left in place and named',
+  '      the security floor (secret scanning, push protection, dependency alerts) is the',
+  '      organisation\'s minimum, not Redline\'s state — no flag here turns it off',
   '',
   '  redline verify [--gate] [--repo <owner/name>]',
   '      check this repository still matches what .redline.json claims',
@@ -125,6 +137,9 @@ export interface RunDeps {
   // own instead of the single resolved platform every other command uses.
   syncHost?: () => SyncHost;
   remoteVerifyHost?: () => RemoteVerifyHost;
+  // `redline remove` withdraws host state, which the install-and-verify
+  // Platform port has no method for — see cli/remove/host.ts.
+  hostWithdrawal?: (cwd: string) => HostWithdrawal;
   // Injected so the metrics dispatch can be asserted without executing a runner
   // that talks to GitHub.
   loadRunner?: (path: string) => Promise<unknown>;
@@ -282,6 +297,69 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       }
       if (report.pullRequest) log.info(`pull request: ${report.pullRequest.url}`);
       else if (report.alreadyOnboarded) log.info('already onboarded — nothing to change');
+      return 0;
+    }
+
+    if (command === 'remove') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { 'dry-run': { type: 'boolean', default: false } },
+          allowPositionals: false,
+        })
+      );
+
+      const dryRun = values['dry-run'] === true;
+      // Same contract as `init --dry-run`: the plan is built from the local
+      // checkout, so previewing what backing Redline out would cost needs
+      // neither a credential nor a reachable host.
+      const platform = await resolve(cwd, dryRun ? { lazyCredentials: true } : {});
+      const report = await remove(
+        platform,
+        () => deps.hostWithdrawal?.(cwd) ?? createHostWithdrawal(cwd),
+        { cwd, root, ...(dryRun ? { dryRun: true } : {}) }
+      );
+
+      for (const action of report.actions) {
+        if (action.kind === 'kept') continue;
+        const verb = action.kind === 'delete' ? 'remove ' : 'unmerge';
+        log.info(`  ${report.dryRun ? 'would ' : ''}${verb}  ${action.path}  — ${action.reason}`);
+      }
+      // Printed on every run, dry or not. What was left behind is the half of
+      // this command's answer an operator has to act on themselves, and a
+      // report that only lists deletions reads as if nothing was left.
+      for (const action of report.actions) {
+        if (action.kind !== 'kept') continue;
+        log.warn(`left in place  ${action.path}  — ${action.reason}`);
+      }
+      for (const note of report.notes) log.info(note);
+
+      if (report.dryRun) {
+        for (const step of report.hostPlan) log.info(`  would apply   ${step}`);
+        log.info('dry run — nothing was written, read or changed on the host');
+        return 0;
+      }
+
+      for (const outcome of report.outcomes) {
+        log.info(`  ${outcome.status.padEnd(11)} ${outcome.capability}  ${outcome.detail}`);
+      }
+      if (report.pendingAdmin.length > 0) {
+        log.warn(
+          `partially removed — an administrator must still take away: ${report.pendingAdmin.join(', ')}`
+        );
+      }
+      // The host state is withdrawn and the files are gone from the working
+      // tree; only the review vehicle is missing. `failed` (1), not host (4):
+      // there is nothing to retry, there is a branch to open a pull request from.
+      if (report.pullRequestError !== null) {
+        log.error(
+          `could not open the pull request: ${report.pullRequestError}`,
+          `the removal is on branch ${REMOVE_BRANCH} — push it if it is not already on origin, then open the pull request manually`
+        );
+        return exitCodeFor('failed');
+      }
+      if (report.pullRequest) log.info(`pull request: ${report.pullRequest.url}`);
+      else log.info('nothing left to remove from the working tree — no pull request was opened');
       return 0;
     }
 

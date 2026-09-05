@@ -119,7 +119,7 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
       "Counts onboarded repos by reading registry.json from the source repo, for a coverage figure. A failed read omits the figure rather than reporting zero.",
       "Builds dist/index.html with scripts/build-dashboard.mjs, then deploys, then opens or updates a tracking issue on failure.",
     ],
-    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise. The coverage figure works again now that registry.json exists — but this workflow file lives in the metrics repo, so the fix reaches the live dashboard only once someone copies it across; redline sync, which would do that, is still unbuilt.",
+    phase1: "Works, but only where installed: same Pages-visibility gate as the inbox, plus REDLINE_ORG_READ_TOKEN and collected telemetry to summarise. The coverage figure works again now that registry.json exists — but this workflow file lives in the metrics repo, so the fix reaches the live dashboard only once someone copies it across; redline sync would do that, but it targets registered product repositories, not the metrics repo.",
     output:
       "A static dashboard on GitHub Pages: acted-on rate, weekly trend, seed recall history, and the rules most worth tuning. Coverage is reported as instrumented-against-onboarded, read from registry.json; if that read fails the figure is omitted rather than shown as zero, because zero would look like a finding.",
     action: "Nothing, normally — it runs itself daily. Run scripts/build-dashboard.mjs locally against a copy of data/ to preview a metric or chart change.",

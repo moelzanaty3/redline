@@ -1,31 +1,59 @@
 import Link from "next/link";
 import { CopyButton } from "@/components/copy-button";
-import { Counter } from "@/components/counter";
+import { FindingPanel } from "@/components/finding";
 import { Journey } from "@/components/journey";
 import { Reveal } from "@/components/reveal";
+import { SEED_FILE, SEED_RULE_ID, seedDiff, seedMarkerExcerpt } from "@/components/seed-excerpt";
 import { ValueCase } from "@/components/value-case";
-import { ValueViz } from "@/components/value-viz";
+import { SeverityFloor } from "@/components/value-viz";
 import { loadManifest } from "@/lib/manifest";
-import { getRules } from "@/lib/rules";
+import { PACKAGE_NAME, installCommand, packageState } from "@/lib/package-version";
+import { findRule, getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
 
-// Declared, not inherited from Next's default. Journey's loaders throw when
-// standards/manifest.json or commands/ cannot be resolved, and those throws are
-// a build gate only while this page is prerendered — anything that made it
-// dynamic would move them to request time and disarm them silently.
+// Declared, not inherited from Next's default. The loaders behind this page —
+// Journey's profile resolution, the seed reader, the rule lookup below — throw
+// when the repository they read no longer says what the page claims, and those
+// throws are a build gate only while this page is prerendered. Anything that
+// made it dynamic would move them to request time and disarm them silently.
 export const dynamic = "force-static";
 
-const INSTALL_CMD = "npm i -g redline-cli";
-const ONBOARD_CMD = "redline init";
+// The standards page the demonstrated rule is documented on. `javascript` is a
+// slug in lib/registry.ts; the rule lookup below is what fails the build if the
+// rule itself is ever renamed or removed.
+const RULE_HREF = "/docs/standards/javascript";
 
-export default function Home() {
-  const ruleCount = getRules().length;
+export default async function Home() {
+  const rules = getRules();
   const manifest = loadManifest();
+  const ruleCount = rules.length;
   const stackCount = Object.keys(manifest.stacks).length;
   const vendorCount = Object.values(manifest.vendors).filter((v) => v.enabled).length;
   const seedCount = seededFindingCount();
+
+  // The finding in section 3 is a real rule at its real severity. A page that
+  // typeset `Redline/BLOCKER [javascript/shell-injection]` after that id had
+  // been renamed would be printing a contract it no longer honours.
+  const demoRule = findRule(SEED_RULE_ID);
+  if (demoRule === undefined) {
+    throw new Error(
+      `standards/ no longer defines "${SEED_RULE_ID}"; the home page renders a finding citing it`,
+    );
+  }
+
+  // One invocation, everywhere on the page. `npx` needs no prior install, so
+  // there is nothing to say twice — and when the package is not installable the
+  // command degrades to the one that does work rather than to a lie.
+  const state = await packageState();
+  const initCmd =
+    state.status === "published" ? `npx ${PACKAGE_NAME} init` : installCommand(state);
+
+  const diff = seedDiff();
+  const seedExcerpt = seedMarkerExcerpt();
+
   return (
     <main>
+      {/* ============ 1 — hero ============ */}
       <section className="hero">
         <div className="hero-glow" aria-hidden="true" />
         <div className="hero-lines" aria-hidden="true" />
@@ -36,327 +64,315 @@ export default function Home() {
             <span className="grad">Redline holds the line.</span>
           </h1>
           <p className="sub">
-            Your team&apos;s engineering standards, written once and rendered into
-            the files your AI coding tools already read — with a merge gate the
-            CLI installs and re-checks on GitHub and Azure DevOps.
+            One versioned rule set your AI reviewer, your teammates and a local
+            model all review against — with <b>every finding tagged</b>, so you
+            can measure which rules are worth keeping.
           </p>
-          <p className="hero-claim">
-            <span>No servers</span>
-            <span>No SaaS</span>
-            <span>No per-seat fee</span>
+          <div className="hm-hero-cmd">
+            <code>
+              <span className="tk-prompt">$ </span>
+              {initCmd}
+            </code>
+            <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+          </div>
+          <p className="hm-hero-alt">
+            <a href="#finding">See a finding ↓</a>
           </p>
-          <div className="hero-cmd">
-            <div className="hc-row">
-              <span className="hc-step">once</span>
-              <code>
-                <span className="tk-prompt">$ </span>
-                {INSTALL_CMD}
-              </code>
-              <CopyButton
-                text={INSTALL_CMD}
-                label="Copy"
-                ariaLabel={`Copy ${INSTALL_CMD}`}
-              />
-            </div>
-            <div className="hc-row">
-              <span className="hc-step">per repo</span>
-              <code>
-                <span className="tk-prompt">$ </span>
-                {ONBOARD_CMD}
-              </code>
-              <CopyButton
-                text={ONBOARD_CMD}
-                label="Copy"
-                ariaLabel={`Copy ${ONBOARD_CMD}`}
-              />
-            </div>
-          </div>
-          <div className="ctas">
-            <Link className="btn btn-red" href="/docs/installation">
-              Get Started
-            </Link>
-            <Link className="btn btn-outline" href="/docs">
-              Read the Docs
-            </Link>
-          </div>
           <p className="hero-proof">
             <span>{ruleCount} rules, each with a permanent id</span>
             <span>{stackCount} stack rule sets</span>
-            <span>{vendorCount} AI-tool formats</span>
             <span>GitHub &amp; Azure DevOps</span>
-            <span>standards v{manifest.version}</span>
+            <span>MIT</span>
+            <span>no servers</span>
           </p>
         </div>
       </section>
 
-      <Journey />
-
-      <ValueViz />
-
+      {/* ============ 2 — the problem ============ */}
       <ValueCase />
 
-      <section className="works-with">
-        <div className="container inner">
-          <span className="lbl">Reviews through</span>
-          <Link className="chip" href="/docs/adaptors/github-copilot"><i />GitHub Copilot</Link>
-          <Link className="chip" href="/docs/adaptors/claude"><i />Claude</Link>
-          <Link className="chip" href="/docs/adaptors/agents-md"><i />OpenAI Codex</Link>
-          <Link className="chip" href="/docs/adaptors/agents-md"><i />Devin</Link>
-          <Link className="chip" href="/docs/adaptors/agents-md"><i />Jules</Link>
-          <Link className="chip" href="/docs/adaptors/cursor"><i />Cursor</Link>
+      {/* ============ 3 — a finding ============ */}
+      <section className="hm-sec hm-finding" id="finding">
+        <div className="container">
+          <div className="hm-sec-head">
+            <h2 className="hm-h2">This is what Redline produces</h2>
+            <p className="hm-lead">
+              A rule is only worth anything at the moment it catches something.
+              Here is one, on real code from the corpus Redline publishes to be
+              scored against.
+            </p>
+          </div>
+          <FindingPanel
+            diff={diff}
+            file={SEED_FILE}
+            ruleId={demoRule.id}
+            ruleHref={RULE_HREF}
+            severity={demoRule.severity}
+          />
+          <SeverityFloor />
         </div>
       </section>
 
-      <section className="section" id="features">
+      {/* ============ 4 — where it sits ============ */}
+      <section className="hm-sec hm-flow" id="workflow">
         <div className="container">
           <Reveal>
-            <div className="section-head">
-              <span className="pill">Why Redline</span>
-              <h2>Everything the delivery loop needs.</h2>
-              <p>
-                One system covering the full loop — AI writes code, automated
-                review against versioned standards, readiness gates, and the
-                measurement that lets it evolve from <b>data, not opinion</b>.
+            <div className="hm-sec-head">
+              <h2 className="hm-h2">Where it sits in your day</h2>
+              <p className="hm-lead">
+                Three places, and you already stand in all three.
               </p>
             </div>
-          </Reveal>
-          <Reveal>
-            <div className="bento">
-              <div className="bento-card wide">
-                <h3>A measurable output contract</h3>
+            <ol className="hm-steps">
+              <li>
+                <span className="hm-step-n">01</span>
+                <h3>Write</h3>
                 <p>
-                  Every finding carries a severity and a permanent rule id.
-                  Parseable, aggregatable, tunable — per rule, per stack, per week.
+                  Your AI reads the same rules you do. <code>redline init</code>{" "}
+                  renders the standard into the {vendorCount} formats your tools
+                  already read, composed for the stacks this repository uses.
                 </p>
-                <div className="bento-visual">
-                  <div className="bento-code">
-{`Redline/BLOCKER [core/query-string-concatenation]:
-user-supplied \`name\` is concatenated into the SQL
-string. Use a parameterised query:
-db.Query("SELECT id FROM users WHERE name = $1", name)`}
-                  </div>
+              </li>
+              <li>
+                <span className="hm-step-n">02</span>
+                <h3>Review</h3>
+                <p>
+                  <code>redline review</code> checks the change on your machine
+                  against <b>only the rules that apply to the files you touched</b>{" "}
+                  — before you push. The same standard runs as the gate on the
+                  pull request.
+                </p>
+                <div className="hm-step-cmd">
+                  <span className="tk-prompt">$ </span>redline review --staged
                 </div>
-              </div>
-              <div className="bento-card wide">
-                <h3>A merge-readiness gate, host-verified</h3>
+              </li>
+              <li>
+                <span className="hm-step-n">03</span>
+                <h3>Merge</h3>
                 <p>
-                  One human approval always, and a required check whose name
-                  is confirmed against what the host actually reported —{" "}
-                  <code>redline-gate / gate</code> on GitHub,{" "}
-                  <code>redline/gate</code> on Azure DevOps.
+                  The gate reports <code>redline-gate / gate</code> on every pull
+                  request and is <b>advisory until you promote it</b>. One human
+                  approval is required either way.
                 </p>
-                <div className="bento-visual">
-                  <div className="gate-check"><span className="st ok">✓</span> redline-gate / gate — checklist · ADR · deps · secret scan</div>
-                  <div className="gate-check"><span className="st ok">✓</span> 1 human approval — cannot be lowered, CI enforces it</div>
-                  <div className="gate-check"><span className="st ok">✓</span> advisory by default — promoted to blocking after a soak</div>
-                </div>
-              </div>
-              <div className="bento-card">
-                <h3>One source of truth</h3>
-                <p>
-                  Rules live once in <code>standards/</code> and render to four
-                  vendor formats per profile.
-                </p>
-                <div className="bento-visual">
-                  <div className="flow">
-                    <span className="hot">standards/</span><b>→</b>
-                    <span>redline init</span><b>→</b>
-                    <span>4 vendors</span><b>→</b>
-                    <span>1 pull request</span>
-                  </div>
-                </div>
-              </div>
-              <div className="bento-card">
-                <h3>Telemetry that counts</h3>
-                <p>
-                  Measures findings <b>acted on</b> — not fired. Noisy rules are
-                  named in the Monday digest, then tuned or cut.
-                </p>
-                <div className="bento-visual">
-                  <div className="bars" aria-hidden="true">
-                    <i style={{ height: "42%" }} /><i style={{ height: "60%" }} />
-                    <i style={{ height: "38%" }} /><i style={{ height: "78%" }} />
-                    <i style={{ height: "55%" }} /><i style={{ height: "92%" }} />
-                    <i style={{ height: "70%" }} />
-                  </div>
-                </div>
-              </div>
-              <div className="bento-card">
-                <h3>A real security floor</h3>
-                <p>
-                  Secret scanning with push protection, Dependabot, dependency
-                  review and a SHA-pinned diff secret scan — enabled by
-                  onboarding, never assumed, never label-exemptable.
-                </p>
-              </div>
-              <div className="bento-card">
-                <h3>Noise control as a rule</h3>
-                <p>
-                  AI review dies by nitpick spam. Every standard ships a
-                  “what NOT to flag” section, and the clean-code corpus allows{" "}
-                  <b>zero</b> false positives.
-                </p>
-              </div>
-              <div className="bento-card">
-                <h3>PRs, never pushes</h3>
-                <p>
-                  Standards reach a repository as a reviewable pull request when{" "}
-                  <code>redline init</code> runs there — opened on{" "}
-                  <code>redline/onboard</code> for that repository&apos;s own team
-                  to merge. Redline never pushes to your default branch.
-                </p>
-              </div>
-            </div>
-          </Reveal>
-          <Reveal>
-            <div className="roadmap-note">
-              <h3>What is not built yet</h3>
+              </li>
+            </ol>
+            <div className="hm-local">
+              <p className="hm-local-h">
+                Point it at a local model and no code leaves your machine.
+              </p>
               <p>
-                Automated review against a measurable output contract, and
-                org-wide telemetry across both hosts, are later-phase work. There
-                is no <code>redline sync</code> either — until it ships, an
-                already-onboarded repository picks up a standards change by
-                re-running <code>redline init</code>.
+                <code>redline review --engine api</code> speaks the
+                OpenAI-compatible dialect, so Ollama, LM Studio and vLLM all
+                work, and a local endpoint needs no key. The model returns JSON
+                against a published schema — the CLI writes the{" "}
+                <code>Redline/&lt;SEVERITY&gt; [rule-id]:</code> line itself, so a
+                model can never invent a severity or an id.{" "}
+                <Link href="/docs/local-review">
+                  How local review works →
+                </Link>
               </p>
             </div>
           </Reveal>
         </div>
       </section>
 
-      <section className="stats-band">
-        <div className="container inner">
-          <div className="stat">
-            <span className="num"><Counter value={ruleCount} /></span>
-            <span className="lbl">rules, each with a permanent id</span>
-          </div>
-          <div className="stat">
-            <span className="num"><Counter value={stackCount} /></span>
-            <span className="lbl">stack rule sets, composed by profile</span>
-          </div>
-          <div className="stat">
-            <span className="num"><Counter value={seedCount} /></span>
-            <span className="lbl">seeded findings in the validation corpus</span>
-          </div>
-          <div className="stat">
-            <span className="num"><Counter value={100} /><em>%</em></span>
-            <span className="lbl">BLOCKER recall — the target the corpus is scored against</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="section" id="how">
+      {/* ============ 5 — why this is different ============ */}
+      <section className="hm-sec hm-claims" id="different">
         <div className="container">
           <Reveal>
-            <div className="section-head">
-              <span className="pill">How it works</span>
-              <h2>Author once. It reaches the estate, and comes back measured.</h2>
-              <p>
-                Rendered per vendor, installed by one command, distributed as
-                pull requests, gated on merge, and measured against whether
-                anyone acted.
-              </p>
+            <div className="hm-sec-head">
+              <h2 className="hm-h2">Why this is different</h2>
             </div>
-          </Reveal>
-          <Reveal>
-            <div className="how">
-              <div className="how-card">
-                <span className="n">01 — Author</span>
-                <h3>Edit one place</h3>
-                <p>Vendor-neutral rules in <code>standards/</code>. Bump the version, note the change. Nothing else is hand-written.</p>
+            <div className="hm-claim">
+              <div className="hm-claim-copy">
+                <h3>Every finding is countable</h3>
+                <p>
+                  Rule ids are permanent, so a comment is an aggregate row:{" "}
+                  <code>redline metrics</code> counts which rules were{" "}
+                  <b>acted on</b>, which were dismissed, and which nobody has
+                  ever fixed. A rule that only ever generates noise is named and
+                  cut on that evidence, not on argument.{" "}
+                  <Link href="/docs/telemetry">What gets measured →</Link>
+                </p>
               </div>
-              <div className="how-card">
-                <span className="n">02 — Render</span>
-                <h3>Five formats</h3>
-                <p>Copilot instructions, <code>AGENTS.md</code>, <code>CLAUDE.md</code>, Cursor rules and per-stack Claude skills — from one source, per profile.</p>
+              <div className="hm-claim-art">
+                <div className="hm-mini">
+                  <span className="tk-red">Redline/BLOCKER</span>{" "}
+                  <span className="tk-blue">[{demoRule.id}]</span>
+                  <span className="tk-dim">: …</span>
+                  {"\n"}
+                  <span className="tk-dim">
+                    {"          ↳ one row, keyed on that id, in every count"}
+                  </span>
+                </div>
               </div>
-              <div className="how-card">
-                <span className="n">03 — Onboard</span>
-                <h3><code>redline init</code></h3>
-                <p>Detects GitHub or Azure DevOps, installs the floor, opens one pull request. Never a direct push.</p>
+            </div>
+
+            <div className="hm-claim">
+              <div className="hm-claim-copy">
+                <h3>We publish what we&apos;re scored against</h3>
+                <p>
+                  {seedCount} defects are seeded into a corpus in the open, each
+                  marked with the severity and the rule id it must be caught at.
+                  Anyone can run a reviewer over it and check the number, and
+                  whatever has been scored against it so far is on{" "}
+                  <Link href="/scoreboard">the scoreboard</Link>.{" "}
+                  <Link href="/docs/seeds">The corpus →</Link>
+                </p>
               </div>
-              <div className="how-card">
-                <span className="n">04 — Distribute</span>
-                <h3><code>redline sync</code></h3>
-                <p>A rule change reaches every registered repository as a pull request. Nobody re-runs anything by hand.</p>
+              <div className="hm-claim-art">
+                <pre className="hm-seed">
+                  {seedExcerpt.map((line, i) => (
+                    <span
+                      key={`${i}-${line}`}
+                      className={/SEED \d+ \[/.test(line) ? "hm-seed-hit" : undefined}
+                    >
+                      {line === "" ? " " : line}
+                      {"\n"}
+                    </span>
+                  ))}
+                </pre>
               </div>
-              <div className="how-card">
-                <span className="n">05 — Verify</span>
-                <h3><code>redline verify</code></h3>
-                <p>Confirms the gate reported for real, locally or across the estate. A check that could not run says so rather than passing.</p>
+            </div>
+
+            <div className="hm-claim">
+              <div className="hm-claim-copy">
+                <h3>We govern the diff. Nothing after it</h3>
+                <p>
+                  Redline governs a change while it is still a diff. It does not
+                  build, deploy, promote or roll back anything, it has no opinion
+                  on cloud spend, and <b>its data ends at merge</b> — those are a
+                  delivery platform&apos;s job and are well served. It
+                  increasingly does not even produce findings itself: it governs
+                  the standard, normalises whoever found what, and measures
+                  whether anyone acted.{" "}
+                  <Link href="/docs">Where the line is →</Link>
+                </p>
               </div>
-              <div className="how-card">
-                <span className="n">06 — Measure</span>
-                <h3><code>redline metrics</code></h3>
-                <p>Acted-on rate, seed recall, how much of the estate enforces, and what review cost against what it caught.</p>
+              <div className="hm-claim-art">
+                <div className="hm-mini">
+                  <span className="tk-white">{"commit → diff → merge → deploy"}</span>
+                  {"\n"}
+                  <span className="tk-red">{"       └───────────┘"}</span>
+                  {"\n"}
+                  <span className="tk-red">{"          redline"}</span>
+                  {"\n"}
+                  <span className="tk-dim">
+                    {"build, deploy and rollback: not ours"}
+                  </span>
+                </div>
               </div>
             </div>
           </Reveal>
         </div>
       </section>
 
-      <section className="section" id="docs-preview" style={{ paddingTop: 0 }}>
+      {/* ============ 6 — proof ============ */}
+      <Journey initCmd={initCmd} />
+
+      {/* ============ 7 — try it ============ */}
+      <section className="hm-sec hm-try" id="try">
         <div className="container">
           <Reveal>
-            <div className="section-head">
-              <span className="pill">Documentation</span>
-              <h2>Everything is in the docs — and copyable.</h2>
-              <p>
-                Every rule, command, workflow and template — with the decision
-                behind it, not just the mechanism. Press <b>⌘K</b> to search.
+            <div className="hm-try-card">
+              <h2 className="hm-h2">Try it on one repository</h2>
+              <p className="hm-try-lead">
+                <code>{initCmd}</code> opens a single pull request on{" "}
+                <code>redline/onboard</code>. It never pushes to your default
+                branch. The gate starts advisory — it comments, it doesn&apos;t
+                block. Don&apos;t like it? Close the pull request. Nothing was
+                changed. <Link href="/docs/removing">Backing it out →</Link>
               </p>
-            </div>
-          </Reveal>
-          <Reveal>
-            <div className="doc-cards">
-              <Link className="doc-card" href="/docs/installation">
-                <h3>Installation <span>→</span></h3>
-                <p>Install the gate workflow into the org, then run <code>npx redline-cli init</code> per repo — GitHub or Azure DevOps.</p>
-              </Link>
-              <Link className="doc-card" href="/docs/standards">
-                <h3>Standards <span>→</span></h3>
-                <p>Core + 12 stack rule sets — 249 rules with permanent ids, viewable and copyable in full.</p>
-              </Link>
-              <Link className="doc-card" href="/docs/adaptors/github-copilot">
-                <h3>Adaptors <span>→</span></h3>
-                <p>Connect GitHub Copilot, Claude, Codex-style agents and Cursor to one rendered source of truth.</p>
-              </Link>
-              <Link className="doc-card" href="/docs/cost">
-                <h3>Cost and value <span>→</span></h3>
-                <p>Cost per BLOCKER caught — a figure no cost tool and no DORA tool can compute on its own.</p>
-              </Link>
-              <Link className="doc-card" href="/docs/output-contract">
-                <h3>Output contract <span>→</span></h3>
-                <p>Machine-readable severities and rule ids — the part that turns review comments into metrics.</p>
-              </Link>
-              <Link className="doc-card" href="/docs/enforcement">
-                <h3>Enforcement ladder <span>→</span></h3>
-                <p>Four rungs a repository climbs on recorded evidence — and steps back from without asking anyone.</p>
-              </Link>
-              <Link className="doc-card" href="/docs/workflows">
-                <h3>Workflows <span>→</span></h3>
-                <p>The reusable gate, sync, collection, digest, inbox and canary GitHub Actions workflows.</p>
-              </Link>
+              <ul className="hm-try-list">
+                <li>
+                  <b>No admin rights needed.</b> An engineer without them still
+                  gets everything file-level. The capabilities the token cannot
+                  reach come back <code>denied</code>, are recorded in{" "}
+                  <code>.redline.json</code>, and <code>redline verify</code>{" "}
+                  reports <b>partially onboarded</b> until an administrator
+                  enables them — recorded, never silently skipped.{" "}
+                  <Link href="/docs/onboarding">That path, step by step →</Link>
+                </li>
+                <li>
+                  <b>Your code can stay on your machine.</b> Run the review
+                  against a local model and no diff is sent anywhere.
+                </li>
+                <li>
+                  <b>About ten minutes.</b> One command, one pull request, one
+                  review by your own team.
+                </li>
+              </ul>
             </div>
           </Reveal>
         </div>
       </section>
 
+      {/* ============ 8 — when not to use it ============ */}
+      {/* Deliberately the quietest section on the page: no card fill, no accent
+          rule, smaller heading. It follows "try it" because that is where a
+          reader has just been told how cheap adoption is, and disqualifying
+          them is worth more there than one more reason to say yes. */}
+      <section className="hm-sec hm-not" id="not-for-you">
+        <div className="container">
+          <div className="hm-not-card">
+            <h2 className="hm-not-h">When not to use Redline</h2>
+            <p className="hm-not-lead">
+              Cases where it will not pay for itself. Better found here than in
+              month two.
+            </p>
+            <ul className="hm-not-list">
+              <li>
+                <b>One repository, and no AI writing code in it.</b> Redline
+                renders the standard into the files AI tools read, and measures
+                an estate. You would be using neither.
+              </li>
+              <li>
+                <b>You are not on GitHub or Azure DevOps.</b>{" "}
+                <code>redline init</code> reads your git remote and supports
+                those two. GitLab and Bitbucket are refused.
+              </li>
+              <li>
+                <b>A stack outside the {stackCount}.</b> You get the core rules,
+                plus whatever you write into this repository&apos;s own{" "}
+                <code>.redline/local.md</code> and then maintain.
+              </li>
+              <li>
+                <b>You want a blocking gate on day one.</b> Redline installs
+                advisory and makes blocking be earned on recorded evidence, which
+                cannot be hurried.
+              </li>
+              <li>
+                <b>You want governance past merge.</b> Build, deploy, incidents,
+                cloud spend: Redline stops at the diff, on purpose.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* ============ 9 — final cta ============ */}
       <section className="final-cta">
         <div className="glow" aria-hidden="true" />
         <div className="container">
-          <h2>Ship at AI speed.<br />The line still holds.</h2>
-          <p>
-            Security floor, rendered standards and a verified merge gate —
-            from a single onboarding command, on GitHub or Azure DevOps.
-          </p>
-          <div className="ctas">
-            <Link className="btn btn-red" href="/docs/installation">
-              Get Started
-            </Link>
-            <Link className="btn btn-outline" href="/docs/standards">
-              Browse the Standards
-            </Link>
+          <h2>
+            Ship at AI speed.
+            <br />
+            The line still holds.
+          </h2>
+          <div className="hm-hero-cmd hm-hero-cmd-cta">
+            <code>
+              <span className="tk-prompt">$ </span>
+              {initCmd}
+            </code>
+            <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
           </div>
+          <p className="hm-cta-links">
+            <Link href="/docs">Documentation</Link>
+            <Link href="/docs/standards">The {ruleCount} rules</Link>
+            <Link href="/docs/quickstart">Quickstart</Link>
+            <Link href="/docs/local-review">Local review</Link>
+            <Link href="/docs/seeds">The seed corpus</Link>
+          </p>
         </div>
       </section>
     </main>

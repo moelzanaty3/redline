@@ -41,7 +41,7 @@ export default function Page() {
       <CodeWindow title="the delivery loop">
         <span className="tk-red">standards/</span>  <span className="tk-dim">— humans edit one place, versioned + changelogged</span>{"\n"}
         {"   "}↓ <span className="tk-white">the CLI&apos;s renderer</span>{"\n"}
-        <span className="tk-white">5 vendor formats</span>  <span className="tk-dim">— Copilot · AGENTS.md · Claude · Cursor · skills</span>{"\n"}
+        <span className="tk-white">3 vendor formats</span>  <span className="tk-dim">— Copilot · AGENTS.md · Claude   (Cursor and skills ship disabled)</span>{"\n"}
         {"   "}↓ <span className="tk-white">redline init (one PR, per repo) · redline sync (to the whole estate)</span>{"\n"}
         <span className="tk-white">every onboarded repo</span>  <span className="tk-dim">— gated on merge, at the rung that repo has earned</span>{"\n"}
         {"   "}↓ <span className="tk-white">redline verify (locally, or across the estate weekly)</span>{"\n"}

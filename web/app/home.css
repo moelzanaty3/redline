@@ -1,0 +1,846 @@
+/* Homepage sections. Owned by the home page and its components; the shared
+   chrome, docs and primitives stay in globals.css.
+
+   Everything here is prefixed hm- so nothing collides with a primitive in
+   globals.css, and the tokens are the ones already defined there — --red,
+   --card, --border, --muted, --sev-*, --mono. No new colour is introduced:
+   the accent is the one accent, and it is spent on exactly three things —
+   the offending line in the diff, the severity in the finding, and the
+   section that asks for the install.
+
+   Code panels stay dark in both themes, the same choice globals.css makes for
+   .bento-code and the transcript: a terminal that inverts stops looking like a
+   terminal. Those panels therefore carry literal dark values rather than
+   surface tokens, and the light theme only has to re-fix the accent inside
+   them, exactly as [data-theme="light"] .jr-probe .tk-red does. */
+
+/* ================= shared section furniture ================= */
+.hm-sec {
+  padding: 64px 0;
+}
+.hm-sec + .hm-sec {
+  border-top: 1px solid var(--border);
+}
+.hm-sec-head {
+  text-align: center;
+  margin-bottom: 34px;
+}
+.hm-h2 {
+  font-size: clamp(27px, 3.6vw, 39px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+}
+.hm-lead {
+  max-width: 620px;
+  margin: 12px auto 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.hm-lead b {
+  color: var(--text);
+  font-weight: 600;
+}
+.hm-lead code,
+.hm-term-cap code,
+.hm-try-lead code,
+.hm-try-list code,
+.hm-not-list code,
+.hm-steps code,
+.hm-claim-copy code {
+  font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+/* small uppercase label, the same voice as .jr-band-h */
+.hm-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.hm-sec a:not(.hm-switch-b),
+.hm-cta-links a {
+  color: var(--red-soft);
+  text-decoration: none;
+}
+.hm-sec a:not(.hm-switch-b):hover,
+.hm-cta-links a:hover {
+  text-decoration: underline;
+}
+
+/* ================= 1 · hero ================= */
+/* One command, presented as the call to action itself — there is nothing to
+   install first, so there is no second row and no "once / per repo" ladder. */
+.hm-hero-cmd {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: max-content;
+  max-width: 100%;
+  margin: 26px auto 14px;
+  padding: 11px 12px 11px 18px;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+.hm-hero-cmd code {
+  font-size: 15px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.hm-hero-alt {
+  position: relative;
+  margin: 0 0 24px;
+  font-size: 13.5px;
+}
+.hm-hero-alt a {
+  color: var(--muted);
+}
+.hm-hero-alt a:hover {
+  color: var(--red-soft);
+}
+
+/* ================= 2 · the problem ================= */
+.hm-prob-cols,
+.hm-prob-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 40px;
+}
+.hm-prob-cols {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.hm-prob-col-fix {
+  color: var(--red-soft);
+}
+.hm-prob-row {
+  padding: 26px 0;
+}
+.hm-prob-row + .hm-prob-row {
+  border-top: 1px solid var(--border);
+}
+.hm-prob-n {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+.hm-prob-today h3 {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.hm-prob-today p {
+  color: var(--muted);
+  font-size: 14.5px;
+  max-width: 460px;
+}
+/* the answer column carries the accent as a spine, not as a fill */
+.hm-prob-fix {
+  border-left: 2px solid var(--vc-spine);
+  padding-left: 22px;
+}
+.hm-prob-fix p {
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.hm-prob-fix p b {
+  color: var(--text);
+  font-weight: 600;
+}
+.hm-prob-fix code {
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.hm-facts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 0;
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.hm-facts li:not(:last-child)::after {
+  content: "·";
+  margin: 0 10px;
+  color: var(--faint);
+}
+
+/* ================= 3 · a finding ================= */
+.hm-find {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.hm-find-code,
+.hm-find-out {
+  min-width: 0;
+}
+.hm-panel-h {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.hm-panel-t {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--red-soft);
+  flex: none;
+}
+.hm-panel-h code,
+.hm-panel-n {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* both panels are terminals: dark in both themes */
+.hm-diff,
+.hm-out {
+  background: #0c0c0c;
+  border: 1px solid #262626;
+  border-radius: 12px;
+}
+.hm-diff {
+  padding: 16px 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: #b9b9b9;
+  overflow-x: auto;
+}
+.hm-dl {
+  display: block;
+  padding: 0 16px;
+  white-space: pre;
+}
+.hm-dl-g {
+  display: inline-block;
+  width: 14px;
+  color: #5a5a5a;
+  user-select: none;
+}
+.hm-dl-add {
+  color: #dcdcdc;
+}
+.hm-dl-add .hm-dl-g {
+  color: var(--green);
+}
+/* the one line the finding is about — the only accent in the panel */
+.hm-dl-hot {
+  background: rgba(230, 0, 0, 0.14);
+  box-shadow: inset 2px 0 0 var(--red);
+  color: #ffdede;
+}
+.hm-dl-hot .hm-dl-g {
+  color: var(--red-soft);
+}
+.hm-out {
+  padding: 16px 18px 18px;
+}
+.hm-out-prefix {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  color: #d8d8d8;
+}
+.hm-out-sev {
+  color: var(--red-soft);
+  font-weight: 700;
+}
+.hm-out-id a {
+  color: var(--blue);
+}
+.hm-out-id a:hover {
+  text-decoration: underline;
+}
+.hm-out-prose {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #b4b4b4;
+}
+.hm-out-prose code {
+  font-size: 12px;
+  color: #e4e4e4;
+  overflow-wrap: anywhere;
+}
+/* the toggle. No transition: the point is that only the prose moved */
+.hm-switch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.hm-switch-l {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-right: 2px;
+}
+.hm-switch-b {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.hm-switch-b:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.hm-switch-b.on {
+  color: var(--text);
+  border-color: rgba(230, 0, 0, 0.5);
+  background: rgba(230, 0, 0, 0.1);
+}
+.hm-switch-b:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+}
+.hm-switch-cap {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* the severity floor, folded in under the finding it explains */
+.hm-sevfloor {
+  margin-top: 30px;
+  padding: 20px 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.hm-sevfloor-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.hm-sevfloor-n {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.hm-sevfloor-n b {
+  color: var(--text);
+  font-size: 14px;
+}
+/* The reassurance sits inside the same card as the counts, separated by the
+   hairline only — a reader who takes in "BLOCKER 100" takes this in with it. */
+.hm-sevfloor-note {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.hm-sevfloor-note b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ================= 4 · where it sits ================= */
+.hm-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  counter-reset: none;
+}
+.hm-steps > li {
+  position: relative;
+  padding: 20px 22px 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.15s;
+}
+.hm-steps > li:hover {
+  border-color: var(--border-strong);
+}
+.hm-step-n {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--red-soft);
+}
+.hm-steps h3 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 6px 0 8px;
+}
+.hm-steps p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.hm-steps p b {
+  color: var(--text);
+  font-weight: 600;
+}
+.hm-step-cmd {
+  margin-top: 12px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: #dcdcdc;
+  background: #0c0c0c;
+  border: 1px solid #262626;
+  border-radius: 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+/* the differentiated claim gets its own strip, not a fourth card */
+.hm-local {
+  margin-top: 18px;
+  padding: 20px 24px;
+  border: 1px solid rgba(230, 0, 0, 0.35);
+  background: var(--vc-wash);
+  border-radius: 12px;
+}
+.hm-local-h {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+.hm-local p {
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 760px;
+}
+
+/* ================= 5 · why this is different ================= */
+.hm-claim {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: center;
+  padding: 26px 0;
+}
+.hm-claim + .hm-claim {
+  border-top: 1px solid var(--border);
+}
+.hm-claim-copy h3 {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  margin-bottom: 8px;
+}
+.hm-claim-copy p {
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.hm-claim-copy p b {
+  color: var(--text);
+  font-weight: 600;
+}
+.hm-claim-art {
+  min-width: 0;
+}
+.hm-mini,
+.hm-seed {
+  display: block;
+  padding: 16px 18px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.75;
+  color: #a8a8a8;
+  background: #0c0c0c;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.hm-seed-hit {
+  display: block;
+  color: #ffd9d9;
+  background: rgba(230, 0, 0, 0.14);
+  box-shadow: inset 2px 0 0 var(--red);
+  padding-left: 6px;
+  margin-left: -6px;
+}
+
+/* ================= 6 · the transcript ================= */
+.hm-term-wrap {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.hm-term-cap {
+  max-width: 760px;
+  margin: 16px auto 0;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.hm-term-cap b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ================= 7 · try it ================= */
+.hm-try-card {
+  padding: 34px 38px 36px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  position: relative;
+}
+.hm-try-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(230, 0, 0, 0.7), transparent);
+}
+.hm-try-lead {
+  margin-top: 12px;
+  max-width: 720px;
+  font-size: 15px;
+  color: var(--muted);
+}
+.hm-try-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px 26px;
+  margin-top: 26px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.hm-try-list li {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.hm-try-list b {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.hm-try-list li b + b,
+.hm-try-list li b:not(:first-child) {
+  display: inline;
+  margin: 0;
+}
+
+/* ================= 8 · when not to use it ================= */
+/* The honesty note. Everything here is a step down from section 7: no card
+   fill, no accent hairline, a heading two sizes below .hm-h2. It has to be
+   read, not noticed — a disqualifier that shouts is a pitch in disguise. */
+.hm-not {
+  padding: 52px 0;
+}
+.hm-not-card {
+  padding: 24px 28px 26px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.hm-not-h {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.hm-not-lead {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+.hm-not-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 32px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.hm-not-list li {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.hm-not-list b {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* ================= 9 · final cta ================= */
+.hm-hero-cmd-cta {
+  margin: 30px auto 22px;
+}
+.hm-cta-links {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 0;
+  font-size: 13.5px;
+}
+.hm-cta-links a + a::before {
+  content: "·";
+  margin: 0 12px;
+  color: var(--faint);
+}
+
+/* ================= light theme ================= */
+/* Only the surfaces that are not already token-driven need saying twice. The
+   code panels stay dark, so the accent inside them keeps its dark-surface
+   value — the light --red-soft would be unreadable there. */
+[data-theme="light"] .hm-lead code,
+[data-theme="light"] .hm-term-cap code,
+[data-theme="light"] .hm-try-lead code,
+[data-theme="light"] .hm-try-list code,
+[data-theme="light"] .hm-not-list code,
+[data-theme="light"] .hm-steps code,
+[data-theme="light"] .hm-claim-copy code,
+[data-theme="light"] .hm-prob-fix code {
+  background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .hm-out-sev,
+[data-theme="light"] .hm-dl-hot .hm-dl-g {
+  color: #ff6b6b;
+}
+[data-theme="light"] .hm-out-id a {
+  color: #6fbaff;
+}
+[data-theme="light"] .hm-local {
+  background: rgba(189, 0, 0, 0.04);
+  border-color: rgba(189, 0, 0, 0.28);
+}
+[data-theme="light"] .hm-dl-add .hm-dl-g {
+  color: #4ec97a;
+}
+[data-theme="light"] .hm-switch-b.on {
+  background: rgba(189, 0, 0, 0.08);
+  border-color: rgba(189, 0, 0, 0.45);
+}
+[data-theme="light"] .hm-try-card,
+[data-theme="light"] .hm-sevfloor,
+[data-theme="light"] .hm-steps > li {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* ================= motion ================= */
+/* The vendor toggle is deliberately instant, so there is nothing to disable
+   there. This only covers the hover transitions declared above. */
+@media (prefers-reduced-motion: reduce) {
+  .hm-switch-b,
+  .hm-steps > li {
+    transition: none;
+  }
+}
+
+/* ================= responsive ================= */
+@media (max-width: 1000px) {
+  .hm-sec {
+    padding: 56px 0;
+  }
+  /* the finding stops being a split panel and becomes diff-then-finding, which
+     is the reading order anyway */
+  .hm-find {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .hm-claim {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .hm-steps {
+    grid-template-columns: 1fr;
+  }
+  .hm-try-list {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .hm-try-card {
+    padding: 28px 24px 30px;
+  }
+  /* two columns of 13.5px prose stop being readable well before the grid
+     stops fitting, so the disqualifiers stack a breakpoint early */
+  .hm-not-list {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .hm-not {
+    padding: 46px 0;
+  }
+  .hm-prob-cols,
+  .hm-prob-row {
+    gap: 0 24px;
+  }
+  .hm-hero-cmd code {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 620px) {
+  .hm-sec {
+    padding: 46px 0;
+  }
+  .hm-sec-head {
+    margin-bottom: 26px;
+  }
+  /* Today / With Redline stack, so the two-column header would label nothing */
+  .hm-prob-cols {
+    display: none;
+  }
+  .hm-prob-row {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 22px 0;
+  }
+  .hm-prob-fix {
+    padding-left: 16px;
+  }
+  .hm-hero-cmd {
+    width: 100%;
+    gap: 8px;
+    padding: 10px 10px 10px 14px;
+  }
+  .hm-hero-cmd code {
+    font-size: 13px;
+  }
+  .hm-diff,
+  .hm-mini,
+  .hm-seed {
+    font-size: 11.5px;
+  }
+  .hm-out-prefix {
+    font-size: 12px;
+  }
+  .hm-switch {
+    gap: 6px;
+  }
+  .hm-switch-l {
+    width: 100%;
+  }
+  .hm-sevfloor {
+    padding: 16px;
+  }
+  .hm-local {
+    padding: 18px 16px;
+  }
+  .hm-try-card {
+    padding: 24px 18px 26px;
+  }
+  .hm-not {
+    padding: 32px 0;
+  }
+  .hm-not-card {
+    padding: 18px 16px 20px;
+  }
+  /* On a phone each bolded case is a line of its own with half a line of dead
+     space after it, five times over. Run it into the sentence instead: the
+     scan-line is still the first thing on the item, and the section costs
+     about a screen less. */
+  .hm-not-list {
+    margin-top: 16px;
+    padding-top: 16px;
+    gap: 13px;
+    font-size: 13px;
+  }
+  .hm-not-list li {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .hm-not-list b {
+    display: inline;
+    margin: 0;
+  }
+  .hm-cta-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .hm-cta-links a + a::before {
+    content: none;
+  }
+}
+
+/* ================= scrollable code panels =================
+   .hm-diff and .hm-seed already scroll, but a phone draws overlay scrollbars —
+   they reserve no space and surface only while a finger is down, so a reader
+   sees a line stop at the right edge with nothing saying it continues. This is
+   the same treatment .jr-pre carries in globals.css, kept identical on purpose:
+   two layers that scroll *with* the content (background-attachment: local)
+   against two that do not, so the shading shows only on the side that still has
+   content off-screen and fades out as that side is reached. The panel colour is
+   #0c0c0c here rather than the transcript's #0b0b0b, matching the background
+   these two already declare above; like the transcript they stay dark in the
+   light theme, so there is no [data-theme="light"] counterpart. */
+.hm-diff,
+.hm-seed {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #2c2c2c transparent;
+  background:
+    linear-gradient(90deg, #0c0c0c 40%, rgba(12, 12, 12, 0)) 0 0 / 26px 100% no-repeat local,
+    linear-gradient(90deg, rgba(12, 12, 12, 0), #0c0c0c 60%) 100% 0 / 26px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(255, 255, 255, 0.09), transparent) 0 0 / 14px 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(255, 255, 255, 0.09), transparent) 100% 0 / 14px
+      100% no-repeat scroll #0c0c0c;
+}
+.hm-diff::-webkit-scrollbar,
+.hm-seed::-webkit-scrollbar {
+  height: 8px;
+}
+.hm-diff::-webkit-scrollbar-track,
+.hm-seed::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hm-diff::-webkit-scrollbar-thumb,
+.hm-seed::-webkit-scrollbar-thumb {
+  background: #2c2c2c;
+  border-radius: 999px;
+}
+.hm-diff:hover::-webkit-scrollbar-thumb,
+.hm-seed:hover::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+}

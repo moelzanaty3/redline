@@ -1,7 +1,10 @@
-// The command surface v3 fixes at four. Two are built and two are not, and the
-// unbuilt pair is documented rather than omitted: "does redline review exist?"
-// is a question people keep asking, and a page that simply lacks the answer
-// reads as an oversight instead of a decision.
+// The commands a person types in a repository they are standing in. All seven
+// are built; `built` stays on the type because the estate-level commands (metrics,
+// registry) are documented elsewhere and this shape is shared with them, and
+// because a command that is later specified ahead of its implementation should
+// be documented as unbuilt rather than omitted — "does redline review exist?"
+// is a question people ask, and a page that lacks the answer reads as an
+// oversight instead of a decision.
 export type CommandInfo = {
   what: string;
   built: boolean;
@@ -88,6 +91,26 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     output:
       "One line per check: ok, FAIL, or ?? for a check that could not run. Findings name what was checked and what was found — a gate that no longer publishes its check, a merge policy that exists but was switched out of enforcement, zero required approvals, artifacts left stale by an ignored sync pull request, work still waiting on an administrator. Exit 0 when clean, 1 on drift, 2 when the repository was never onboarded — a distinction that matters, because those two need different people to act.",
     edit: "cli/commands/verify.ts for the local path and cli/verify/remote.ts for --repo. Both parse the gate caller with the same function, deliberately: two independent answers to \"what does this file publish\" would eventually disagree, and that disagreement is the difference between a repository reported healthy and one reported broken.",
+  },
+  remove: {
+    what: "Takes Redline back out of a repository: the rendered standards, the gate machinery, the slash-command files, the host state init applied, and .redline.json last of all. It lands as a pull request on its own branch, exactly as onboarding does — backing out changes how this repository is reviewed and merged, which is a decision its own team reviews rather than one a command makes on a laptop.",
+    built: true,
+    onboard:
+      "Nothing to install: it ships with the CLI. Run it from inside the repository, the same way as init — it reads .redline.json to know what was installed, and the git remote to know which host to withdraw from. A repository that was never onboarded exits 2 with \"nothing to remove\" rather than crashing.",
+    usage: [
+      "redline remove --dry-run              # print the plan; writes nothing, contacts no host",
+      "redline remove                        # open the removal pull request",
+    ],
+    flags: [
+      {
+        flag: "--dry-run",
+        detail:
+          "Prints exactly the plan it would carry out and changes nothing — no file, no host setting, no branch. It needs no credential and contacts no host, which is what lets someone evaluating Redline find out what backing it out would cost before they adopt it. That question gets asked in the first five minutes, and \"by hand, and we haven't told you how\" is not an answer.",
+      },
+    ],
+    output:
+      "One line per path, saying whether it was removed outright, had only its REDLINE block taken out, or was left in place — and why, in every case. Nothing is deleted that Redline cannot prove it wrote: proof is the redline- prefix at a path a vendor's own prune rule owns, a REDLINE:BEGIN/END pair, the \"Managed by Redline\" attribution line, or a content identifier .redline.json recorded when Redline last wrote those bytes. A merged file keeps every byte outside its block; a file whose markers are half-edited is left completely alone and named, the same refusal the renderer already makes. A pre-existing CODEOWNERS, a workflow that carries no Redline attribution, and .redline/local.md are never touched. Host state Redline applied — the branch ruleset and its required check, the labels still carrying the descriptions Redline gave them, the repository property — is withdrawn; a capability the token cannot reach is reported denied and listed as needing an administrator, never silently skipped. The security floor is NOT withdrawn and there is no flag that withdraws it: secret scanning, push protection and dependency alerts are the organisation's minimum rather than Redline's own state, and removing Redline is not a reason to lower a repository's security. .redline.json goes last, and the report says what that means — redline verify stops recognising the repository and reports it as never onboarded.",
+    edit: "cli/commands/remove.ts for the plan and the file work, cli/remove/host.ts for the host withdrawal. The removal surface is taken from the renderers themselves — each vendor's own PruneRule and merge flags — rather than restated, because a second list of those paths would drift from what init writes, and the entry that drifted out of it is the artifact nobody ever removes.",
   },
   policy: {
     what: "Evaluates the rules a checker can decide, with no model call. A share of what the standard asserts needs no judgement — a ticket reference is present or it is not, a suppression carries one or it does not — and sending those to an LLM costs tokens and invites a false positive on a fact, which is the worst kind: an author cannot argue with a model about whether the word TODO appears.",

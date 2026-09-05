@@ -92,14 +92,17 @@ test('web/components/journey.tsx mirrors these CLI constants verbatim', () => {
   assert.equal(SYNC_LABEL, 'redline-sync');
 });
 
-// The "before" probe on the journey page shows `redline verify`'s literal
-// "not onboarded" hint for an illustrative repo. Unlike the constants above,
-// that hint is not an exported value — it is built inline in verify.ts from
-// opts.cwd — so it is derived here by actually running verify() against an
-// empty repo and substituting the page's illustrative cwd into the real
-// result, then compared against the text journey.tsx renders. Hardcoding the
-// same sentence in both files would only move the drift this pins against.
-test('web/components/journey.tsx mirrors the "not onboarded" hint verbatim', async () => {
+// The journey page used to carry a "before" probe showing `redline verify`'s
+// literal "not onboarded" hint. It no longer renders one — the home page was cut
+// back to the transcript alone — so this pins the invariant rather than the
+// layout: *if* the page quotes that hint, it must be the sentence verify()
+// actually prints. The hint is not an exported constant (verify.ts builds it
+// inline from opts.cwd), so it is derived by running verify() against an empty
+// repo and substituting the page's illustrative cwd. Written this way the guard
+// survives the page being restructured, and still fails the moment someone
+// re-adds the probe with drifted wording — which is the drift it exists to catch.
+// Hardcoding the sentence in both files would only move that drift somewhere else.
+test('web/components/journey.tsx quotes the "not onboarded" hint verbatim, if at all', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'redline-journey-hint-'));
   try {
     const report = await verify(
@@ -114,9 +117,14 @@ test('web/components/journey.tsx mirrors the "not onboarded" hint verbatim', asy
     const expected = `no /src/checkout-service${detail.slice(prefix.length)}`;
 
     const journeySource = readFileSync(journeyPath, 'utf8');
-    const match = /<span className="tk-dim">\s*\{" "\}\s*\n\s*(.+)\n\s*<\/span>/.exec(journeySource);
-    assert.ok(match, 'journey.tsx "not onboarded" hint span not found');
-    assert.equal(match[1]!.trim(), expected);
+    // The illustrative path is the tell. Its absence means the page makes no
+    // claim about this hint at all, which is the state today and is fine; its
+    // presence means the page is quoting verify() and owes an exact match.
+    if (!journeySource.includes('/src/checkout-service')) return;
+    assert.ok(
+      journeySource.includes(expected),
+      `journey.tsx quotes the "not onboarded" hint but not as verify() prints it.\nexpected: ${expected}`
+    );
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
