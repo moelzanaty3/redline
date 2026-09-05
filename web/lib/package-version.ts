@@ -46,6 +46,17 @@ async function resolve(): Promise<PackageState> {
   const pinned = process.env["REDLINE_NPM_VERSION"];
   if (pinned) return { status: "published", version: pinned, publishedAt: null };
 
+  // The pre-publication case, which is different from the two above and must not
+  // be served by either of them. The package is about to exist and the site is
+  // built ahead of it; rendering `node dist/bin/redline.js init` as the headline
+  // command would be honest about today and wrong about the moment anyone reads
+  // it. This value is consulted ONLY when the registry says the package is not
+  // there, so it expires by itself: the first real publish outranks it and the
+  // page starts quoting the version npm actually serves, with nobody editing
+  // anything. REDLINE_NPM_VERSION above still wins outright, for the air-gapped
+  // build that cannot ask at all.
+  const fallback = process.env["REDLINE_NPM_FALLBACK_VERSION"];
+
   // An org publishing to a private mirror asks that mirror, not npmjs.
   const registry = (process.env["REDLINE_NPM_REGISTRY"] ?? "https://registry.npmjs.org").replace(
     /\/+$/,
@@ -59,7 +70,7 @@ async function resolve(): Promise<PackageState> {
       signal: AbortSignal.timeout(8000),
       headers: { accept: "application/vnd.npm.install-v1+json" },
     });
-    if (response.status === 404) return { status: "unpublished" };
+    if (response.status === 404) return unpublished(fallback);
     if (!response.ok) return { status: "unknown", reason: `registry returned ${response.status}` };
 
     const body = (await response.json()) as {
@@ -67,10 +78,18 @@ async function resolve(): Promise<PackageState> {
       time?: Record<string, string>;
     };
     const version = body["dist-tags"]?.["latest"];
-    if (!version) return { status: "unpublished" };
+    if (!version) return unpublished(fallback);
     return { status: "published", version, publishedAt: body.time?.[version] ?? null };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return { status: "unknown", reason };
   }
+}
+
+// A registry that answered "not there" — reported as the announced version if a
+// build declared one, and as the plain unpublished state otherwise.
+function unpublished(fallback: string | undefined): PackageState {
+  return fallback === undefined || fallback === ""
+    ? { status: "unpublished" }
+    : { status: "published", version: fallback, publishedAt: null };
 }

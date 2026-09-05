@@ -3,8 +3,16 @@
   "version": "0.0.0-development",
   "description": "Engineering control plane: standards, merge gates and evidence across GitHub and Azure DevOps",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": false,
+  "homepage": "https://github.com/moelzanaty3/redline#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moelzanaty3/redline.git"
+  },
+  "bugs": {
+    "url": "https://github.com/moelzanaty3/redline/issues"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -13,6 +21,7 @@
     "redline-cli": "./dist/bin/redline.js"
   },
   "files": [
+    "LICENSE",
     "dist/",
     "scripts/",
     "standards/",

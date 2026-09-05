@@ -38,6 +38,9 @@
 
 html {
   scroll-behavior: smooth;
+  /* 62px of sticky .site-nav plus 28px of air, so an in-page anchor lands the
+     section heading clear of the bar instead of tucked under it. Keep this in
+     step with .site-nav .inner's height. */
   scroll-padding-top: 90px;
 }
 
@@ -202,30 +205,6 @@ kbd {
   border: 1px solid transparent;
   cursor: pointer;
 }
-.btn-white {
-  background: #fff;
-  color: #000;
-}
-.btn-white:hover {
-  background: #d9d9d9;
-}
-.btn-outline {
-  border-color: var(--border-strong);
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.02);
-}
-.btn-outline:hover {
-  border-color: #555;
-  background: rgba(255, 255, 255, 0.05);
-}
-.btn-red {
-  background: var(--red);
-  color: #fff;
-}
-.btn-red:hover {
-  background: #ff1f1f;
-  box-shadow: 0 6px 28px rgba(230, 0, 0, 0.4);
-}
 
 /* ================= hero ================= */
 .hero {
@@ -306,11 +285,6 @@ kbd {
   text-transform: uppercase;
   color: var(--text);
 }
-.hero-claim span + span::before {
-  content: "·";
-  margin: 0 12px;
-  color: var(--red-soft);
-}
 
 /* the two commands, in the form a reader should remember them */
 .hero-cmd {
@@ -323,37 +297,15 @@ kbd {
   border-radius: 12px;
   overflow: hidden;
 }
-.hc-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 14px;
-}
-.hc-row + .hc-row {
-  border-top: 1px solid var(--border);
-}
-.hc-step {
-  flex: none;
-  width: 62px;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.hc-row code {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 13.5px;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
 .hc-row .copy-btn {
   flex: none;
 }
 
-/* live proof rail — every number comes from the loaders in web/lib */
+/* live proof rail — every number comes from the loaders in web/lib.
+   Sized up from 11.5px/--muted: this rail is not a caption, it is where the
+   page's evidence lives, and 11.5px monospace at 4.7:1 was legible in the
+   accessibility sense and genuinely tiring in the human one. The separators
+   keep --faint so the row still reads as a list rather than a sentence. */
 .hero-proof {
   position: relative;
   display: flex;
@@ -362,8 +314,8 @@ kbd {
   gap: 4px 0;
   margin: 0;
   font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--muted);
+  font-size: 12.5px;
+  color: var(--text);
 }
 .hero-proof span + span::before {
   content: "·";
@@ -445,15 +397,8 @@ kbd {
 .tk-prompt {
   color: var(--faint);
   user-select: none;
-}
+}/* ================= adaptor row ================= */
 
-/* ================= adaptor row ================= */
-.works-with {
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 34px 0;
-  background: var(--bg-soft);
-}
 .works-with .inner {
   display: flex;
   align-items: center;
@@ -461,139 +406,17 @@ kbd {
   gap: 14px 34px;
   flex-wrap: wrap;
 }
-.works-with .lbl {
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.works-with a.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 14px;
-  font-weight: 550;
-  color: var(--muted);
-  transition: color 0.15s;
-}
-.works-with a.chip:hover {
-  color: var(--text);
-}
-.works-with .chip i {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  background: var(--red);
-  opacity: 0.85;
-}
 
 /* ================= value viz ================= */
 .section.value-viz {
   padding: 0 0 76px;
 }
-.vv-head {
-  text-align: center;
-  margin-bottom: 18px;
-}
-.vv-card {
-  position: relative;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
-}
-.vv-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(230, 0, 0, 0.7), transparent);
-}
-.vv-pipeline {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 20px;
-  padding: 34px 30px 30px;
-}
-.vv-pipeline::before {
-  content: "";
-  position: absolute;
-  top: 38px;
-  left: 30px;
-  right: 30px;
-  height: 1px;
-  background: linear-gradient(90deg, var(--border), rgba(230, 0, 0, 0.55) 50%, var(--border));
-}
-.vv-step {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-.vv-dot {
-  position: relative;
-  z-index: 1;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--faint);
-  box-shadow: 0 0 0 5px var(--card);
-  margin-bottom: 10px;
-}
 .vv-dot.hot {
   background: var(--red);
   box-shadow: 0 0 0 5px var(--card), 0 0 12px rgba(230, 0, 0, 0.8);
 }
-.vv-n {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.1em;
-  color: var(--faint);
-}
-.vv-name {
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
 .vv-name.hot {
   color: var(--red-soft);
-}
-.vv-desc {
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.vv-rules {
-  border-top: 1px solid var(--border);
-  padding: 26px 30px 28px;
-}
-.vv-rules-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px 18px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.vv-lbl {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.vv-total {
-  font-size: 13px;
-  color: var(--muted);
-}
-.vv-total b {
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--text);
 }
 .sev-bar {
   display: flex;
@@ -648,6 +471,7 @@ kbd {
   font-style: normal;
   color: var(--faint);
 }
+/* the second proof rail — sized to match .hero-proof, and for the same reason */
 .vv-strip {
   display: flex;
   flex-wrap: wrap;
@@ -656,48 +480,13 @@ kbd {
   padding-top: 18px;
   border-top: 1px solid var(--border);
   font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.vv-strip span + span::before {
-  content: "·";
-  margin: 0 10px;
-  color: var(--faint);
+  font-size: 12.5px;
+  color: var(--text);
 }
 
 /* ================= value case ================= */
 .section.value-case {
   padding: 0 0 76px;
-}
-.vc-head {
-  text-align: center;
-  margin-bottom: 22px;
-}
-.vc-lead {
-  max-width: 640px;
-  margin: 10px auto 0;
-  font-size: 14.5px;
-  color: var(--muted);
-}
-.vc-lead b {
-  color: var(--text);
-  font-weight: 600;
-}
-.vc-card {
-  position: relative;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
-}
-.vc-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(230, 0, 0, 0.7), transparent);
 }
 /* one numbered rail, then the two halves — the rail column is what turns four
    rows into one sequence instead of four equal blocks */
@@ -705,42 +494,9 @@ kbd {
 .vc-row {
   display: grid;
   grid-template-columns: 72px 0.86fr 1.14fr;
-}
-.vc-cols {
-  border-bottom: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.vc-cols span {
-  padding: 11px 26px 11px 8px;
-  color: var(--faint);
-}
-.vc-cols-rail {
-  padding: 0;
-}
-.vc-cols-fix {
-  color: var(--vc-ink);
-  border-left: 1px solid var(--border);
-  background: var(--vc-bg);
-  padding-left: 30px;
-}
-/* the column headers say it once; the per-row badges only return when the
+}/* the column headers say it once; the per-row badges only return when the
    two columns stack and the headers no longer sit above them */
-.vc-tag {
-  display: none;
-}
-.vc-row + .vc-row {
-  border-top: 1px solid var(--border);
-}
-.vc-rail {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  padding-top: 26px;
-}
+
 /* the spine: continuous through the stack, fading out under the last node */
 .vc-rail::before {
   content: "";
@@ -752,30 +508,6 @@ kbd {
   margin-left: -0.5px;
   background: var(--border);
 }
-.vc-row:first-of-type .vc-rail::before {
-  top: 26px;
-}
-.vc-row:last-of-type .vc-rail::before {
-  bottom: auto;
-  height: 55%;
-  background: linear-gradient(180deg, var(--border), transparent);
-}
-.vc-n {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--bg);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
 /* 01 is the thesis the section head states, so the rail marks it as the entry point */
 .vc-row-lead .vc-n {
   color: var(--text);
@@ -783,147 +515,16 @@ kbd {
   background: var(--vc-bg);
   box-shadow: 0 0 0 3px var(--vc-wash);
 }
-.vc-problem {
-  padding: 26px 30px 30px 8px;
-}
-.vc-answer {
-  position: relative;
-  padding: 26px 30px 30px;
-  border-left: 1px solid var(--border);
-  background: var(--vc-wash);
-}
-.vc-answer::before {
-  content: "";
-  position: absolute;
-  left: -1px;
-  top: 12%;
-  bottom: 12%;
-  width: 1px;
-  background: linear-gradient(180deg, transparent, var(--vc-spine), transparent);
-}
-.vc-row-lead .vc-problem,
-.vc-row-lead .vc-answer {
-  padding-top: 32px;
-  padding-bottom: 36px;
-}
-.vc-row-lead h3 {
-  font-size: 21px;
-  letter-spacing: -0.025em;
-}
-.vc-row-lead .vc-problem p,
-.vc-row-lead .vc-answer > p {
-  font-size: 14.5px;
-}
-.vc-tag {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--faint);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 9px;
-  margin-bottom: 12px;
-}
-.vc-tag-fix {
-  color: var(--vc-ink);
-  border-color: var(--vc-line);
-  background: var(--vc-bg);
-}
-.vc-row h3 {
-  font-size: 16.5px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
-  line-height: 1.35;
-  margin-bottom: 8px;
-}
-.vc-problem p,
-.vc-answer > p {
-  font-size: 13.5px;
-  line-height: 1.62;
-  color: var(--muted);
-}
-.vc-answer > p b {
-  color: var(--text);
-  font-weight: 600;
-}
-.vc-row code {
-  font-size: 12.5px;
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 5px;
-  padding: 1px 5px;
-}
-.vc-art {
-  display: block;
-  width: 100%;
-  max-width: 320px;
-  height: auto;
-  margin: 17px 0 0;
-}
-.vc-art-src,
-.vc-art-bar,
-.vc-art-pr {
-  fill: var(--vc-ink);
-  fill-opacity: 0.16;
-  stroke: var(--vc-ink);
-  stroke-opacity: 0.5;
-  stroke-width: 1;
-}
-.vc-art-mark {
-  fill: var(--vc-ink);
-  fill-opacity: 0.8;
-}
-.vc-art-mute .vc-art-line {
-  stroke: var(--border-strong);
-}
-.vc-art-mute .vc-art-arrow {
-  fill: var(--faint);
-}
-.vc-art-node {
-  fill: none;
-  stroke: var(--border-strong);
-  stroke-width: 1;
-}
-.vc-art-line {
-  fill: none;
-  stroke: var(--vc-line);
-  stroke-width: 1;
-}
-.vc-art-arrow {
-  fill: var(--vc-ink);
-  fill-opacity: 0.65;
-}
 /* the dashes carry the direction the prose states; static under reduced motion,
    where the global override strips the animation but keeps the dash pattern */
 .vc-art-flow,
 .vc-art-dash {
   stroke-dasharray: 3 4;
 }
-.vc-art-flow {
-  animation: vc-art-flow 2.4s linear infinite;
-}
 @keyframes vc-art-flow {
   to {
     stroke-dashoffset: -14;
   }
-}
-.vc-proof {
-  margin-top: 16px;
-  padding-top: 15px;
-  border-top: 1px solid var(--vc-line);
-}
-.vc-cmd {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 7px 11px;
-  margin-bottom: 14px;
-  overflow-x: auto;
-  white-space: nowrap;
 }
 /* counted facts: equal auto-flow columns, so a fact can never wrap into an
    orphan on a line of its own however many there are */
@@ -932,34 +533,6 @@ kbd {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-}
-.vc-stats li {
-  padding-left: 15px;
-  border-left: 1px solid var(--vc-line);
-}
-.vc-stats li:first-child {
-  padding-left: 0;
-  border-left: none;
-}
-.vc-stats b {
-  display: block;
-  font-family: var(--mono);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: var(--vc-ink);
-}
-.vc-stats span {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--muted);
-}
-.vc-row-lead .vc-stats b {
-  font-size: 26px;
 }
 /* stated properties, not measurements — deliberately quieter than the numerals */
 .vc-props {
@@ -971,90 +544,13 @@ kbd {
   line-height: 1.5;
   color: var(--muted);
 }
-.vc-stats + .vc-props {
-  margin-top: 14px;
-}
-.vc-props li:not(:last-child)::after {
-  content: "·";
-  margin: 0 9px;
-  color: var(--faint);
-}
-.vc-cta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  padding: 16px 30px;
-}
-.vc-cta-lbl {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.vc-cta-lines {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.vc-cta-lines code {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  white-space: nowrap;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 6px 11px;
-}
-.vc-cta-note {
-  font-size: 12.5px;
-  color: var(--muted);
-}
 
 /* ================= journey ================= */
 .section.journey {
   padding: 0 0 76px;
 }
-.jr-head {
-  text-align: center;
-  margin-bottom: 20px;
-}
-.jr-lead {
-  max-width: 660px;
-  margin: 10px auto 0;
-  font-size: 14.5px;
-  color: var(--muted);
-}
-.jr-lead b {
-  color: var(--text);
-  font-weight: 600;
-}
-.jr-card {
-  position: relative;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
-}
-.jr-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(230, 0, 0, 0.7), transparent);
-}
 .jr-band {
   padding: 22px 30px 24px;
-}
-.jr-band-after {
-  background: rgba(230, 0, 0, 0.04);
 }
 .jr-band-h {
   font-family: var(--mono);
@@ -1067,130 +563,10 @@ kbd {
 }
 .jr-band-after .jr-band-h {
   color: var(--red-soft);
-}
-/* before and after share this grid so the same three rows line up */
-.jr-rows {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px 26px;
-}
-.jr-rows li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.jr-k {
-  font-size: 12px;
-  color: var(--faint);
-}
-.jr-v {
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.jr-v-none {
-  color: var(--muted);
-}
-.jr-v-set {
-  color: var(--red-soft);
-}
-.jr-d {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.jr-sub-h {
-  margin: 26px 0 14px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--red-soft);
-}
-.jr-files,
-.jr-cmds {
-  list-style: none;
-  display: grid;
-  gap: 14px;
-}
-.jr-files li {
-  display: grid;
-  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
-  grid-template-areas: "k d" "p d";
-  column-gap: 26px;
-  row-gap: 6px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
-.jr-files li:first-child {
-  padding-top: 0;
-  border-top: none;
-}
-.jr-fk {
-  grid-area: k;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-.jr-fp {
-  grid-area: p;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  min-width: 0;
-}
-.jr-fd {
-  grid-area: d;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.jr-cmds li {
-  display: grid;
-  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
-  column-gap: 26px;
-  row-gap: 4px;
-  align-items: baseline;
-}
-.jr-cmds li span {
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.jr-note {
-  margin-top: 14px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.jr-lead code,
-.jr-fp code,
-.jr-fd code,
-.jr-cmds code,
-.jr-note code {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 5px;
-  padding: 2px 6px;
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.jr-fd a,
-.jr-note a {
-  color: var(--red-soft);
-  border-bottom: 1px solid rgba(230, 0, 0, 0.35);
-}
-.jr-fd a:hover,
-.jr-note a:hover {
-  border-bottom-color: var(--red-soft);
-}
+}/* before and after share this grid so the same three rows line up */
+
+/* Real CLI output, so it scrolls rather than reflows; the reasoning and the
+   shared scroll treatment are on the .jr-pre, .jr-probe rule below. */
 .jr-probe {
   margin-top: 18px;
   padding: 12px 14px;
@@ -1198,11 +574,10 @@ kbd {
   border-radius: 10px;
   background: #0b0b0b;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.7;
   color: #c9c9c9;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: pre;
 }
 .jr-term {
   border-top: 1px solid var(--border);
@@ -1248,14 +623,59 @@ kbd {
   color: #f2f2f2;
   border-color: #4a4a4a;
 }
+/* A terminal that wraps stops reading as a terminal: at 340px the column-aligned
+   output folded mid-path (".github/instructions/redline-" / "javascript.…") and
+   the whole panel read as broken markup. Real terminals scroll sideways, so this
+   one does too — `pre`, not `pre-wrap`, and the overflow is owned by the panel
+   (overscroll-behavior stops the swipe chaining out to the page). */
 .jr-pre {
   padding: 18px 22px 22px;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.72;
   color: #c9c9c9;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: pre;
+}
+.jr-pre,
+.jr-probe {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  /* the track has to read as part of the panel chrome, not as an OS artefact
+     dropped on top of it — same greys as .jr-bar and its dots */
+  scrollbar-width: thin;
+  scrollbar-color: #2c2c2c transparent;
+  /* Phones draw overlay scrollbars, which reserve no space and appear only
+     while a finger is down — so the bar above cannot be the only sign that
+     there is more line to the right. These two layers scroll *with* the content
+     (background-attachment: local) against two that do not, which is what makes
+     the edge shading appear only on the side that still has content off-screen
+     and fade out as you reach it. Same #0b0b0b as the panel, in both themes:
+     the transcript stays dark in light mode, as .jr-probe .tk-red assumes. */
+  background:
+    linear-gradient(90deg, #0b0b0b 40%, rgba(11, 11, 11, 0)) 0 0 / 26px 100% no-repeat local,
+    linear-gradient(90deg, rgba(11, 11, 11, 0), #0b0b0b 60%) 100% 0 / 26px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(255, 255, 255, 0.09), transparent) 0 0 / 14px 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(255, 255, 255, 0.09), transparent) 100% 0 / 14px
+      100% no-repeat scroll #0b0b0b;
+}
+.jr-pre::-webkit-scrollbar,
+.jr-probe::-webkit-scrollbar {
+  height: 8px;
+}
+.jr-pre::-webkit-scrollbar-track,
+.jr-probe::-webkit-scrollbar-track {
+  background: transparent;
+}
+.jr-pre::-webkit-scrollbar-thumb,
+.jr-probe::-webkit-scrollbar-thumb {
+  background: #2c2c2c;
+  border-radius: 999px;
+}
+.jr-pre:hover::-webkit-scrollbar-thumb,
+.jr-probe:hover::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
 }
 .jr-pre .tk-dim,
 .jr-probe .tk-dim {
@@ -1264,8 +684,14 @@ kbd {
 .jr-l {
   transition: opacity 0.18s ease;
 }
-.jr-l.off {
-  opacity: 0;
+/* Replay dims the lines it has not reached yet; it never removes them. Hiding
+   them left the panel's full height reserved and empty — a ~750px black
+   rectangle for the three seconds the transcript took to type, in the one
+   section whose job is to prove the tool actually runs. Pending text stays
+   readable, so every frame of the sweep still shows a working terminal, and
+   nothing reflows because the lines never leave the flow. */
+.jr-l.pend {
+  opacity: 0.34;
 }
 .jr-l.cur::after {
   content: "\25AE";
@@ -1277,80 +703,11 @@ kbd {
   50% {
     opacity: 0;
   }
-}
-.jr-foot {
-  padding: 16px 30px 18px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted);
-}
-.jr-foot code {
-  font-size: 12.5px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 5px;
-  padding: 2px 7px;
-}
-.jr-foot + .jr-foot {
-  padding-top: 0;
-}
-.jr-caveat {
-  font-size: 12.5px;
-  color: var(--muted);
-}
-.jr-caveat code {
-  font-size: 11.5px;
-  color: var(--text);
-}
-.jr-caveat b {
-  color: var(--text);
-  font-weight: 600;
-}
-.jr-caveat a {
-  color: var(--red-soft);
-  border-bottom: 1px solid rgba(230, 0, 0, 0.35);
-}
-.jr-caveat a:hover {
-  border-bottom-color: var(--red-soft);
-}
-
-/* ================= roadmap note ================= */
-.roadmap-note {
-  margin-top: 28px;
-  border: 1px solid var(--border);
-  border-left: 2px solid rgba(230, 0, 0, 0.5);
-  border-radius: 12px;
-  background: var(--bg-soft);
-  padding: 18px 22px;
-}
-.roadmap-note h3 {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--red-soft);
-  margin-bottom: 8px;
-}
-.roadmap-note p {
-  font-size: 13.5px;
-  color: var(--muted);
-  max-width: 780px;
-}
-.roadmap-note code {
-  font-size: 12.5px;
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 5px;
-  padding: 1px 5px;
-}
+}/* ================= roadmap note ================= */
 
 /* ================= sections ================= */
 .section {
   padding: 96px 0;
-}
-.section-head {
-  text-align: center;
-  margin-bottom: 56px;
 }
 .section-head .pill {
   display: inline-block;
@@ -1363,21 +720,6 @@ kbd {
   padding: 5px 14px;
   margin-bottom: 18px;
 }
-.section-head h2 {
-  font-size: clamp(30px, 4.2vw, 44px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-  margin-bottom: 14px;
-}
-.section-head p {
-  color: var(--muted);
-  max-width: 600px;
-  margin: 0 auto;
-}
-.section-head p b {
-  color: var(--text);
-}
 
 /* ================= bento ================= */
 .bento {
@@ -1385,46 +727,8 @@ kbd {
   grid-template-columns: repeat(6, 1fr);
   gap: 16px;
 }
-.bento-card {
-  grid-column: span 2;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 26px 26px 24px;
-  position: relative;
-  overflow: hidden;
-  transition: border-color 0.2s, transform 0.2s;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.bento-card:hover {
-  border-color: #3d3d3d;
-  transform: translateY(-2px);
-}
 .bento-card.wide {
   grid-column: span 3;
-}
-.bento-card h3 {
-  font-size: 16px;
-  font-weight: 620;
-  letter-spacing: -0.015em;
-}
-.bento-card > p {
-  font-size: 13.5px;
-  color: var(--muted);
-}
-.bento-card > p code {
-  font-size: 12px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 1px 5px;
-}
-.bento-visual {
-  margin-top: auto;
-  padding-top: 16px;
 }
 .bento-code {
   background: #0a0a0a;
@@ -1438,31 +742,6 @@ kbd {
   white-space: pre;
   color: #bdbdbd;
 }
-.gate-check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #0a0a0a;
-}
-.gate-check + .gate-check {
-  margin-top: 8px;
-}
-.gate-check .st {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  flex: none;
-}
 .gate-check .st.ok {
   background: rgba(69, 222, 131, 0.15);
   color: var(--green);
@@ -1470,22 +749,6 @@ kbd {
 .gate-check .st.no {
   background: rgba(230, 0, 0, 0.18);
   color: var(--red-soft);
-}
-.bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 7px;
-  height: 74px;
-}
-.bars i {
-  flex: 1;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(180deg, rgba(230, 0, 0, 0.85), rgba(230, 0, 0, 0.25));
-  min-height: 8%;
-  animation: bar-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-.bars i:nth-child(2n) {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.08));
 }
 @keyframes bar-in {
   from {
@@ -1516,44 +779,11 @@ kbd {
 .flow b {
   color: var(--faint);
   font-weight: 400;
-}
+}/* ================= stats ================= */
 
-/* ================= stats ================= */
-.stats-band {
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background:
-    radial-gradient(ellipse 500px 200px at 50% 120%, rgba(230, 0, 0, 0.12), transparent 70%),
-    var(--bg-soft);
-}
 .stats-band .inner {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-}
-.stat {
-  padding: 46px 24px;
-  text-align: center;
-  border-right: 1px solid var(--border);
-}
-.stat:last-child {
-  border-right: none;
-}
-.stat .num {
-  font-size: clamp(34px, 4.4vw, 52px);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  display: block;
-}
-.stat .num em {
-  font-style: normal;
-  color: var(--red-soft);
-}
-.stat .lbl {
-  display: block;
-  margin-top: 10px;
-  font-size: 13px;
-  color: var(--muted);
 }
 
 /* ================= steps ================= */
@@ -1562,35 +792,12 @@ kbd {
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
-.how-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 24px;
-}
 .how-card .n {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--red-soft);
   display: block;
   margin-bottom: 14px;
-}
-.how-card h3 {
-  font-size: 15.5px;
-  font-weight: 620;
-  margin-bottom: 6px;
-}
-.how-card p {
-  font-size: 13px;
-  color: var(--muted);
-}
-.how-card p code {
-  font-size: 11.5px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 1px 5px;
 }
 
 /* ================= docs preview cards ================= */
@@ -2165,13 +1372,6 @@ kbd {
 [data-theme="light"] .btn-white:hover {
   background: #333;
 }
-[data-theme="light"] .btn-outline {
-  background: rgba(0, 0, 0, 0.02);
-}
-[data-theme="light"] .btn-outline:hover {
-  background: rgba(0, 0, 0, 0.05);
-  border-color: #aaa;
-}
 [data-theme="light"] .hero h1 {
   background: linear-gradient(180deg, #111 55%, #5c5c5c);
   -webkit-background-clip: text;
@@ -2205,9 +1405,6 @@ kbd {
 [data-theme="light"] .callout code {
   background: rgba(0, 0, 0, 0.05);
 }
-[data-theme="light"] .jr-band-after {
-  background: rgba(230, 0, 0, 0.03);
-}
 /* the transcript panels stay dark in light mode, like .bento-code above —
    so the red inside them needs the dark-surface value, not the light one */
 [data-theme="light"] .jr-probe .tk-red {
@@ -2227,14 +1424,6 @@ kbd {
 [data-theme="light"] .flow span.hot {
   color: #ff6b6b;
   border-color: rgba(230, 0, 0, 0.5);
-}
-[data-theme="light"] .bars i:nth-child(2n) {
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.1));
-}
-[data-theme="light"] .stats-band {
-  background:
-    radial-gradient(ellipse 500px 200px at 50% 120%, rgba(230, 0, 0, 0.06), transparent 70%),
-    var(--bg-soft);
 }
 [data-theme="light"] .doc-card:hover {
   background: #fff6f6;
@@ -2292,6 +1481,17 @@ kbd {
   .reveal {
     opacity: 1;
     transform: none;
+  }
+  /* JourneyTerminal already refuses to sweep under this preference, but .pend is
+     state rather than animation — if the preference flips mid-sweep the
+     transcript must land complete instead of freezing half-dimmed. Same for the
+     replay cursor, whose blink is off above but whose glyph would otherwise sit
+     on a line for no reason. */
+  .jr-l.pend {
+    opacity: 1;
+  }
+  .jr-l.cur::after {
+    content: none;
   }
 }
 
@@ -2464,13 +1664,6 @@ kbd {
   .stats-band .inner {
     grid-template-columns: 1fr;
   }
-  .stat {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-  .stat:last-child {
-    border-bottom: none;
-  }
   .search-pill span {
     display: none;
   }
@@ -2483,43 +1676,19 @@ kbd {
   .docs-pager a {
     max-width: 100%;
   }
+  /* The headline is two sentences split by a hard <br/>, so "two lines" only
+     happens if each sentence fits its own line. The 42px clamp floor did not:
+     at 390px both halves wrapped again and the hero opened on four ragged rows.
+     Below 620px the size tracks the viewport instead of bottoming out, and
+     text-wrap: balance evens the halves if a narrow enough screen still folds
+     one. */
+  .hero h1 {
+    font-size: clamp(25px, 7.9vw, 42px);
+    letter-spacing: -0.04em;
+    text-wrap: balance;
+  }
   .jr-pre {
     font-size: 10.5px;
-  }
-  .hc-step {
-    width: 54px;
-  }
-  .vc-rail {
-    padding-left: 18px;
-  }
-  .vc-problem {
-    padding-left: 10px;
-  }
-  .vc-stats {
-    grid-auto-flow: row;
-  }
-  .vc-stats li {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    padding: 8px 0 0;
-    border-left: none;
-    border-top: 1px solid var(--vc-line);
-  }
-  .vc-stats li:first-child {
-    padding-top: 0;
-    border-top: none;
-  }
-  .vc-stats b,
-  .vc-row-lead .vc-stats b {
-    min-width: 40px;
-    font-size: 19px;
-  }
-  .vc-stats span {
-    margin-top: 0;
-  }
-  .vc-cta {
-    padding: 16px 24px;
   }
 }
 

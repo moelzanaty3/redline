@@ -5,9 +5,9 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 export type Tok = { t: string; c?: string };
 export type Line = { toks: Tok[]; cmd?: boolean };
 
-const CMD_PAUSE = 360;
-const OUT_PAUSE = 52;
-const LEAD_IN = 160;
+const CMD_PAUSE = 240;
+const OUT_PAUSE = 46;
+const LEAD_IN = 120;
 
 export function JourneyTerminal({ lines, title }: { lines: Line[]; title: string }) {
   // Starts fully revealed so the server-rendered HTML, the pre-hydration paint and a
@@ -24,6 +24,13 @@ export function JourneyTerminal({ lines, title }: { lines: Line[]; title: string
     timer.current = null;
   }, []);
 
+  // Replay never *removes* the transcript. Every line stays in flow and stays
+  // legible; the sweep only lifts each line from pending to full strength as the
+  // cursor reaches it. The previous version reset to zero visible lines while the
+  // hidden ones still held their space, so the section whose entire job is to
+  // prove the tool runs opened as a ~750px rectangle of empty black for three
+  // seconds — indistinguishable from a render failure. Dimming instead of hiding
+  // keeps the box full of text at every frame and costs no layout shift.
   const play = useCallback(() => {
     stop();
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -84,11 +91,11 @@ export function JourneyTerminal({ lines, title }: { lines: Line[]; title: string
           </button>
         ) : null}
       </div>
-      <pre className="jr-pre">
+      <pre className={`jr-pre${playing ? " run" : ""}`}>
         {lines.map((line, i) => (
           <Fragment key={`${i}-${line.toks[0]?.t ?? ""}`}>
             <span
-              className={`jr-l${playing && i >= shown ? " off" : ""}${
+              className={`jr-l${playing && i >= shown ? " pend" : ""}${
                 playing && i === shown - 1 ? " cur" : ""
               }`}
             >

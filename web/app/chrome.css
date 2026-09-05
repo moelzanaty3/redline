@@ -1,1 +1,398 @@
-/* Site chrome: nav, mobile menu, footer. */
+/* Site chrome: nav, mobile menu, footer.
+   ------------------------------------------------------------------
+   globals.css owns the visual language — the tokens, the single red accent,
+   the type. Nothing here introduces a colour; everything reads a custom
+   property so the light theme keeps working. Layout that was previously
+   correct only above 1000px is fixed here, at the widths phones actually are.
+
+   Two rules in globals.css are deliberately routed around rather than edited:
+     .site-nav .links { display: none }  below 1000px — the desktop link row is
+       now .nav-links, and the replacement below that breakpoint is a real menu,
+       not a second display:none.
+     body { overflow-x: hidden } — it clipped a header that was 409px wide in a
+       390px viewport. The header is sized to fit instead; the clip is no longer
+       load-bearing. */
+
+:root {
+  /* Height of .site-nav .inner in globals.css. The mobile menu hangs off the
+     bottom edge of the bar, so the two must agree. */
+  --nav-h: 62px;
+}
+
+/* ================= nav layout ================= */
+
+/* The bar is a single non-wrapping row of items that must survive 320px. Each
+   part is allowed to shrink or drop out in a defined order — logo last, the
+   repository link never. */
+.site-nav .inner {
+  gap: 18px;
+  min-width: 0;
+}
+.site-nav .logo {
+  flex: none;
+  white-space: nowrap;
+}
+.nav-right {
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Desktop link row. Renamed from .links so the mobile menu can own everything
+   below 1000px; the styling is the same as the row it replaces. */
+.site-nav .nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.site-nav .nav-links a {
+  font-size: 13.5px;
+  color: var(--muted);
+  padding: 7px 11px;
+  border-radius: 8px;
+  transition: color 0.15s, background 0.15s;
+}
+.site-nav .nav-links a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Icon-sized link in the bar — the repository mark. Matches .theme-toggle so
+   the right-hand cluster reads as one control group. */
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: color 0.15s, border-color 0.15s;
+}
+.nav-icon:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* ================= search affordance ================= */
+
+/* The pill is rendered by search-button.tsx, which prints "⌘ K" or "Ctrl K"
+   from navigator.platform. Neither key exists on a phone, so on a coarse
+   pointer the shortcut hint is dropped — the button keeps its label and its
+   aria-label, it simply stops promising a key the device does not have. */
+@media (pointer: coarse) {
+  .site-nav .search-pill kbd {
+    display: none;
+  }
+}
+
+/* Below this the pill has no room for its own sentence, so it collapses to an
+   icon. The icon is added here rather than left as an empty button: the coarse
+   pointer rule above can remove the kbd as well, and a button with nothing in
+   it is not a target anyone can find. */
+@media (max-width: 860px) {
+  .site-nav .search-pill {
+    gap: 0;
+    padding: 8px;
+  }
+  .site-nav .search-pill span,
+  .site-nav .search-pill kbd {
+    display: none;
+  }
+  .site-nav .search-pill::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23000'%20stroke-width='2'%20stroke-linecap='round'%3E%3Ccircle%20cx='11'%20cy='11'%20r='7'/%3E%3Cpath%20d='M20%2020l-4.2-4.2'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23000'%20stroke-width='2'%20stroke-linecap='round'%3E%3Ccircle%20cx='11'%20cy='11'%20r='7'/%3E%3Cpath%20d='M20%2020l-4.2-4.2'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+}
+
+/* ================= mobile menu ================= */
+
+.nav-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.nav-burger:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.nav-burger[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* Portalled to <body>: .site-nav carries a backdrop-filter, which would make it
+   the containing block for a fixed-position descendant. The overlay starts
+   below the bar so the toggle — which is the close control while open — stays
+   lit and clickable. */
+.mobile-menu {
+  position: fixed;
+  inset: var(--nav-h) 0 0 0;
+  z-index: 90;
+}
+.mobile-menu[hidden] {
+  display: none;
+}
+.mm-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+.mm-panel {
+  position: relative;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  padding: 12px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  animation: mm-in 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes mm-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.mm-links ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.mm-links a {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 550;
+  color: var(--text);
+}
+.mm-links a:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mm-external {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.mm-external a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.mm-external a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.mm-external svg {
+  flex: none;
+  color: var(--faint);
+}
+.mm-external em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 12px;
+  color: var(--faint);
+  margin-left: 6px;
+}
+.mm-out {
+  margin-left: auto;
+  color: var(--faint);
+}
+
+/* "Get Started" leaves the bar below 640px — it is the widest item there and it
+   was the one being sliced off the right edge. It is not dropped, it moves here
+   and gets the full width. */
+.mm-cta {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  border-radius: 10px;
+  background: #fff;
+  color: #000;
+  font-size: 15px;
+  font-weight: 600;
+}
+.mm-cta:hover {
+  background: #d9d9d9;
+}
+
+/* The site has no global focus style of its own; these controls are new, so
+   they carry one. Keyboard only — :focus-visible, not :focus. */
+.nav-burger:focus-visible,
+.nav-icon:focus-visible,
+.mm-links a:focus-visible,
+.mm-external a:focus-visible,
+.mm-cta:focus-visible,
+.site-footer .brand-links a:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+}
+
+/* ================= footer ================= */
+
+/* Off-site identity: repository, package, author. A CLI that writes files into
+   a reader's repo and edits their branch protection has to be inspectable. */
+.site-footer .brand-links {
+  list-style: none;
+  display: flex;
+  /* .site-footer ul in globals.css stacks its lists; this one is a row of
+     identity links, so the direction is restated rather than inherited. */
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin-top: 16px;
+}
+.site-footer .brand-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+.site-footer .brand-links a:hover {
+  color: var(--text);
+}
+.site-footer .brand-links svg {
+  flex: none;
+  color: var(--faint);
+  transition: color 0.15s;
+}
+.site-footer .brand-links a:hover svg {
+  color: var(--red-soft);
+}
+
+/* A vendor that ships disabled in standards/manifest.json is not a capability
+   this footer may advertise. It stays linked — the page explains how to turn it
+   on — and is labelled for what it is. */
+.site-footer ul .off {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.site-footer .legal .built {
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+.site-footer .legal .built b {
+  color: var(--muted);
+  font-weight: 600;
+}
+.site-footer .legal .terms {
+  white-space: nowrap;
+}
+
+/* ================= light theme ================= */
+
+[data-theme="light"] .site-nav .nav-links a:hover,
+[data-theme="light"] .nav-burger:hover,
+[data-theme="light"] .mm-links a:hover,
+[data-theme="light"] .mm-external a:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .mm-scrim {
+  background: rgba(0, 0, 0, 0.3);
+}
+[data-theme="light"] .mm-panel {
+  background: var(--card);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.16);
+}
+[data-theme="light"] .mm-cta {
+  background: #171717;
+  color: #fff;
+}
+[data-theme="light"] .mm-cta:hover {
+  background: #333;
+}
+
+/* ================= responsive ================= */
+
+@media (max-width: 1000px) {
+  /* Below here the desktop row is gone and the menu is the way in. */
+  .site-nav .nav-links {
+    display: none;
+  }
+  .nav-burger {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 640px) {
+  .site-nav .inner {
+    padding: 0 16px;
+    gap: 12px;
+  }
+  .nav-right {
+    gap: 8px;
+  }
+  /* The version pill and the CTA are the two widest optional items; both are
+     reachable one tap away (the footer carries the version, the menu carries
+     the CTA) and neither is worth a sliced-off header. */
+  .site-nav .logo .v {
+    display: none;
+  }
+  .site-nav .nav-cta {
+    display: none;
+  }
+  .site-footer .legal .terms {
+    white-space: normal;
+  }
+}
+
+@media (min-width: 1001px) {
+  /* Widening past the breakpoint hides the panel; mobile-menu.tsx also drops
+     the open state and the scroll lock on the same query. */
+  .mobile-menu {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* globals.css disables animation globally; stated here too so the panel's
+     entrance is not something a future edit has to rediscover. */
+  .mm-panel {
+    animation: none;
+  }
+}
