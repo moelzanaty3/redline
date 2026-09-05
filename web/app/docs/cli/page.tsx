@@ -11,16 +11,18 @@ export default function Page() {
     <DocsPage
       crumb="CLI"
       title="CLI commands"
-      intro="Four commands, deliberately. Two exist; two are designed and unbuilt, and are documented as such rather than left out."
+      intro="The commands you run in a repository, and the two that act on the estate. Every one of them is built — each page below is written against what the command actually prints."
       href="/docs/cli"
     >
       <p>
-        The command surface is fixed at four on purpose — every capability that is
-        not one of these is a control-plane job that runs on a schedule, not
-        something a person types. <code>redline init</code> and{" "}
-        <code>redline verify</code> are what an onboarded repository actually uses;{" "}
-        <code>redline sync</code> and <code>redline review</code> are specified and
-        sequenced but do not exist in <code>cli/commands/</code>.
+        The surface is deliberately small — every capability that is not one of
+        these is a scheduled control-plane job, not something a person types.{" "}
+        <code>redline init</code> and <code>redline verify</code> are what an
+        onboarded repository uses day to day; <code>redline review</code> reviews
+        a diff against only the rules its files touch; <code>redline policy</code>{" "}
+        and <code>redline exempt</code> are what the gate calls; and{" "}
+        <code>redline sync</code> runs from a checkout of this repository to open
+        a pull request on every registered repository whose standards are behind.
       </p>
       <div className="doc-cards" style={{ marginTop: 24 }}>
         {COMMANDS.map((c) => (

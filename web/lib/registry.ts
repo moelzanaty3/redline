@@ -61,9 +61,10 @@ export const TEMPLATES: RegistryEntry[] = [
   { slug: "org-ruleset", title: "redline-org-ruleset.json", file: "rulesets/redline-org-ruleset.json", description: "Reference shape for a one-time manual org-level import — not applied by any code here." },
 ];
 
-// The four commands v3 fixes the surface at. Two exist; two are designed and
-// unbuilt, and are listed because "it does not exist yet" is the answer people
-// keep looking for and not finding.
+// The commands documented under /docs/cli. All six are built and each entry
+// points at the file that implements it, so a command listed here that loses
+// its implementation shows up as a broken source link rather than as prose that
+// quietly stops being true.
 export const COMMANDS: RegistryEntry[] = [
   { slug: "init", title: "redline init", file: "cli/commands/init.ts", description: "Onboard a repository: standards, security floor, merge gate, registration. The one command a product repo runs." },
   { slug: "verify", title: "redline verify", file: "cli/commands/verify.ts", description: "Check a repository still matches what its .redline.json claims — and, with --gate, act as the Azure gate itself." },

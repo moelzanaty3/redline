@@ -1,7 +1,10 @@
-// The command surface v3 fixes at four. Two are built and two are not, and the
-// unbuilt pair is documented rather than omitted: "does redline review exist?"
-// is a question people keep asking, and a page that simply lacks the answer
-// reads as an oversight instead of a decision.
+// The commands a person types in a repository they are standing in. All six are
+// built; `built` stays on the type because the estate-level commands (metrics,
+// registry) are documented elsewhere and this shape is shared with them, and
+// because a command that is later specified ahead of its implementation should
+// be documented as unbuilt rather than omitted — "does redline review exist?"
+// is a question people ask, and a page that lacks the answer reads as an
+// oversight instead of a decision.
 export type CommandInfo = {
   what: string;
   built: boolean;

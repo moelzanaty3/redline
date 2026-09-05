@@ -139,10 +139,11 @@ export default async function Page() {
           contain <code>github</code> is not auto-detected.
         </li>
         <li>
-          There is no <code>redline sync</code> yet — an onboarded repository
-          picks up a standards change by re-running <code>redline init</code>. The
-          register those sync pull requests would target does now exist:{" "}
-          <code>registry.json</code>, derived nightly from the estate.
+          <code>redline sync</code> runs from a checkout of the Redline source
+          repository, not from a product repo, and it needs{" "}
+          <code>registry.json</code> — the register of onboarded repositories,
+          derived nightly. A repository that is not in the register picks up a
+          standards change by re-running <code>redline init</code>.
         </li>
         <li>
           No offline single-file executable yet, which matters for air-gapped

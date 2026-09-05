@@ -4,6 +4,8 @@ import { Cmdk } from "@/components/cmdk";
 import { SiteFooter } from "@/components/footer";
 import { SiteNav } from "@/components/nav";
 import "./globals.css";
+import "./chrome.css";
+import "./home.css";
 
 const sans = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
