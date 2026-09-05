@@ -1,0 +1,536 @@
+/* /scoreboard — the public benchmark page.
+   Imported directly by app/scoreboard/page.tsx; nothing else on the site uses it.
+   Every colour is a custom property defined in globals.css. There is no second
+   accent and no animation: this is an evidence page, and movement on it would be
+   decoration over a number. */
+
+.sb {
+  padding-bottom: 96px;
+}
+
+.sb-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ================= header ================= */
+.sb-head {
+  border-bottom: 1px solid var(--border);
+  padding: 72px 0 40px;
+  margin-bottom: 56px;
+}
+.sb-eyebrow {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--red-soft);
+  margin-bottom: 14px;
+}
+.sb h1 {
+  font-size: 46px;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 650;
+}
+.sb-lede {
+  margin-top: 18px;
+  max-width: 68ch;
+  font-size: 16.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.sb-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 36px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.sb-facts > div {
+  background: var(--card);
+  padding: 16px 18px;
+}
+.sb-facts dt {
+  font-size: 12px;
+  color: var(--faint);
+  letter-spacing: 0.01em;
+}
+.sb-facts dd {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* ================= sections ================= */
+.sb-sec {
+  margin-bottom: 72px;
+}
+.sb-sec h2 {
+  font-size: 25px;
+  letter-spacing: -0.02em;
+  font-weight: 620;
+}
+.sb-h2-tight {
+  margin-top: 44px;
+}
+.sb-sec h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.sb-sec-lede {
+  margin-top: 12px;
+  max-width: 74ch;
+  color: var(--muted);
+  line-height: 1.72;
+}
+.sb-note {
+  margin-top: 18px;
+  max-width: 78ch;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+.sb a,
+.sb-note a {
+  color: var(--red-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(230, 0, 0, 0.4);
+}
+.sb a:hover {
+  text-decoration-color: currentColor;
+}
+.sb code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: inherit;
+}
+
+/* ================= the never-run status card ================= */
+.sb-status {
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--red);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 22px 24px;
+  max-width: 78ch;
+}
+.sb-status-h {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--red-soft);
+  margin-bottom: 10px;
+}
+.sb-status p {
+  color: var(--muted);
+  line-height: 1.72;
+}
+.sb-status p + p {
+  margin-top: 12px;
+}
+.sb-status-why {
+  color: var(--text) !important;
+}
+.sb-status-paths {
+  font-size: 13px;
+  color: var(--faint) !important;
+}
+
+/* ================= numbered method ================= */
+.sb-steps {
+  list-style: none;
+  counter-reset: sb;
+  margin-top: 26px;
+  max-width: 82ch;
+}
+.sb-steps > li {
+  counter-increment: sb;
+  position: relative;
+  padding-left: 46px;
+  padding-bottom: 22px;
+  color: var(--muted);
+  line-height: 1.72;
+}
+.sb-steps > li::before {
+  content: counter(sb);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--red-soft);
+  background: var(--bg-soft);
+}
+.sb-steps > li b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ================= code panels ================= */
+/* Kept dark in both themes, the way the inline code panels elsewhere on the
+   site are: these are terminal and source excerpts, not prose. */
+.sb-code {
+  margin-top: 24px;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  background: #0f0f0f;
+  overflow: hidden;
+  max-width: 900px;
+}
+.sb-code pre {
+  overflow-x: auto;
+  padding: 16px 18px;
+}
+.sb-code pre code {
+  display: block;
+  background: none;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.85;
+  color: #a8a8a8;
+  white-space: pre;
+}
+.sb-code-l {
+  display: block;
+}
+.sb-code .sb-hot {
+  color: #ff6b6b;
+}
+.sb-code .sb-dim {
+  color: #6f6f6f;
+}
+.sb-code figcaption {
+  border-top: 1px solid #2a2a2a;
+  padding: 10px 18px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #8f8f8f;
+  font-family: var(--mono);
+  background: #0c0c0c;
+}
+.sb-code figcaption code {
+  display: inline;
+  white-space: normal;
+  background: rgba(255, 255, 255, 0.07);
+  color: #c9c9c9;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* ================= metric definitions ================= */
+.sb-defs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 26px;
+}
+.sb-def {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 18px 20px;
+}
+.sb-def h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 15px;
+}
+.sb-def h3 span {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.sb-def p {
+  margin-top: 10px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ================= results table ================= */
+.sb-table-wrap {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.sb-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.sb-table th,
+.sb-table td {
+  text-align: left;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.sb-table thead th {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 500;
+  background: var(--bg-soft);
+  white-space: nowrap;
+}
+.sb-table tbody th {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.sb-table em,
+.sb-trend-label em {
+  display: block;
+  font-style: normal;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.sb-num {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.sb-num.sb-pass {
+  color: var(--green);
+}
+.sb-num.sb-fail {
+  color: var(--sev-blocker);
+}
+.sb-when {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sb-detail td {
+  padding-top: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--faint);
+  background: var(--bg-soft);
+}
+.sb-row-none td {
+  color: var(--faint);
+  font-size: 13px;
+}
+.sb-table tr:last-child th,
+.sb-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ================= trend ================= */
+.sb-trends {
+  margin-top: 34px;
+}
+.sb-trend-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.sb-trend-label {
+  flex: 0 0 220px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.sb-trend-plot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 560px;
+}
+.sb-trend {
+  flex: 1 1 auto;
+  height: 64px;
+  min-width: 0;
+}
+/* The scale, in HTML rather than inside the SVG: the chart is stretched to its
+   container with preserveAspectRatio="none", which would distort any text in
+   it. The SVG's own aria-label carries the values for a screen reader, so this
+   is presentational only. */
+.sb-trend-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 64px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.sb-trend-base {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.sb-trend-line {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.sb-trend-dot {
+  fill: var(--red);
+}
+
+/* ================= foot ================= */
+.sb-foot {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--faint);
+}
+
+/* ================= light theme ================= */
+[data-theme="light"] .sb code {
+  background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .sb a,
+[data-theme="light"] .sb-note a {
+  text-decoration-color: rgba(189, 0, 0, 0.35);
+}
+[data-theme="light"] .sb-steps > li::before {
+  background: #fff;
+}
+/* the excerpt panels stay dark in light mode, like .bento-code on the home page */
+[data-theme="light"] .sb-code {
+  border-color: #2a2a2a;
+}
+[data-theme="light"] .sb-code figcaption code {
+  background: rgba(255, 255, 255, 0.07);
+}
+[data-theme="light"] .sb-num.sb-pass {
+  color: #12813f;
+}
+
+/* ================= motion ================= */
+/* There is no animation on this page by design. The guard is here so a future
+   edit cannot quietly introduce one that ignores the preference. */
+@media (prefers-reduced-motion: reduce) {
+  .sb *,
+  .sb *::before,
+  .sb *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ================= responsive ================= */
+@media (max-width: 1000px) {
+  .sb-head {
+    padding: 52px 0 32px;
+    margin-bottom: 44px;
+  }
+  .sb h1 {
+    font-size: 38px;
+  }
+  .sb-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sb-defs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sb-trend-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .sb-trend-label {
+    flex: 0 0 auto;
+  }
+  .sb-trend-plot {
+    max-width: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .sb-wrap {
+    padding: 0 18px;
+  }
+  .sb-head {
+    padding: 40px 0 26px;
+    margin-bottom: 36px;
+  }
+  .sb h1 {
+    font-size: 31px;
+  }
+  .sb-lede {
+    font-size: 15px;
+  }
+  .sb-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sb-facts dd {
+    font-size: 22px;
+  }
+  .sb-sec {
+    margin-bottom: 54px;
+  }
+  .sb-sec h2 {
+    font-size: 21px;
+  }
+  .sb-status {
+    padding: 18px 18px;
+  }
+  .sb-steps > li {
+    padding-left: 38px;
+  }
+  .sb-steps > li::before {
+    width: 24px;
+    height: 24px;
+    font-size: 11.5px;
+  }
+  .sb-code pre {
+    padding: 14px;
+  }
+  .sb-code pre code {
+    font-size: 11.5px;
+  }
+}

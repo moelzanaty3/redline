@@ -1,0 +1,354 @@
+/* The "who runs what" scope ladder — web/components/tiers.tsx.
+   Every colour is an existing token from globals.css, so the light theme
+   ([data-theme="light"]) needs no second copy of anything here. */
+
+.tl {
+  margin: 26px 0 34px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 18px 18px 6px;
+}
+
+.tl-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+}
+
+/* The drawing may be wider than the docs column; it scrolls in its own box
+   rather than pushing the page sideways. */
+.tl-canvas {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+
+.tl-svg {
+  display: block;
+  width: 100%;
+  min-width: 700px;
+  height: auto;
+  font-family: var(--sans);
+}
+
+/* ── SVG type ─────────────────────────────────────────────────────────── */
+.tl-head {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  fill: var(--faint);
+}
+.tl-cap {
+  font-size: 10px;
+  fill: var(--faint);
+}
+.tl-name {
+  font-size: 14px;
+  font-weight: 600;
+  fill: var(--text);
+}
+.tl-sub {
+  font-size: 11px;
+  fill: var(--muted);
+}
+.tl-cmd {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--faint);
+}
+.tl-cred {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  fill: var(--text);
+}
+
+/* The credential's mode is the one thing in that column that must read at a
+   glance, so it is the only place besides the tiles that carries the colour. */
+.tl-credmode {
+  font-size: 10.5px;
+  font-weight: 600;
+  fill: var(--muted);
+}
+.tl-credmode-write {
+  fill: var(--red-soft);
+}
+.tl-reach {
+  font-size: 11px;
+  fill: var(--muted);
+}
+
+.tl-chip {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.tl-chip-n {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--muted);
+}
+
+.tl-rule {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.tl-split {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+/* ── the tiles: one repository each ───────────────────────────────────── */
+.tl-tile rect {
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Out of reach — drawn, but plainly inert. */
+.tl-none rect {
+  fill: none;
+  stroke: var(--border);
+  stroke-dasharray: 2 3;
+}
+
+/* Read — solid outline, no fill: it is looked at, not changed. */
+.tl-read rect {
+  fill: none;
+  stroke: var(--muted);
+}
+
+/* Write — the only filled tile on the page, and the only red one. */
+.tl-write rect {
+  fill: var(--vc-bg);
+  stroke: var(--red-soft);
+}
+
+.tl-mark {
+  fill: none;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.tl-mark-read {
+  stroke: var(--muted);
+}
+.tl-mark-write {
+  stroke: var(--red-soft);
+}
+
+/* ── direction of flow ────────────────────────────────────────────────── */
+.tl-flow {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.tl-flow-up {
+  stroke: var(--muted);
+  stroke-dasharray: 3 3;
+}
+.tl-flow-up polyline {
+  stroke-dasharray: none;
+}
+.tl-flow-down {
+  stroke: var(--red-soft);
+}
+
+/* ── legend ───────────────────────────────────────────────────────────── */
+.tl-legend {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px 22px;
+}
+.tl-legend li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.tl-legend b {
+  color: var(--text);
+  font-weight: 600;
+}
+.tl-key-sw {
+  flex: none;
+  width: 22px;
+  height: 21px;
+  overflow: visible;
+}
+.tl-key-arrow {
+  width: 26px;
+}
+
+/* ── the accessible copy ──────────────────────────────────────────────── */
+.tl-tablewrap {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+  overflow-x: auto;
+}
+.tl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin: 0 0 8px;
+}
+.tl-tablecap {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 12px 0 10px;
+}
+.tl-table th,
+.tl-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 10px 14px 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+  color: var(--muted);
+}
+.tl-table thead th {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tl-table tbody th {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tl-table tbody tr:last-child th,
+.tl-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.tl-td-n {
+  display: inline-block;
+  min-width: 17px;
+  height: 17px;
+  line-height: 16px;
+  text-align: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-weight: 700;
+  margin-right: 3px;
+}
+.tl-td-cmd {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text);
+}
+.tl-table code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text);
+}
+.tl-td-ran {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+.tl-td-mode {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+}
+.tl-td-write {
+  border-color: var(--red-soft);
+  color: var(--red-soft);
+  background: var(--vc-bg);
+}
+
+/* ── narrow viewports ─────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  /* Below this the drawing cannot be read even scrolled, and the table says
+     the same thing. Nothing is lost — the SVG was aria-hidden anyway. */
+  .tl-canvas,
+  .tl-legend {
+    display: none;
+  }
+  .tl {
+    padding: 16px 14px 10px;
+  }
+  .tl-tablewrap {
+    border-top: none;
+    margin-top: 10px;
+    overflow-x: visible;
+  }
+  .tl-table,
+  .tl-table tbody,
+  .tl-table tr,
+  .tl-table th,
+  .tl-table td {
+    display: block;
+    width: auto;
+  }
+  .tl-table thead {
+    display: none;
+  }
+  .tl-table tbody tr {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .tl-table tbody th,
+  .tl-table td {
+    border-bottom: none;
+    padding: 0 0 8px;
+    white-space: normal;
+  }
+  .tl-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
+    margin: 6px 0 3px;
+  }
+  .tl-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+}
+
+/* This is an evidence page: the drawing does not move. Declared anyway, so a
+   later addition cannot quietly introduce motion here. */
+@media (prefers-reduced-motion: reduce) {
+  .tl *,
+  .tl *::before,
+  .tl *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1124,6 +1124,38 @@ kbd {
   padding-top: 4px;
   padding-bottom: 4px;
 }
+
+/* The docs navigation is one <details> wrapping every group. Above 1000px it is
+   not a disclosure at all — the summary is not rendered and the list is always
+   open — so the sticky column above is exactly what it has always been. Below
+   1000px it collapses, because a static 1,264px list of 30 links stacked over
+   the article put the page's own <h1> 1,402px down a 390px screen.
+   <details> rather than a scripted drawer: the rest of the docs render without
+   JavaScript and the navigation should not be the one part that does not.
+
+   Two rules force it open, because engines hide a closed <details> two
+   different ways: older ones with a display rule on the children, current ones
+   with the ::details-content pseudo-element. Neither is load-bearing on its own
+   and the sidebar must not depend on which one the reader's browser uses.
+   docs-sidebar.tsx sets the attribute directly as the floor under both. */
+@media (min-width: 1001px) {
+  .docs-nav > summary {
+    display: none;
+  }
+  .docs-nav > .dn-body {
+    display: block;
+  }
+  .docs-nav::details-content {
+    content-visibility: visible;
+    block-size: auto;
+  }
+}
+/* The site has no global focus style; this control is new, so it carries one —
+   keyboard only, matching the controls in chrome.css. */
+.docs-nav > summary:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+}
 .docs-main {
   padding: 44px 0 90px;
   min-width: 0;
@@ -1410,6 +1442,9 @@ kbd {
 [data-theme="light"] .jr-probe .tk-red {
   color: #ff6b6b;
 }
+[data-theme="light"] .docs-nav > summary:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
 [data-theme="light"] .site-nav .links a:hover {
   background: rgba(0, 0, 0, 0.05);
 }
@@ -1492,6 +1527,14 @@ kbd {
   }
   .jr-l.cur::after {
     content: none;
+  }
+  /* The rule above already clears every transition; stated here so the caret's
+     rotation is not something a future edit has to rediscover. The disclosure
+     itself never animates its own height — <details> does not, and nothing here
+     adds one. */
+  .docs-nav > summary::after,
+  .docs-nav[open] > summary::after {
+    transition: none;
   }
 }
 
@@ -1646,11 +1689,89 @@ kbd {
     grid-template-columns: 1fr;
     gap: 0;
   }
+  /* The sidebar stops being a column and becomes a strip: one closed
+     disclosure, so the article starts within the first screen instead of 1.7
+     screens down. It keeps its own border as the seam against the content. */
   .docs-sidebar {
     position: static;
     max-height: none;
-    padding: 26px 0 0;
+    overflow-y: visible;
+    padding: 18px 0;
     border-bottom: 1px solid var(--border);
+  }
+  /* A 46px row, which is a tappable target, not a text link. The default
+     triangle is dropped for a caret that states the direction it will move in;
+     list-style covers Firefox and Chrome, the marker pseudo-element Safari. */
+  .docs-nav > summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 46px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    list-style: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .docs-nav > summary::-webkit-details-marker {
+    display: none;
+  }
+  .docs-nav > summary:hover {
+    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  /* Closed, this is the only thing on screen saying where the reader is, so the
+     current page is named in the accent the open item carries in the list. It
+     truncates rather than wraps: the row is a control, and a control that
+     changes height as you move through the docs is a moving target. */
+  .dn-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .dn-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .dn-here {
+    font-size: 13.5px;
+    font-weight: 550;
+    color: var(--red-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dn-count {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .docs-nav > summary::after {
+    content: "";
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-right: 1.5px solid var(--faint);
+    border-bottom: 1.5px solid var(--faint);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.15s;
+  }
+  .docs-nav[open] > summary::after {
+    transform: translateY(2px) rotate(-135deg);
+  }
+  .docs-nav > .dn-body {
+    padding-top: 20px;
+  }
+  /* The last group's own margin would otherwise sit under the seam and read as
+     a gap the page cannot account for. */
+  .docs-nav > .dn-body .group:last-child {
+    margin-bottom: 6px;
   }
   .site-footer .cols {
     grid-template-columns: 1fr 1fr;

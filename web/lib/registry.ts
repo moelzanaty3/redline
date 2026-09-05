@@ -68,6 +68,7 @@ export const TEMPLATES: RegistryEntry[] = [
 export const COMMANDS: RegistryEntry[] = [
   { slug: "init", title: "redline init", file: "cli/commands/init.ts", description: "Onboard a repository: standards, security floor, merge gate, registration. The one command a product repo runs." },
   { slug: "verify", title: "redline verify", file: "cli/commands/verify.ts", description: "Check a repository still matches what its .redline.json claims — and, with --gate, act as the Azure gate itself." },
+  { slug: "remove", title: "redline remove", file: "cli/commands/remove.ts", description: "Takes Redline back out of a repository, as a pull request — removing only what it can prove it wrote, and leaving the security floor alone." },
   { slug: "sync", title: "redline sync", file: "cli/commands/sync.ts", description: "Lands the current standards on every registered repository as a pull request, from the register derived nightly off the estate." },
   { slug: "policy", title: "redline policy", file: "cli/policy/checks.ts", description: "Evaluates the rules a checker can decide, with no model call — a ticket reference is present or it is not." },
   { slug: "exempt", title: "redline exempt", file: "cli/commands/exempt.ts", description: "Decides whether a pull request carries a valid exemption for a failing process check — a reason, a scope and an expiry, not a bare label." },

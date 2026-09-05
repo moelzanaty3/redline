@@ -45,6 +45,7 @@
 .hm-term-cap code,
 .hm-try-lead code,
 .hm-try-list code,
+.hm-not-list code,
 .hm-steps code,
 .hm-claim-copy code {
   font-size: 0.92em;
@@ -361,6 +362,20 @@
   color: var(--text);
   font-size: 14px;
 }
+/* The reassurance sits inside the same card as the counts, separated by the
+   hairline only — a reader who takes in "BLOCKER 100" takes this in with it. */
+.hm-sevfloor-note {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.hm-sevfloor-note b {
+  color: var(--text);
+  font-weight: 600;
+}
 
 /* ================= 4 · where it sits ================= */
 .hm-steps {
@@ -551,7 +566,50 @@
   margin: 0;
 }
 
-/* ================= 8 · final cta ================= */
+/* ================= 8 · when not to use it ================= */
+/* The honesty note. Everything here is a step down from section 7: no card
+   fill, no accent hairline, a heading two sizes below .hm-h2. It has to be
+   read, not noticed — a disqualifier that shouts is a pitch in disguise. */
+.hm-not {
+  padding: 52px 0;
+}
+.hm-not-card {
+  padding: 24px 28px 26px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.hm-not-h {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.hm-not-lead {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+.hm-not-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 32px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.hm-not-list li {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.hm-not-list b {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* ================= 9 · final cta ================= */
 .hm-hero-cmd-cta {
   margin: 30px auto 22px;
 }
@@ -577,6 +635,7 @@
 [data-theme="light"] .hm-term-cap code,
 [data-theme="light"] .hm-try-lead code,
 [data-theme="light"] .hm-try-list code,
+[data-theme="light"] .hm-not-list code,
 [data-theme="light"] .hm-steps code,
 [data-theme="light"] .hm-claim-copy code,
 [data-theme="light"] .hm-prob-fix code {
@@ -641,6 +700,15 @@
   .hm-try-card {
     padding: 28px 24px 30px;
   }
+  /* two columns of 13.5px prose stop being readable well before the grid
+     stops fitting, so the disqualifiers stack a breakpoint early */
+  .hm-not-list {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .hm-not {
+    padding: 46px 0;
+  }
   .hm-prob-cols,
   .hm-prob-row {
     gap: 0 24px;
@@ -699,6 +767,30 @@
   }
   .hm-try-card {
     padding: 24px 18px 26px;
+  }
+  .hm-not {
+    padding: 32px 0;
+  }
+  .hm-not-card {
+    padding: 18px 16px 20px;
+  }
+  /* On a phone each bolded case is a line of its own with half a line of dead
+     space after it, five times over. Run it into the sentence instead: the
+     scan-line is still the first thing on the item, and the section costs
+     about a screen less. */
+  .hm-not-list {
+    margin-top: 16px;
+    padding-top: 16px;
+    gap: 13px;
+    font-size: 13px;
+  }
+  .hm-not-list li {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .hm-not-list b {
+    display: inline;
+    margin: 0;
   }
   .hm-cta-links {
     flex-direction: column;

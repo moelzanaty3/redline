@@ -6,7 +6,11 @@ import { loadManifest } from "@/lib/manifest";
 import { GITHUB_REPO, GITHUB_URL, NAV_LINKS } from "@/lib/site";
 
 const CTA_HREF = "/docs/installation";
-const CTA_LABEL = "Get Started";
+// Not "Get Started": Redline has no account to start, and SaaS-signup language
+// on a CLI sets an expectation the next page cannot meet. The product's first
+// action is literally one command in one repository, so the button says that
+// — and stays short enough that the header still fits 320px.
+const CTA_LABEL = "Onboard a repo";
 
 export function SiteNav() {
   const manifest = loadManifest();

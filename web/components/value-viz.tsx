@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getRules, type Severity } from "@/lib/rules";
 
 // What each severity obliges a reader to do, straight out of the output
@@ -51,6 +52,16 @@ export function SeverityFloor() {
           </span>
         ))}
       </div>
+      {/* The counts above are the first place a reader thinks "that many can
+          stop my team merging". The answer belongs here, next to the number
+          that produces the question, not two sections down the page. */}
+      <p className="hm-sevfloor-note">
+        BLOCKER is what the standard obliges, not what your repository blocks
+        on: the gate installs <b>advisory</b> — it comments, it stops nothing.
+        Blocking is earned rung by rung on evidence, and given up without asking
+        anyone.{" "}
+        <Link href="/docs/enforcement">The enforcement ladder →</Link>
+      </p>
     </div>
   );
 }

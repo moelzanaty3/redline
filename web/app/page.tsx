@@ -214,7 +214,9 @@ export default async function Home() {
                 <p>
                   {seedCount} defects are seeded into a corpus in the open, each
                   marked with the severity and the rule id it must be caught at.
-                  Anyone can run a reviewer over it and check the number.{" "}
+                  Anyone can run a reviewer over it and check the number, and
+                  whatever has been scored against it so far is on{" "}
+                  <Link href="/scoreboard">the scoreboard</Link>.{" "}
                   <Link href="/docs/seeds">The corpus →</Link>
                 </p>
               </div>
@@ -279,7 +281,7 @@ export default async function Home() {
                 <code>redline/onboard</code>. It never pushes to your default
                 branch. The gate starts advisory — it comments, it doesn&apos;t
                 block. Don&apos;t like it? Close the pull request. Nothing was
-                changed.
+                changed. <Link href="/docs/removing">Backing it out →</Link>
               </p>
               <ul className="hm-try-list">
                 <li>
@@ -305,7 +307,50 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 8 — final cta ============ */}
+      {/* ============ 8 — when not to use it ============ */}
+      {/* Deliberately the quietest section on the page: no card fill, no accent
+          rule, smaller heading. It follows "try it" because that is where a
+          reader has just been told how cheap adoption is, and disqualifying
+          them is worth more there than one more reason to say yes. */}
+      <section className="hm-sec hm-not" id="not-for-you">
+        <div className="container">
+          <div className="hm-not-card">
+            <h2 className="hm-not-h">When not to use Redline</h2>
+            <p className="hm-not-lead">
+              Cases where it will not pay for itself. Better found here than in
+              month two.
+            </p>
+            <ul className="hm-not-list">
+              <li>
+                <b>One repository, and no AI writing code in it.</b> Redline
+                renders the standard into the files AI tools read, and measures
+                an estate. You would be using neither.
+              </li>
+              <li>
+                <b>You are not on GitHub or Azure DevOps.</b>{" "}
+                <code>redline init</code> reads your git remote and supports
+                those two. GitLab and Bitbucket are refused.
+              </li>
+              <li>
+                <b>A stack outside the {stackCount}.</b> You get the core rules,
+                plus whatever you write into this repository&apos;s own{" "}
+                <code>.redline/local.md</code> and then maintain.
+              </li>
+              <li>
+                <b>You want a blocking gate on day one.</b> Redline installs
+                advisory and makes blocking be earned on recorded evidence, which
+                cannot be hurried.
+              </li>
+              <li>
+                <b>You want governance past merge.</b> Build, deploy, incidents,
+                cloud spend: Redline stops at the diff, on purpose.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* ============ 9 — final cta ============ */}
       <section className="final-cta">
         <div className="glow" aria-hidden="true" />
         <div className="container">

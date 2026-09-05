@@ -230,9 +230,10 @@
   color: var(--faint);
 }
 
-/* "Get Started" leaves the bar below 640px — it is the widest item there and it
-   was the one being sliced off the right edge. It is not dropped, it moves here
-   and gets the full width. */
+/* The CTA leaves the bar below 640px — it is the widest item there and it was
+   the one being sliced off the right edge. It is not dropped, it moves here and
+   gets the full width. Its label lives in components/nav.tsx and reaches this
+   panel as a prop, so the two can never disagree. */
 .mm-cta {
   margin-top: 14px;
   display: flex;
