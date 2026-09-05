@@ -292,10 +292,14 @@ export default function Page() {
           ones. The CLI onboards and verifies on{" "}
           <b>GitHub and Azure DevOps</b> both, but the scheduled measurement and
           sync plane is GitHub-only today — see{" "}
-          <Link href="/docs/telemetry">Telemetry &amp; validation</Link>. And{" "}
+          <Link href="/docs/telemetry">Telemetry &amp; validation</Link>.{" "}
           <code>redline-sync.yml</code> and <code>verify-onboarding.yml</code>{" "}
-          are marked disabled in Phase 1: in a Phase 1 estate, nothing writes
-          across repositories at all.
+          are <b>active</b> where a platform team has installed them and created
+          the tokens, so <code>sync</code> is a real cross-repository write on a
+          GitHub estate — scoped and pull-request-only as described above, but
+          not hypothetical. On Azure DevOps both report a registered repository
+          as <b>unsupported</b> rather than skipping it silently, so an Azure
+          repository is measured and synced by nothing today.
         </p>
       </div>
       <p>
