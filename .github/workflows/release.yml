@@ -38,6 +38,10 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      # @semantic-release/github's `fail` step opens an issue when a release fails.
+      # Without this it throws "Resource not accessible by integration" ON TOP of the
+      # real error, burying the cause that actually needs reading.
+      issues: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,10 +84,17 @@ jobs:
           node scripts/assign-rule-ids.mjs --check
           node scripts/validate.mjs
           node scripts/render-self.mjs --check
+      # Both names, and they are not interchangeable. setup-node's `registry-url`
+      # writes an .npmrc containing `_authToken=${NODE_AUTH_TOKEN}`, so npm itself
+      # reads NODE_AUTH_TOKEN; @semantic-release/npm reads NPM_TOKEN. Setting only
+      # NPM_TOKEN leaves that .npmrc expanding to an empty token, and the registry
+      # rejects it as EINVALIDNPMTOKEN — which reads like a bad credential and is
+      # actually an unset variable. The canary job below already sets NODE_AUTH_TOKEN.
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx semantic-release
 
   # Manual rehearsal of the publish path: pushes a throwaway version to the
