@@ -17,8 +17,8 @@
     "node": ">=22"
   },
   "bin": {
-    "redline": "./dist/bin/redline.js",
-    "redline-cli": "./dist/bin/redline.js"
+    "redline": "dist/bin/redline.js",
+    "redline-cli": "dist/bin/redline.js"
   },
   "files": [
     "LICENSE",
