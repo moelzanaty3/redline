@@ -101,8 +101,11 @@ jobs:
       # No NPM_TOKEN, deliberately. Authentication is OIDC trusted publishing:
       # `id-token: write` above lets the job mint a short-lived credential that npm
       # exchanges for publish rights, so there is no long-lived secret to leak or
-      # rotate. Setting an empty NPM_TOKEN here would actively break it — npm reads
-      # the empty value and reports a missing token instead of using OIDC.
+      # rotate. @semantic-release/npm tries the exchange first and returns before it
+      # ever looks for a token, so a token here would be dead weight — and one that
+      # silently rescued a broken OIDC path would hide the breakage until it expired.
+      # If the exchange fails, the log says why on the line above ENONPMTOKEN:
+      # "OIDC token exchange with the npm registry failed: <status> <message>".
       #
       # Provenance is off because it cannot work here: npm does not generate
       # attestations for private source repositories even when the package is
