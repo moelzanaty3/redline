@@ -83,7 +83,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   }, {});
   const blockers = counts["BLOCKER"] ?? 0;
 
-  const score = `GH_TOKEN=... node scripts/score-seeds.mjs --repo <org>/<repo> --pr <n>`;
+  const score = `GH_TOKEN=... npx redline-cli metrics score-seeds --repo <org>/<repo> --pr <n>`;
 
   return (
     <DocsPage

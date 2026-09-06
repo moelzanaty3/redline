@@ -2,38 +2,17 @@ import type { Metadata } from "next";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 import { PackageBadge } from "@/components/package-badge";
-import { LifecycleSteps } from "@/components/lifecycle-steps";
 import { PACKAGE_NAME, installCommand, packageState, standardsVersion } from "@/lib/package-version";
 
 export const metadata: Metadata = { title: "Installation" };
 
 // Resolved at build time. A published package makes every command on this page
-// name its version; an unpublished one makes them install from source instead,
-// rather than printing an npx line that cannot resolve.
+// name its version; a registry we could not reach renders them unpinned rather
+// than quoting a number nobody checked.
 export default async function Page() {
   const state = await packageState();
-  const published = state.status === "published";
+  const version = state.status === "published" ? state.version : null;
   const init = installCommand(state, "init");
-  const version = published ? state.version : null;
-
-  const fromSource = [
-    {
-      label: "git clone <this repo> && cd redline",
-      detail: "The CLI is built from this repository. There is no other distribution while the package is unpublished.",
-    },
-    {
-      label: "npm ci",
-      detail: "Installs the dev toolchain only — the CLI itself declares no runtime dependencies, so nothing it needs at run time comes from here.",
-    },
-    {
-      label: "npm run build",
-      detail: "Compiles cli/ to dist/ with the TypeScript compiler. dist/bin/redline.js is the entry point the published package would expose as redline.",
-    },
-    {
-      label: "node dist/bin/redline.js init",
-      detail: "Run from inside the repository you are onboarding, pointing at this checkout's dist/. Identical behaviour to the npx form; only the path to the binary differs.",
-    },
-  ];
 
   return (
     <DocsPage
@@ -47,9 +26,7 @@ export default async function Page() {
       <p>
         Two version lines run separately and neither is derived from the other.
         The <b>package version</b> is the CLI on npm, computed by semantic-release
-        at publish time — <code>package.json</code> in the repository says{" "}
-        <code>0.0.0-development</code> and always will, so it is not the number to
-        quote. The <b>standards version</b> is{" "}
+        at publish time. The <b>standards version</b> is{" "}
         <code>standards/manifest.json</code> → <code>version</code>, currently{" "}
         <code>{standardsVersion()}</code>; every rendered artifact and every sync
         pull request names it, so a repository can always say which standard its
@@ -65,34 +42,11 @@ export default async function Page() {
           Azure DevOps.
         </li>
         <li>
-          {published ? (
-            <>
-              No install step for the CLI itself — <code>npx {PACKAGE_NAME}</code>{" "}
-              fetches it on demand. The npm package is <code>{PACKAGE_NAME}</code>;
-              the command it installs is <code>redline</code>.
-            </>
-          ) : (
-            <>
-              A checkout of this repository, because <code>{PACKAGE_NAME}</code> is
-              not on the registry yet. The steps are below.
-            </>
-          )}
+          No install step for the CLI itself — <code>npx {PACKAGE_NAME}</code>{" "}
+          fetches it on demand. The npm package is <code>{PACKAGE_NAME}</code>;
+          the command it installs is <code>redline</code>.
         </li>
       </ul>
-
-      {!published && (
-        <>
-          <h2>Install from source</h2>
-          <p>
-            Every command elsewhere in these docs is written as{" "}
-            <code>npx {PACKAGE_NAME} &lt;command&gt;</code>, which is what it will
-            be once the package publishes. Until then, substitute{" "}
-            <code>node dist/bin/redline.js &lt;command&gt;</code> from a built
-            checkout:
-          </p>
-          <LifecycleSteps steps={fromSource} />
-        </>
-      )}
 
       <h2>GitHub only — install the reusable gate once</h2>
       <p>
@@ -123,17 +77,6 @@ export default async function Page() {
 
       <h2>Limitations, stated plainly</h2>
       <ul>
-        {!published && (
-          <li>
-            <b>The package is unpublished.</b> Nothing installs by{" "}
-            <code>npx</code> today. The release workflow refuses to publish until
-            the release line is anchored — <code>git tag v0.0.0</code> on the root
-            commit, once — because without a <code>v*</code> tag semantic-release
-            treats this as a first release and computes <code>1.0.0</code>, a
-            number npm will not let you take back. Anchored at zero, the first
-            published version is <code>0.0.1</code>.
-          </li>
-        )}
         <li>
           A self-hosted GitHub Enterprise Server on a hostname that doesn&apos;t
           contain <code>github</code> is not auto-detected.

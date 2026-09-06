@@ -27,11 +27,8 @@ export function PackageBadge({ state }: { state: PackageState }) {
         <span className="ic">!</span>
         <p>
           <b>Not published yet.</b> <code>{PACKAGE_NAME}</code> is not on the npm
-          registry, and this repository carries no <code>v*</code> tag — the
-          release workflow&apos;s own first-release guard refuses to publish until
-          one is seeded, so <code>npx {PACKAGE_NAME}</code> cannot resolve.
-          Install from source until that lands; this page updates itself the day
-          it does.
+          registry, so <code>npx {PACKAGE_NAME}</code> cannot resolve yet. This
+          page updates itself the day the first release lands — no edit here.
         </p>
       </div>
     );

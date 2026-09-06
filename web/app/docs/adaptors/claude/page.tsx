@@ -39,10 +39,10 @@ export default function Page() {
       <h2>Compare it against other vendors</h2>
       <CodeWindow
         title="terminal — evidence-based comparison"
-        copyText={`GH_TOKEN=... node scripts/score-seeds.mjs --repo acme/pilot-claude --pr 7 --json\nGH_TOKEN=... node scripts/score-seeds.mjs --repo acme/pilot-copilot --pr 4 --json`}
+        copyText={`GH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot-claude --pr 7 --json\nGH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot-copilot --pr 4 --json`}
       >
-        <span className="tk-prompt">$</span> <span className="tk-white">node scripts/score-seeds.mjs --repo acme/pilot-claude  --pr 7 --json</span>{"\n"}
-        <span className="tk-prompt">$</span> <span className="tk-white">node scripts/score-seeds.mjs --repo acme/pilot-copilot --pr 4 --json</span>{"\n"}
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli metrics score-seeds --repo acme/pilot-claude  --pr 7 --json</span>{"\n"}
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli metrics score-seeds --repo acme/pilot-copilot --pr 4 --json</span>{"\n"}
         <span className="tk-dim"># compare blocker_recall and false_positives_on_clean on identical seeded input</span>
       </CodeWindow>
       <p>
