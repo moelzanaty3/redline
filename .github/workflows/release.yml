@@ -3,6 +3,15 @@ name: Release
 on:
   push:
     branches: [main]
+    # The published package is the CLI and the standards it renders. The docs
+    # site is a reflection of those, not part of them, and neither is this
+    # repository's own CI. A change to either used to cut an npm release:
+    # 0.0.2 came from removing a badge in web/, 0.0.4 from a permission line in
+    # this file. Nothing installable changed in either.
+    paths-ignore:
+      - 'web/**'
+      - 'docs/**'
+      - '.github/**'
   pull_request:
   workflow_dispatch:
 
