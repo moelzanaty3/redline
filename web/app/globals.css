@@ -121,15 +121,6 @@ kbd {
   background: #fff;
   border-radius: 2px;
 }
-.logo .v {
-  font-size: 11px;
-  font-family: var(--mono);
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-weight: 500;
-}
 .site-nav .links {
   display: flex;
   align-items: center;

@@ -28,7 +28,6 @@ export function SiteFooter() {
             <div className="logo">
               <span className="mark" aria-hidden="true" />
               Redline
-              <span className="v">v{manifest.version}</span>
             </div>
             <p>{PRODUCT_BLURB}</p>
             <ul className="brand-links">
