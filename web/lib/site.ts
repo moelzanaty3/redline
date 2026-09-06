@@ -16,7 +16,7 @@ export const AUTHOR_CREDIT =
 export const GITHUB_REPO = "moelzanaty3/redline";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
 
-export const NPM_PACKAGE = "redline-cli";
+export const NPM_PACKAGE = "redlinegate";
 export const NPM_URL = `https://www.npmjs.com/package/${NPM_PACKAGE}`;
 
 export const LICENSE_NAME = "MIT";

@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-Identical to `.superpowers/sdd/2026-09-01-redline-v3-phase-1/constraints.md` (npm package `redline-cli`, bin `redline`; zero runtime deps; `@types/node` + `typescript` only in devDependencies; erasable TS only; strict + noUncheckedIndexedAccess; no `any`/`@ts-ignore`; host calls only inside `cli/platforms/` with injected fetch; no secret ever written to a product repo; init always opens a PR, never pushes to a default branch; exit codes 0–4 with 3 = *total* permission failure and partial failure exiting 0 with `pendingAdmin`; shell via `execFile` argv only; never `git add -A`; never stage `docs/superpowers/` or `.superpowers/`; leave the uncommitted `sync-targets.txt` deletion untouched).
+Identical to `.superpowers/sdd/2026-09-01-redline-v3-phase-1/constraints.md` (npm package `redlinegate`, bin `redline`; zero runtime deps; `@types/node` + `typescript` only in devDependencies; erasable TS only; strict + noUncheckedIndexedAccess; no `any`/`@ts-ignore`; host calls only inside `cli/platforms/` with injected fetch; no secret ever written to a product repo; init always opens a PR, never pushes to a default branch; exit codes 0–4 with 3 = *total* permission failure and partial failure exiting 0 with `pendingAdmin`; shell via `execFile` argv only; never `git add -A`; never stage `docs/superpowers/` or `.superpowers/`; leave the uncommitted `sync-targets.txt` deletion untouched).
 
 Additional constraints for this plan:
 
@@ -88,14 +88,14 @@ Audit findings:
 - `applyPolicy` matches existing policies by type-id + repositoryId only (`install.ts:212-225`): ignores `refName`, keeps no ownership signature — a human admin's own min-reviewers policy on any branch of the repo is PUT-overwritten with Redline's settings. Existing test covers only a fixture without `refName`.
 - `openPullRequest` drops `change.labels` (`install.ts:314-331`); Azure has `POST …/pullRequests/{id}/labels`. The onboarding PR misses `redline-sync`.
 - `SOFT_FAIL_LABELS` is substituted into the template but nothing consumes it — the `redline-exempt`/`redline-sync` exemption mechanism does not exist on Azure at all (GitHub implements it in workflow shell, `workflows/redline-gate.yml:138,151`).
-- `gate-template.yml:36` runs `redline-cli@latest` — org-wide gate behavior changes on any npm publish.
+- `gate-template.yml:36` runs `redlinegate@latest` — org-wide gate behavior changes on any npm publish.
 - `worstOutcome` ranks `already(1) > applied(0)`, and `policyApplied = mergePolicy.status === 'applied'` (`install.ts:229`) — any `already` zeroes `policy` to null.
 
 Requirements:
 - Policy matching: scope entry must match `repositoryId` **and** `refName` (default branch); Redline ownership = `settings.displayName` starting `Redline:` (write it on create) — for Status policies additionally genre/name match. A same-type policy on the branch without the marker: leave untouched, report `already` with a detail naming the human policy (brownfield coexistence), never PUT.
 - After PR creation, apply labels via the labels API; fold non-2xx into a `labels` CapabilityOutcome (degrade, don't throw).
 - Implement soft-fail in the gate template shell: fetch the PR's labels (`GET …/pullRequests/$SYSTEM_PULLREQUEST_PULLREQUESTID/labels`, SYSTEM_ACCESSTOKEN via the existing stdin `-K` pattern), and when any label is in `SOFT_FAIL_LABELS`, report the gate status as succeeded-with-warning instead of failing. Keep secrets off argv.
-- Pin the npx version at install time: substitute `redline-cli@latest` → `redline-cli@${CLI_VERSION}` unless `CLI_VERSION` is `0.0.0-development` (leave `@latest` then, with a comment why).
+- Pin the npx version at install time: substitute `redlinegate@latest` → `redlinegate@${CLI_VERSION}` unless `CLI_VERSION` is `0.0.0-development` (leave `@latest` then, with a comment why).
 - `policyApplied` = "no policy outcome is denied/unsupported", not `status === 'applied'`.
 - Tests: human policy with refName on default branch survives untouched and is reported; labels applied; version substitution both branches; `already` no longer nulls `policy`.
 
@@ -195,7 +195,7 @@ Requirements:
 - README: "Run it any time. Scheduled estate-wide re-verification is Phase 3 — see CHANGELOG limitations."
 - `templates/CODEOWNERS` header: "Reference shape only. `redline init` builds equivalent content in code and never reads this file."
 - Spec: replace `pending_admin` with `pendingAdmin` and note the decision date. (File is untracked; edit in place, never stage it.)
-- **Install-command convention (product owner's decision, applies everywhere a command is shown — README, `web/`, CHANGELOG, CLI help text, PR-body templates, workflow snippets):** the published package is `redline-cli` and the binary is `redline`. `redline` on the public npm registry is an unrelated third-party package, so a bare `npx redline …` must never appear in any document or rendered output. The pattern is: `npx redline-cli init` for the zero-setup first run, immediately followed by `npm i -g redline-cli` presented as the one-time install that makes the everyday command plain `redline init` / `redline verify`. Sweep every existing occurrence of a command in the repo and the site for this, and add a short note to the README's install section stating why the package name and the binary name differ.
+- **Install-command convention (product owner's decision, applies everywhere a command is shown — README, `web/`, CHANGELOG, CLI help text, PR-body templates, workflow snippets):** the published package is `redlinegate` and the binary is `redline`. `redline` on the public npm registry is an unrelated third-party package, so a bare `npx redline …` must never appear in any document or rendered output. The pattern is: `npx redlinegate init` for the zero-setup first run, immediately followed by `npm i -g redlinegate` presented as the one-time install that makes the everyday command plain `redline init` / `redline verify`. Sweep every existing occurrence of a command in the repo and the site for this, and add a short note to the README's install section stating why the package name and the binary name differ.
 - Reconcile README/CHANGELOG/web copy with the behaviors changed in Tasks 4–7 (Azure Build Validation objects, soft-fail on Azure, `--dry-run`, upstream-vs-local drift, blocking-preserving re-runs). Verify claims against the code, not against this plan.
 - `web/` build must pass if web copy is touched.
 
@@ -244,7 +244,7 @@ The current fold wastes itself. Fix these specifically:
 - The subhead is a five-line paragraph that contains a **roadmap disclaimer** — "Automated review against a measurable output contract, and org-wide telemetry across both hosts, are later-phase work." Caveats about what does not exist yet do not belong above the fold. Move that sentence to the roadmap/limitations area further down the page (it must still appear somewhere — deleting it would make the page dishonest, and the CHANGELOG limitations already carry it).
 - `No servers. No SaaS. No per-seat fee.` is the strongest differentiator on the page and is currently the tail of that paragraph. Give it its own line or a small strip of its own.
 - Cut the subhead to one sentence a stranger understands. The `<h1>` ("AI writes the code. Redline holds the line.") is good — keep it.
-- The two commands belong in the fold, in the form the reader should remember: `npm i -g redline-cli` once, then `redline init`. Keep the copy-to-clipboard affordance the current terminal has. Never render a bare `npx redline …` (the published package is `redline-cli`; `redline` on the public registry is an unrelated package).
+- The two commands belong in the fold, in the form the reader should remember: `npm i -g redlinegate` once, then `redline init`. Keep the copy-to-clipboard affordance the current terminal has. Never render a bare `npx redline …` (the published package is `redlinegate`; `redline` on the public registry is an unrelated package).
 - The demo (Part B) must begin within the first viewport on a laptop, not below it. Tighten vertical padding as needed; the fold's job is headline + one sentence + command + proof, and nothing else.
 
 ### Part B — the before → after journey

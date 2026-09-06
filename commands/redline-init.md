@@ -2,10 +2,10 @@
 description: Onboard this repository to Redline — standards, security floor and merge gate
 ---
 
-Run `npx redline-cli init` in the repository root and report what it printed. Do not run
+Run `npx redlinegate init` in the repository root and report what it printed. Do not run
 plain `npx redline` — that resolves to an unrelated package on the public registry; the
-published package is `redline-cli`. If the engineer already has it installed
-(`npm i -g redline-cli`), the everyday command is just `redline init`.
+published package is `redlinegate`. If the engineer already has it installed
+(`npm i -g redlinegate`), the everyday command is just `redline init`.
 
 The command is not interactive by default. If the engineer asked for something specific,
 pass it through:

@@ -101,7 +101,7 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     installedBy: "redline init, with the ADR threshold, dependency-severity floor and soft-fail labels filled in, on an Azure DevOps repository.",
     detail: [
       "This file alone runs nothing — Azure Repos ignores its pr: trigger. redline init also registers a redline-gate build definition pointing at it and a \"Redline: gate build\" Build Validation branch policy that queues that pipeline on every pull request; without Build Administrator rights that registration degrades to a pending gate capability and the redline/gate status policy is written advisory, since no pipeline could publish the status it would require.",
-      "Step \"Redline gate\" runs npx --yes --package=redline-cli@latest redline verify --gate.",
+      "Step \"Redline gate\" runs npx --yes --package=redlinegate@latest redline verify --gate.",
       "Step \"Publish redline/gate status\" always runs (condition: always()) and publishes a PR status with genre redline and name gate — the branch policy requires exactly redline/gate. Renaming either value makes the policy unsatisfiable and every PR in the repo sits blocked.",
       "Materially weaker than the GitHub gate: redline verify --gate runs none of GitHub's four checks. An Azure repository gets no dependency-review job and no diff secret scan at the gate — the two checks that are hard-fail and never label-exemptible on GitHub. checklist and adr, the two that are soft-fail there, are the lesser loss.",
     ],

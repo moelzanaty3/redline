@@ -44,7 +44,7 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
     authorization: `Bearer ${token}`,
     accept: 'application/vnd.github+json',
     'x-github-api-version': '2022-11-28',
-    'user-agent': 'redline-cli',
+    'user-agent': 'redlinegate',
   };
   const httpOptions = {
     ...(opts.fetch ? { fetch: opts.fetch } : {}),

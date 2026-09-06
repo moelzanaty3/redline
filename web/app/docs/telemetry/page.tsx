@@ -49,9 +49,9 @@ export default function Page() {
       </p>
       <CodeWindow
         title="terminal — score a seeded PR"
-        copyText="GH_TOKEN=... npx redline-cli metrics score-seeds --repo <org>/<repo> --pr <n> --json"
+        copyText="GH_TOKEN=... npx redlinegate metrics score-seeds --repo <org>/<repo> --pr <n> --json"
       >
-        <span className="tk-prompt">$</span> <span className="tk-white">GH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot --pr 4 --json</span>{"\n"}
+        <span className="tk-prompt">$</span> <span className="tk-white">GH_TOKEN=... npx redlinegate metrics score-seeds --repo acme/pilot --pr 4 --json</span>{"\n"}
         <span className="tk-green">blocker_recall</span>: 1.0   <span className="tk-green">false_positives_on_clean</span>: 0   <span className="tk-dim">untagged: 0</span>
       </CodeWindow>
       <p>

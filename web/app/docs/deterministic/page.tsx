@@ -91,13 +91,13 @@ export default function Page() {
       <h2>Running it yourself</h2>
       <CodeWindow
         title="terminal"
-        copyText={"git diff main...HEAD > change.diff\nnpx redline-cli policy --diff-file change.diff"}
+        copyText={"git diff main...HEAD > change.diff\nnpx redlinegate policy --diff-file change.diff"}
       >
         <span className="tk-prompt">$</span>{" "}
         <span className="tk-white">git diff main...HEAD &gt; change.diff</span>
         {"\n"}
         <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redline-cli policy --diff-file change.diff</span>
+        <span className="tk-white">npx redlinegate policy --diff-file change.diff</span>
       </CodeWindow>
       <p>
         The floor is <code>BLOCKER</code>, not <code>HIGH</code>, on purpose: a

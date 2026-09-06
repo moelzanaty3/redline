@@ -414,7 +414,7 @@ function azureRepoWith(files: Record<string, string>): string {
 
 const PIPELINE = [
   'steps:',
-  '  - script: npx --yes --package=redline-cli@latest redline verify --gate',
+  '  - script: npx --yes --package=redlinegate@latest redline verify --gate',
   '  - script: |',
   '      body=$(jq -n \'{state: $state, context: {name: "gate", genre: "redline"}}\')',
   '',
@@ -464,7 +464,7 @@ test('the status contract surviving only in a comment does not count as publishi
   const cwd = azureRepoWith({
     '.azuredevops/redline-gate.yml': [
       'steps:',
-      '  - script: npx --yes --package=redline-cli@latest redline verify --gate',
+      '  - script: npx --yes --package=redlinegate@latest redline verify --gate',
       '  # was: context: {name: "gate", genre: "redline"}',
       '',
     ].join('\n'),

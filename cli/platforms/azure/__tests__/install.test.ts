@@ -268,10 +268,10 @@ test('installGate writes the azure pipeline and PR template', async () => {
   assert.match(yml, /Build Validation/);
 
   // Regression guard: `redline` alone is a different, unrelated package on
-  // the public registry. The gate must pin npx to redline-cli explicitly,
+  // the public registry. The gate must pin npx to redlinegate explicitly,
   // never resolve `redline@<version>` directly.
   assert.doesNotMatch(yml, /npx --yes redline@/);
-  assert.match(yml, /npx --yes --package=redline-cli@latest redline verify --gate/);
+  assert.match(yml, /npx --yes --package=redlinegate@latest redline verify --gate/);
 
   // Regression guard: the access token must never be interpolated into a
   // curl argv (visible to `ps`/`/proc/<pid>/cmdline`) — it is passed via a
@@ -874,15 +874,15 @@ test('a rejected label write degrades to a labels outcome and still returns the 
   assert.equal(pr?.outcomes?.find((o) => o.capability === 'labels')?.status, 'denied');
 });
 
-// `redline-cli@latest` in a template installed into hundreds of repositories
+// `redlinegate@latest` in a template installed into hundreds of repositories
 // means any npm publish changes org-wide gate behaviour without a pull
 // request anywhere. The version is pinned at install time instead.
 test('installGate pins the npx version in the rendered pipeline', async () => {
   const cwd = tmp();
   await createAzureInstall(fakeAzure(registrationRoutes), gitFor, '3.1.4').installGate(ref, cwd, gateOpts);
   const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
-  assert.match(yml, /--package=redline-cli@3\.1\.4 redline verify --gate/);
-  assert.doesNotMatch(yml, /redline-cli@latest/);
+  assert.match(yml, /--package=redlinegate@3\.1\.4 redline verify --gate/);
+  assert.doesNotMatch(yml, /redlinegate@latest/);
 });
 
 test('an unpublished development build leaves @latest in place rather than pinning a version npm has never seen', async () => {
@@ -893,7 +893,7 @@ test('an unpublished development build leaves @latest in place rather than pinni
     gateOpts
   );
   const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
-  assert.match(yml, /--package=redline-cli@latest redline verify --gate/);
+  assert.match(yml, /--package=redlinegate@latest redline verify --gate/);
 });
 
 // GitHub implements the redline-exempt / redline-sync escape hatch in the
@@ -993,7 +993,7 @@ test('ensureReviewOwnership reports unsupported on Azure and writes no policy', 
 });
 
 // A re-run must leave a matching file alone. The gate yml carries a pinned
-// `redline-cli@<version>`, so under a published CLI every re-run rewrote it
+// `redlinegate@<version>`, so under a published CLI every re-run rewrote it
 // and `redline init` — which reads installGate's file list — could not tell a
 // real change from a rewrite of identical bytes.
 test('installGate rewrites nothing and reports no file when the pinned pipeline already matches', async () => {
@@ -1015,7 +1015,7 @@ test('a CLI version bump reports the gate pipeline as changed', async () => {
     gateOpts
   );
   assert.deepEqual(bumped.files, ['.azuredevops/redline-gate.yml']);
-  assert.match(readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8'), /redline-cli@3\.2\.0/);
+  assert.match(readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8'), /redlinegate@3\.2\.0/);
 });
 
 test('installGate in check mode writes nothing and registers no build definition', async () => {

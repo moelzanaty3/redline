@@ -52,7 +52,7 @@ export async function runMetrics(name: string, opts: RunOptions): Promise<void> 
     throw new RedlineError(
       'failed',
       `${spec.script} is missing from this installation`,
-      'reinstall redline-cli — the runners ship inside the package'
+      'reinstall redlinegate — the runners ship inside the package'
     );
   }
 

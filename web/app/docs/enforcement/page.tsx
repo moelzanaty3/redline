@@ -80,10 +80,10 @@ export default function Page() {
       </p>
       <CodeWindow
         title="terminal"
-        copyText="npx redline-cli init --rung block-blocker"
+        copyText="npx redlinegate init --rung block-blocker"
       >
         <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redline-cli init --rung block-blocker</span>
+        <span className="tk-white">npx redlinegate init --rung block-blocker</span>
         {"\n"}
         <span className="tk-dim">
           {"enforcement stays at warn — cannot move to block-blocker:"}

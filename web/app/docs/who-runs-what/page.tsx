@@ -107,7 +107,7 @@ export default function Page() {
         <code>.github</code> repository and called by the thin{" "}
         <code>.github/workflows/redline.yml</code> each onboarded repo carries.
         Both are invoked as{" "}
-        <code>npx --yes redline-cli@&lt;pinned version&gt;</code>.
+        <code>npx --yes redlinegate@&lt;pinned version&gt;</code>.
       </p>
       <ul>
         <li>

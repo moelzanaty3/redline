@@ -72,7 +72,7 @@ export function createAzureClient(org: string, opts: AzureClientOptions = {}): A
   const headers = {
     authorization: `${credential.scheme} ${credential.value}`,
     accept: 'application/json',
-    'user-agent': 'redline-cli',
+    'user-agent': 'redlinegate',
   };
   const httpOptions = {
     ...(opts.fetch ? { fetch: opts.fetch } : {}),

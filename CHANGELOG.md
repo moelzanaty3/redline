@@ -7,6 +7,18 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Published as `redlinegate`
+
+The npm package is `redlinegate`, not `redline-cli`. Nothing was ever published under the
+old name — the bootstrap attempts that reached the registry were unpublished, and the name
+never reached a reader — so this is a rename on paper only: no installed repo points at
+`redline-cli`, and no redirect is owed. Every command in the docs, the Azure gate template
+and the collector workflow names the new package. The installed binary is still `redline`.
+
+Docs are served from <https://redline-gate.vercel.app>, which `package.json` now names as
+`homepage`. `repository` and `bugs` stay absent: the source repository is private, and
+publishing a link nobody outside the org can open is worse than publishing none.
+
 ### Review pass — fourteen defects found before merge
 
 - **Every exemption was rejected.** The pull request template explains each field in a

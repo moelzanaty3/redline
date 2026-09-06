@@ -52,7 +52,7 @@ export const DOCS_NAV: DocSection[] = [
         title: "Installation",
         href: "/docs/installation",
         description: "Install the CLI, install the gate workflow into the org, onboard a repo.",
-        keywords: "install setup npx redline-cli npm package github azure devops gate workflow",
+        keywords: "install setup npx redlinegate npm package github azure devops gate workflow",
       },
       {
         title: "Onboard a repository",

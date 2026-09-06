@@ -14,8 +14,8 @@ export default function Page() {
       intro="One command per repo. redline detects GitHub or Azure DevOps from your git remote, installs the floor, and opens a pull request — never a direct push."
       href="/docs/onboarding"
     >
-      <CodeWindow title="terminal" copyText="npx redline-cli init">
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli init</span>{"\n"}
+      <CodeWindow title="terminal" copyText="npx redlinegate init">
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate init</span>{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">profile</span>              web{"\n"}
         <span className="tk-dim">  write  AGENTS.md</span>{"\n"}
         <span className="tk-dim">  write  CLAUDE.md</span>{"\n"}
@@ -83,8 +83,8 @@ export default function Page() {
       </div>
 
       <h2>Verify</h2>
-      <CodeWindow title="terminal" copyText="npx redline-cli verify">
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli verify</span>{"\n"}
+      <CodeWindow title="terminal" copyText="npx redlinegate verify">
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate verify</span>{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">onboarded</span>              profile web, standards v{manifest.version}{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">merge-policy</span>           policy is advisory, config says advisory{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">gate-machinery</span>         .github/workflows/redline.yml publishes redline-gate / gate{"\n"}

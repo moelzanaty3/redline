@@ -27,7 +27,7 @@ export default function Page() {
 
       <h2>Connect it</h2>
       <ol>
-        <li>Onboard the repo: <code>npx redline-cli init</code> — the pull request it opens adds the instruction files.</li>
+        <li>Onboard the repo: <code>npx redlinegate init</code> — the pull request it opens adds the instruction files.</li>
         <li>Enable Copilot code review for the repo or org (Copilot settings → code review).</li>
         <li>The branch ruleset ships with <code>automatic_copilot_code_review_enabled</code> — every PR gets reviewed without being requested.</li>
         <li>Merge the pull request. Findings arrive as review comments with the <code>Redline/&lt;SEVERITY&gt; [&lt;rule-id&gt;]:</code> prefix.</li>
