@@ -208,7 +208,7 @@ function worstOutcome(outcomes: CapabilityOutcome[]): CapabilityOutcome {
 
 // Writes only when the bytes differ, and answers whether they did — same
 // contract as cli/platforms/github/install.ts and cli/render/standards.ts.
-// The gate template carries a pinned `redline-cli@<version>`, so under a
+// The gate template carries a pinned `redlinegate@<version>`, so under a
 // published CLI an unconditional write rewrote this file on every single run:
 // `redline init` reads the returned file list to decide whether a re-run has
 // anything to do, and an always-dirty gate file made that decision worthless
@@ -954,14 +954,14 @@ export function createAzureInstall(
           `FAIL_ON_DEPENDENCY_SEVERITY: ${opts.failOnDependencySeverity}`
         )
         .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`);
-      // `redline-cli@latest` inside a template installed across every
+      // `redlinegate@latest` inside a template installed across every
       // onboarded repository means any npm publish changes org-wide gate
       // behaviour with no pull request anywhere. Pin the version that wrote
       // the file, so a CLI upgrade arrives as a reviewable sync PR.
       const pinned =
         cliVersion === UNPUBLISHED_VERSION
           ? pipeline
-          : pipeline.replace('redline-cli@latest', `redline-cli@${cliVersion}`);
+          : pipeline.replace('redlinegate@latest', `redlinegate@${cliVersion}`);
       if (syncFile(cwd, '.azuredevops/redline-gate.yml', pinned, check)) {
         files.push('.azuredevops/redline-gate.yml');
       }

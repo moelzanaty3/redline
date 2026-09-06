@@ -52,7 +52,7 @@ async function gh(path) {
     headers: {
       authorization: `Bearer ${GH_TOKEN}`,
       accept: 'application/vnd.github+json',
-      'user-agent': 'redline-cli',
+      'user-agent': 'redlinegate',
     },
   });
   if (!response.ok) throw new Error(`GitHub ${path} returned ${response.status}`);

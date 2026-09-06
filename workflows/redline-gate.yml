@@ -10,7 +10,7 @@
 #     redline-gate / gate
 #
 # Changing either job id changes the required context and will silently block every PR
-# in every onboarded repo. `npx redline-cli verify` checks the
+# in every onboarded repo. `npx redlinegate verify` checks the
 # real name after onboarding.
 name: Redline Gate
 
@@ -147,7 +147,7 @@ jobs:
             block-high) fail_on=HIGH ;;
             *) fail_on=BLOCKER ;;
           esac
-          npx --yes "redline-cli@${REDLINE_CLI_VERSION}" policy \
+          npx --yes "redlinegate@${REDLINE_CLI_VERSION}" policy \
             --diff-file /tmp/redline.diff --fail-on "$fail_on"
 
   dependency-review:
@@ -240,7 +240,7 @@ jobs:
             # deterministic `policy` job too — the field was recorded and ignored.
             exempt=true
             for check in $soft_failed; do
-              if ! npx --yes "redline-cli@${REDLINE_CLI_VERSION}" exempt \
+              if ! npx --yes "redlinegate@${REDLINE_CLI_VERSION}" exempt \
                    --body-file /tmp/redline-pr-body.md --scope "$check"; then
                 exempt=false
                 break

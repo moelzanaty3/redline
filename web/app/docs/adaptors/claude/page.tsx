@@ -25,7 +25,7 @@ export default function Page() {
 
       <h2>Connect Claude Code (CLI / IDE)</h2>
       <ol>
-        <li>Onboard the repo with <code>npx redline-cli init</code> — the pull request it opens adds <code>CLAUDE.md</code> and <code>AGENTS.md</code>.</li>
+        <li>Onboard the repo with <code>npx redlinegate init</code> — the pull request it opens adds <code>CLAUDE.md</code> and <code>AGENTS.md</code>.</li>
         <li>Nothing else. Claude Code loads <code>CLAUDE.md</code> automatically on session start; reviews and edits follow the standard, including the output contract when asked to review.</li>
       </ol>
 
@@ -39,10 +39,10 @@ export default function Page() {
       <h2>Compare it against other vendors</h2>
       <CodeWindow
         title="terminal — evidence-based comparison"
-        copyText={`GH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot-claude --pr 7 --json\nGH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot-copilot --pr 4 --json`}
+        copyText={`GH_TOKEN=... npx redlinegate metrics score-seeds --repo acme/pilot-claude --pr 7 --json\nGH_TOKEN=... npx redlinegate metrics score-seeds --repo acme/pilot-copilot --pr 4 --json`}
       >
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli metrics score-seeds --repo acme/pilot-claude  --pr 7 --json</span>{"\n"}
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redline-cli metrics score-seeds --repo acme/pilot-copilot --pr 4 --json</span>{"\n"}
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate metrics score-seeds --repo acme/pilot-claude  --pr 7 --json</span>{"\n"}
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate metrics score-seeds --repo acme/pilot-copilot --pr 4 --json</span>{"\n"}
         <span className="tk-dim"># compare blocker_recall and false_positives_on_clean on identical seeded input</span>
       </CodeWindow>
       <p>

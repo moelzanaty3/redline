@@ -36,10 +36,10 @@ export default function Page() {
       </p>
       <CodeWindow
         title="terminal"
-        copyText="npx redline-cli sync --dry-run"
+        copyText="npx redlinegate sync --dry-run"
       >
         <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redline-cli sync --dry-run</span>
+        <span className="tk-white">npx redlinegate sync --dry-run</span>
         <span className="tk-dim">{"   # the whole plan, writing nothing"}</span>
       </CodeWindow>
       <p>Three properties, each a way this could have gone wrong:</p>

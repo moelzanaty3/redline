@@ -396,7 +396,7 @@ test('a gate file rewritten by a CLI upgrade opens a pull request instead of dir
   // What a version-pinned gate template looks like after a CLI bump: same
   // path, different bytes. The old alreadyOnboarded ignored gate.files
   // entirely and left this modified tracked file behind with no PR.
-  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'pinned to an older redline-cli\n');
+  writeFileSync(join(cwd, '.github/workflows/redline.yml'), 'pinned to an older redlinegate\n');
 
   const second = fakePlatform();
   const report = await init(second, { cwd, root, now });

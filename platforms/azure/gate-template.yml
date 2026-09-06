@@ -32,10 +32,10 @@ steps:
     inputs:
       versionSpec: '22.x'
 
-  # --package pins npx to the redline-cli package explicitly. `redline` alone
+  # --package pins npx to the redlinegate package explicitly. `redline` alone
   # names a different, unrelated package on the public registry — `redline`
   # is only this package's bin name, never resolve npx against it directly.
-  - script: npx --yes --package=redline-cli@latest redline verify --gate
+  - script: npx --yes --package=redlinegate@latest redline verify --gate
     displayName: Redline gate
     name: gate
     env:

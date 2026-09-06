@@ -21,11 +21,11 @@ export default function Page() {
       </p>
       <CodeWindow
         title="terminal"
-        copyText="npx redline-cli metrics roi --data data --days 90 --spend-total 850 --spend-grain org"
+        copyText="npx redlinegate metrics roi --data data --days 90 --spend-total 850 --spend-grain org"
       >
         <span className="tk-prompt">$</span>{" "}
         <span className="tk-white">
-          npx redline-cli metrics roi --data data --days 90 \
+          npx redlinegate metrics roi --data data --days 90 \
         </span>
         {"\n"}
         <span className="tk-white">

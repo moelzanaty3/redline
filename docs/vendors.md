@@ -16,7 +16,7 @@ Only the third row is vendor-aware, and it is about 60 lines of `cli/render/vend
 
 ## What renders where
 
-`npx redline-cli init` renders the detected profile for you. Programmatically, the same
+`npx redlinegate init` renders the detected profile for you. Programmatically, the same
 entry point is `render({ root, profile, out })` from `cli/render/standards.ts` — see
 `scripts/render-self.mjs` for the smallest working caller.
 

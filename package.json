@@ -1,16 +1,31 @@
 {
-  "name": "redline-cli",
+  "name": "redlinegate",
   "version": "0.0.0-development",
-  "description": "Engineering control plane: standards, merge gates and evidence across GitHub and Azure DevOps",
+  "description": "Engineering control plane for AI-assisted development: standards, merge gates and evidence across GitHub and Azure DevOps",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://redline-gate.vercel.app",
+  "keywords": [
+    "code-review",
+    "ai-code-review",
+    "engineering-standards",
+    "code-quality",
+    "merge-gate",
+    "governance",
+    "sarif",
+    "static-analysis",
+    "github-actions",
+    "azure-devops",
+    "copilot",
+    "claude"
+  ],
   "private": false,
   "engines": {
     "node": ">=22"
   },
   "bin": {
     "redline": "dist/bin/redline.js",
-    "redline-cli": "dist/bin/redline.js"
+    "redlinegate": "dist/bin/redline.js"
   },
   "files": [
     "LICENSE",

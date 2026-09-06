@@ -11,7 +11,7 @@
 // install-from-source path any more: the CLI is distributed on npm and a second
 // set of instructions pointing at a built checkout is a second thing to keep
 // true. When the registry cannot be reached the command is rendered unpinned
-// (`npx redline-cli ...`), which still resolves — only the version we would have
+// (`npx redlinegate ...`), which still resolves — only the version we would have
 // named is missing.
 import { readRepoFile } from "./content";
 
@@ -20,7 +20,7 @@ export type PackageState =
   | { status: "unpublished" }
   | { status: "unknown"; reason: string };
 
-export const PACKAGE_NAME = "redline-cli";
+export const PACKAGE_NAME = "redlinegate";
 
 // The command a reader should run, given what is actually installable.
 export function installCommand(state: PackageState, args = "init"): string {

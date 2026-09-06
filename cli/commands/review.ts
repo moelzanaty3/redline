@@ -81,7 +81,7 @@ export async function review(engine: ReviewEngine, opts: ReviewOptions): Promise
     throw new RedlineError(
       'usage',
       'no profile: this repository has no .redline.json and none was given',
-      'run: npx redline-cli init — or pass --profile <name>'
+      'run: npx redlinegate init — or pass --profile <name>'
     );
   }
 

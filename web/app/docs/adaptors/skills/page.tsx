@@ -61,10 +61,10 @@ export default function Page() {
       </p>
       <CodeWindow
         title="terminal"
-        copyText="npx redline-cli init --vendors skills,copilot,agents"
+        copyText="npx redlinegate init --vendors skills,copilot,agents"
       >
         <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redline-cli init --vendors skills,copilot,agents</span>
+        <span className="tk-white">npx redlinegate init --vendors skills,copilot,agents</span>
       </CodeWindow>
       <p>
         The org manifest is a hard ceiling: while <code>skills</code> is disabled

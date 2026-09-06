@@ -21,7 +21,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | `standards/core.md` | Core standards: security, type safety, error handling, scope, and the severity output contract | source of truth — **the only file a human edits** |
 | `standards/stacks/*.md` | Per-stack rules: javascript, react, react-native, nodejs, microservices, java, go, python, csharp, kotlin, swift, terraform | source of truth |
 | `standards/manifest.json` | Stack globs, profiles, vendor toggles, standards version | source of truth |
-| `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx redline-cli`, or `redline` once installed with `npm i -g redline-cli` |
+| `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx redlinegate`, or `redline` once installed with `npm i -g redlinegate` |
 | `.github/pull_request_template.md` | Readiness checklist + ADR link | every onboarded repo |
 | `templates/repo-context.md` | Per-repo context template | reference only — a human copies it above the generated block in `AGENTS.md`; `redline init` never installs it |
 | `templates/CODEOWNERS` | Reference shape of the CODEOWNERS pattern that makes `require_code_owner_review` real and protects the enforcement surface | `redline init` writes `.github/CODEOWNERS` on GitHub repos with equivalent content built in code — it does not read this file |
@@ -53,7 +53,7 @@ TypeScript-only globs previously missed. Shell/Dockerfile/Gherkin intentionally 
 
 ```sh
 cd your-repo
-npx redline-cli init
+npx redlinegate init
 ```
 
 That is the whole procedure. It detects your stack, renders the standards for it, installs
@@ -64,14 +64,14 @@ admin rights you do not have is listed at the end for an administrator to run.
 Install it once and the everyday command is shorter:
 
 ```sh
-npm i -g redline-cli
+npm i -g redlinegate
 redline verify
 ```
 
-The package is named `redline-cli`, not `redline` — that name is already taken on the public
+The package is named `redlinegate`, not `redline` — that name is already taken on the public
 npm registry by an unrelated package, so `npx redline …` always resolves to the wrong thing.
 The binary it installs is named `redline`, which is why the everyday command reads `redline
-init` / `redline verify` once it is installed rather than `redline-cli init`.
+init` / `redline verify` once it is installed rather than `redlinegate init`.
 
 `redline verify` checks the repository still matches what it claims. Run it any time —
 scheduled estate-wide re-verification is Phase 3 work, not yet wired up; see
@@ -123,7 +123,7 @@ Redline carries two versions that move independently. Do not conflate them.
 
 | Axis | Lives in | Bumped by | Example |
 | --- | --- | --- | --- |
-| **CLI version** | `redline-cli` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.0.1` |
+| **CLI version** | `redlinegate` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.0.1` |
 | **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.1` |
 
 The CLI version is the tool's release line: [CHANGELOG.md](CHANGELOG.md) tracks it, and

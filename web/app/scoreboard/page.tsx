@@ -280,7 +280,7 @@ function NeverRun({
               # inside the canary run — scores a pull request the reviewer has already
               commented on
             </span>
-            <span className="sb-code-l">GH_TOKEN=… npx redline-cli metrics score-seeds \</span>
+            <span className="sb-code-l">GH_TOKEN=… npx redlinegate metrics score-seeds \</span>
             <span className="sb-code-l"> --repo &lt;org&gt;/&lt;canary-repo&gt; --pr &lt;n&gt; \</span>
             <span className="sb-code-l">
               {` --history ${DEFAULT_SCORE_HISTORY_PATH} --baseline`}

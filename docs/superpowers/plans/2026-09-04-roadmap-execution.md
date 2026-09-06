@@ -19,7 +19,7 @@ it builds the instrument rather than guessing the number.
 Two constraints shape every task below and are not restated in each one:
 
 - **Zero runtime dependencies.** `package.json` declares none. Everything uses `node:`
-  builtins and the existing HTTP layer. This is what makes `npx redline-cli` viable on a
+  builtins and the existing HTTP layer. This is what makes `npx redlinegate` viable on a
   locked-down Azure agent, and it is not negotiable for a convenience.
 - **Rule ids are permanent.** Several pieces reclassify or re-tag rules. Not one of them
   may change an id: every historical telemetry record is keyed on it.

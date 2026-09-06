@@ -2,10 +2,10 @@
 description: Check this repository still matches the standards and guardrails it claims
 ---
 
-Run `npx redline-cli verify` in the repository root and report the findings table. Do not run
+Run `npx redlinegate verify` in the repository root and report the findings table. Do not run
 plain `npx redline` — that resolves to an unrelated package on the public registry; the
-published package is `redline-cli`. If the engineer already has it installed
-(`npm i -g redline-cli`), the everyday command is just `redline verify`. Add `--gate` if the
+published package is `redlinegate`. If the engineer already has it installed
+(`npm i -g redlinegate`), the everyday command is just `redline verify`. Add `--gate` if the
 engineer wants an explicit pass/fail summary line printed after the table, such as when
 running this by hand to mirror what CI's gate check sees.
 

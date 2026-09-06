@@ -283,7 +283,7 @@ export default function Page() {
         deleting it is what makes the removal real rather than cosmetic.
       </p>
       <ul>
-        <li><code>redline verify</code> stops recognising the repository. It reports a single finding — <code>no .redline.json — run: npx redline-cli init</code> — and exits <code>2</code>, a usage error, not drift.</li>
+        <li><code>redline verify</code> stops recognising the repository. It reports a single finding — <code>no .redline.json — run: npx redlinegate init</code> — and exits <code>2</code>, a usage error, not drift.</li>
         <li>Central discovery reads <code>.redline.json</code> from the default branch of every repository in the org. With the file gone this repository is simply not in the registry, and stops appearing in coverage and drift reporting.</li>
         <li>It also carries <code>onboardedAt</code>, the recorded menu, the pending-admin list and the content ids of the command files. All of that is gone with it — a later <code>redline init</code> would start from nothing and read as a fresh onboarding.</li>
       </ul>

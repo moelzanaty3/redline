@@ -170,13 +170,13 @@ export default async function Page({
                 includes it. <code>redline init</code> detects the profile from
                 what is in the repository, so in most cases this is automatic:
               </p>
-              <CodeWindow title="terminal" copyText={`npx redline-cli init --profile ${profiles[0] ?? "web"}`}>
+              <CodeWindow title="terminal" copyText={`npx redlinegate init --profile ${profiles[0] ?? "web"}`}>
                 <span className="tk-prompt">$</span>{" "}
-                <span className="tk-white">npx redline-cli init</span>
+                <span className="tk-white">npx redlinegate init</span>
                 <span className="tk-dim">{"  # detects the profile"}</span>
                 {"\n"}
                 <span className="tk-prompt">$</span>{" "}
-                <span className="tk-white">npx redline-cli init --profile {profiles[0] ?? "web"}</span>
+                <span className="tk-white">npx redlinegate init --profile {profiles[0] ?? "web"}</span>
                 <span className="tk-dim">{"  # or name one"}</span>
               </CodeWindow>
               {profiles.length > 0 ? (
