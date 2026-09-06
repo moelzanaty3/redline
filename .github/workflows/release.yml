@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
@@ -38,14 +38,32 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      # @semantic-release/github's `fail` step opens an issue when a release fails.
+      # Without this it throws "Resource not accessible by integration" ON TOP of the
+      # real error, burying the cause that actually needs reading.
+      issues: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # No `registry-url`. It writes an .npmrc containing
+      # `_authToken=${NODE_AUTH_TOKEN}`, and with no token in the environment that
+      # expands to an empty string — which npm reports as a missing or invalid
+      # token rather than falling through to OIDC. Trusted publishing needs no
+      # .npmrc at all: the credential is the short-lived id-token below.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          node-version: 24
+
+      # Node 24 already bundles npm 11.19.x, which clears the >= 11.5.1 floor
+      # trusted publishing needs. Taking @latest on top keeps the client current
+      # for provenance and OIDC fixes; npm 12 requires ^24.15.0, which the Node
+      # line above satisfies.
+      - name: Upgrade npm
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          npm --version
 
       - run: npm ci
 
@@ -80,10 +98,24 @@ jobs:
           node scripts/assign-rule-ids.mjs --check
           node scripts/validate.mjs
           node scripts/render-self.mjs --check
+      # No NPM_TOKEN, deliberately. Authentication is OIDC trusted publishing:
+      # `id-token: write` above lets the job mint a short-lived credential that npm
+      # exchanges for publish rights, so there is no long-lived secret to leak or
+      # rotate. @semantic-release/npm tries the exchange first and returns before it
+      # ever looks for a token, so a token here would be dead weight — and one that
+      # silently rescued a broken OIDC path would hide the breakage until it expired.
+      # If the exchange fails, the log says why on the line above ENONPMTOKEN:
+      # "OIDC token exchange with the npm registry failed: <status> <message>".
+      #
+      # Provenance is off because it cannot work here: npm does not generate
+      # attestations for private source repositories even when the package is
+      # public, and @semantic-release/npm turns provenance ON by default under OIDC.
+      # Left at its default, every publish would fail trying to attest a repository
+      # npm cannot see. Turn this back on if the repository is ever made public.
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'false'
         run: npx semantic-release
 
   # Manual rehearsal of the publish path: pushes a throwaway version to the
@@ -91,18 +123,32 @@ jobs:
   canary:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          node-version: 24
+
+      # Node 24 already bundles npm 11.19.x, which clears the >= 11.5.1 floor
+      # trusted publishing needs. Taking @latest on top keeps the client current
+      # for provenance and OIDC fixes; npm 12 requires ^24.15.0, which the Node
+      # line above satisfies.
+      - name: Upgrade npm
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          npm --version
 
       - run: npm ci
 
+      # Same OIDC path as the release job — the trusted publisher is configured
+      # against this workflow file, so both jobs in it can publish without a token.
       - name: Publish canary
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'false'
         run: |
           set -euo pipefail
           # `g` prefix keeps an all-digit sha from becoming a numeric prerelease

@@ -5,20 +5,12 @@
   "type": "module",
   "license": "MIT",
   "private": false,
-  "homepage": "https://github.com/moelzanaty3/redline#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/moelzanaty3/redline.git"
-  },
-  "bugs": {
-    "url": "https://github.com/moelzanaty3/redline/issues"
-  },
   "engines": {
     "node": ">=22"
   },
   "bin": {
-    "redline": "./dist/bin/redline.js",
-    "redline-cli": "./dist/bin/redline.js"
+    "redline": "dist/bin/redline.js",
+    "redline-cli": "dist/bin/redline.js"
   },
   "files": [
     "LICENSE",
