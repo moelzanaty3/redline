@@ -38,10 +38,12 @@ jobs:
     permissions:
       contents: write
       id-token: write
-      # @semantic-release/github's `fail` step opens an issue when a release fails.
-      # Without this it throws "Resource not accessible by integration" ON TOP of the
-      # real error, burying the cause that actually needs reading.
+      # @semantic-release/github comments on the issues and pull requests a release
+      # contains, and opens an issue when one fails. Both scopes are needed: with
+      # only issues:write the publish succeeds and the run still exits 1 on the
+      # `success` step with "Resource not accessible by integration".
       issues: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
