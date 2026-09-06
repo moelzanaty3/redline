@@ -58,10 +58,15 @@ jobs:
       # Node 22 bundles npm 10.9.x. Trusted publishing needs npm >= 11.5.1, so the
       # bundled client cannot do it — it fails looking for a token that no longer
       # exists.
+      # Pinned to the 11 line, not @latest. Trusted publishing needs npm >= 11.5.1
+      # and Node 22 bundles 10.9.x, so an upgrade is required — but npm 12 already
+      # refuses Node 22.22.0 and a future major could drop the Node 22 line
+      # entirely, breaking releases with no change on our side. 11.x supports
+      # Node 22 and clears the OIDC floor.
       - name: Upgrade npm to a version that speaks OIDC
         run: |
           set -euo pipefail
-          npm install -g npm@latest
+          npm install -g npm@11
           npm --version
 
       - run: npm ci
@@ -128,10 +133,15 @@ jobs:
         with:
           node-version: 22
 
+      # Pinned to the 11 line, not @latest. Trusted publishing needs npm >= 11.5.1
+      # and Node 22 bundles 10.9.x, so an upgrade is required — but npm 12 already
+      # refuses Node 22.22.0 and a future major could drop the Node 22 line
+      # entirely, breaking releases with no change on our side. 11.x supports
+      # Node 22 and clears the OIDC floor.
       - name: Upgrade npm to a version that speaks OIDC
         run: |
           set -euo pipefail
-          npm install -g npm@latest
+          npm install -g npm@11
           npm --version
 
       - run: npm ci
