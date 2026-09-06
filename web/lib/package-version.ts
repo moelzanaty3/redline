@@ -1,17 +1,18 @@
 // What version of the CLI a reader should actually install, resolved at build
-// time from sources that exist.
+// time from the registry.
 //
 // package.json here says "0.0.0-development": semantic-release computes the real
 // version at publish time and never commits it back, so the checked-in field is
 // a placeholder and quoting it in the docs would be worse than saying nothing.
 // The registry is the only authority on what is installable, so that is what is
-// asked — and the honest answer today is that nothing is: the package has never
-// been published and the repository carries no v* tag, so the release workflow's
-// own first-release guard stops it.
+// asked.
 //
-// The lookup never fails a build. An unreachable registry and an unpublished
-// package are different states and are reported differently, because "we could
-// not check" must not read as "it does not exist".
+// Every command in these docs installs from the package. There is no
+// install-from-source path any more: the CLI is distributed on npm and a second
+// set of instructions pointing at a built checkout is a second thing to keep
+// true. When the registry cannot be reached the command is rendered unpinned
+// (`npx redline-cli ...`), which still resolves — only the version we would have
+// named is missing.
 import { readRepoFile } from "./content";
 
 export type PackageState =
@@ -25,7 +26,7 @@ export const PACKAGE_NAME = "redline-cli";
 export function installCommand(state: PackageState, args = "init"): string {
   return state.status === "published"
     ? `npx ${PACKAGE_NAME}@${state.version} ${args}`
-    : `node dist/bin/redline.js ${args}`;
+    : `npx ${PACKAGE_NAME} ${args}`;
 }
 
 export function standardsVersion(): string {
@@ -46,13 +47,11 @@ async function resolve(): Promise<PackageState> {
   const pinned = process.env["REDLINE_NPM_VERSION"];
   if (pinned) return { status: "published", version: pinned, publishedAt: null };
 
-  // The pre-publication case, which is different from the two above and must not
-  // be served by either of them. The package is about to exist and the site is
-  // built ahead of it; rendering `node dist/bin/redline.js init` as the headline
-  // command would be honest about today and wrong about the moment anyone reads
-  // it. This value is consulted ONLY when the registry says the package is not
-  // there, so it expires by itself: the first real publish outranks it and the
-  // page starts quoting the version npm actually serves, with nobody editing
+  // The pre-publication case: the site is built ahead of the first publish and
+  // would otherwise render an unpinned command on a page whose job is to name
+  // the version. Consulted ONLY when the registry says the package is not there,
+  // so it expires by itself — the first real publish outranks it and the page
+  // starts quoting the version npm actually serves, with nobody editing
   // anything. REDLINE_NPM_VERSION above still wins outright, for the air-gapped
   // build that cannot ask at all.
   const fallback = process.env["REDLINE_NPM_FALLBACK_VERSION"];

@@ -2,6 +2,14 @@
 // onboarded repo — these are the Redline source repo's own CI, telemetry and validation
 // tooling. Facts are sourced from .github/workflows/ci.yml and workflows/*.yml, not
 // guessed: see each script's own header comment for the same claims.
+//
+// Where a script has a front door on the published CLI, the `command` lines name the
+// CLI form, because that is what a reader can actually run without a checkout:
+// `npx redline-cli metrics <command>` validates the flags and hands the runner the
+// environment contract it already documents (cli/metrics/options.ts). The `env` list
+// stays — it is the same contract, and a scheduled run still shows those names.
+// The four that have no CLI equivalent — validate, assign-rule-ids, render-self,
+// check-pins — are source-repo checks and keep their `node scripts/...` form.
 export type ScriptInfo = {
   what: string;
   runsIn: string;
@@ -50,7 +58,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     what: "Derives registry.json — the register of onboarded repositories — by walking every repo in the org for a .redline.json. The register is never hand-edited and redline init never writes it: an entry exists exactly as long as the repository's own file does, so a repo that removes Redline leaves the register on the next run.",
     runsIn: "This (source) repo.",
     trigger: ".github/workflows/registry.yml — nightly at 04:00 UTC, plus workflow_dispatch.",
-    command: ["npm run build && GH_TOKEN=... ORG=... SOURCE=owner/repo node scripts/build-registry.mjs"],
+    command: ["GH_TOKEN=... npx redline-cli registry --org acme --source owner/repo"],
     env: [
       "GH_TOKEN — read access to org repos.",
       "ORG — the owner whose repositories are walked.",
@@ -64,7 +72,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     what: "Research. Redline can say a rule was ignored; it cannot say ignoring it mattered. Where a finding was left unresolved and the same repository later attracted a revert or a hotfix, that is evidence the rule earns its place — computed from merged-pull-request history alone, with no incident feed.",
     runsIn: "The redline-metrics repo, or a maintainer's terminal against a checkout of its data/.",
     trigger: "Run by hand, occasionally. It is an experiment, not a loop.",
-    command: ["DATA_DIR=data DAYS=180 WINDOW_DAYS=30 node scripts/build-correlation.mjs"],
+    command: ["npx redline-cli metrics correlate --data data --days 180 --window-days 30"],
     env: [
       "DATA_DIR — collected telemetry, default data.",
       "DAYS — how much history to read, default 180.",
@@ -79,8 +87,8 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     runsIn: "The redline-metrics repo, or a maintainer's terminal against a checkout of its data/.",
     trigger: "Run by hand, or on a schedule alongside the dashboard.",
     command: [
-      "DATA_DIR=data DAYS=90 node scripts/build-roi.mjs",
-      "SPEND_TOTAL=850 SPEND_GRAIN=org SPEND_SOURCE='vendor console' node scripts/build-roi.mjs",
+      "npx redline-cli metrics roi --data data --days 90",
+      "npx redline-cli metrics roi --spend-total 850 --spend-grain org --spend-source 'vendor console'",
     ],
     env: [
       "DATA_DIR — collected telemetry, default data.",
@@ -95,7 +103,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     what: "Measures what the skills render target saves, per profile: the composed AGENTS.md a Claude session loads every turn, against the core skill plus the one stack whose files are actually in play.",
     runsIn: "This (source) repo.",
     trigger: "Run by hand. The roadmap makes the skills target conditional on this number, so it is a script anyone can re-run rather than a claim asserted once.",
-    command: ["npm run build && node scripts/measure-context.mjs", "OUT=context.json node scripts/measure-context.mjs"],
+    command: ["npx redline-cli metrics context", "npx redline-cli metrics context --out context.json"],
     env: ["ROOT — the repo to measure, default the working directory.", "OUT — also write the rows as JSON here."],
     produces: "A row per profile with the byte counts and the reduction, and the finding stated rather than left for the reader to spot: multi-stack profiles save 20-48%, and single-stack profiles LOSE about 5% because there is no second stack to avoid loading and the frontmatter is pure overhead.",
     action: "Run it before deciding whether to select the skills vendor for a repository. If the repository's profile has one stack, do not — the measurement says it makes things worse, and no amount of rollout enthusiasm changes that.",
@@ -105,8 +113,8 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     runsIn: "A maintainer's terminal, once, with org credentials — alongside a checkout of the metrics repo's data/.",
     trigger: "Run by hand. It is a measurement, not a loop.",
     command: [
-      "DATA_DIR=data REGISTRY=registry.json DAYS=90 node scripts/build-baseline.mjs",
-      "GH_TOKEN=... ORG=... SPEND_TOTAL=... node scripts/build-baseline.mjs   # the full picture",
+      "npx redline-cli metrics baseline --data data --registry registry.json --days 90",
+      "GH_TOKEN=... npx redline-cli metrics baseline --org acme --spend-total 850   # the full picture",
     ],
     env: [
       "DATA_DIR — collected telemetry, default data.",
@@ -135,9 +143,9 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     runsIn: "The redline-metrics repo, against a throwaway PR on a canary target repo — never this repo.",
     trigger: "workflows/seed-canary.yml, step \"Score against the corpus\" — weekly (Monday 03:00 UTC) plus workflow_dispatch, one run per configured canary target.",
     command: [
-      "GH_TOKEN=... node scripts/score-seeds.mjs --repo acme/pilot-web --pr 12",
-      "GH_TOKEN=... node scripts/score-seeds.mjs --repo acme/pilot-web --pr 12 --json",
-      "GH_TOKEN=... node scripts/score-seeds.mjs --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl --baseline",
+      "GH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot-web --pr 12",
+      "GH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot-web --pr 12 --json",
+      "GH_TOKEN=... npx redline-cli metrics score-seeds --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl --baseline",
     ],
     env: ["GH_TOKEN — read access to the target repo's PR comments."],
     produces: "Human-readable report to stdout by default; with --json, a machine-readable score object instead. Exits 1 if BLOCKER recall is below 1.0, any false positive landed on seeded/clean/**, or (with --history/--baseline) the run regressed against the last recorded score.",
@@ -147,7 +155,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     what: "Central nightly pull of review outcomes for merged PRs across the org, written as monthly JSONL. Replaced the old per-repo telemetry workflow so no cross-repo write token is ever stored in a product repo.",
     runsIn: "The redline-metrics repo — never this repo.",
     trigger: "workflows/redline-collect.yml — daily (05:00 UTC) plus workflow_dispatch with a days input.",
-    command: ["GH_TOKEN=... ORG=acme node scripts/collect-telemetry.mjs"],
+    command: ["GH_TOKEN=... npx redline-cli metrics collect --org acme"],
     env: [
       "GH_TOKEN — read access to org repos and pull requests (required).",
       "ORG (required), SINCE=YYYY-MM-DD, DAYS=8, OUT=data, DRY_RUN=1",
@@ -159,7 +167,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     what: "Builds the Monday stakeholder digest — open/stale PR counts, seed recall, dashboard link — as a Teams Adaptive Card from already-collected telemetry.",
     runsIn: "The redline-metrics repo — never this repo.",
     trigger: "workflows/weekly-digest.yml, step \"Build Adaptive Card\" — every Monday 07:00 UTC plus workflow_dispatch. A separate step then POSTs the card to a Power Automate Teams webhook.",
-    command: ["node scripts/build-digest.mjs --out digest.json"],
+    command: ["npx redline-cli metrics digest --org acme --out digest.json"],
     env: ["DATA_DIR=data, DAYS=7, ORG=org, OPEN_PRS, STALE_PRS, CAPPED, DASHBOARD_URL, SEED_SCORES=data/seed-scores.jsonl"],
     produces: "Writes the Adaptive Card JSON to the file named by --out (stdout otherwise). Produces nothing on its own — delivery to Teams is a separate workflow step and needs TEAMS_WEBHOOK_URL.",
     action: "Nothing, normally — it runs itself every Monday. Run it locally to preview digest.json before changing what the card reports.",
@@ -168,7 +176,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     what: "Aggregates open PRs across the org into one prioritised static HTML page.",
     runsIn: "This (source) repo.",
     trigger: "workflows/inbox.yml — every 30 minutes, 06:00-19:00 UTC, Monday-Friday, plus workflow_dispatch. Refuses to build unless the GitHub Pages site's visibility has been explicitly acknowledged as private or internal.",
-    command: ["GH_TOKEN=... ORG=acme node scripts/build-inbox.mjs"],
+    command: ["GH_TOKEN=... npx redline-cli metrics inbox --org acme"],
     env: ["GH_TOKEN — org read (required).", "ORG (required), OUT=dist, MAX_PAGES=10"],
     produces: "Writes OUT/index.html (default dist/index.html), then deployed to GitHub Pages by the same workflow.",
     action: "Nothing, normally — it runs itself every 30 minutes on weekdays. Run it locally with a scoped GH_TOKEN to preview a layout change before it ships.",
@@ -177,7 +185,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     what: "Builds the telemetry dashboard: acted-on rate, weekly trend lines, seed recall history, and the noisiest-rules tuning queue — one static page, no server.",
     runsIn: "The redline-metrics repo — never this repo.",
     trigger: "workflows/dashboard.yml — daily (05:30 UTC), plus workflow_dispatch, plus automatically after Redline Collect or Redline Seed Canary finishes. Refuses to build unless Pages visibility has been acknowledged as private or internal.",
-    command: ["ORG=acme node scripts/build-dashboard.mjs"],
+    command: ["npx redline-cli metrics dashboard --org acme"],
     env: ["DATA_DIR=data, ORG (required), DAYS=90, OUT=dist, SEED_SCORES=data/seed-scores.jsonl, ONBOARDED, STANDARDS_VERSION"],
     produces: "Writes OUT/index.html (default dist/index.html), then deployed to GitHub Pages by the same workflow.",
     action: "Nothing, normally — it runs itself daily. Run it locally against a copy of data/ to preview a metric or chart change before it ships.",
