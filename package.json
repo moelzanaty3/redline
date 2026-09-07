@@ -5,6 +5,14 @@
   "type": "module",
   "license": "MIT",
   "homepage": "https://redline-gate.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moelzanaty3/redline.git"
+  },
+  "bugs": {
+    "url": "https://github.com/moelzanaty3/redline/issues"
+  },
+  "author": "Mohamed Elzanaty (https://github.com/moelzanaty3)",
   "keywords": [
     "code-review",
     "ai-code-review",
@@ -28,6 +36,7 @@
     "redlinegate": "dist/bin/redline.js"
   },
   "files": [
+    "README.md",
     "LICENSE",
     "dist/",
     "scripts/",
