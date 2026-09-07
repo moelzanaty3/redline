@@ -1410,11 +1410,18 @@ test('two case variants of the template in one directory resolve to the canonica
 
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
+  // Neither is written now, so the resolution shows in what is reported: the
+  // canonical spelling is the one Redline says it looked at.
   assert.deepEqual(
     result.files.filter((f) => f.toLowerCase().includes('pull_request_template')),
-    ['docs/pull_request_template.md']
+    []
+  );
+  assert.match(
+    result.outcomes.find((o) => /pull_request_template\.md/i.test(o.detail))?.detail ?? '',
+    /docs\/pull_request_template\.md/
   );
   assert.equal(readFileSync(join(cwd, 'docs/PULL_REQUEST_TEMPLATE.md'), 'utf8'), '# Upper\n');
+  assert.equal(readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
 });
 
 // Deterministic on every filesystem: Azure serves both extensions from the same
