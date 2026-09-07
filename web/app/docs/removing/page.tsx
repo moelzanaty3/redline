@@ -220,13 +220,15 @@ export default function Page() {
 
       <h3>The pull request template</h3>
       <p>
-        Merged, not owned — and where your template already answered the gate
-        on its own, Redline never wrote to it at all. Three cases:
+        Created, never taken over. A template your repository wrote for itself
+        is not Redline&apos;s to edit, so there are four cases and only two of
+        them leave you anything to undo:
       </p>
       <ul>
         <li><b>You had no template.</b> Redline wrote the packaged one whole. Delete the file.</li>
-        <li><b>You had one that did not answer the gate.</b> Redline kept every byte of yours and appended the missing sections — <code>## Launch readiness</code>, <code>## Architecture decision</code> — inside a REDLINE block. Strip the block.</li>
         <li><b>You had one that already answered the gate.</b> Redline left it untouched and there is nothing to undo.</li>
+        <li><b>You had one that did not answer the gate.</b> Redline still did not edit it. The install named the sections it lacks — <code>## Launch readiness</code>, <code>## Architecture decision</code> — and said the checklist job will fail until someone adds them or the gate is deselected. Nothing to undo; the file is entirely yours.</li>
+        <li><b>Your template carries a REDLINE block.</b> Redline put it there on an earlier run, and refreshes only what is inside it. Strip the block and keep every other byte.</li>
       </ul>
       <p>
         On Azure DevOps, check the branch-specific templates too — anything
@@ -234,12 +236,19 @@ export default function Page() {
         <code>pull_request_template/</code>, in <code>.azuredevops/</code>,{" "}
         <code>.vsts/</code>, <code>docs/</code> or the repository root. Azure
         serves those in preference to the default, so{" "}
-        <code>redline init</code> merges into every one it finds.
+        <code>redline init</code> considers every one it finds — under the same
+        four cases above, which for a template you wrote means it is reported
+        and left alone.
       </p>
 
       <h3><code>.github/CODEOWNERS</code></h3>
       <p>
-        <b>Seeded only if this repository had none.</b> Before writing anything,{" "}
+        <b>Seeded only if you asked for it, and only if this repository had
+        none.</b> Ownership is off by default — it is written when{" "}
+        <code>redline init --with review-ownership</code> selects it, because
+        the generated file names an owner Redline cannot prove exists and a
+        ruleset requiring code-owner review with an unresolvable owner blocks
+        every pull request in the repository. Where it is selected,{" "}
         <code>redline init</code> looks for{" "}
         <code>.github/CODEOWNERS</code>, <code>CODEOWNERS</code> and{" "}
         <code>docs/CODEOWNERS</code>; if any of the three exists the file is

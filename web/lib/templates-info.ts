@@ -36,7 +36,7 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
   codeowners: {
     what: "The CODEOWNERS pattern that protects the enforcement surface: the paths that control what the gate checks and how strictly.",
     installedAs: ".github/CODEOWNERS",
-    installedBy: "redline init, but only on a repo that has none yet — an existing CODEOWNERS, in any of the three locations GitHub recognises, is left untouched.",
+    installedBy: "redline init --with review-ownership, and only on a repo that has none yet — an existing CODEOWNERS, in any of the three locations GitHub recognises, is left untouched. It is off by default: the generated file names an owner Redline cannot prove exists, and a ruleset requiring code-owner review with an unresolvable owner blocks every pull request in the repository. Ask for it once you know the team or user in it is real.",
     detail: [
       "\"Protects the enforcement surface\" means: without a code-owner rule on the files that define the gate, the branch ruleset's require_code_owner_review is a silent no-op, and any contributor could edit .github/workflows/, CODEOWNERS itself, or the rendered standards files in a self-approved PR — quietly weakening their own review, undetected.",
       "The CLI does not read this checked-in template file at install time — it generates .github/CODEOWNERS content in code, from a hardcoded rule list in cli/commands/init.ts, always owned by @platform-engineering with no placeholder to fill in.",

@@ -28,6 +28,9 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       "redline init --vendors claude,copilot # render for these AI tools only",
       "redline init --blocking               # promote the gate from advisory to blocking",
       "redline init --skip gate              # this repository has its own; do not install one",
+      "redline init --with review-ownership  # also seed CODEOWNERS; off unless asked for",
+      "redline init --no-speckit             # drop the spec-first context section",
+      "redline init --tmf                    # add the TM Forum context section",
       "redline init --repair                 # re-apply every capability on an already-onboarded repo",
     ],
     flags: [
@@ -39,7 +42,12 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       {
         flag: "--skip <list> / --with <list>",
         detail:
-          "Deselects or re-selects a capability the repository already has its own answer for: gate, merge-policy, labels, review-ownership. A deselected capability is not attempted, not written and not reported as missing. The security floor cannot be skipped — it is the org-wide minimum and is refused by name rather than recorded.",
+          "Deselects or re-selects a capability the repository already has its own answer for: gate, merge-policy, labels, review-ownership. A deselected capability is not attempted, not written and not reported as missing. review-ownership is the one that starts deselected — a CODEOWNERS file names owners Redline cannot verify exist, and a ruleset requiring code-owner review with no resolvable owner blocks every pull request in the repository, so it is written only when --with review-ownership asks for it. The security floor cannot be skipped — it is the org-wide minimum and is refused by name rather than recorded.",
+      },
+      {
+        flag: "--speckit / --no-speckit, --tmf / --no-tmf",
+        detail:
+          "The optional context sections rendered into the standards artifacts beside the rules — background about how this repository works, not rules with ids. speckit says the repository is spec-first and is on by default; it is dropped automatically, with a note in the report, where the repository already runs Spec Kit, which is a separate tool with its own installer that Redline neither creates nor edits. tmf says the repository implements TM Forum interfaces and is off unless asked for. The selection is reversible: passing the negative on a later run removes a section already rendered, because the block is regenerated rather than appended to.",
       },
       {
         flag: "--repair",
@@ -63,7 +71,7 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       },
     ],
     output:
-      "Rendered standards artifacts for the detected vendors, the gate caller workflow, a CODEOWNERS file where the repository has none, a pull request template (written whole, or merged into an existing one inside REDLINE:BEGIN/END markers), and .redline.json recording the profile, vendors, capability selections and onboarding date. Anything it could not apply for lack of rights is recorded as a pendingAdmin entry rather than reported as success. Exit codes follow the CLI's own contract: 1 failed, 2 usage, 3 permission, 4 host.",
+      "Rendered standards artifacts for the detected vendors, the gate caller workflow, a pull request template, and .redline.json recording the profile, vendors, capability selections and onboarding date. The template is written only where the host would resolve none; a template the repository wrote for itself is never edited, and if it lacks a section the gate's checklist job reads, the run says so by name and tells you to add it or deselect the gate — a red check the install could have predicted is worse than a blunt sentence during onboarding. CODEOWNERS is written only under --with review-ownership. Anything it could not apply for lack of rights is recorded as a pendingAdmin entry rather than reported as success. Exit codes follow the CLI's own contract: 1 failed, 2 usage, 3 permission, 4 host.",
     edit: "cli/commands/init.ts, with the install path unit-tested against a fake host client in cli/platforms/*/__tests__/install.test.ts.",
   },
   verify: {

@@ -56,7 +56,9 @@ export default async function Page() {
         </li>
         <li>
           A pull request template carrying the readiness checklist and an empty{" "}
-          <Link href="/docs/exemptions">exemption block</Link>.
+          <Link href="/docs/exemptions">exemption block</Link> — written only
+          where your host would resolve none. A template you already have is
+          reported, not edited.
         </li>
         <li>
           <code>.redline.json</code>, recording what was chosen so a re-run
