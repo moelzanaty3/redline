@@ -22,6 +22,7 @@ import { resolveProfile } from '../render/profile.ts';
 import { render } from '../render/standards.ts';
 import { renderCommands, COMMAND_HOSTS } from '../render/commands.ts';
 import { CONTEXTS, detectSpecKit } from '../render/contexts.ts';
+import { surveyRepo } from '../detect/existing.ts';
 import { LOCAL_RULES_FILE } from '../render/vendors.ts';
 import { isPending } from '../platforms/types.ts';
 import type {
@@ -504,6 +505,25 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       `this repository already runs Spec Kit (${specKitAt}), so Redline left the spec-driven ` +
         'development context out rather than writing a second account of it beside the one Spec ' +
         'Kit maintains — pass --speckit to include it anyway'
+    );
+  }
+
+  // The same courtesy Spec Kit gets, generalised to the rest of the toolchain.
+  // A repository with a mature pipeline already runs a scanner for most of what
+  // the gate would add; installing a second one beside it is not defence in
+  // depth, it is two sets of findings and two exemption paths for one problem.
+  // What Redline still brings such a repository is the part nothing else does —
+  // the standards the AI reviews against, and a check that they were applied —
+  // so detection narrows the gate rather than cancelling the onboarding.
+  const survey = surveyRepo(cwd);
+  for (const tool of survey.tools) {
+    const covers = tool.standsDown;
+    notes.push(
+      covers === null
+        ? `this repository already runs ${tool.label} (${tool.evidence}) — noted; Redline installs nothing that overlaps it`
+        : `this repository already runs ${tool.label} (${tool.evidence}), which covers what Redline's ` +
+          `own ${covers} check would report. Narrowing the gate to match is not wired yet, so for now ` +
+          `deselect it yourself with: redline init --skip gate`
     );
   }
 
