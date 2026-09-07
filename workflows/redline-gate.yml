@@ -179,7 +179,14 @@ jobs:
           head: ${{ github.event.pull_request.head.sha }}
           # verified only: `unknown` produces false positives, and this is a blocking
           # check. Unverified candidates are caught by GHAS secret scanning instead.
-          extra_args: --results=verified --fail
+          #
+          # No `--fail` here. The action's own entrypoint already passes it before
+          # appending extra_args, and trufflehog rejects a repeated flag outright —
+          # `flag 'fail' cannot be repeated` — so the scan never ran at all. This
+          # job is outside the enforcement ladder and outside label exemption, so
+          # that failure blocked every pull request in every onboarded repository
+          # for a reason no author could act on or waive.
+          extra_args: --results=verified
 
   gate:
     # Aggregate. The branch ruleset requires the check "redline-gate / gate".

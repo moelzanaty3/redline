@@ -45,8 +45,19 @@ export const MIN_REASON_LENGTH = 20;
 // stop describing its own fields, so the parser has to know what a comment is.
 const withoutComments = (text: string): string => text.replace(/<!--[\s\S]*?-->/g, '');
 
+// Horizontal whitespace only, never `\s`. `\s` matches a newline, so on an empty
+// field the run after the colon crossed the line break and `(.+)` captured the
+// NEXT field's line: the shipped template's blank `- reason:` parsed as the
+// literal text `- until:`, and the author was told their reason was 8 characters
+// long. It failed closed — `- scope:` never parses as a date — but the author was
+// told the wrong thing about a field they had left empty.
+const H_SPACE = '[^\\S\\n]*';
+
 const field = (block: string, name: string): string | null => {
-  const match = new RegExp(`^\\s*[-*]?\\s*${name}\\s*:\\s*(.+)$`, 'im').exec(block);
+  const match = new RegExp(
+    `^${H_SPACE}[-*]?${H_SPACE}${name}${H_SPACE}:${H_SPACE}(.+)$`,
+    'im'
+  ).exec(block);
   return match?.[1]?.trim() ?? null;
 };
 
