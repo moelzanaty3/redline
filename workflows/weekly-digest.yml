@@ -45,7 +45,7 @@ jobs:
 
       - name: Build Adaptive Card
         run: |
-          npx --yes "redlinegate@0.0.1" metrics digest \
+          npx --yes "redlinegate@0.0.2" metrics digest \
             --org "${{ github.repository_owner }}" \
             --days 7 \
             --open-prs "${{ steps.prs.outputs.open }}" \

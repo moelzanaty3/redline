@@ -5,9 +5,9 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
-## Unreleased — first release, 0.0.1
+## Unreleased — 0.0.2
 
-### Standards 0.0.4 — optional context sections
+### Standards 0.0.2 — optional context sections
 
 `standards/contexts/` carries background a reviewer needs about how a repository works,
 rendered into the same artifacts the rules are and selected per repository:
@@ -240,7 +240,7 @@ publishing a link nobody outside the org can open is worse than publishing none.
   the API did not return is left absent rather than defaulted to the merge time, which would
   report a lead time of zero and drag the median toward a number no team achieved.
 
-### Standards v0.0.3 — the deterministic policy tier
+### Pre-release standards iteration — the deterministic policy tier
 
 - A share of what the standard asserts needs no model. A ticket reference is present or it
   is not; a type-checker suppression carries one or it does not. Sending those to an LLM
@@ -332,7 +332,7 @@ publishing a link nobody outside the org can open is worse than publishing none.
   is empty, that is the answer to the roadmap's open question 1 — and the signal that SARIF
   ingestion was not where the next effort belonged.
 
-### Standards v0.0.2 — structured exemptions
+### Pre-release standards iteration — structured exemptions
 
 - `redline-exempt` was a bare label. It downgraded the process checks to warnings and
   recorded nothing: not who accepted the failing check, not why, not until when. An

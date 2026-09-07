@@ -133,7 +133,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           RUNG: ${{ inputs.rung }}
-          REDLINE_CLI_VERSION: '0.0.1'
+          REDLINE_CLI_VERSION: '0.0.2'
         run: |
           set -euo pipefail
           # Three dots: the diff against the merge base, not against the tip of
@@ -208,7 +208,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           # Pinned, not @latest: the gate's behaviour must not change under a
           # repository because a release happened overnight.
-          REDLINE_CLI_VERSION: '0.0.1'
+          REDLINE_CLI_VERSION: '0.0.2'
         run: |
           set -euo pipefail
 

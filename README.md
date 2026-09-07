@@ -123,8 +123,8 @@ Redline carries two versions that move independently. Do not conflate them.
 
 | Axis | Lives in | Bumped by | Example |
 | --- | --- | --- | --- |
-| **CLI version** | `redlinegate` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.0.1` |
-| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.1` |
+| **CLI version** | `redlinegate` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.0.2` |
+| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.2` |
 
 The CLI version is the tool's release line: [CHANGELOG.md](CHANGELOG.md) tracks it, and
 semantic-release computes the next one from commit messages — never edit
