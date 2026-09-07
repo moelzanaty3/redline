@@ -132,7 +132,9 @@ export function Journey({ initCmd }: { initCmd: string }) {
   const outcomes: [string, string, string][] = [
     ["applied", "labels", 'label "no-adr"'],
     ["applied", "gate", `wrote ${PR_TEMPLATE}`],
-    ["applied", "review-ownership", "seeded .github/CODEOWNERS"],
+    // review-ownership is deliberately absent: it is opt-in behind
+    // `--with review-ownership`, so a default run never seeds CODEOWNERS and a
+    // transcript of a default run must not show it doing so.
     ["applied", "secret-scanning", "secret scanning"],
     ["applied", "push-protection", "secret scanning push protection"],
     ["applied", "dependency-alerts", "dependabot alerts (vulnerability alerts)"],

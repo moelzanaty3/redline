@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CopyButton } from "@/components/copy-button";
 import { FindingPanel } from "@/components/finding";
 import { Journey } from "@/components/journey";
+import { Choices } from "@/components/choices";
 import { Reveal } from "@/components/reveal";
 import { SEED_FILE, SEED_RULE_ID, seedDiff, seedMarkerExcerpt } from "@/components/seed-excerpt";
 import { ValueCase } from "@/components/value-case";
@@ -94,6 +95,9 @@ export default async function Home() {
 
       {/* ============ 2 — proof ============ */}
       <Journey initCmd={initCmd} />
+
+      {/* ============ 2b — the choices behind that run ============ */}
+      <Choices />
 
       {/* ============ 3 — the problem ============ */}
       <ValueCase />
