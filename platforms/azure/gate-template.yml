@@ -22,6 +22,18 @@ variables:
   ADR_DIFF_THRESHOLD: 300
   FAIL_ON_DEPENDENCY_SEVERITY: high
   SOFT_FAIL_LABELS: redline-exempt,redline-sync
+  # Declared with a default so the status step can read it even when the scan
+  # passed and never set it. An undeclared Azure variable interpolates as the
+  # literal string "$(NAME)" rather than empty, which is the kind of quiet
+  # wrong answer this gate exists to prevent.
+  REDLINE_SECURITY_FAILED: 'false'
+  # Pinned by image digest, not by tag: a tag is mutable and this scans the diff
+  # of every pull request in the repository. The version in the trailing comment
+  # is what scripts/check-pins.mjs re-resolves the digest against, exactly as it
+  # does for the SHA-pinned actions on the GitHub side of the gate. Docker Hub
+  # spells the tag without the `v` the git tag carries; both sides of the gate
+  # deliberately run the same version.
+  TRUFFLEHOG_IMAGE: trufflesecurity/trufflehog@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08 # 3.97.1
 
 steps:
   - checkout: self
@@ -32,12 +44,48 @@ steps:
     inputs:
       versionSpec: '22.x'
 
+  # The GitHub gate runs this as its own job (workflows/redline-gate.yml,
+  # `secrets`). It has no substitute in Mend or SonarQube: both scan a state of
+  # the tree, and a credential committed and reverted inside one pull request
+  # is still in the history the moment it merges. This scans the RANGE.
+  #
+  # `--results=verified` only, matching the GitHub job for the same reason:
+  # `unknown` produces false positives and this check cannot be waived.
+  - script: |
+      set -euo pipefail
+      target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+      # The PR build checks out a merge commit, and the target branch is not
+      # guaranteed to be a local ref on a fresh agent. Fetch it by name before
+      # asking for a merge base, or `git merge-base` fails and the scan silently
+      # degrades to scanning nothing.
+      git fetch --no-tags origin "$target"
+      base=$(git merge-base FETCH_HEAD HEAD)
+      echo "scanning $base..HEAD"
+
+      # The failure is recorded BEFORE the exit, because the exemption branch in
+      # the status step below must never downgrade this one. On GitHub the
+      # security jobs sit outside label exemption; this variable is how that
+      # exclusion survives the two being one pipeline here.
+      if ! docker run --rm -v "$(pwd):/repo" "$TRUFFLEHOG_IMAGE" \
+        git file:///repo --since-commit "$base" --results=verified --fail
+      then
+        echo "##vso[task.setvariable variable=REDLINE_SECURITY_FAILED]true"
+        exit 1
+      fi
+    displayName: Secret scan (diff)
+    name: secrets
+    env:
+      TRUFFLEHOG_IMAGE: $(TRUFFLEHOG_IMAGE)
+
   # --package pins npx to the redlinegate package explicitly. `redline` alone
   # names a different, unrelated package on the public registry — `redline`
   # is only this package's bin name, never resolve npx against it directly.
   - script: npx --yes --package=redlinegate@latest redline verify --gate
     displayName: Redline gate
     name: gate
+    # A failed secret scan must not hide the configuration findings: the author
+    # deserves the whole list in one run rather than one blocker at a time.
+    condition: succeededOrFailed()
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       ADR_DIFF_THRESHOLD: $(ADR_DIFF_THRESHOLD)
@@ -72,12 +120,16 @@ steps:
       # accept a process failure deliberately. It can only ever turn a
       # failure into a success, never the reverse.
       #
-      # NOTE for whoever splits this job up: on GitHub the security jobs
-      # (dependency-review, secrets) are excluded from the exemption. Here the
-      # gate is one `redline verify --gate` run that checks configuration
-      # drift only — no scanning step exists to downgrade. Adding one means
-      # excluding it from this branch, exactly as the GitHub workflow does.
-      if [ "$state" = "failed" ] && [ -n "${SOFT_FAIL_LABELS:-}" ]; then
+      # The secret scan is excluded, exactly as it is on GitHub, where the
+      # security jobs sit outside the exemption. There the exclusion is
+      # structural — separate jobs, and the label only reaches some of them.
+      # Here the whole gate is one pipeline, so the scan records
+      # REDLINE_SECURITY_FAILED before it exits and this branch refuses to
+      # downgrade it. A label that could waive a verified credential in the
+      # diff would make the label the vulnerability.
+      if [ "${REDLINE_SECURITY_FAILED:-}" = "true" ]; then
+        echo "##vso[task.logissue type=error]The secret scan failed. This check cannot be waived by a label."
+      elif [ "$state" = "failed" ] && [ -n "${SOFT_FAIL_LABELS:-}" ]; then
         labels=$(curl_authed -sS "$pr_url/labels?api-version=7.1") || labels=''
         for label in ${SOFT_FAIL_LABELS//,/ }; do
           if printf '%s' "$labels" \
@@ -103,3 +155,4 @@ steps:
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       SOFT_FAIL_LABELS: $(SOFT_FAIL_LABELS)
+      REDLINE_SECURITY_FAILED: $(REDLINE_SECURITY_FAILED)

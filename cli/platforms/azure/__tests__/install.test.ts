@@ -261,6 +261,23 @@ test('installGate writes the azure pipeline and PR template', async () => {
   assert.match(yml, /ADR_DIFF_THRESHOLD: 300/);
   assert.match(yml, /genre[^\n]*redline/);
 
+  // The secret scan reaches parity with the GitHub gate's `secrets` job, and
+  // the image is pinned by digest because it handles the diff of every pull
+  // request. scripts/check-pins.mjs re-resolves that digest against the tag in
+  // the trailing comment; the pin is asserted here so a hand-edit that drops
+  // the digest for a floating tag fails the suite rather than CI alone.
+  assert.match(yml, /trufflesecurity\/trufflehog@sha256:[0-9a-f]{64} # \d+\.\d+\.\d+/);
+  assert.match(yml, /--results=verified/);
+
+  // SECURITY REGRESSION GUARD. On GitHub the security jobs sit outside label
+  // exemption structurally — the label only reaches some jobs. Here the whole
+  // gate is one pipeline, so the exclusion is this variable, and the soft-fail
+  // branch must be reached only when it is not set. A refactor that folds
+  // these back into one condition would let `redline-exempt` waive a verified
+  // credential in the diff, which makes the label itself the vulnerability.
+  assert.match(yml, /if \[ "\$\{REDLINE_SECURITY_FAILED:-\}" = "true" \]; then/);
+  assert.match(yml, /elif \[ "\$state" = "failed" \] && \[ -n "\$\{SOFT_FAIL_LABELS:-\}" \]; then/);
+
   // Regression guard: Azure Repos ignores YAML `pr:` triggers (GitHub-only
   // feature) — the Build Validation policy is what queues this pipeline, so
   // a `pr:` block in the template is dead code that misleads readers.

@@ -39,6 +39,10 @@ const files = [
     ? readdirSync(join(ROOT, '.github/workflows')).map((f) => `.github/workflows/${f}`)
     : []),
   'templates/redline.yml',
+  // The Azure gate. It was outside this list while it pinned nothing, and the
+  // moment it pinned a container digest that omission would have made the pin
+  // unverifiable — the exact rot this script exists to catch.
+  'platforms/azure/gate-template.yml',
 ].filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
 
 const pins = [];
@@ -84,6 +88,39 @@ for (const pin of pins) {
   }
 }
 
+// The Azure gate runs its secret scan from a container rather than an action,
+// so the pin is an image digest with the version in a trailing comment — the
+// same shape as `uses: repo@sha # tag`, verified the same way. A digest that no
+// longer matches the tag it claims means someone edited one and not the other,
+// and the scan of every Azure pull request is then running an unreviewed image.
+const IMAGE_PIN = /([\w.-]+\/[\w.-]+)@(sha256:[0-9a-f]{64})\s*#\s*(\S+)/g;
+const imagePins = [];
+for (const file of files) {
+  const body = readFileSync(join(ROOT, file), 'utf8');
+  for (const [, image, digest, tag] of body.matchAll(IMAGE_PIN)) {
+    imagePins.push({ file, image, digest, tag });
+  }
+}
+
+for (const pin of imagePins) {
+  try {
+    const res = await fetch(`https://hub.docker.com/v2/repositories/${pin.image}/tags/${pin.tag}`);
+    if (!res.ok) throw new Error(`docker hub: ${res.status}`);
+    const resolved = (await res.json()).digest;
+    if (resolved !== pin.digest) {
+      console.error(
+        `FAIL ${pin.file}: ${pin.image}@${pin.digest} is commented as ${pin.tag}, but ${pin.tag} resolves to ${resolved}`
+      );
+      errors += 1;
+      continue;
+    }
+    console.log(`ok   ${pin.image}:${pin.tag} → ${pin.digest.slice(7, 19)}`);
+  } catch (err) {
+    console.error(`FAIL ${pin.file}: could not verify ${pin.image}:${pin.tag} — ${err.message}`);
+    errors += 1;
+  }
+}
+
 // The gate also pins the CLI it shells out to, as `REDLINE_CLI_VERSION` rather
 // than as a `uses:` SHA, so the loop above cannot see it. It is the pin that
 // rots hardest: it is a plain literal in two places, nothing in the release
@@ -125,6 +162,6 @@ if (cliPins.length) {
 }
 
 console.log(
-  `\n${pins.length + cliPins.length} pin(s), ${errors} error(s), ${updates} update(s) available`
+  `\n${pins.length + cliPins.length + imagePins.length} pin(s), ${errors} error(s), ${updates} update(s) available`
 );
 process.exit(errors || (STRICT && updates) ? 1 : 0);
