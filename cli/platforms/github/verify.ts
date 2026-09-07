@@ -129,6 +129,23 @@ function parseCheckRunNames(body: unknown): string[] {
 
 // null means GitHub did not report the block at all, which is not the same
 // thing as reporting it empty — see readSecurityState.
+// One line per distinct problem, not per offending line: a CODEOWNERS naming
+// one unknown team across ten paths is one thing wrong, and printing it ten
+// times buries it. GitHub's own `suggestion` is the remedy, so it is kept.
+function parseCodeownersProblems(body: unknown): string[] {
+  if (!isNonNullObject(body) || !Array.isArray(body['errors'])) {
+    throw hostShapeError('a CODEOWNERS errors list');
+  }
+  const seen = new Set<string>();
+  for (const error of body['errors']) {
+    if (!isNonNullObject(error)) throw hostShapeError('a CODEOWNERS error');
+    const kind = typeof error['kind'] === 'string' ? error['kind'] : 'problem';
+    const suggestion = typeof error['suggestion'] === 'string' ? error['suggestion'] : null;
+    seen.add(suggestion === null ? kind : `${kind} — ${suggestion}`);
+  }
+  return [...seen];
+}
+
 function parseSecurityAnalysisStatuses(body: unknown): Record<string, string> | null {
   if (!isNonNullObject(body)) throw hostShapeError('a repository');
   const analysis = body['security_and_analysis'];
@@ -344,6 +361,19 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       const runs = await client.rest<unknown>('GET', runsPath);
       assertOk(runs.status, runsPath);
       return parseCheckRunNames(runs.body);
+    },
+
+    async readCodeownersProblems(ref: RepoRef, at?: string): Promise<string[] | null> {
+      const path =
+        at === undefined
+          ? `${repoPath(ref)}/codeowners/errors`
+          : `${repoPath(ref)}/codeowners/errors?ref=${encodeURIComponent(at)}`;
+      const res = await client.rest<unknown>('GET', path);
+      // 404 is "no CODEOWNERS file here", which is a real answer and not a
+      // failure — a repository that deselected review-ownership has none.
+      if (res.status === 404) return null;
+      assertOk(res.status, path);
+      return parseCodeownersProblems(res.body);
     },
 
     async readSecurityState(ref: RepoRef): Promise<SecurityResult> {

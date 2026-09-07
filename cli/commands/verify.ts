@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError } from '../core/errors.ts';
+import { createGit } from '../core/git.ts';
 import {
   deselectedCapabilities,
   labelsCarriedByGate,
@@ -497,6 +498,33 @@ export async function verify(
           : localStale
             ? `this repository's own ${LOCAL_RULES_FILE} has changed since the last render — re-run redline init to fold it in: ${stale.join(', ')}`
             : `stale: ${stale.join(', ')}`
+  );
+
+  // `redline init` writes CODEOWNERS and turns on code-owner review in the same
+  // run, and until now nothing ever asked the host whether the owners it wrote
+  // resolve. They do not on a personal account, which has no teams at all: the
+  // seeded `@<owner>/platform-engineering` is an unknown owner on every line,
+  // GitHub reports ten errors, and code-owner review becomes a requirement that
+  // cannot be satisfied — on `.github/workflows/`, `.github/CODEOWNERS`,
+  // `AGENTS.md` and `CLAUDE.md`, which is Redline's own enforcement surface.
+  // The install reported `applied`, the host rejected it, and `verify` said ok.
+  //
+  // Only asserted while code-owner review is actually required. A repository
+  // that deselected review-ownership, or turned the setting off deliberately,
+  // is not failing at owners nothing consults.
+  // The branch in hand, not the default one: on the onboarding pull request the
+  // file exists only here, and this is the last moment the owners can be fixed
+  // before the requirement they feed goes live.
+  const codeownersProblems = await platform.readCodeownersProblems(ref, createGit(opts.cwd).currentBranch());
+  const ownersEnforced = config.menu.sensitivePathReviewers && policy?.requireCodeOwnerReview === true;
+  add(
+    'review-ownership',
+    !ownersEnforced || codeownersProblems === null || codeownersProblems.length === 0,
+    codeownersProblems === null
+      ? 'no CODEOWNERS on this host'
+      : codeownersProblems.length === 0
+        ? 'every owner in CODEOWNERS resolves'
+        : `code-owner review is required but ${codeownersProblems.length} owner problem(s) make it unsatisfiable: ${codeownersProblems.join('; ')}`
   );
 
   // Slash-command files were the other thing `verify` could not see. `render()`

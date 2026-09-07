@@ -294,6 +294,13 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
       return statuses.map((s) => (s.genre ? `${s.genre}/${s.name}` : s.name));
     },
 
+    // Azure has no CODEOWNERS. Ownership of a path is a branch policy with
+    // required reviewers, which readPolicy already reports, so there is no
+    // second file here whose owners could fail to resolve.
+    async readCodeownersProblems(): Promise<string[] | null> {
+      return null;
+    },
+
     async readSecurityState(ref: RepoRef): Promise<SecurityResult> {
       const path = `/${project(ref)}/_apis/management/repositories/${repoId(ref)}/enablement`;
       const res = await client.request<unknown>('GET', path, undefined, {

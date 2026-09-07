@@ -200,6 +200,20 @@ export interface PlatformVerify {
   readGateMachinery(cwd: string): GateMachinery;
   readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]>;
   readSecurityState(ref: RepoRef): Promise<SecurityResult>;
+  // Whether the owners in CODEOWNERS actually resolve on the host. `null` means
+  // the question does not apply here — the host has no CODEOWNERS concept, or
+  // the repository has no such file — which is not the same answer as "they all
+  // resolve", and the caller must not report the two the same way.
+  //
+  // `redline init` writes CODEOWNERS itself and turns on code-owner review in
+  // the same run, so an owner that does not resolve is Redline having made a
+  // requirement nobody can satisfy, on the paths that carry its own enforcement
+  // surface. Nothing asked the host about it until this existed.
+  //
+  // `at` is the git ref to read the file at. The host defaults to the default
+  // branch, where an onboarding pull request has not landed yet — so the run
+  // that could still fix it cheaply is exactly the run that would see nothing.
+  readCodeownersProblems(ref: RepoRef, at?: string): Promise<string[] | null>;
   latestPullRequestNumber(ref: RepoRef): Promise<number | null>;
 }
 

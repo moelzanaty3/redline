@@ -1091,3 +1091,28 @@ test('an edit inside a slash command block is drift, not something verify may pa
   assert.match(finding?.detail ?? '', /redline-verify\.md/);
   assert.equal(report.ok, false);
 });
+
+test('an owner the host cannot resolve fails the run that requires code-owner review', async () => {
+  // `redline init` writes CODEOWNERS and turns on code-owner review together,
+  // and nothing asked the host whether the owners resolve. On a personal
+  // account they never do — there are no teams — so the requirement lands on
+  // Redline's own enforcement surface and cannot be satisfied.
+  const cwd = await onboarded();
+  const problems = ['Unknown owner — make sure the team @acme/platform-engineering exists'];
+
+  const report = await verify(() => fakePlatform({ codeownersProblems: problems }), { cwd, root });
+  const finding = find(report, 'review-ownership');
+  assert.equal(finding?.ok, false, JSON.stringify(report.findings, null, 2));
+  assert.match(finding?.detail ?? '', /platform-engineering/);
+  assert.equal(report.ok, false);
+});
+
+test('owners that all resolve pass, and a host without CODEOWNERS is not a failure', async () => {
+  const cwd = await onboarded();
+
+  const resolved = await verify(() => fakePlatform({ codeownersProblems: [] }), { cwd, root });
+  assert.equal(find(resolved, 'review-ownership')?.ok, true);
+
+  const absent = await verify(() => fakePlatform({ codeownersProblems: null }), { cwd, root });
+  assert.equal(find(absent, 'review-ownership')?.ok, true);
+});
