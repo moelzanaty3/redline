@@ -9,6 +9,7 @@ import {
 } from '../config/redline-json.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { render } from '../render/standards.ts';
+import { COMMAND_HOSTS, renderCommands } from '../render/commands.ts';
 import { LOCAL_HEADING, LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
 import {
   observePullRequestTemplates,
@@ -496,6 +497,42 @@ export async function verify(
           : localStale
             ? `this repository's own ${LOCAL_RULES_FILE} has changed since the last render — re-run redline init to fold it in: ${stale.join(', ')}`
             : `stale: ${stale.join(', ')}`
+  );
+
+  // Slash-command files were the other thing `verify` could not see. `render()`
+  // enumerates vendor artifacts only, so `.claude/commands/redline-*.md` and its
+  // siblings sat outside the stale set entirely: an edit INSIDE their REDLINE
+  // block — the block that says "do not edit inside this block" — left every
+  // check reporting ok. These files are prompts an assistant executes on
+  // request, which makes them the worst artifact class to leave unwatched.
+  //
+  // Compared by re-rendering, not against the `commandFiles` hash in
+  // `.redline.json`. The hash answers a different question — it is `remove`'s
+  // proof that a file with no block is still Redline's to delete — and it
+  // covers whole-file bytes, so on a file Redline only merged into it would
+  // fail the repository for the human content the merge exists to permit.
+  // Re-rendering asks the question that matters at each path: a file Redline
+  // owns whole is compared whole, because the next init rewrites it whole; a
+  // file it merged into is compared on its block alone.
+  const orgVendors = Object.entries(manifest.vendors)
+    .filter(([, v]) => v.enabled)
+    .map(([k]) => k);
+  const commandDrift = renderCommands({
+    root: opts.root,
+    out: opts.cwd,
+    hosts: config.vendors.flatMap((v) => (orgVendors.includes(v) && v in COMMAND_HOSTS ? [v] : [])),
+    check: true,
+    known: config.commandFiles,
+  });
+  const commandStale = [...commandDrift.written, ...commandDrift.removed];
+  add(
+    'commands-current',
+    commandStale.length === 0 || drift !== 'same',
+    commandStale.length === 0
+      ? 'slash commands match what this CLI renders'
+      : drift === 'same'
+        ? `edited since Redline wrote them — re-run redline init to restore: ${commandStale.join(', ')}`
+        : `standards v${config.standardsVersion} recorded against a CLI rendering v${manifest.version} — re-run redline init: ${commandStale.join(', ')}`
   );
 
   // The pull request template is the one thing `redline init` writes that

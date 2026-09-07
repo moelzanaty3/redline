@@ -535,3 +535,26 @@ test('a gate workflow that cannot be read fails as a Redline error, not an unexp
     (error: unknown) => isRedlineError(error) && error.kind === 'failed'
   );
 });
+
+test('a check name reported by several run attempts is listed once', async () => {
+  // GitHub returns one check run per attempt on the head SHA, so re-running the
+  // gate three times listed `lint` three times. On the advisory install this
+  // list is the whole assertion a human reads.
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/pulls/12': { status: 200, body: { head: { sha: 'def456' } } },
+    'GET /repos/acme/web/commits/def456/check-runs?per_page=100': {
+      status: 200,
+      body: {
+        check_runs: [
+          { name: 'redline-gate / gate' },
+          { name: 'lint' },
+          { name: 'redline-gate / gate' },
+          { name: 'lint' },
+          { name: 'build' },
+        ],
+      },
+    },
+  });
+  const names = await createGitHubVerify(client).readReportedCheckNames(ref, 12);
+  assert.deepEqual(names, ['redline-gate / gate', 'lint', 'build']);
+});

@@ -108,16 +108,23 @@ function parsePullRequestHeadSha(body: unknown): string {
   return head['sha'];
 }
 
+// Distinct names. GitHub returns one check run per ATTEMPT on the head SHA, so
+// a re-run or a re-trigger adds another entry under the same name — three gate
+// re-triggers reported 21 entries for 9 checks. On the default advisory install
+// nothing is required yet and this list is the whole assertion: a human reads it
+// to see whether the gate reported at all. A list that repeats itself is the one
+// thing that stops being read.
 function parseCheckRunNames(body: unknown): string[] {
   if (!isNonNullObject(body) || !Array.isArray(body['check_runs'])) {
     throw hostShapeError('a check-runs list');
   }
-  return body['check_runs'].map((run) => {
+  const names = body['check_runs'].map((run) => {
     if (!isNonNullObject(run) || typeof run['name'] !== 'string') {
       throw hostShapeError('a check run');
     }
     return run['name'];
   });
+  return [...new Set(names)];
 }
 
 // null means GitHub did not report the block at all, which is not the same

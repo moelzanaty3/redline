@@ -534,7 +534,11 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const vendorsChanged =
     existing !== null &&
     (existing.vendors.length !== vendors.length ||
-      [...existing.vendors].sort().join(' ') !== [...vendors].sort().join(' '));
+      // `\0` as the escape, never a literal NUL byte. The byte itself made this
+      // file read as binary to grep and ripgrep, which then skipped it silently:
+      // a repository-wide search for any symbol in the largest command module
+      // returned nothing and reported no error.
+      [...existing.vendors].sort().join('\0') !== [...vendors].sort().join('\0'));
 
   // Same shape again: deselecting a capability moves no file of its own, and
   // swallowing it as "nothing to change" would leave .redline.json recording a
