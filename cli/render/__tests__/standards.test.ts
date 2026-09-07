@@ -404,6 +404,7 @@ test('a vendor whose artifact Redline generates whole also carries the local rul
     root,
     profile: 'tooling',
     stacks: [],
+    contexts: [],
     local: 'We allow console.log in the CLI.',
   });
   const core = cursor.files.get('.cursor/rules/redline-core.mdc');

@@ -153,7 +153,9 @@ function renderedSurface(root: string, cwd: string, profile: string): RenderedSu
   } catch (error) {
     if (!isRedlineError(error)) throw error;
   }
-  const ctx: RenderContext = { manifest, root, profile, stacks, local: readLocalRules(cwd) };
+  // No contexts: `remove` strips the block whole, so what it rendered into it
+  // does not change which bytes come out.
+  const ctx: RenderContext = { manifest, root, profile, stacks, contexts: [], local: readLocalRules(cwd) };
   const merged: string[] = [];
   const prunes: PruneRule[] = [];
   for (const renderer of Object.values(VENDORS)) {

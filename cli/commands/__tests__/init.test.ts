@@ -1579,3 +1579,47 @@ test('a demotion needs no evidence at all', async () => {
   const after = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
   assert.equal(after.rung, 'observe');
 });
+
+test('the spec-driven development context renders by default and comes back out with --no-speckit', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.match(readFileSync(join(cwd, 'AGENTS.md'), 'utf8'), /Context: spec-driven development/);
+
+  // The block is regenerated rather than appended to, so deselecting on a later
+  // run is how a rendered section is removed.
+  await init(fakePlatform(), { cwd, root, now, menu: { speckit: false } });
+  const after = readFileSync(join(cwd, 'AGENTS.md'), 'utf8');
+  assert.ok(!after.includes('Context: spec-driven development'));
+  assert.equal(readConfig(cwd)?.menu.speckit, false);
+});
+
+test('TM Forum context is off unless the repository asks for it', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: TM Forum'));
+
+  await init(fakePlatform(), { cwd, root, now, menu: { tmf: true } });
+  assert.match(readFileSync(join(cwd, 'AGENTS.md'), 'utf8'), /Context: TM Forum/);
+});
+
+test('a repository already running Spec Kit keeps its own account of it, and is told so', async () => {
+  const cwd = repo();
+  mkdirSync(join(cwd, '.specify'), { recursive: true });
+
+  const report = await init(fakePlatform(), { cwd, root, now });
+
+  assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: spec-driven development'));
+  assert.equal(readConfig(cwd)?.menu.speckit, false);
+  assert.ok(
+    report.notes.some((note) => note.includes('already runs Spec Kit')),
+    `expected the skip to be reported, got ${JSON.stringify(report.notes)}`
+  );
+});
+
+test('an explicit --speckit still wins over the detection', async () => {
+  const cwd = repo();
+  mkdirSync(join(cwd, '.specify'), { recursive: true });
+
+  await init(fakePlatform(), { cwd, root, now, menu: { speckit: true } });
+  assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: spec-driven development'));
+});

@@ -7,6 +7,28 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — first release, 0.0.1
 
+### Standards 0.0.4 — optional context sections
+
+`standards/contexts/` carries background a reviewer needs about how a repository works,
+rendered into the same artifacts the rules are and selected per repository:
+
+- `speckit.md` — the repository works spec-first. On by default, and dropped automatically
+  where the repository already runs Spec Kit, which is a separate tool with its own
+  installer and templates that Redline neither creates nor edits.
+- `tmf.md` — the repository implements TM Forum interfaces. Off unless `--tmf` asks for it.
+
+Context, deliberately not rules: a rule carries a stable id that telemetry is keyed on for
+the life of the estate, and these are selected per repository rather than by stack, so an
+id only some repositories could ever fire would make its tuning numbers meaningless. A
+finding that needs one cites `core/uncatalogued` and says which paragraph — which is also
+how the org finds out a context has earned promotion to real rules. The TMF text is a
+starting frame drawn from TMF630's design guidelines and wants review by someone who owns
+the org's TM Forum conformance.
+
+Selection is reversible: passing `--no-speckit` or `--no-tmf` on a later run removes a
+section already rendered, because the block is regenerated rather than appended to.
+
+
 ### Published as `redlinegate`
 
 The npm package is `redlinegate`, not `redline-cli`. Nothing was ever published under the

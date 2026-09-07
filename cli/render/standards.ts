@@ -4,6 +4,7 @@ import { loadManifest } from './manifest.ts';
 import { resolveProfile } from './profile.ts';
 import { END, findBlock, wrapBlock } from './markers.ts';
 import { readLocalRules, VENDORS, type PruneRule, type RenderedFile } from './vendors.ts';
+import { loadContexts } from './contexts.ts';
 import { RedlineError } from '../core/errors.ts';
 
 export interface RenderOptions {
@@ -11,6 +12,8 @@ export interface RenderOptions {
   profile: string;
   out: string;
   vendors?: string[];
+  // Context section keys this repository selected. Empty renders none.
+  contexts?: string[];
   check?: boolean;
 }
 
@@ -91,6 +94,7 @@ export function render(opts: RenderOptions): RenderResult {
     root,
     profile: resolved.profile,
     stacks: resolved.stacks,
+    contexts: loadContexts(opts.root, opts.contexts ?? []),
     local: readLocalRules(out),
   };
   const planned = new Map<string, RenderedFile>();

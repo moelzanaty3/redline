@@ -252,7 +252,8 @@ test('usage names --dry-run and says what --no-a11y and --no-speckit actually do
   const usage = lines.join('\n');
   assert.ok(usage.includes('--dry-run'));
   assert.ok(usage.includes('--no-speckit'));
-  assert.ok(usage.includes('neither changes anything in Phase 1'));
+  assert.ok(usage.includes('--tmf'));
+  assert.ok(usage.includes('changes nothing in Phase 1'));
 });
 
 // The escape hatch for a gate machinery file Redline cannot attribute to

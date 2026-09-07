@@ -19,6 +19,7 @@ const config = {
     adrForLargeDiffs: true,
     accessibility: false,
     speckit: false,
+    tmf: false,
     sensitivePathReviewers: false,
   },
   pendingAdmin: [],

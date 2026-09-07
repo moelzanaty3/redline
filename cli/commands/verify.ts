@@ -11,6 +11,7 @@ import {
 import { loadManifest } from '../render/manifest.ts';
 import { render } from '../render/standards.ts';
 import { COMMAND_HOSTS, renderCommands } from '../render/commands.ts';
+import { CONTEXTS } from '../render/contexts.ts';
 import { LOCAL_HEADING, LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
 import {
   observePullRequestTemplates,
@@ -445,6 +446,10 @@ export async function verify(
     profile: config.profile,
     out: opts.cwd,
     vendors: config.vendors,
+    // The same context selection init rendered with. Without it every
+    // repository that selected one read as stale against a render that had
+    // dropped its section.
+    contexts: CONTEXTS.filter((context) => config.menu[context.key]).map((context) => context.key),
     check: true,
   });
   const stale = rendered.stale;
