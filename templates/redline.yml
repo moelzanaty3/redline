@@ -1,13 +1,9 @@
-# Managed by Redline; regenerate with `redline init` rather than editing here.
-# Redline caller. Installed into every onboarded repo as .github/workflows/redline.yml
-# by `redline init`. Kept in sync by workflows/redline-sync.yml once `redline sync`
-# ships in Phase 3 — see CHANGELOG.md.
+# Managed by Redline. Regenerate with `redline init`; edits here are overwritten.
 #
-# DO NOT RENAME THE JOB. The branch ruleset requires the check "redline-gate / gate",
-# which is derived from this job id plus the aggregate job id in the reusable workflow.
-# Renaming it makes the required check unreportable and blocks every PR in this repo.
-#
-# Replace <org> with the organisation that hosts the `.github` repo.
+# Keep the job id `redline-gate`: the branch ruleset requires the check
+# `redline-gate / gate`, which is built from this id. Renaming it makes that
+# check unreportable.
+
 name: Redline
 
 on:

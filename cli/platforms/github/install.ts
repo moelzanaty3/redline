@@ -337,12 +337,20 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
       detail: `${relPath} already satisfies the gate on its own — left untouched`,
     };
   }
-  const contents = wrapBlock(existing, gatedSections(packaged, blockSections(missing)), relPath);
-  const appended = missing.map((heading) => `"## ${heading}"`).join(' and ');
+  // A template this repository wrote for itself is not Redline's to edit, even
+  // to make its own gate pass. Redline creates one where the host resolves
+  // none, and refreshes a block it put there itself; a file it has never
+  // touched it leaves alone and says what that costs, because the checklist job
+  // fails a pull request whose body has no `## Launch readiness` and the author
+  // deserves to hear that from the install rather than from a red check.
+  const absent = missing.map((heading) => `"## ${heading}"`).join(' and ');
   return {
     path: relPath,
-    changed: syncFile(cwd, relPath, contents, check),
-    detail: `kept this repository's ${relPath} and appended ${appended} inside REDLINE markers`,
+    changed: false,
+    detail:
+      `kept this repository's ${relPath} — Redline did not edit it. It has no ${absent}, ` +
+      `so the gate's checklist job will fail until someone adds ${missing.length === 1 ? 'that section' : 'those sections'} ` +
+      `or the gate is deselected with: redline init --skip gate`,
   };
 }
 

@@ -43,7 +43,7 @@ const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const USAGE = [
   'redline — engineering control plane',
   '',
-  '  redline init [--profile <name>] [--vendors <list>] [--blocking] [--no-a11y] [--speckit] [--dry-run] [--repair]',
+  '  redline init [--profile <name>] [--vendors <list>] [--blocking] [--no-a11y] [--no-speckit] [--dry-run] [--repair]',
   '               [--adopt-caller] [--skip <list>] [--with <list>]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
@@ -51,7 +51,8 @@ const USAGE = [
   '                  overrides both detection and whatever .redline.json already recorded; a vendor',
   '                  the org has not enabled never renders no matter what this list names',
   '      --blocking  promote the merge gate from advisory to blocking',
-  '      --no-a11y, --speckit  recorded in .redline.json for later phases; changes nothing in Phase 1',
+  '      --no-a11y, --no-speckit  both are on by default and recorded in .redline.json for',
+  '                  later phases; neither changes anything in Phase 1',
   '      --repair    re-apply every capability even if this repository looks already onboarded — for',
   '                  labels, review-ownership, repo-property, gate and merge-policy, whose recorded',
   '                  pendingAdmin entry a plain re-run can never clear on its own; composes with --dry-run',
@@ -180,6 +181,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             blocking: { type: 'boolean' },
             'no-a11y': { type: 'boolean' },
             speckit: { type: 'boolean' },
+            'no-speckit': { type: 'boolean' },
             'dry-run': { type: 'boolean' },
             repair: { type: 'boolean' },
             'adopt-caller': { type: 'boolean' },
@@ -206,6 +208,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values.blocking !== undefined) menu.blockingGate = values.blocking;
       if (values['no-a11y'] !== undefined) menu.accessibility = !values['no-a11y'];
       if (values.speckit !== undefined) menu.speckit = values.speckit;
+      if (values['no-speckit'] === true) menu.speckit = false;
 
       // Same "no default" reasoning as the menu flags above: undefined is how
       // init() tells "nothing typed, keep detection or the recorded

@@ -25,10 +25,10 @@ function tempRepo(prefix: string): string {
   return dir;
 }
 
-async function onboarded(): Promise<string> {
+async function onboarded(menu?: { sensitivePathReviewers?: boolean }): Promise<string> {
   const cwd = tempRepo('redline-verify-');
   writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
-  await init(fakePlatform(), { cwd, root, now });
+  await init(fakePlatform(), { cwd, root, now, ...(menu ? { menu } : {}) });
   return cwd;
 }
 
@@ -379,7 +379,9 @@ test('the merge-policy finding names --repair as the remedy when no ruleset is o
 });
 
 test('a policy that no longer requires code-owner review is drift even while the gate still matches', async () => {
-  const cwd = await onboarded();
+  // Only drift for a repository that asked for code-owner review; it is off by
+  // default, and a repository that never selected it is not failing at it.
+  const cwd = await onboarded({ sensitivePathReviewers: true });
   const platform = await withPolicy(cwd, policyOf({ requireCodeOwnerReview: false }));
   const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
   assert.equal(finding?.ok, false, finding?.detail);
@@ -811,8 +813,17 @@ test('the merge policy init applies is the one verify holds a repository to', as
 
   assert.equal(platform.lastPolicy?.requiredApprovals, 1, 'raise MINIMUM_APPROVALS in verify.ts with it');
   assert.equal(platform.lastPolicy?.dismissStaleReviews, true);
-  assert.equal(platform.lastPolicy?.requireCodeOwnerReview, true);
   assert.equal(platform.lastPolicy?.requireThreadResolution, true);
+  // Never required by default: the CODEOWNERS that would satisfy it is not
+  // installed by default either, and requiring an owner nobody can be is how a
+  // repository ends up unmergeable.
+  assert.equal(platform.lastPolicy?.requireCodeOwnerReview, false);
+
+  const selected = fakePlatform();
+  const other = tempRepo('redline-verify-contract-owned-');
+  writeFileSync(join(other, 'package.json'), '{"dependencies":{"react":"19"}}');
+  await init(selected, { cwd: other, root, now, menu: { sensitivePathReviewers: true } });
+  assert.equal(selected.lastPolicy?.requireCodeOwnerReview, true);
 });
 
 // --- repository-local rules --------------------------------------------------
@@ -943,6 +954,7 @@ test('every deselected capability is named in one finding, and a full selection 
   const cwd = await onboarded();
   const config = readConfig(cwd)!;
 
+  writeConfig(cwd, { ...config, menu: { ...config.menu, sensitivePathReviewers: true } });
   const all = await verify(() => fakePlatform(), { cwd, root });
   assert.equal(find(all, 'capabilities')?.ok, true);
   assert.match(find(all, 'capabilities')?.detail ?? '', /every capability selected/);
@@ -1097,7 +1109,7 @@ test('an owner the host cannot resolve fails the run that requires code-owner re
   // and nothing asked the host whether the owners resolve. On a personal
   // account they never do — there are no teams — so the requirement lands on
   // Redline's own enforcement surface and cannot be satisfied.
-  const cwd = await onboarded();
+  const cwd = await onboarded({ sensitivePathReviewers: true });
   const problems = ['Unknown owner — make sure the team @acme/platform-engineering exists'];
 
   const report = await verify(() => fakePlatform({ codeownersProblems: problems }), { cwd, root });
@@ -1108,7 +1120,7 @@ test('an owner the host cannot resolve fails the run that requires code-owner re
 });
 
 test('owners that all resolve pass, and a host without CODEOWNERS is not a failure', async () => {
-  const cwd = await onboarded();
+  const cwd = await onboarded({ sensitivePathReviewers: true });
 
   const resolved = await verify(() => fakePlatform({ codeownersProblems: [] }), { cwd, root });
   assert.equal(find(resolved, 'review-ownership')?.ok, true);

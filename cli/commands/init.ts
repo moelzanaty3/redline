@@ -32,12 +32,25 @@ import type {
   PullRequestRef,
 } from '../platforms/types.ts';
 
+// What a repository gets when it says nothing. Every default here has to be
+// safe on a repository nobody has looked at, because that is the one the
+// command is usually run on.
 export const DEFAULT_MENU: MenuSelections = {
+  // Advisory. The gate reports and does not block until a team has watched it
+  // for a while and promoted it deliberately with --blocking.
   blockingGate: false,
   adrForLargeDiffs: true,
   accessibility: true,
-  speckit: false,
-  sensitivePathReviewers: true,
+  // Recorded for a later phase; nothing reads it yet. --no-speckit turns it off.
+  speckit: true,
+  // Off by default. Turning it on writes a CODEOWNERS naming
+  // `@<org>/platform-engineering` and requires that team's review on the paths
+  // it lists — which is worth having only where the team actually exists. It
+  // does not on a personal account, which has no teams at all: GitHub then
+  // rejects every line as an unknown owner and code-owner review becomes a
+  // requirement nobody can satisfy, on the very files it was meant to protect.
+  // `redline init --with review-ownership` opts in.
+  sensitivePathReviewers: false,
 };
 
 // Named once so the label FLOOR_GATE soft-fails on and the label

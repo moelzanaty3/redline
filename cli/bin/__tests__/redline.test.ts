@@ -246,12 +246,13 @@ test('init --vendors overrides detection and skips a deselected vendor', async (
   assert.ok(existsSync(join(cwd, 'AGENTS.md')));
 });
 
-test('usage names --dry-run and says what --no-a11y and --speckit actually do', async () => {
+test('usage names --dry-run and says what --no-a11y and --no-speckit actually do', async () => {
   const { opts, lines } = deps(repo());
   await run(['--help'], opts);
   const usage = lines.join('\n');
   assert.ok(usage.includes('--dry-run'));
-  assert.ok(usage.includes('changes nothing in Phase 1'));
+  assert.ok(usage.includes('--no-speckit'));
+  assert.ok(usage.includes('neither changes anything in Phase 1'));
 });
 
 // The escape hatch for a gate machinery file Redline cannot attribute to
