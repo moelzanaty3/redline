@@ -104,6 +104,13 @@
 .hm-hero-alt a:hover {
   color: var(--red-soft);
 }
+/* Same middot separator the final CTA row uses — two link rows on one page that
+   separate their items differently read as two different components. */
+.hm-hero-alt a + a::before {
+  content: "·";
+  margin: 0 12px;
+  color: var(--faint);
+}
 
 /* ================= 2 · the problem ================= */
 .hm-prob-cols,

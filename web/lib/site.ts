@@ -38,3 +38,9 @@ export const NAV_LINKS: readonly NavLink[] = [
   { href: "/docs/adaptors/github-copilot", label: "Adaptors" },
   { href: "/docs/installation", label: "Installation" },
 ];
+
+// Where a reader reports something. `/issues/new` rather than the list: the
+// people this link is for arrived with a specific problem, and the list is one
+// extra click away from the form they actually want.
+export const ISSUES_URL = `${GITHUB_URL}/issues`;
+export const NEW_ISSUE_URL = `${ISSUES_URL}/new`;

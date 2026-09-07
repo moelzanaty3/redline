@@ -5,6 +5,7 @@ import {
   AUTHOR_CREDIT,
   GITHUB_REPO,
   GITHUB_URL,
+  ISSUES_URL,
   LICENSE_NAME,
   LICENSE_URL,
   LINKEDIN_URL,
@@ -45,6 +46,14 @@ export function SiteFooter() {
                     <path d="M1.763 0C.786 0 0 .786 0 1.763v20.474C0 23.214.786 24 1.763 24h20.474c.977 0 1.763-.786 1.763-1.763V1.763C24 .786 23.214 0 22.237 0zM5.13 5.323l13.837.019-.009 13.836h-3.464l.01-10.382h-3.456L12.04 19.17H5.113z" />
                   </svg>
                   <span>{NPM_PACKAGE}</span>
+                </a>
+              </li>
+              <li>
+                <a href={ISSUES_URL} rel="noopener noreferrer" target="_blank">
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0Zm0 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13Zm0 2.25a.9.9 0 0 0-.9.9v3.6a.9.9 0 0 0 1.8 0v-3.6a.9.9 0 0 0-.9-.9Zm0 6.1a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" />
+                  </svg>
+                  <span>Report an issue</span>
                 </a>
               </li>
               <li>

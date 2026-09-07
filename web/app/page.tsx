@@ -10,6 +10,7 @@ import { loadManifest } from "@/lib/manifest";
 import { PACKAGE_NAME, installCommand, packageState } from "@/lib/package-version";
 import { findRule, getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
+import { GITHUB_REPO, GITHUB_URL, NEW_ISSUE_URL } from "@/lib/site";
 
 // Declared, not inherited from Next's default. The loaders behind this page —
 // Journey's profile resolution, the seed reader, the rule lookup below — throw
@@ -31,7 +32,7 @@ export default async function Home() {
   const vendorCount = Object.values(manifest.vendors).filter((v) => v.enabled).length;
   const seedCount = seededFindingCount();
 
-  // The finding in section 3 is a real rule at its real severity. A page that
+  // The finding in section 4 is a real rule at its real severity. A page that
   // typeset `Redline/BLOCKER [javascript/shell-injection]` after that id had
   // been renamed would be printing a contract it no longer honours.
   const demoRule = findRule(SEED_RULE_ID);
@@ -77,6 +78,9 @@ export default async function Home() {
           </div>
           <p className="hm-hero-alt">
             <a href="#finding">See a finding ↓</a>
+            <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
+              {GITHUB_REPO} on GitHub
+            </a>
           </p>
           <p className="hero-proof">
             <span>{ruleCount} rules, each with a permanent id</span>
@@ -88,10 +92,13 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 2 — the problem ============ */}
+      {/* ============ 2 — proof ============ */}
+      <Journey initCmd={initCmd} />
+
+      {/* ============ 3 — the problem ============ */}
       <ValueCase />
 
-      {/* ============ 3 — a finding ============ */}
+      {/* ============ 4 — a finding ============ */}
       <section className="hm-sec hm-finding" id="finding">
         <div className="container">
           <div className="hm-sec-head">
@@ -113,7 +120,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 4 — where it sits ============ */}
+      {/* ============ 5 — where it sits ============ */}
       <section className="hm-sec hm-flow" id="workflow">
         <div className="container">
           <Reveal>
@@ -176,7 +183,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 5 — why this is different ============ */}
+      {/* ============ 6 — why this is different ============ */}
       <section className="hm-sec hm-claims" id="different">
         <div className="container">
           <Reveal>
@@ -266,9 +273,6 @@ export default async function Home() {
           </Reveal>
         </div>
       </section>
-
-      {/* ============ 6 — proof ============ */}
-      <Journey initCmd={initCmd} />
 
       {/* ============ 7 — try it ============ */}
       <section className="hm-sec hm-try" id="try">
@@ -372,6 +376,12 @@ export default async function Home() {
             <Link href="/docs/quickstart">Quickstart</Link>
             <Link href="/docs/local-review">Local review</Link>
             <Link href="/docs/seeds">The seed corpus</Link>
+            <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
+              Source on GitHub
+            </a>
+            <a href={NEW_ISSUE_URL} rel="noopener noreferrer" target="_blank">
+              Report an issue
+            </a>
           </p>
         </div>
       </section>
