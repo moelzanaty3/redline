@@ -397,9 +397,26 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       // present but not enabled -> denied, as before.
       const statuses = parseSecurityAnalysisStatuses(repo.body);
       const invisible = statuses === null;
-      const stateFor = (key: string): CapabilityOutcome['status'] =>
-        invisible ? 'unknown' : statuses[key] === 'enabled' ? 'applied' : 'denied';
-      const note = invisible ? ' (not visible to this token)' : '';
+      // Three answers, not two. GitHub includes a key in a VISIBLE
+      // security_and_analysis block only when the feature exists on this
+      // repository's plan: present-and-not-enabled means "you have it and it
+      // is off", while an omitted key means "this plan does not have it at
+      // all". Collapsing the second into `denied` is what made `redline init`
+      // and `redline verify` disagree about the same three settings on the
+      // same repository — init reported `unsupported (not available on this
+      // repository)` from its write's 404, verify reported `FAIL disabled`
+      // from the absent key, and the operator was told to go and enable
+      // something no administrator of that repository can enable.
+      const stateFor = (key: string): CapabilityOutcome['status'] => {
+        if (invisible) return 'unknown';
+        const status = statuses[key];
+        if (status === undefined) return 'unsupported';
+        return status === 'enabled' ? 'applied' : 'denied';
+      };
+      const noteFor = (key: string): string => {
+        if (invisible) return ' (not visible to this token)';
+        return statuses[key] === undefined ? ' (not available on this repository)' : '';
+      };
 
       // Dependabot alerts live on their own endpoint, and it answers with a
       // status rather than a body: 204 enabled, 404 disabled (the repository
@@ -421,12 +438,12 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
           {
             capability: 'secret-scanning',
             status: stateFor('secret_scanning'),
-            detail: `secret scanning${note}`,
+            detail: `secret scanning${noteFor('secret_scanning')}`,
           },
           {
             capability: 'push-protection',
             status: stateFor('secret_scanning_push_protection'),
-            detail: `secret scanning push protection${note}`,
+            detail: `secret scanning push protection${noteFor('secret_scanning_push_protection')}`,
           },
           {
             capability: 'dependency-alerts',

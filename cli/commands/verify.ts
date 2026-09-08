@@ -325,6 +325,25 @@ export async function verify(
               : `${machinery.path} publishes ${machinery.publishes}`
   );
 
+  // A mature repository reports twenty-five checks on a pull request, and
+  // printing all of them put a single unreadable line in the middle of the
+  // report — burying the findings either side of it. What the reader needs from
+  // this list is the count and whether anything Redline-shaped is in it; the
+  // rest is noise that a `gh pr checks` away.
+  const CHECK_SAMPLE = 3;
+  const summariseChecks = (names: readonly string[]): string => {
+    if (names.length === 0) return '(nothing)';
+    if (names.length <= CHECK_SAMPLE + 1) return names.join(', ');
+    // Redline's own checks lead, because their presence or absence is the
+    // question this finding exists to answer.
+    const ordered = [
+      ...names.filter((n) => n.toLowerCase().startsWith('redline')),
+      ...names.filter((n) => !n.toLowerCase().startsWith('redline')),
+    ];
+    const shown = ordered.slice(0, CHECK_SAMPLE);
+    return `${names.length} checks (${shown.join(', ')} and ${names.length - shown.length} more)`;
+  };
+
   const pr = await platform.latestPullRequestNumber(ref);
   if (pr === null) {
     add('check-name-reported', true, 'no pull request yet — open one to confirm the check reports');
@@ -364,7 +383,7 @@ export async function verify(
         'check-name-reported',
         false,
         `expected ${missing.join(', ')} but PR #${pr} only reported: ${
-          reported.length > 0 ? reported.join(', ') : '(nothing)'
+          summariseChecks(reported)
         } — ${missing.join(', ')} was never reported${
           // Only a blocking policy blocks. Azure reports required checks off a
           // Status policy that nothing queues a build for, and telling that
@@ -389,7 +408,7 @@ export async function verify(
                 ...(gateOwned ? [] : ['gate']),
                 ...(config.capabilities.mergePolicy ? [] : ['merge-policy']),
               ].join(', ')} ${OFF_BY_CHOICE}`
-        } — PR #${pr} reported: ${reported.length > 0 ? reported.join(', ') : '(nothing)'}`
+        } — PR #${pr} reported: ${summariseChecks(reported)}`
       );
     }
   }

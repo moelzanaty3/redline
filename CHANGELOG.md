@@ -7,6 +7,52 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased — 0.0.2
 
+### CLI — `redline init` asks before it writes
+
+Everything below came out of one real onboarding of a mature repository. Each item is a
+defect that onboarding surfaced, not a feature anyone asked for.
+
+- **`redline init` with no flags at a terminal now walks a menu.** Profile, host, pipeline,
+  vendors, contexts, capabilities and rung, one question at a time, with the detected answer
+  preselected and every term explained beside the choice that uses it. The last question is
+  Dry run or Apply, defaulting to Dry run. CI, pipes and any run carrying a flag take exactly
+  the path they took before: a prompt in a pipeline is a hang with nobody there to answer it.
+  Zero new dependencies — the prompt kit is `node:readline` and ANSI, because a tool that runs
+  via `npx` inside other organisations' CI should not hand them a supply-chain edge for a menu.
+
+- **The gate no longer writes a workflow that cannot resolve.** `init` used to render
+  `.github/workflows/redline.yml` referencing `<org>/.github/.github/workflows/redline-gate.yml@main`,
+  commit it, and report `applied gate` — on an organisation with no `.github` repository. Every
+  pull request in that repository then failed with "Unable to find reusable workflow". The
+  reference is now resolved before the caller is written; a failure suppresses the caller only,
+  keeps the pull request template and labels, and reports the gate as `denied` so it reaches
+  pendingAdmin with the org-level fix named.
+
+- **`--pipeline github-actions|azure-pipelines`, asked in the menu.** The host and the thing
+  that runs the checks come apart: a repository can live on GitHub and be built entirely by
+  Azure Pipelines. Deriving one from the other is what put an Actions workflow into a repository
+  that runs no Actions. Choosing `azure-pipelines` on a GitHub host writes
+  `.azuredevops/redline-gate.yml` — with the `pr:` trigger GitHub-hosted repositories honour, the
+  same pinned diff secret scan as the other two gates, and no Azure Repos status POST, because
+  on GitHub the build result is the check.
+
+- **`verify` and `init` no longer contradict each other about the security floor.** GitHub
+  includes a key in a visible `security_and_analysis` block only when the feature exists on the
+  repository's plan. An omitted key now reads as `unsupported`, not `denied` — `init` said "not
+  available on this repository" while `verify` said "FAIL disabled" about the same three
+  settings, sending the operator to enable something no administrator of that repository can.
+
+- **`check-name-reported` summarises.** A mature repository reports twenty-five checks, and
+  printing all of them put one unreadable line in the middle of the report with a real
+  security-floor failure directly underneath it.
+
+- **An applied run says where its changes went.** Onboarding commits to `redline/onboard` and
+  pushes, so `git status` stays clean; the run now says so. Without it the first real onboarding
+  looked like it had done nothing, and the operator ran `init` again and was told "already
+  onboarded" by a repository they believed was not.
+
+- **Cancelling is not a failure.** Ctrl-C at a prompt exits 130 with no `error` line.
+
 ### Standards 0.0.2 — optional context sections
 
 `standards/contexts/` carries background a reviewer needs about how a repository works,

@@ -286,6 +286,48 @@ test('a pull request the gate never ran on is reported without being called a br
   assert.match(finding?.detail ?? '', /no gate run observed yet/);
 });
 
+// A mature repository reports twenty-five checks. Printing all of them put one
+// unreadable line in the middle of the report and buried the findings either
+// side of it — including, on the run that prompted this, a genuine
+// security-floor failure directly underneath.
+test('a long list of reported checks is summarised rather than dumped', async () => {
+  const cwd = await onboarded();
+  const many = Array.from({ length: 25 }, (_, i) => `build (stage ${i})`);
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: [], blocking: false }));
+  platform.readReportedCheckNames = async () => many;
+
+  const detail = find(await verify(() => platform, { cwd, root }), 'check-name-reported')?.detail ?? '';
+  assert.match(detail, /25 checks/);
+  assert.match(detail, /and 22 more/);
+  assert.ok(detail.length < 300, `still a wall at ${detail.length} chars`);
+});
+
+// Redline's own checks are the ones this finding exists to ask about, so they
+// lead the sample even when the host lists them last.
+test('a summarised list leads with Redline\'s own checks', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: [], blocking: false }));
+  platform.readReportedCheckNames = async () => [
+    ...Array.from({ length: 20 }, (_, i) => `build ${i}`),
+    'redline-gate / gate',
+  ];
+
+  const detail = find(await verify(() => platform, { cwd, root }), 'check-name-reported')?.detail ?? '';
+  assert.match(detail, /\(redline-gate \/ gate, /);
+});
+
+// A short list is still printed in full: summarising four names would hide
+// information to save nothing.
+test('a short list of reported checks is printed whole', async () => {
+  const cwd = await onboarded();
+  const platform = await withPolicy(cwd, policyOf({ requiredChecks: [], blocking: false }));
+  platform.readReportedCheckNames = async () => ['build', 'lint'];
+
+  const detail = find(await verify(() => platform, { cwd, root }), 'check-name-reported')?.detail ?? '';
+  assert.match(detail, /build, lint/);
+  assert.doesNotMatch(detail, /more\)/);
+});
+
 // Both halves in one test: Azure publishes a blocking Status policy whose
 // Build Validation policy is missing, so required checks exist while nothing
 // blocks on them. Telling that operator every pull request is blocked sends

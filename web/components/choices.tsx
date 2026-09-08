@@ -1,4 +1,5 @@
-// What `redline init` asks you, on the page rather than in the man page.
+// What `redline init` asks you — the same questions, in the same order, as the
+// menu the CLI now walks when it is run with no flags at a terminal.
 //
 // The transcript above shows one run with its defaults. That is the honest
 // demonstration, and it is also the thing most likely to be mistaken for the
@@ -29,7 +30,7 @@ type Group = {
 const GROUPS: readonly Group[] = [
   {
     title: "Where it runs",
-    lead: "Read from your git remote. Named explicitly only when detection cannot tell.",
+    lead: "Detected from your git remote, and asked anyway — detection can be wrong, and it is one keystroke to overrule.",
     choices: [
       {
         label: "GitHub",
@@ -43,7 +44,27 @@ const GROUPS: readonly Group[] = [
         flag: "detected",
         fallback: "dev.azure.com or a legacy visualstudio.com remote",
         detail:
-          "A registered pipeline definition plus a Build Validation policy, because Azure Repos ignores YAML pr: triggers.",
+          "A registered pipeline definition plus a Build Validation policy. Azure Repos ignores YAML pr: triggers, so the policy is what queues the build.",
+      },
+    ],
+  },
+  {
+    title: "What runs your checks",
+    lead: "Asked separately from the host, because the two come apart.",
+    choices: [
+      {
+        label: "GitHub Actions",
+        flag: "--pipeline github-actions",
+        fallback: "the default on GitHub",
+        detail:
+          "A thin caller workflow referencing the organisation's reusable gate. Redline resolves that workflow before writing the caller, and refuses rather than commit one that cannot start.",
+      },
+      {
+        label: "Azure Pipelines",
+        flag: "--pipeline azure-pipelines",
+        fallback: "detected from an existing pull request pipeline",
+        detail:
+          "For a repository hosted on GitHub whose checks are Azure Pipelines. Writes a pipeline definition with a pr: trigger; the build result is the check GitHub reads.",
       },
     ],
   },
@@ -102,6 +123,10 @@ export function Choices() {
       <div className="container">
         <h2>It asks before it writes</h2>
         <p className="hm-choices-lead">
+          <code>redline init</code> with no flags, at a terminal, walks these
+          one at a time — detected answer preselected, every term explained
+          beside the choice that uses it, and <b>Dry run</b> before Apply. In CI,
+          in a pipe, or with any flag at all, it prompts for nothing.{" "}
           The run above is one repository&apos;s answers. Yours are recorded in{" "}
           <code>.redline.json</code>, explained inline in that file, and every one
           of them is reversible — re-run <code>redline init</code> with the

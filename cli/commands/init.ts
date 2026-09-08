@@ -30,6 +30,7 @@ import type {
   CapabilityOutcome,
   GateMachinery,
   GateOptions,
+  GatePipeline,
   OwnershipRule,
   Platform,
   PullRequestRef,
@@ -202,7 +203,7 @@ const VENDOR_MARKERS: { vendor: string; paths: string[] }[] = [
 // org-enabled vendor) rather than an empty selection — that is the greenfield
 // case the standard is written for, not a repository that opted out of all of
 // them.
-function detectVendors(cwd: string, orgDefault: string[]): string[] {
+export function detectVendors(cwd: string, orgDefault: string[]): string[] {
   const found = VENDOR_MARKERS.filter((marker) =>
     marker.paths.some((relPath) => existsSync(join(cwd, relPath)))
   ).map((marker) => marker.vendor);
@@ -242,6 +243,10 @@ export interface InitOptions {
   // supports it; a demotion is always allowed, because the safe direction must
   // never need permission.
   rung?: Rung;
+  // What runs this repository's pull request checks, when it is not this
+  // host's default. A repository on GitHub built by Azure Pipelines is the
+  // case this exists for; see GatePipeline in cli/platforms/types.ts.
+  pipeline?: GatePipeline;
   // Evidence for a promotion, read from collected telemetry by the caller. Absent
   // means none was supplied, which is not the same as evidence that failed — a
   // promotion asked for without it is refused and says so.
@@ -403,6 +408,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   const gateOptions: GateOptions = {
     ...FLOOR_GATE,
+    ...(opts.pipeline ? { pipeline: opts.pipeline } : {}),
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
     ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
     ...(capabilities.labels ? {} : { manageLabels: false }),

@@ -51,7 +51,24 @@ export function isPending(outcome: CapabilityOutcome): boolean {
   return outcome.status === 'denied';
 }
 
+// What actually runs this repository's pull request checks. It is asked
+// separately from the host because the two genuinely come apart: a repository
+// can live on GitHub and be built entirely by Azure Pipelines, and deriving one
+// from the other is what installed a GitHub Actions workflow into a repository
+// that runs none.
+export type GatePipeline = 'github-actions' | 'azure-pipelines';
+
+export const GATE_PIPELINES: readonly GatePipeline[] = ['github-actions', 'azure-pipelines'];
+
+export function isGatePipeline(value: string): value is GatePipeline {
+  return (GATE_PIPELINES as readonly string[]).includes(value);
+}
+
 export interface GateOptions {
+  // Absent means "whatever this host's default is" — Actions on GitHub, an
+  // Azure pipeline definition on Azure DevOps — which is what every caller
+  // predating the question passes.
+  pipeline?: GatePipeline;
   adrDiffThreshold: number;
   failOnDependencySeverity: 'low' | 'moderate' | 'high' | 'critical';
   softFailLabels: string[];

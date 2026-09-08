@@ -1,0 +1,152 @@
+# Managed by Redline; regenerate with `redline init` rather than editing here.
+# Redline merge gate for a GitHub-hosted repository built by Azure Pipelines.
+#
+# This is the combination the estate actually runs: the code lives on GitHub,
+# the pull request checks are Azure Pipelines. Neither of Redline's two original
+# paths fitted it — the GitHub path writes an Actions workflow the repository
+# never runs, and the Azure path installs a Build Validation policy against an
+# Azure Repos repository that does not exist here.
+#
+# CONTRACT: this pipeline reports to GitHub as a check named after its own
+# pipeline definition, published by the Azure Pipelines GitHub App. There is no
+# status POST here, unlike the Azure Repos template beside it: on a GitHub-hosted
+# repository the build result IS the check, and posting to the Azure Repos
+# statuses API would address a pull request that does not exist. The name a
+# branch ruleset must require is therefore the pipeline's name in Azure DevOps —
+# `redline init` prints it, and `redline verify` reads the reported names back.
+#
+# A `pr:` block IS honoured here. Azure Pipelines ignores `pr:` triggers only
+# for Azure *Repos*; for a GitHub-hosted repository they are the trigger
+# mechanism, which is why the Azure Repos template beside this one has none.
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ADR_DIFF_THRESHOLD: 300
+  FAIL_ON_DEPENDENCY_SEVERITY: high
+  SOFT_FAIL_LABELS: redline-exempt,redline-sync
+  # Declared with a default so the final step can read it even when the scan
+  # passed and never set it. An undeclared Azure variable interpolates as the
+  # literal string "$(NAME)" rather than empty, which is the kind of quiet
+  # wrong answer this gate exists to prevent.
+  REDLINE_SECURITY_FAILED: 'false'
+  # Pinned by image digest, not by tag: a tag is mutable and this scans the diff
+  # of every pull request in the repository. The version in the trailing comment
+  # is what scripts/check-pins.mjs re-resolves the digest against, exactly as it
+  # does for the SHA-pinned actions on the GitHub side of the gate.
+  TRUFFLEHOG_IMAGE: trufflesecurity/trufflehog@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08 # 3.97.1
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: NodeTool@0
+    displayName: Node 22
+    inputs:
+      versionSpec: '22.x'
+
+  # No substitute in Mend or SonarQube: both scan a state of the tree, and a
+  # credential committed and reverted inside one pull request is still in the
+  # history the moment it merges. This scans the RANGE.
+  #
+  # `--results=verified` only: `unknown` produces false positives and this
+  # check cannot be waived by a label.
+  - script: |
+      set -euo pipefail
+      target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+      # The PR build checks out a merge commit, and the target branch is not
+      # guaranteed to be a local ref on a fresh agent. Fetch it by name before
+      # asking for a merge base, or `git merge-base` fails and the scan silently
+      # degrades to scanning nothing.
+      git fetch --no-tags origin "$target"
+      base=$(git merge-base FETCH_HEAD HEAD)
+      echo "scanning $base..HEAD"
+
+      # Recorded BEFORE the exit, because the exemption branch in the final step
+      # must never downgrade this one.
+      if ! docker run --rm -v "$(pwd):/repo" "$TRUFFLEHOG_IMAGE" \
+        git file:///repo --since-commit "$base" --results=verified --fail
+      then
+        echo "##vso[task.setvariable variable=REDLINE_SECURITY_FAILED]true"
+        exit 1
+      fi
+    displayName: Secret scan (diff)
+    name: secrets
+    env:
+      TRUFFLEHOG_IMAGE: $(TRUFFLEHOG_IMAGE)
+
+  # --package pins npx to the redlinegate package explicitly. `redline` alone
+  # names a different, unrelated package on the public registry.
+  - script: npx --yes --package=redlinegate@latest redline verify --gate
+    displayName: Redline gate
+    name: gate
+    # A failed secret scan must not hide the configuration findings: the author
+    # deserves the whole list in one run rather than one blocker at a time.
+    condition: succeededOrFailed()
+    env:
+      GH_TOKEN: $(GH_TOKEN)
+      ADR_DIFF_THRESHOLD: $(ADR_DIFF_THRESHOLD)
+      FAIL_ON_DEPENDENCY_SEVERITY: $(FAIL_ON_DEPENDENCY_SEVERITY)
+      SOFT_FAIL_LABELS: $(SOFT_FAIL_LABELS)
+
+  - script: |
+      set -euo pipefail
+      if [ "$AGENT_JOBSTATUS" = "Succeeded" ]; then
+        echo "gate passed"
+        exit 0
+      fi
+
+      # The secret scan is never waivable, exactly as on the GitHub side where
+      # the security jobs sit outside label exemption. A label that could waive
+      # a verified credential in the diff would make the label the
+      # vulnerability.
+      if [ "${REDLINE_SECURITY_FAILED:-}" = "true" ]; then
+        echo "##vso[task.logissue type=error]The secret scan failed. This check cannot be waived by a label."
+        exit 1
+      fi
+
+      # Soft-fail escape hatch: a pull request carrying one of SOFT_FAIL_LABELS
+      # reports success instead of blocking, so a reviewer can accept a process
+      # failure deliberately. It can only ever turn a failure into a success.
+      #
+      # Fails CLOSED when no token is configured. Without GH_TOKEN the labels
+      # cannot be read, and "could not check for an exemption" must block rather
+      # than wave through — an unreadable exemption is not an exemption.
+      if [ -z "${GH_TOKEN:-}" ] || [ -z "${SOFT_FAIL_LABELS:-}" ]; then
+        echo "##vso[task.logissue type=error]Redline gate failed."
+        exit 1
+      fi
+
+      pr="${SYSTEM_PULLREQUEST_PULLREQUESTNUMBER:-}"
+      repo="${BUILD_REPOSITORY_NAME:-}"
+      # The token must never appear in argv — visible via `ps` to any process on
+      # the agent. It is already an env var; hand it to curl through a stdin
+      # config instead of putting it on the command line with -H.
+      labels=$(printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" \
+        | curl -K - -sS -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/${repo}/issues/${pr}/labels") || labels=''
+
+      for label in ${SOFT_FAIL_LABELS//,/ }; do
+        if printf '%s' "$labels" | jq -e --arg l "$label" '[.[]?.name] | index($l)' >/dev/null 2>&1; then
+          echo "##vso[task.logissue type=warning]Redline gate failed but the \"$label\" label is applied — a reviewer accepted this deliberately"
+          exit 0
+        fi
+      done
+
+      echo "##vso[task.logissue type=error]Redline gate failed."
+      exit 1
+    displayName: Redline gate verdict
+    condition: always()
+    env:
+      GH_TOKEN: $(GH_TOKEN)
+      SOFT_FAIL_LABELS: $(SOFT_FAIL_LABELS)
+      REDLINE_SECURITY_FAILED: $(REDLINE_SECURITY_FAILED)

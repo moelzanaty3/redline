@@ -142,6 +142,46 @@ test('readSecurityState reports each capability from security_and_analysis', asy
   assert.equal(state.outcomes.find((o) => o.capability === 'push-protection')?.status, 'denied');
 });
 
+// GitHub includes a key in a visible security_and_analysis block only when the
+// feature exists on this repository's plan. Reading an omitted key as `denied`
+// is what made `redline init` and `redline verify` contradict each other on the
+// same repository — init said "not available on this repository" from its
+// write's 404, verify said "FAIL disabled" from the absent key, and the
+// operator was sent to enable something no administrator of that repository
+// can enable. Absent is `unsupported`: definite, and nobody's to fix.
+test('a key absent from a visible block is unsupported, not disabled', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': {
+      status: 200,
+      // A private repository without Advanced Security: the block is readable,
+      // the two secret-scanning keys are simply not in it.
+      body: { security_and_analysis: { dependabot_security_updates: { status: 'disabled' } } },
+    },
+  });
+  const state = await createGitHubVerify(client).readSecurityState(ref);
+  const secretScanning = state.outcomes.find((o) => o.capability === 'secret-scanning');
+  const pushProtection = state.outcomes.find((o) => o.capability === 'push-protection');
+
+  assert.equal(secretScanning?.status, 'unsupported');
+  assert.equal(pushProtection?.status, 'unsupported');
+  assert.match(secretScanning!.detail, /not available on this repository/);
+});
+
+// The other half of the same distinction: present-and-off is a real gap an
+// administrator can close, and must keep failing.
+test('a key present but not enabled stays denied', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': {
+      status: 200,
+      body: { security_and_analysis: { secret_scanning: { status: 'disabled' } } },
+    },
+  });
+  const state = await createGitHubVerify(client).readSecurityState(ref);
+  const secretScanning = state.outcomes.find((o) => o.capability === 'secret-scanning');
+  assert.equal(secretScanning?.status, 'denied');
+  assert.doesNotMatch(secretScanning!.detail, /not available/);
+});
+
 // A 404 (typo'd repo, deleted repo, insufficient token scope) must not read as
 // "both capabilities are off" — `denied` is exactly the status that files
 // pending-admin work, so a transient host error would send an administrator

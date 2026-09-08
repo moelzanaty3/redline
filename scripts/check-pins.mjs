@@ -43,6 +43,10 @@ const files = [
   // moment it pinned a container digest that omission would have made the pin
   // unverifiable — the exact rot this script exists to catch.
   'platforms/azure/gate-template.yml',
+  // The same gate for a GitHub-hosted repository built by Azure Pipelines. It
+  // carries the same container digest, so leaving it out here would let the two
+  // halves of the same gate drift to different versions of the scanner.
+  'platforms/azure/gate-template-github.yml',
 ].filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
 
 const pins = [];
