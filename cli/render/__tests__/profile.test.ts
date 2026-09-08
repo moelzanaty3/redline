@@ -31,3 +31,48 @@ test('an unknown profile names the known ones', () => {
     /unknown profile "nope"/
   );
 });
+
+// A repository is routinely more than one bundle — a React application with its
+// own Terraform beside it — and a single choice made it pick the half that
+// fitted worst.
+test('several profiles resolve to the union of their stacks', () => {
+  const { stacks } = resolveProfile(manifest, 'web,infra');
+  assert.deepEqual(stacks, ['terraform', 'javascript', 'react']);
+});
+
+// `.redline.json` records one string and every reader hands it straight back
+// here, so the recorded name has to be canonical. Two operators choosing the
+// same two profiles in a different order must produce byte-identical artifacts,
+// or verify's artifacts-current finding flaps between their runs.
+test('the recorded name is sorted, so order of selection cannot matter', () => {
+  const one = resolveProfile(manifest, 'web,infra');
+  const other = resolveProfile(manifest, 'infra,web');
+  assert.equal(one.profile, 'infra,web');
+  assert.deepEqual(one, other);
+});
+
+test('a profile named twice is resolved once', () => {
+  assert.deepEqual(resolveProfile(manifest, 'web,web'), resolveProfile(manifest, 'web'));
+});
+
+test('a stack two profiles share is listed once', () => {
+  const { stacks } = resolveProfile(manifest, 'web,service-node');
+  assert.equal(new Set(stacks).size, stacks.length);
+  assert.ok(stacks.includes('react') && stacks.includes('nodejs'));
+});
+
+test('aliases resolve per element in a list', () => {
+  assert.equal(resolveProfile(manifest, 'mobile,infra').profile, 'infra,mobile-rn');
+});
+
+test('one bad name in a list names that name, not the whole list', () => {
+  assert.throws(() => resolveProfile(manifest, 'web,nope'), /unknown profile "nope"/);
+});
+
+// A config written by an older CLI carries a bare profile name and has to keep
+// resolving byte-identically — this function is what every reader of that field
+// calls.
+test('whitespace and empty segments are tolerated, an empty list is not', () => {
+  assert.deepEqual(resolveProfile(manifest, ' web , infra ,'), resolveProfile(manifest, 'infra,web'));
+  assert.throws(() => resolveProfile(manifest, ' , '), /no profile given/);
+});

@@ -56,10 +56,26 @@ cd your-repo
 npx redlinegate init
 ```
 
-That is the whole procedure. It detects your stack, renders the standards for it, installs
-the merge-readiness template and the gate (advisory — it reports, it does not block),
-turns on the security floor, and opens a pull request. Anything that needed repository
-admin rights you do not have is listed at the end for an administrator to run.
+That is the whole procedure. With no flags, at a terminal, it asks before it writes:
+which standards apply, where the repository lives, what runs your pull request checks,
+which assistants should read the rules, what to install, and how hard the gate should
+bite. Whatever it detected is preselected, so pressing enter through it accepts detection,
+and the last question offers **Dry run** before Apply.
+
+Choose Apply and it renders the standards, installs the merge-readiness template and the
+gate (advisory — it reports, it does not block), turns on the security floor, and opens a
+pull request on `redline/onboard`. It never pushes to your default branch, so `git status`
+stays clean. Anything that needed repository admin rights you do not have is listed at the
+end for an administrator to run.
+
+In CI, in a pipe, or with any flag present it prompts for nothing and takes the scripted
+path — a prompt in a pipeline is a hang with nobody there to answer it:
+
+```sh
+npx redlinegate init --dry-run                 # the plan; writes nothing, contacts no host
+npx redlinegate init --profile web,infra       # a React app with its own Terraform beside it
+npx redlinegate init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines
+```
 
 Install it once and the everyday command is shorter:
 
@@ -123,8 +139,8 @@ Redline carries two versions that move independently. Do not conflate them.
 
 | Axis | Lives in | Bumped by | Example |
 | --- | --- | --- | --- |
-| **CLI version** | `redlinegate` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.0.1` |
-| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.1` |
+| **CLI version** | `redlinegate` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.0.2` |
+| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.2` |
 
 The CLI version is the tool's release line: [CHANGELOG.md](CHANGELOG.md) tracks it, and
 semantic-release computes the next one from commit messages — never edit

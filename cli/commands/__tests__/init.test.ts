@@ -35,14 +35,23 @@ test('installs the floor in order and opens a pull request', async () => {
   const cwd = repo();
   const report = await init(platform, { cwd, root, now });
 
+  // No ensureReviewOwnership: it is off unless the repository asks for it. A
+  // CODEOWNERS naming a team that may not exist is not something to install
+  // into a repository nobody has looked at.
   assert.deepEqual(platform.applied, [
     'installGate',
-    'ensureReviewOwnership',
     'enableSecurityFloor',
     'applyPolicy',
     'openPullRequest',
   ]);
   assert.equal(report.pullRequest?.number, 1);
+});
+
+test('review ownership is installed once the repository selects it', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, menu: { sensitivePathReviewers: true } });
+
+  assert.ok(platform.applied.includes('ensureReviewOwnership'));
 });
 
 test('the gate is advisory by default', async () => {
@@ -243,7 +252,9 @@ for (const capability of ALL_CAPABILITIES) {
   test(`denying only "${capability}" is reported pending and the run still completes (exit 0)`, async () => {
     const platform = platformDenying([capability]);
     const cwd = repo();
-    const report = await init(platform, { cwd, root, now });
+    // review-ownership is off by default now, so a run that means to test its
+    // denial has to select it.
+    const report = await init(platform, { cwd, root, now, menu: { sensitivePathReviewers: true } });
 
     assert.deepEqual(report.pendingAdmin, [capability]);
     assert.deepEqual(readConfig(cwd)?.pendingAdmin, [capability]);
@@ -264,7 +275,7 @@ test('several capabilities denied at once are all reported pending, run still co
 test('every capability denied still completes the run (exit 0), not exit 3', async () => {
   const platform = platformDenying(ALL_CAPABILITIES);
   const cwd = repo();
-  const report = await init(platform, { cwd, root, now });
+  const report = await init(platform, { cwd, root, now, menu: { sensitivePathReviewers: true } });
 
   assert.deepEqual(report.pendingAdmin, ALL_CAPABILITIES);
   assert.deepEqual(readConfig(cwd)?.pendingAdmin, ALL_CAPABILITIES);
@@ -285,7 +296,7 @@ test('unsupported capabilities are excluded from pendingAdmin even when every ot
     policy: [outcomeFor('merge-policy', new Set(denied)), outcomeFor('repo-property', new Set(denied))],
   });
   const cwd = repo();
-  const report = await init(platform, { cwd, root, now });
+  const report = await init(platform, { cwd, root, now, menu: { sensitivePathReviewers: true } });
 
   assert.ok(!report.pendingAdmin.includes('dependency-alerts'));
   assert.equal(report.pendingAdmin.length, ALL_CAPABILITIES.length - 1);
@@ -376,12 +387,12 @@ test('a no-op re-run makes zero platform calls', async () => {
 
 test('a deleted gate workflow and CODEOWNERS are repaired in a pull request, not reported as nothing to change', async () => {
   const cwd = repo();
-  await init(fakePlatform(), { cwd, root, now });
+  await init(fakePlatform(), { cwd, root, now, menu: { sensitivePathReviewers: true } });
   rmSync(join(cwd, '.github/workflows/redline.yml'));
   rmSync(join(cwd, '.github/CODEOWNERS'));
 
   const second = fakePlatform();
-  const report = await init(second, { cwd, root, now });
+  const report = await init(second, { cwd, root, now, menu: { sensitivePathReviewers: true } });
 
   assert.equal(report.alreadyOnboarded, false);
   assert.ok(report.pullRequest !== null, 'a repaired file must ride out in a pull request');
@@ -1117,11 +1128,11 @@ test(
         { capability: 'repo-property' as const, status: 'already' as const, detail: 'set' },
       ],
     };
-    await init(fakePlatform(settled), { cwd, root, now });
+    await init(fakePlatform(settled), { cwd, root, now, menu: { sensitivePathReviewers: true } });
     const before = readConfig(cwd)!;
 
     const second = fakePlatform(settled);
-    const report = await init(second, { cwd, root, now: laterNow, repair: true });
+    const report = await init(second, { cwd, root, now: laterNow, repair: true, menu: { sensitivePathReviewers: true } });
 
     assert.ok(
       report.outcomes.length > 0 && report.outcomes.every((o) => o.status === 'already'),
@@ -1298,7 +1309,8 @@ test('--dry-run names what a deselection changes and writes nothing', async () =
   const platform = fakePlatform();
   const report = await init(platform, { cwd, root, now, dryRun: true, capabilities: { gate: false } });
 
-  assert.deepEqual(report.optedOut, ['gate', 'labels']);
+  // review-ownership is deselected by default now, so it is named here too.
+  assert.deepEqual(report.optedOut.sort(), ['gate', 'labels', 'review-ownership']);
   assert.equal(report.capabilities.gate, false);
   assert.deepEqual(platform.applied, []);
   assert.equal(existsSync(join(cwd, '.redline.json')), false);
@@ -1465,7 +1477,7 @@ test('deselecting the gate reports labels as off with it, and says why', async (
   const cwd = repo();
   const report = await init(fakePlatform(), { cwd, root, now, capabilities: { gate: false } });
 
-  assert.deepEqual(report.optedOut, ['gate', 'labels']);
+  assert.deepEqual(report.optedOut.sort(), ['gate', 'labels', 'review-ownership']);
   assert.ok(
     report.notes.some((note) => note.includes('labels')),
     `expected the reason to be given, got ${JSON.stringify(report.notes)}`
@@ -1566,4 +1578,48 @@ test('a demotion needs no evidence at all', async () => {
 
   const after = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
   assert.equal(after.rung, 'observe');
+});
+
+test('the spec-driven development context renders by default and comes back out with --no-speckit', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.match(readFileSync(join(cwd, 'AGENTS.md'), 'utf8'), /Context: spec-driven development/);
+
+  // The block is regenerated rather than appended to, so deselecting on a later
+  // run is how a rendered section is removed.
+  await init(fakePlatform(), { cwd, root, now, menu: { speckit: false } });
+  const after = readFileSync(join(cwd, 'AGENTS.md'), 'utf8');
+  assert.ok(!after.includes('Context: spec-driven development'));
+  assert.equal(readConfig(cwd)?.menu.speckit, false);
+});
+
+test('TM Forum context is off unless the repository asks for it', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: TM Forum'));
+
+  await init(fakePlatform(), { cwd, root, now, menu: { tmf: true } });
+  assert.match(readFileSync(join(cwd, 'AGENTS.md'), 'utf8'), /Context: TM Forum/);
+});
+
+test('a repository already running Spec Kit keeps its own account of it, and is told so', async () => {
+  const cwd = repo();
+  mkdirSync(join(cwd, '.specify'), { recursive: true });
+
+  const report = await init(fakePlatform(), { cwd, root, now });
+
+  assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: spec-driven development'));
+  assert.equal(readConfig(cwd)?.menu.speckit, false);
+  assert.ok(
+    report.notes.some((note) => note.includes('already runs Spec Kit')),
+    `expected the skip to be reported, got ${JSON.stringify(report.notes)}`
+  );
+});
+
+test('an explicit --speckit still wins over the detection', async () => {
+  const cwd = repo();
+  mkdirSync(join(cwd, '.specify'), { recursive: true });
+
+  await init(fakePlatform(), { cwd, root, now, menu: { speckit: true } });
+  assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: spec-driven development'));
 });

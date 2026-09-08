@@ -17,7 +17,7 @@ const manifest = loadManifest(root);
 
 function ctx(profileName: string): RenderContext {
   const { profile, stacks } = resolveProfile(manifest, profileName);
-  return { manifest, root, profile, stacks, local: null };
+  return { manifest, root, profile, stacks, contexts: [], local: null };
 }
 
 test('copilot writes a merged core file and one generated file per stack', () => {

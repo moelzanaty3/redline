@@ -16,6 +16,7 @@ const valid: RedlineConfig = {
     adrForLargeDiffs: true,
     accessibility: true,
     speckit: false,
+    tmf: false,
     sensitivePathReviewers: true,
   },
   pendingAdmin: ['secret-scanning'],
@@ -54,8 +55,11 @@ test('round-trips through disk with stable formatting', (t) => {
   writeConfig(dir, valid);
   const onDisk = readFileSync(join(dir, CONFIG_FILE), 'utf8');
   assert.ok(onDisk.endsWith('\n'), 'file must end with a newline');
-  assert.equal(onDisk, `${JSON.stringify(valid, null, 2)}\n`);
-  assert.deepEqual(readConfig(dir), valid);
+  // The `//` explainer rides on the front and is not part of the config, so the
+  // round trip is over what parseConfig reads back, not over the bytes.
+  assert.equal(onDisk, `${JSON.stringify({ '//': JSON.parse(onDisk)['//'], ...valid }, null, 2)}\n`);
+  assert.ok(Array.isArray(JSON.parse(onDisk)['//']), 'the file explains its own keys');
+  assert.deepEqual(readConfig(dir), valid, 'the explainer must not survive into the parsed config');
 });
 
 test('readConfig returns null when the repo is not onboarded', (t) => {
@@ -138,4 +142,25 @@ test('an unrecognised rung reads back as observe rather than raising enforcement
 
 test('a recorded rung is preserved', () => {
   assert.equal(parseConfig({ ...valid, rung: 'block-blocker' }).rung, 'block-blocker');
+});
+
+test('a menu key added after a repository was onboarded takes its default, not an error', () => {
+  // Rejecting an absent key made every CLI upgrade invalidate the config of
+  // every repository in the estate at once.
+  const cwd = mkdtempSync(join(tmpdir(), 'redline-menu-'));
+  const config = { ...valid, menu: { ...valid.menu } } as Record<string, unknown>;
+  delete (config['menu'] as Record<string, unknown>)['tmf'];
+  writeFileSync(join(cwd, CONFIG_FILE), JSON.stringify(config));
+
+  assert.equal(readConfig(cwd)?.menu.tmf, false);
+});
+
+test('a menu key that is present and not a boolean is still a corrupt file', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'redline-menu-bad-'));
+  writeFileSync(
+    join(cwd, CONFIG_FILE),
+    JSON.stringify({ ...valid, menu: { ...valid.menu, tmf: 'yes' } })
+  );
+
+  assert.throws(() => readConfig(cwd), /menu\.tmf must be a boolean/);
 });

@@ -18,12 +18,76 @@ import type {
   SecurityResult,
 } from '../types.ts';
 import type { GitHubClient } from './client.ts';
+import { checkReusableGate } from './preflight.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
 import { BEGIN_PREFIX, END, findBlock, wrapBlock } from '../../render/markers.ts';
 import { TEMPLATE_DIRS as PULL_REQUEST_TEMPLATE_DIRS } from '../pull-request-templates.ts';
 
 export const RULESET_NAME = 'Redline';
 export const REQUIRED_CHECK = 'redline-gate / gate';
+
+// Where the Azure Pipelines variant of the gate is written on a GitHub-hosted
+// repository. Deliberately alongside the repository's own pipeline definitions
+// rather than under `.github/`: nothing in `.github/workflows` runs it, and a
+// pipeline definition filed where GitHub Actions looks is the kind of thing a
+// reader trusts for the wrong reason.
+export const AZURE_PIPELINE_PATH = '.azuredevops/redline-gate.yml';
+
+/**
+ * The gate for a repository on GitHub whose checks are Azure Pipelines.
+ *
+ * Writes the pipeline definition and nothing else on the host: there is no
+ * Actions workflow to reference, no Azure Repos policy to attach (the pull
+ * requests are GitHub's), and the check GitHub sees is published by the Azure
+ * Pipelines GitHub App from the build result. The one remaining step is a human
+ * registering the definition once, which is reported as work for an
+ * administrator rather than quietly assumed to have happened.
+ */
+function installAzurePipelineGate(
+  cwd: string,
+  opts: GateOptions,
+  check: boolean
+): InstallResult {
+  const files: string[] = [];
+  const template = readFileSync(
+    join(PACKAGE_ROOT, 'platforms/azure/gate-template-github.yml'),
+    'utf8'
+  )
+    .replace(/ADR_DIFF_THRESHOLD: \d+/, `ADR_DIFF_THRESHOLD: ${opts.adrDiffThreshold}`)
+    .replace(
+      /FAIL_ON_DEPENDENCY_SEVERITY: \w+/,
+      `FAIL_ON_DEPENDENCY_SEVERITY: ${opts.failOnDependencySeverity}`
+    )
+    .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`);
+
+  if (syncFile(cwd, AZURE_PIPELINE_PATH, template, check)) files.push(AZURE_PIPELINE_PATH);
+
+  const prTemplate = syncPullRequestTemplate(
+    cwd,
+    '.github/pull_request_template.md',
+    readFileSync(join(PACKAGE_ROOT, 'templates/github/pull_request_template.md'), 'utf8'),
+    check
+  );
+  files.push(...prTemplate.files);
+
+  if (check) return { files, outcomes: [] };
+
+  return {
+    files,
+    outcomes: [
+      {
+        capability: 'gate',
+        // `denied`, so it reaches pendingAdmin: a pipeline definition nobody
+        // has registered runs on nothing, and reporting it `applied` would be
+        // the same lie the Actions caller told.
+        status: 'denied',
+        detail:
+          `wrote ${AZURE_PIPELINE_PATH} — register it as a pipeline in Azure DevOps pointing at ` +
+          'this repository, then require its check name in the branch ruleset',
+      },
+    ],
+  };
+}
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -337,12 +401,20 @@ function mergeTemplate(cwd: string, relPath: string, packaged: string, check: bo
       detail: `${relPath} already satisfies the gate on its own — left untouched`,
     };
   }
-  const contents = wrapBlock(existing, gatedSections(packaged, blockSections(missing)), relPath);
-  const appended = missing.map((heading) => `"## ${heading}"`).join(' and ');
+  // A template this repository wrote for itself is not Redline's to edit, even
+  // to make its own gate pass. Redline creates one where the host resolves
+  // none, and refreshes a block it put there itself; a file it has never
+  // touched it leaves alone and says what that costs, because the checklist job
+  // fails a pull request whose body has no `## Launch readiness` and the author
+  // deserves to hear that from the install rather than from a red check.
+  const absent = missing.map((heading) => `"## ${heading}"`).join(' and ');
   return {
     path: relPath,
-    changed: syncFile(cwd, relPath, contents, check),
-    detail: `kept this repository's ${relPath} and appended ${appended} inside REDLINE markers`,
+    changed: false,
+    detail:
+      `kept this repository's ${relPath} — Redline did not edit it. It has no ${absent}, ` +
+      `so the gate's checklist job will fail until someone adds ${missing.length === 1 ? 'that section' : 'those sections'} ` +
+      `or the gate is deselected with: redline init --skip gate`,
   };
 }
 
@@ -536,7 +608,27 @@ export function createGitHubInstall(
       check = false
     ): Promise<InstallResult> {
       const files: string[] = [];
+
+      // A GitHub-hosted repository whose pull request checks are Azure
+      // Pipelines gets an Azure pipeline definition, not an Actions workflow.
+      // Writing the caller here was the defect: the repository ran no Actions
+      // gate, so the workflow sat there failing to resolve on every pull
+      // request while Redline reported the gate applied.
+      if (opts.pipeline === 'azure-pipelines') {
+        return installAzurePipelineGate(cwd, opts, check);
+      }
+
       refuseForeignCaller(cwd, opts);
+
+      // Does the workflow the caller is about to reference exist? Skipped on
+      // `check`, which is the dry-run path and must send no request — the
+      // wizard asks separately there, where a credential is available.
+      //
+      // A failed preflight suppresses the CALLER ONLY. The pull request
+      // template and the labels below are independently useful and break
+      // nothing, so withholding them would punish the repository for an
+      // org-level gap it did not create.
+      const preflight = check ? { ok: true as const } : await checkReusableGate(client, ref.org);
       const caller = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
         .replaceAll('<org>', ref.org)
         .replace(/adr-diff-threshold: \d+/, `adr-diff-threshold: ${opts.adrDiffThreshold}`)
@@ -546,7 +638,7 @@ export function createGitHubInstall(
         )
         .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`)
         .replace(/rung: \w[\w-]*/, `rung: ${opts.rung ?? 'observe'}`);
-      if (syncFile(cwd, '.github/workflows/redline.yml', caller, check)) {
+      if (preflight.ok && syncFile(cwd, '.github/workflows/redline.yml', caller, check)) {
         files.push('.github/workflows/redline.yml');
       }
 
@@ -586,11 +678,21 @@ export function createGitHubInstall(
         files,
         outcomes: [
           ...(labelOutcomes.length > 0 ? [worstOutcome(labelOutcomes)] : []),
-          {
-            capability: 'gate',
-            status: prTemplate.changed ? 'applied' : 'already',
-            detail: prTemplate.detail,
-          },
+          preflight.ok
+            ? {
+                capability: 'gate',
+                status: prTemplate.changed ? 'applied' : 'already',
+                detail: prTemplate.detail,
+              }
+            : // `denied`, not `unsupported`: the gate is perfectly supported
+              // here, an administrator simply has to publish the reusable
+              // workflow. That distinction is what puts it on the pendingAdmin
+              // list instead of writing it off as impossible.
+              {
+                capability: 'gate',
+                status: 'denied',
+                detail: `${preflight.detail}. ${preflight.hint}`,
+              },
         ],
       };
     },

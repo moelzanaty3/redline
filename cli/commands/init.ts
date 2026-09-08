@@ -5,6 +5,7 @@ import { CLI_VERSION } from '../core/version.ts';
 import { canPromote, type Evidence, type Rung } from '../enforce/ladder.ts';
 import {
   CAPABILITY_KEYS,
+  MENU_DEFAULTS,
   CONFIG_FILE,
   MENU_KEYS,
   deselectedCapabilities,
@@ -20,6 +21,8 @@ import { loadManifest } from '../render/manifest.ts';
 import { resolveProfile } from '../render/profile.ts';
 import { render } from '../render/standards.ts';
 import { renderCommands, COMMAND_HOSTS } from '../render/commands.ts';
+import { CONTEXTS, detectSpecKit } from '../render/contexts.ts';
+import { surveyRepo } from '../detect/existing.ts';
 import { LOCAL_RULES_FILE } from '../render/vendors.ts';
 import { isPending } from '../platforms/types.ts';
 import type {
@@ -27,18 +30,19 @@ import type {
   CapabilityOutcome,
   GateMachinery,
   GateOptions,
+  GatePipeline,
   OwnershipRule,
   Platform,
   PullRequestRef,
 } from '../platforms/types.ts';
 
-export const DEFAULT_MENU: MenuSelections = {
-  blockingGate: false,
-  adrForLargeDiffs: true,
-  accessibility: true,
-  speckit: false,
-  sensitivePathReviewers: true,
-};
+// What a repository gets when it says nothing. Every default here has to be
+// safe on a repository nobody has looked at, because that is the one the
+// command is usually run on.
+// Re-exported from the config module, which owns them so the parser can fill a
+// key a repository was onboarded before. See MENU_DEFAULTS there for what each
+// default is and why.
+export const DEFAULT_MENU: MenuSelections = MENU_DEFAULTS;
 
 // Named once so the label FLOOR_GATE soft-fails on and the label
 // openPullRequest applies below share one literal instead of two that could
@@ -199,7 +203,7 @@ const VENDOR_MARKERS: { vendor: string; paths: string[] }[] = [
 // org-enabled vendor) rather than an empty selection — that is the greenfield
 // case the standard is written for, not a repository that opted out of all of
 // them.
-function detectVendors(cwd: string, orgDefault: string[]): string[] {
+export function detectVendors(cwd: string, orgDefault: string[]): string[] {
   const found = VENDOR_MARKERS.filter((marker) =>
     marker.paths.some((relPath) => existsSync(join(cwd, relPath)))
   ).map((marker) => marker.vendor);
@@ -239,6 +243,10 @@ export interface InitOptions {
   // supports it; a demotion is always allowed, because the safe direction must
   // never need permission.
   rung?: Rung;
+  // What runs this repository's pull request checks, when it is not this
+  // host's default. A repository on GitHub built by Azure Pipelines is the
+  // case this exists for; see GatePipeline in cli/platforms/types.ts.
+  pipeline?: GatePipeline;
   // Evidence for a promotion, read from collected telemetry by the caller. Absent
   // means none was supplied, which is not the same as evidence that failed — a
   // promotion asked for without it is refused and says so.
@@ -400,6 +408,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   const gateOptions: GateOptions = {
     ...FLOOR_GATE,
+    ...(opts.pipeline ? { pipeline: opts.pipeline } : {}),
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
     ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
     ...(capabilities.labels ? {} : { manageLabels: false }),
@@ -490,9 +499,45 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     );
   }
 
+  // Spec Kit is a separate tool that scaffolds its own files and carries its own
+  // account of how the repository works. Where it is already installed, Redline
+  // drops its section rather than adding a second one beside it — and says so,
+  // because a context silently missing from the artifacts is indistinguishable
+  // from one that was never asked for.
+  const specKitAt = detectSpecKit(cwd);
+  if (specKitAt !== null && menu.speckit) {
+    menu.speckit = false;
+    notes.push(
+      `this repository already runs Spec Kit (${specKitAt}), so Redline left the spec-driven ` +
+        'development context out rather than writing a second account of it beside the one Spec ' +
+        'Kit maintains — pass --speckit to include it anyway'
+    );
+  }
+
+  // The same courtesy Spec Kit gets, generalised to the rest of the toolchain.
+  // A repository with a mature pipeline already runs a scanner for most of what
+  // the gate would add; installing a second one beside it is not defence in
+  // depth, it is two sets of findings and two exemption paths for one problem.
+  // What Redline still brings such a repository is the part nothing else does —
+  // the standards the AI reviews against, and a check that they were applied —
+  // so detection narrows the gate rather than cancelling the onboarding.
+  const survey = surveyRepo(cwd);
+  for (const tool of survey.tools) {
+    const covers = tool.standsDown;
+    notes.push(
+      covers === null
+        ? `this repository already runs ${tool.label} (${tool.evidence}) — noted; Redline installs nothing that overlaps it`
+        : `this repository already runs ${tool.label} (${tool.evidence}), which covers what Redline's ` +
+          `own ${covers} check would report. Narrowing the gate to match is not wired yet, so for now ` +
+          `deselect it yourself with: redline init --skip gate`
+    );
+  }
+
+  const contexts = CONTEXTS.filter((context) => menu[context.key]).map((context) => context.key);
+
   // Files next, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
-  const rendered = render({ root, profile, out: cwd, vendors, check: dryRun });
+  const rendered = render({ root, profile, out: cwd, vendors, contexts, check: dryRun });
   // The ceiling render() applies internally, applied here too. renderCommands
   // cannot enforce it for itself: COMMAND_HOSTS carries hosts the vendor
   // manifest has no entry for at all (opencode), which is not the same thing
@@ -534,7 +579,11 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const vendorsChanged =
     existing !== null &&
     (existing.vendors.length !== vendors.length ||
-      [...existing.vendors].sort().join(' ') !== [...vendors].sort().join(' '));
+      // `\0` as the escape, never a literal NUL byte. The byte itself made this
+      // file read as binary to grep and ripgrep, which then skipped it silently:
+      // a repository-wide search for any symbol in the largest command module
+      // returned nothing and reported no error.
+      [...existing.vendors].sort().join('\0') !== [...vendors].sort().join('\0'));
 
   // Same shape again: deselecting a capability moves no file of its own, and
   // swallowing it as "nothing to change" would leave .redline.json recording a
@@ -713,7 +762,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     pullRequest = await platform.openPullRequest(ref, cwd, {
       branch: ONBOARD_BRANCH,
       title: `chore(redline): onboard to standards v${manifest.version}`,
-      body: onboardBody(profile, manifest.version, pendingAdmin),
+      body: onboardBody(profile, manifest.version, pendingAdmin, files, hostPlan, menu, notes),
       labels: capabilities.labels ? [SYNC_LABEL] : [],
       files,
     });
@@ -750,23 +799,68 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   };
 }
 
-function onboardBody(profile: string, version: string, pendingAdmin: AdminCapability[]): string {
+// The pull request a team sees first, and usually the only thing they read
+// before deciding whether this tool is worth having. It used to open with
+// "Onboards this repository to Redline standards v0.0.3" — a sentence that
+// means nothing to a reviewer who has not heard of Redline, followed by three
+// paragraphs of Redline's own vocabulary and no statement of what changed in
+// THEIR repository or what happens next. So: what it does, what it changed
+// here, what the reviewer will notice, and how to switch any of it off.
+function onboardBody(
+  profile: string,
+  version: string,
+  pendingAdmin: AdminCapability[],
+  files: string[],
+  hostPlan: string[],
+  menu: MenuSelections,
+  notes: string[]
+): string {
+  const bullets = (items: string[]): string[] => items.map((item) => `- \`${item}\``);
+
+  const gate = menu.blockingGate
+    ? 'The gate **blocks** a merge that fails it.'
+    : 'The gate is **advisory**: it reports and does not block. Making it blocking is a separate, ' +
+      'deliberate step once you have watched it for a while.';
+
   const pending =
     pendingAdmin.length === 0
-      ? 'Everything that needed repository settings was applied.'
-      : `A repository administrator still needs to enable: ${pendingAdmin.join(', ')}. ` +
-        `Until then this repository shows as partially onboarded.`;
+      ? []
+      : [
+          '',
+          '## Needs an administrator',
+          '',
+          `These could not be applied with the permissions this run had: ${pendingAdmin.join(', ')}.`,
+          'Everything else is in place; re-run `redline init --repair` once they are granted.',
+        ];
 
   return [
-    `Onboards this repository to Redline standards \`v${version}\` (profile: \`${profile}\`).`,
+    'This adds an automated review standard to the repository: one versioned set of rules, rendered',
+    'into the files your coding assistants already read, plus a pull request check that applies them',
+    'to the diff.',
     '',
-    'The merge gate runs **advisory** — it reports, it does not block. Promotion to blocking is a',
-    'deliberate second step after a soak period.',
+    `Detected stack: \`${profile}\`. Rules version: \`v${version}\`.`,
     '',
-    'Generated content sits inside `<!-- REDLINE:BEGIN -->` markers; anything outside them is yours',
-    'and was preserved. If a rule is wrong for this repository, raise it in the Redline source repo',
-    'rather than editing it here, so every repository benefits.',
+    '## What changed here',
     '',
-    pending,
+    ...(files.length === 0 ? ['No files changed.'] : bullets(files)),
+    ...(hostPlan.length === 0 ? [] : ['', 'Repository settings:', '', ...hostPlan.map((h) => `- ${h}`)]),
+    '',
+    '## What you will notice',
+    '',
+    `- ${gate}`,
+    '- Your next pull request runs the Redline check and comments findings on the diff.',
+    '- Nothing outside the `<!-- REDLINE:BEGIN -->` markers was touched. Files you already had —',
+    '  a pull request template, a CODEOWNERS — were left exactly as they are.',
+    '',
+    '## Turning it down',
+    '',
+    '- A capability you already have your own version of: `redline init --skip <name>`.',
+    '- A rule that is wrong for this repository: raise it in the Redline repository rather than',
+    '  editing the generated block here, so every repository gets the fix.',
+    '- All of it: `redline remove` takes back only what Redline can prove it wrote, as a pull request.',
+    '',
+    '`.redline.json` records every choice above and explains each one in its own `//` key.',
+    ...(notes.length === 0 ? [] : ['', '## Worth knowing', '', ...notes.map((n) => `- ${n}`)]),
+    ...pending,
   ].join('\n');
 }

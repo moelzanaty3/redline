@@ -35,7 +35,8 @@ export default async function Page() {
       <p>
         It prints the profile it detected, every file it would write, and every
         host setting it would apply. If the profile is wrong, pass{" "}
-        <code>--profile</code> — see{" "}
+        <code>--profile</code> — one name, or several separated by commas
+        (<code>web,infra</code>) when the repository is more than one. See{" "}
         <Link href="/docs/profiles">Profiles &amp; stacks</Link>.
       </p>
 
@@ -43,7 +44,16 @@ export default async function Page() {
       <CodeWindow title="terminal" copyText={real}>
         <span className="tk-prompt">$</span> <span className="tk-white">{real}</span>
       </CodeWindow>
-      <p>You get a pull request containing:</p>
+      <p>
+        With no flags, at a terminal, this asks before it writes: which
+        standards apply, where the repository lives, what runs your pull request
+        checks, which assistants should read the rules, what to install and how
+        hard the gate should bite. Whatever it detected is preselected, so
+        pressing enter through it takes step 1&apos;s plan. The last question
+        offers <b>Dry run</b> again before Apply. In CI, in a pipe, or with any
+        flag present it asks nothing.
+      </p>
+      <p>Choose Apply and you get a pull request containing:</p>
       <ul>
         <li>
           The standard, rendered for whichever AI tools this repository uses —
@@ -56,7 +66,9 @@ export default async function Page() {
         </li>
         <li>
           A pull request template carrying the readiness checklist and an empty{" "}
-          <Link href="/docs/exemptions">exemption block</Link>.
+          <Link href="/docs/exemptions">exemption block</Link> — written only
+          where your host would resolve none. A template you already have is
+          reported, not edited.
         </li>
         <li>
           <code>.redline.json</code>, recording what was chosen so a re-run

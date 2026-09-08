@@ -5,7 +5,82 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
-## Unreleased — first release, 0.0.1
+## Unreleased — 0.0.2
+
+### CLI — `redline init` asks before it writes
+
+Everything below came out of one real onboarding of a mature repository. Each item is a
+defect that onboarding surfaced, not a feature anyone asked for.
+
+- **`redline init` with no flags at a terminal now walks a menu.** Profile, host, pipeline,
+  vendors, contexts, capabilities and rung, one question at a time, with the detected answer
+  preselected and every term explained beside the choice that uses it. The last question is
+  Dry run or Apply, defaulting to Dry run. CI, pipes and any run carrying a flag take exactly
+  the path they took before: a prompt in a pipeline is a hang with nobody there to answer it.
+  Zero new dependencies — the prompt kit is `node:readline` and ANSI, because a tool that runs
+  via `npx` inside other organisations' CI should not hand them a supply-chain edge for a menu.
+
+- **The gate no longer writes a workflow that cannot resolve.** `init` used to render
+  `.github/workflows/redline.yml` referencing `<org>/.github/.github/workflows/redline-gate.yml@main`,
+  commit it, and report `applied gate` — on an organisation with no `.github` repository. Every
+  pull request in that repository then failed with "Unable to find reusable workflow". The
+  reference is now resolved before the caller is written; a failure suppresses the caller only,
+  keeps the pull request template and labels, and reports the gate as `denied` so it reaches
+  pendingAdmin with the org-level fix named.
+
+- **`--pipeline github-actions|azure-pipelines`, asked in the menu.** The host and the thing
+  that runs the checks come apart: a repository can live on GitHub and be built entirely by
+  Azure Pipelines. Deriving one from the other is what put an Actions workflow into a repository
+  that runs no Actions. Choosing `azure-pipelines` on a GitHub host writes
+  `.azuredevops/redline-gate.yml` — with the `pr:` trigger GitHub-hosted repositories honour, the
+  same pinned diff secret scan as the other two gates, and no Azure Repos status POST, because
+  on GitHub the build result is the check.
+
+- **`verify` and `init` no longer contradict each other about the security floor.** GitHub
+  includes a key in a visible `security_and_analysis` block only when the feature exists on the
+  repository's plan. An omitted key now reads as `unsupported`, not `denied` — `init` said "not
+  available on this repository" while `verify` said "FAIL disabled" about the same three
+  settings, sending the operator to enable something no administrator of that repository can.
+
+- **`check-name-reported` summarises.** A mature repository reports twenty-five checks, and
+  printing all of them put one unreadable line in the middle of the report with a real
+  security-floor failure directly underneath it.
+
+- **An applied run says where its changes went.** Onboarding commits to `redline/onboard` and
+  pushes, so `git status` stays clean; the run now says so. Without it the first real onboarding
+  looked like it had done nothing, and the operator ran `init` again and was told "already
+  onboarded" by a repository they believed was not.
+
+- **Cancelling is not a failure.** Ctrl-C at a prompt exits 130 with no `error` line.
+
+- **A repository can be more than one profile.** `--profile web,infra` — and the menu's
+  standards question is a multi-select — because a React application with its own Terraform
+  beside it was previously forced to pick the half that fitted worst. `.redline.json` is
+  unchanged: `profile` stays a single string, it just may now read `infra,web`. Every reader
+  of that field already hands it straight to `resolveProfile`, which resolves the union and
+  records the list sorted, so the order it is typed in cannot change the rendered artifacts.
+
+### Standards 0.0.2 — optional context sections
+
+`standards/contexts/` carries background a reviewer needs about how a repository works,
+rendered into the same artifacts the rules are and selected per repository:
+
+- `speckit.md` — the repository works spec-first. On by default, and dropped automatically
+  where the repository already runs Spec Kit, which is a separate tool with its own
+  installer and templates that Redline neither creates nor edits.
+- `tmf.md` — the repository implements TM Forum interfaces. Off unless `--tmf` asks for it.
+
+Context, deliberately not rules: a rule carries a stable id that telemetry is keyed on for
+the life of the estate, and these are selected per repository rather than by stack, so an
+id only some repositories could ever fire would make its tuning numbers meaningless. A
+finding that needs one cites `core/uncatalogued` and says which paragraph — which is also
+how the org finds out a context has earned promotion to real rules. The TMF text is a
+starting frame drawn from TMF630's design guidelines and wants review by someone who owns
+the org's TM Forum conformance.
+
+Selection is reversible: passing `--no-speckit` or `--no-tmf` on a later run removes a
+section already rendered, because the block is regenerated rather than appended to.
+
 
 ### Published as `redlinegate`
 
@@ -218,7 +293,7 @@ publishing a link nobody outside the org can open is worse than publishing none.
   the API did not return is left absent rather than defaulted to the merge time, which would
   report a lead time of zero and drag the median toward a number no team achieved.
 
-### Standards v0.0.3 — the deterministic policy tier
+### Pre-release standards iteration — the deterministic policy tier
 
 - A share of what the standard asserts needs no model. A ticket reference is present or it
   is not; a type-checker suppression carries one or it does not. Sending those to an LLM
@@ -310,7 +385,7 @@ publishing a link nobody outside the org can open is worse than publishing none.
   is empty, that is the answer to the roadmap's open question 1 — and the signal that SARIF
   ingestion was not where the next effort belonged.
 
-### Standards v0.0.2 — structured exemptions
+### Pre-release standards iteration — structured exemptions
 
 - `redline-exempt` was a bare label. It downgraded the process checks to warnings and
   recorded nothing: not who accepted the failing check, not why, not until when. An

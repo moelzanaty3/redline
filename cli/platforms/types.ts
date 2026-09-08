@@ -51,7 +51,24 @@ export function isPending(outcome: CapabilityOutcome): boolean {
   return outcome.status === 'denied';
 }
 
+// What actually runs this repository's pull request checks. It is asked
+// separately from the host because the two genuinely come apart: a repository
+// can live on GitHub and be built entirely by Azure Pipelines, and deriving one
+// from the other is what installed a GitHub Actions workflow into a repository
+// that runs none.
+export type GatePipeline = 'github-actions' | 'azure-pipelines';
+
+export const GATE_PIPELINES: readonly GatePipeline[] = ['github-actions', 'azure-pipelines'];
+
+export function isGatePipeline(value: string): value is GatePipeline {
+  return (GATE_PIPELINES as readonly string[]).includes(value);
+}
+
 export interface GateOptions {
+  // Absent means "whatever this host's default is" — Actions on GitHub, an
+  // Azure pipeline definition on Azure DevOps — which is what every caller
+  // predating the question passes.
+  pipeline?: GatePipeline;
   adrDiffThreshold: number;
   failOnDependencySeverity: 'low' | 'moderate' | 'high' | 'critical';
   softFailLabels: string[];
@@ -200,6 +217,20 @@ export interface PlatformVerify {
   readGateMachinery(cwd: string): GateMachinery;
   readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]>;
   readSecurityState(ref: RepoRef): Promise<SecurityResult>;
+  // Whether the owners in CODEOWNERS actually resolve on the host. `null` means
+  // the question does not apply here — the host has no CODEOWNERS concept, or
+  // the repository has no such file — which is not the same answer as "they all
+  // resolve", and the caller must not report the two the same way.
+  //
+  // `redline init` writes CODEOWNERS itself and turns on code-owner review in
+  // the same run, so an owner that does not resolve is Redline having made a
+  // requirement nobody can satisfy, on the paths that carry its own enforcement
+  // surface. Nothing asked the host about it until this existed.
+  //
+  // `at` is the git ref to read the file at. The host defaults to the default
+  // branch, where an onboarding pull request has not landed yet — so the run
+  // that could still fix it cheaply is exactly the run that would see nothing.
+  readCodeownersProblems(ref: RepoRef, at?: string): Promise<string[] | null>;
   latestPullRequestNumber(ref: RepoRef): Promise<number | null>;
 }
 

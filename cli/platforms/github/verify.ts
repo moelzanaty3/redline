@@ -108,20 +108,44 @@ function parsePullRequestHeadSha(body: unknown): string {
   return head['sha'];
 }
 
+// Distinct names. GitHub returns one check run per ATTEMPT on the head SHA, so
+// a re-run or a re-trigger adds another entry under the same name — three gate
+// re-triggers reported 21 entries for 9 checks. On the default advisory install
+// nothing is required yet and this list is the whole assertion: a human reads it
+// to see whether the gate reported at all. A list that repeats itself is the one
+// thing that stops being read.
 function parseCheckRunNames(body: unknown): string[] {
   if (!isNonNullObject(body) || !Array.isArray(body['check_runs'])) {
     throw hostShapeError('a check-runs list');
   }
-  return body['check_runs'].map((run) => {
+  const names = body['check_runs'].map((run) => {
     if (!isNonNullObject(run) || typeof run['name'] !== 'string') {
       throw hostShapeError('a check run');
     }
     return run['name'];
   });
+  return [...new Set(names)];
 }
 
 // null means GitHub did not report the block at all, which is not the same
 // thing as reporting it empty — see readSecurityState.
+// One line per distinct problem, not per offending line: a CODEOWNERS naming
+// one unknown team across ten paths is one thing wrong, and printing it ten
+// times buries it. GitHub's own `suggestion` is the remedy, so it is kept.
+function parseCodeownersProblems(body: unknown): string[] {
+  if (!isNonNullObject(body) || !Array.isArray(body['errors'])) {
+    throw hostShapeError('a CODEOWNERS errors list');
+  }
+  const seen = new Set<string>();
+  for (const error of body['errors']) {
+    if (!isNonNullObject(error)) throw hostShapeError('a CODEOWNERS error');
+    const kind = typeof error['kind'] === 'string' ? error['kind'] : 'problem';
+    const suggestion = typeof error['suggestion'] === 'string' ? error['suggestion'] : null;
+    seen.add(suggestion === null ? kind : `${kind} — ${suggestion}`);
+  }
+  return [...seen];
+}
+
 function parseSecurityAnalysisStatuses(body: unknown): Record<string, string> | null {
   if (!isNonNullObject(body)) throw hostShapeError('a repository');
   const analysis = body['security_and_analysis'];
@@ -339,6 +363,19 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       return parseCheckRunNames(runs.body);
     },
 
+    async readCodeownersProblems(ref: RepoRef, at?: string): Promise<string[] | null> {
+      const path =
+        at === undefined
+          ? `${repoPath(ref)}/codeowners/errors`
+          : `${repoPath(ref)}/codeowners/errors?ref=${encodeURIComponent(at)}`;
+      const res = await client.rest<unknown>('GET', path);
+      // 404 is "no CODEOWNERS file here", which is a real answer and not a
+      // failure — a repository that deselected review-ownership has none.
+      if (res.status === 404) return null;
+      assertOk(res.status, path);
+      return parseCodeownersProblems(res.body);
+    },
+
     async readSecurityState(ref: RepoRef): Promise<SecurityResult> {
       const path = repoPath(ref);
       const repo = await client.rest<unknown>('GET', path);
@@ -360,9 +397,26 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       // present but not enabled -> denied, as before.
       const statuses = parseSecurityAnalysisStatuses(repo.body);
       const invisible = statuses === null;
-      const stateFor = (key: string): CapabilityOutcome['status'] =>
-        invisible ? 'unknown' : statuses[key] === 'enabled' ? 'applied' : 'denied';
-      const note = invisible ? ' (not visible to this token)' : '';
+      // Three answers, not two. GitHub includes a key in a VISIBLE
+      // security_and_analysis block only when the feature exists on this
+      // repository's plan: present-and-not-enabled means "you have it and it
+      // is off", while an omitted key means "this plan does not have it at
+      // all". Collapsing the second into `denied` is what made `redline init`
+      // and `redline verify` disagree about the same three settings on the
+      // same repository — init reported `unsupported (not available on this
+      // repository)` from its write's 404, verify reported `FAIL disabled`
+      // from the absent key, and the operator was told to go and enable
+      // something no administrator of that repository can enable.
+      const stateFor = (key: string): CapabilityOutcome['status'] => {
+        if (invisible) return 'unknown';
+        const status = statuses[key];
+        if (status === undefined) return 'unsupported';
+        return status === 'enabled' ? 'applied' : 'denied';
+      };
+      const noteFor = (key: string): string => {
+        if (invisible) return ' (not visible to this token)';
+        return statuses[key] === undefined ? ' (not available on this repository)' : '';
+      };
 
       // Dependabot alerts live on their own endpoint, and it answers with a
       // status rather than a body: 204 enabled, 404 disabled (the repository
@@ -384,12 +438,12 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
           {
             capability: 'secret-scanning',
             status: stateFor('secret_scanning'),
-            detail: `secret scanning${note}`,
+            detail: `secret scanning${noteFor('secret_scanning')}`,
           },
           {
             capability: 'push-protection',
             status: stateFor('secret_scanning_push_protection'),
-            detail: `secret scanning push protection${note}`,
+            detail: `secret scanning push protection${noteFor('secret_scanning_push_protection')}`,
           },
           {
             capability: 'dependency-alerts',

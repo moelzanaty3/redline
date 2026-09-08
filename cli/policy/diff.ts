@@ -1,3 +1,5 @@
+import { BEGIN_PREFIX, END } from '../render/markers.ts';
+
 // A unified diff, reduced to the only thing a deterministic check may look at:
 // the lines this change ADDED, with their file and line number.
 //
@@ -27,6 +29,7 @@ export function parseDiff(diff: string): AddedLine[] {
   const added: AddedLine[] = [];
   let file: string | null = null;
   let line = 0;
+  let generated = false;
 
   for (const raw of diff.split('\n')) {
     const header = FILE_HEADER.exec(raw);
@@ -34,6 +37,7 @@ export function parseDiff(diff: string): AddedLine[] {
       // A deletion has no destination path, so nothing after it is an addition
       // until the next file header.
       file = header[2] ? null : (header[1] ?? null);
+      generated = false;
       continue;
     }
     const hunk = HUNK.exec(raw);
@@ -43,8 +47,26 @@ export function parseDiff(diff: string): AddedLine[] {
     }
     if (file === null) continue;
 
+    // Lines inside a REDLINE block are Redline's own output, not this author's
+    // code, and they are not reviewable as code. The rendered standards quote
+    // the exact constructs the checks hunt for — `@ts-ignore`, `TODO` — so a
+    // checker that read them reported each rule as a violation of itself, and
+    // every `redline init` pull request opened with BLOCKER findings against
+    // the block Redline had just written. Same failure the parseInt pattern
+    // above already had once: a checker flagging its own source.
+    //
+    // Context lines drive the state as well as added ones, so a hunk that opens
+    // an existing block without adding its marker is still recognised as inside
+    // it. A hunk that begins deeper inside a block than its context reaches
+    // cannot be — the marker is simply not in the diff — which is why the
+    // markers are matched at all rather than the whole file being skipped by
+    // name: what is in the diff is decided correctly, and what is not stays as
+    // it was.
+    const body = raw.startsWith('+') || raw.startsWith(' ') ? raw.slice(1).trimStart() : null;
+    if (body !== null && body.startsWith(BEGIN_PREFIX)) generated = true;
+
     if (raw.startsWith('+')) {
-      added.push({ file, line, text: raw.slice(1) });
+      if (!generated) added.push({ file, line, text: raw.slice(1) });
       line += 1;
     } else if (raw.startsWith('-')) {
       // A removed line does not advance the new-file counter.
@@ -52,6 +74,9 @@ export function parseDiff(diff: string): AddedLine[] {
     } else if (raw.startsWith(' ') || raw === '') {
       line += 1;
     }
+
+    // Closed after the line is counted: the END marker is itself generated.
+    if (body !== null && body.startsWith(END)) generated = false;
     // Everything else — `diff --git`, `index`, `\ No newline` — is metadata.
   }
 

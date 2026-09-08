@@ -317,6 +317,18 @@
   max-width: 60ch;
   text-wrap: pretty;
 }
+/* Credit and copyright on one row, one line each. The 60ch cap above is what
+   folds the credit in two, and it is only needed once the row is too narrow to
+   hold both sentences. */
+@media (min-width: 900px) {
+  .site-footer .legal {
+    flex-wrap: nowrap;
+  }
+  .site-footer .legal .built {
+    max-width: none;
+    white-space: nowrap;
+  }
+}
 .site-footer .legal .built b {
   color: var(--muted);
   font-weight: 600;
@@ -375,6 +387,11 @@
     display: none;
   }
   .site-nav .nav-cta {
+    display: none;
+  }
+  /* Same trade as the CTA: the menu now carries the repository link, so the
+     icon in the bar is a duplicate rather than the only route to it. */
+  .nav-icon {
     display: none;
   }
   .site-footer .legal .terms {

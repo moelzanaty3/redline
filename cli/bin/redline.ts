@@ -12,6 +12,11 @@ import {
   type ResolvePlatformOptions,
 } from '../platforms/resolve.ts';
 import { init, ONBOARD_BRANCH } from '../commands/init.ts';
+import { createGit } from '../core/git.ts';
+import { parseRemote } from '../platforms/detect.ts';
+import { Cancelled, createPrompter, isInteractive, type Prompter } from '../ui/prompt.ts';
+import { gatherFacts } from '../ui/facts.ts';
+import { runWizard, type Host as WizardHost, type WizardAnswers } from '../ui/wizard.ts';
 import {
   capabilitySelection,
   OPTIONAL_CAPABILITIES,
@@ -33,6 +38,7 @@ import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
 import { standardsVersion } from '../commands/sync.ts';
+import { isGatePipeline } from '../platforms/types.ts';
 import type { Platform } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
 import type { RemoteVerifyHost } from '../verify/remote.ts';
@@ -43,15 +49,24 @@ const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const USAGE = [
   'redline — engineering control plane',
   '',
-  '  redline init [--profile <name>] [--vendors <list>] [--blocking] [--no-a11y] [--speckit] [--dry-run] [--repair]',
-  '               [--adopt-caller] [--skip <list>] [--with <list>]',
+  '  redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]',
+  '               [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
+  '      --profile <list>  one profile, or several separated by commas, whose stacks are',
+  '                  rendered together — a React app with its own Terraform beside it is',
+  '                  web,infra. The recorded name is sorted, so the order you type cannot',
+  '                  change the artifacts. Omitted, the stack is detected from the checkout',
   '      --vendors <list>  comma-separated vendor ids (copilot,agents,claude,cursor) to render for —',
   '                  overrides both detection and whatever .redline.json already recorded; a vendor',
   '                  the org has not enabled never renders no matter what this list names',
   '      --blocking  promote the merge gate from advisory to blocking',
-  '      --no-a11y, --speckit  recorded in .redline.json for later phases; changes nothing in Phase 1',
+  '      --no-a11y   recorded in .redline.json for a later phase; changes nothing in Phase 1',
+  '      --speckit / --no-speckit, --tmf / --no-tmf  the optional context sections rendered',
+  '                  into the standards artifacts beside the rules. speckit is on by default',
+  '                  and is dropped automatically where the repository already runs Spec Kit;',
+  '                  tmf is off unless asked for. Passing the negative on a later run removes',
+  '                  a section already rendered — the block is regenerated, not appended to',
   '      --repair    re-apply every capability even if this repository looks already onboarded — for',
   '                  labels, review-ownership, repo-property, gate and merge-policy, whose recorded',
   '                  pendingAdmin entry a plain re-run can never clear on its own; composes with --dry-run',
@@ -65,6 +80,10 @@ const USAGE = [
   `      --rung <name>  the enforcement rung: ${RUNGS.join(', ')}. A promotion needs recorded`,
   '                  evidence and is refused without it; a demotion is always allowed. Omitting',
   '                  the flag keeps whatever the repository already recorded',
+  '      --pipeline <name>  github-actions or azure-pipelines — what actually runs this',
+  '                  repository\'s pull request checks. Asked separately from the host because',
+  '                  the two come apart: a repository on GitHub can be built entirely by Azure',
+  '                  Pipelines, and installing an Actions workflow there gates nothing',
   '      --adopt-caller  let Redline take over the gate machinery file (.github/workflows/redline.yml,',
   '                  .azuredevops/redline-gate.yml) when what is already there carries nothing that',
   '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
@@ -143,12 +162,43 @@ export interface RunDeps {
   // Injected so the metrics dispatch can be asserted without executing a runner
   // that talks to GitHub.
   loadRunner?: (path: string) => Promise<unknown>;
+  // Whether a stepped menu can be shown. Injected so the existing command tests
+  // — which run with no TTY but must keep asserting the flag path — cannot be
+  // silently answered by a prompt nobody is there to fill in.
+  isInteractive?: () => boolean;
+  // Injected together so a test can drive the menu without a terminal.
+  prompter?: () => Prompter;
 }
 
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
   const cwd = deps.cwd ?? process.cwd();
   const root = deps.root ?? PACKAGE_ROOT;
   const log = createLog(deps.sink);
+  const interactive = deps.isInteractive ?? (() => isInteractive());
+
+  // The host is read from the git remote alone, with no credential and no
+  // request — the menu's first question has to render before either exists,
+  // because "Dry run" is one of its answers. A remote this cannot classify is
+  // `null`, which is exactly the case the host question is there to settle.
+  const detectHost = (): WizardHost | null => {
+    try {
+      return parseRemote(createGit(cwd).remoteUrl()).host;
+    } catch {
+      return null;
+    }
+  };
+
+  const runInitWizard = async (
+    dir: string,
+    packageRoot: string
+  ): Promise<{ answers: WizardAnswers } | null> => {
+    const prompter = deps.prompter?.() ?? createPrompter();
+    const answers = await runWizard(
+      prompter,
+      gatherFacts({ cwd: dir, root: packageRoot, detectedHost: detectHost() })
+    );
+    return { answers };
+  };
   const resolve =
     deps.resolvePlatform ??
     ((dir: string, options?: ResolvePlatformOptions) => defaultResolvePlatform(dir, options));
@@ -180,16 +230,28 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             blocking: { type: 'boolean' },
             'no-a11y': { type: 'boolean' },
             speckit: { type: 'boolean' },
+            'no-speckit': { type: 'boolean' },
+            tmf: { type: 'boolean' },
+            'no-tmf': { type: 'boolean' },
             'dry-run': { type: 'boolean' },
             repair: { type: 'boolean' },
             'adopt-caller': { type: 'boolean' },
             skip: { type: 'string' },
             with: { type: 'string' },
             rung: { type: 'string' },
+            pipeline: { type: 'string' },
           },
           allowPositionals: false,
         })
       );
+
+      // `redline init` with nothing after it, at a terminal, is a person asking
+      // to be walked through onboarding — so walk them through it. Any flag at
+      // all means the caller has already decided, and the menu would be in the
+      // way; CI and pipes never see it (isInteractive), so the scripted path is
+      // byte-identical to what it was before the menu existed.
+      const wizard =
+        rest.length === 0 && interactive() ? await runInitWizard(cwd, root) : null;
 
       const names = (list: string | undefined): string[] =>
         list === undefined
@@ -200,12 +262,29 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
               .filter((name) => name !== '');
       // Throws a usage RedlineError on an unknown or non-optional name, before
       // a platform is resolved or a byte is written.
-      const selection = capabilitySelection(names(values.skip), names(values.with));
+      //
+      // The menu answers arrive here as the same two lists the flags produce,
+      // rather than as a parallel set of options: a capability the operator
+      // deselected in the wizard is a `--skip`, and there is exactly one place
+      // that decides what a skip means.
+      const selection = wizard
+        ? capabilitySelection(
+            OPTIONAL_CAPABILITIES.filter((name) => !wizard.answers.capabilities.includes(name)),
+            [...wizard.answers.capabilities]
+          )
+        : capabilitySelection(names(values.skip), names(values.with));
 
       const menu: Partial<MenuSelections> = { ...selection.menu };
       if (values.blocking !== undefined) menu.blockingGate = values.blocking;
       if (values['no-a11y'] !== undefined) menu.accessibility = !values['no-a11y'];
       if (values.speckit !== undefined) menu.speckit = values.speckit;
+      if (values['no-speckit'] === true) menu.speckit = false;
+      if (values.tmf !== undefined) menu.tmf = values.tmf;
+      if (values['no-tmf'] === true) menu.tmf = false;
+      if (wizard) {
+        menu.speckit = wizard.answers.speckit;
+        menu.tmf = wizard.answers.tmf;
+      }
 
       // Same "no default" reasoning as the menu flags above: undefined is how
       // init() tells "nothing typed, keep detection or the recorded
@@ -226,22 +305,36 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         );
       }
 
-      const dryRun = values['dry-run'] === true;
+      if (values.pipeline !== undefined && !isGatePipeline(values.pipeline)) {
+        throw new RedlineError(
+          'usage',
+          `--pipeline must be github-actions or azure-pipelines, not "${values.pipeline}"`,
+          'a repository on GitHub whose pull request checks are Azure Pipelines wants azure-pipelines'
+        );
+      }
+      const pipelineChoice = wizard?.answers.pipeline ?? values.pipeline;
+
+      const dryRun = values['dry-run'] === true || wizard?.answers.action === 'dry-run';
       const repair = values.repair === true;
       const adoptCaller = values['adopt-caller'] === true;
       // A dry run sends no request, so it must not require a credential —
       // see ResolvePlatformOptions.lazyCredentials. Every other path here
       // resolves one up front, exactly as before.
       const platform = await resolve(cwd, dryRun ? { lazyCredentials: true } : {});
+      const profileChoice = wizard?.answers.profile ?? values.profile;
+      const vendorChoice = wizard ? [...wizard.answers.vendors] : vendors;
+      const rungChoice = wizard?.answers.rung ?? values.rung;
+
       const report = await init(platform, {
         cwd,
         root,
-        ...(values.profile ? { profile: values.profile } : {}),
-        ...(vendors ? { vendors } : {}),
+        ...(profileChoice ? { profile: profileChoice } : {}),
+        ...(vendorChoice ? { vendors: vendorChoice } : {}),
         ...(dryRun ? { dryRun: true } : {}),
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
-        ...(values.rung ? { rung: values.rung } : {}),
+        ...(rungChoice ? { rung: rungChoice } : {}),
+        ...(pipelineChoice ? { pipeline: pipelineChoice } : {}),
         menu,
         capabilities: selection.capabilities,
       });
@@ -295,8 +388,22 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         );
         return exitCodeFor('failed');
       }
-      if (report.pullRequest) log.info(`pull request: ${report.pullRequest.url}`);
-      else if (report.alreadyOnboarded) log.info('already onboarded — nothing to change');
+      if (report.pullRequest) {
+        log.info(`pull request: ${report.pullRequest.url}`);
+        // Onboarding commits to its own branch and pushes it, so the operator's
+        // working tree is untouched and `git status` is clean. Without this,
+        // the run looks like it did nothing: the first real onboarding ended
+        // with the operator running `init` a second time and being told
+        // "already onboarded" by a repository they believed was not.
+        log.info('');
+        log.info(`the changes are committed on ${ONBOARD_BRANCH} and pushed, not in your working`);
+        log.info('tree — `git status` here stays clean. Review and merge the pull request above.');
+      } else if (report.alreadyOnboarded) {
+        log.info(
+          `already onboarded — nothing to change (recorded in .redline.json; ` +
+            `re-run with --repair to re-apply every capability)`
+        );
+      }
       return 0;
     }
 
@@ -667,6 +774,13 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     log.error(`unknown command "${command}"`, 'run: redline --help');
     return exitCodeFor('usage');
   } catch (error) {
+    // Cancelling at a prompt is a decision, not a failure. It must not print an
+    // `error` line: an operator who pressed Ctrl-C already knows what happened,
+    // and a wrapping script reading exit 1 would file it as onboarding broken.
+    if (error instanceof Cancelled) {
+      log.info('cancelled — nothing was written');
+      return error.exitCode;
+    }
     if (isRedlineError(error)) {
       log.error(error.message, error.hint);
       return error.exitCode;

@@ -16,6 +16,9 @@ export interface RenderContext {
   root: string;
   profile: string;
   stacks: string[];
+  // Selected context sections, ready to embed. Org-level and above the
+  // repository's own rules in precedence, so they render before them.
+  contexts: string[];
   // The repository's own rules, ready to embed, or null when it has none.
   // Read from the tree being rendered INTO (`out`), not from `root`: `root` is
   // the standards package, and the org's copy of a repository's local rules
@@ -75,8 +78,13 @@ export function localSection(local: string): string {
   return `---\n\n${LOCAL_HEADING}\n\n${PRECEDENCE}\n\n${local}`;
 }
 
-const withLocal = (ctx: RenderContext, body: string): string =>
-  ctx.local === null ? body : `${body}\n\n${localSection(ctx.local)}`;
+const withContexts = (ctx: RenderContext, body: string): string =>
+  ctx.contexts.length === 0 ? body : `${body}\n\n---\n\n${ctx.contexts.join('\n\n---\n\n')}`;
+
+const withLocal = (ctx: RenderContext, body: string): string => {
+  const withOrgContext = withContexts(ctx, body);
+  return ctx.local === null ? withOrgContext : `${withOrgContext}\n\n${localSection(ctx.local)}`;
+};
 
 // A REDLINE marker line and an unclosed code fence are the two shapes in a
 // human's markdown that reach markers.ts as structure rather than as prose: the

@@ -11,6 +11,9 @@ export interface MenuSelections {
   adrForLargeDiffs: boolean;
   accessibility: boolean;
   speckit: boolean;
+  // TM Forum context. Off unless asked for: it is right for the repositories
+  // that implement TMF interfaces and noise in every other one.
+  tmf: boolean;
   sensitivePathReviewers: boolean;
 }
 
@@ -76,11 +79,25 @@ export interface RedlineConfig {
   commandFiles: Record<string, string>;
 }
 
+// What each menu key means when a repository has not recorded one. Lives here
+// rather than in cli/commands/init.ts so the parser can fill an absent key
+// without importing the command that writes it; init re-exports it as
+// DEFAULT_MENU.
+export const MENU_DEFAULTS: MenuSelections = {
+  blockingGate: false,
+  adrForLargeDiffs: true,
+  accessibility: true,
+  speckit: true,
+  tmf: false,
+  sensitivePathReviewers: false,
+};
+
 export const MENU_KEYS: (keyof MenuSelections)[] = [
   'blockingGate',
   'adrForLargeDiffs',
   'accessibility',
   'speckit',
+  'tmf',
   'sensitivePathReviewers',
 ];
 
@@ -201,6 +218,17 @@ export function parseConfig(raw: unknown): RedlineConfig {
   const menuObj = menuRaw as Record<string, unknown>;
   const menu = {} as MenuSelections;
   for (const key of MENU_KEYS) {
+    // A key this file has never heard of takes its default rather than failing
+    // the parse. Every menu key added since a repository was onboarded is
+    // absent from its `.redline.json`, and rejecting that made a CLI upgrade
+    // invalidate the config of every repository in the estate at once — every
+    // `redline verify` reporting "`.redline.json` is invalid" for a key nobody
+    // had the chance to write. A value that IS present and is not a boolean is
+    // still an error: that is a corrupt file, not an old one.
+    if (menuObj[key] === undefined) {
+      menu[key] = MENU_DEFAULTS[key];
+      continue;
+    }
     if (typeof menuObj[key] !== 'boolean') bad(`menu.${key} must be a boolean`);
     menu[key] = menuObj[key] as boolean;
   }
@@ -272,6 +300,27 @@ export function readConfig(cwd: string): RedlineConfig | null {
   return parseConfig(raw);
 }
 
+// JSON has no comments, and this file is the only record of what a repository
+// chose and why. Without something in the file itself, the first person to open
+// it after onboarding finds eleven keys and no way to tell which are theirs to
+// change from which are Redline's bookkeeping. `//` is the convention every
+// JSON tool already ignores, and parseConfig ignores unknown keys, so it costs
+// nothing to carry and is rewritten on every run.
+const EXPLAINER: readonly string[] = [
+  'Written by `redline init`. Edit with the command, not by hand — the next run rewrites this file.',
+  'menu.blockingGate — the gate blocks a merge rather than reporting. `redline init --blocking`.',
+  'menu.adrForLargeDiffs — a diff over the threshold needs an ADR link in the pull request body.',
+  'menu.accessibility — recorded for a later phase; nothing reads it yet.',
+  'menu.speckit — renders the spec-driven development context into the standards artifacts.',
+  'menu.tmf — renders the TM Forum context. `redline init --tmf` / `--no-tmf`.',
+  'menu.sensitivePathReviewers — writes CODEOWNERS and requires code-owner review on those paths.',
+  'capabilities.* — false means "this repository has its own"; Redline does not install or report it.',
+  'rung — how hard the gate bites: observe, warn, block-blocker, block-high. Promotion needs evidence.',
+  'pendingAdmin — capabilities an administrator still has to grant. Not a failure, a to-do list.',
+  'commandFiles, standardsVersion, cliVersion, onboardedAt, lastRunAt — Redline\'s own bookkeeping.',
+];
+
 export function writeConfig(cwd: string, config: RedlineConfig): void {
-  writeFileSync(join(cwd, CONFIG_FILE), `${JSON.stringify(config, null, 2)}\n`);
+  const documented = { '//': EXPLAINER, ...config };
+  writeFileSync(join(cwd, CONFIG_FILE), `${JSON.stringify(documented, null, 2)}\n`);
 }

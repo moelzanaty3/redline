@@ -30,6 +30,10 @@ export interface FakePlatformOptions {
   // thing as what `enableSecurityFloor` returned when it was applied: an
   // administrator may have granted a capability since. Defaults to `security`.
   securityState?: CapabilityOutcome[];
+  // What the host says about the owners in CODEOWNERS. `null` (the default) is
+  // "no CODEOWNERS file, or a host without the concept"; `[]` is a file whose
+  // owners all resolve.
+  codeownersProblems?: string[] | null;
   // Work that only exists once the pull request does — Azure applies its sync
   // labels there. It is report-only: `.redline.json` is part of the pull
   // request and was written before it, so this can never reach pendingAdmin.
@@ -238,6 +242,11 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       reads.push('readReportedCheckNames');
       return ['redline-gate / gate'];
     },
+    async readCodeownersProblems(): Promise<string[] | null> {
+      reads.push('readCodeownersProblems');
+      return opts.codeownersProblems ?? null;
+    },
+
     async readSecurityState(): Promise<SecurityResult> {
       reads.push('readSecurityState');
       return {

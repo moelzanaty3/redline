@@ -42,6 +42,19 @@ const PR_TEMPLATE = ".github/pull_request_template.md";
 const ONBOARD_BRANCH = "redline/onboard";
 const SYNC_LABEL = "redline-sync";
 
+// The questions `redline init` asks with no flags at a terminal, in the order
+// cli/ui/wizard.ts asks them, with the answers this example repository gave.
+// The last one is the reason the writes below happen at all: nothing is written
+// until Apply is chosen, and the menu offers Dry run first.
+const MENU: [string, string][] = [
+  ["Which standards apply here?", "web"],
+  ["Where does this repository live?", "GitHub"],
+  ["What runs your pull request checks?", "GitHub Actions"],
+  ["Which assistants should read the standards?", "copilot, agents, claude"],
+  ["How hard should the check bite?", "observe"],
+  ["Ready?", "Apply"],
+];
+
 const dim = (t: string): Tok => ({ t, c: "tk-dim" });
 const white = (t: string): Tok => ({ t, c: "tk-white" });
 const green = (t: string): Tok => ({ t, c: "tk-green" });
@@ -132,7 +145,9 @@ export function Journey({ initCmd }: { initCmd: string }) {
   const outcomes: [string, string, string][] = [
     ["applied", "labels", 'label "no-adr"'],
     ["applied", "gate", `wrote ${PR_TEMPLATE}`],
-    ["applied", "review-ownership", "seeded .github/CODEOWNERS"],
+    // review-ownership is deliberately absent: it is opt-in behind
+    // `--with review-ownership`, so a default run never seeds CODEOWNERS and a
+    // transcript of a default run must not show it doing so.
     ["applied", "secret-scanning", "secret scanning"],
     ["applied", "push-protection", "secret scanning push protection"],
     ["applied", "dependency-alerts", "dependabot alerts (vulnerability alerts)"],
@@ -152,6 +167,20 @@ export function Journey({ initCmd }: { initCmd: string }) {
 
   const lines: Line[] = [
     cmd(initCmd),
+    // The menu, as it looks once answered. `redline init` with no flags at a
+    // terminal asks these before it writes anything, and each row here is the
+    // line the CLI leaves behind when the question is confirmed — cli/ui/tty.ts
+    // `answered()`, which is `◇  <title> · <answer>`.
+    //
+    // Showing the questions collapsed rather than expanded is a choice about
+    // space, not about honesty: the expanded list is in the section directly
+    // below this one. What must not happen is this transcript continuing to
+    // open with a command that silently produces the writes, because that is
+    // no longer what typing it does.
+    ...MENU.map(([question, answer]) => ({
+      toks: [green("◇  "), white(question), dim(" · "), blue(answer)],
+    })),
+    { toks: [] },
     { toks: [dim("profile "), white(PROFILE)] },
     // cli/bin/redline.ts:130 — `write ` is padded to the width of `remove`, so
     // three spaces separate it from the path, not two.
@@ -189,8 +218,10 @@ export function Journey({ initCmd }: { initCmd: string }) {
               actually prints
             </b>{" "}
             — the file names are the ones it writes, the findings are the ones it
-            reports. The one <code>#</code> line is ours, marking the gap between
-            the two runs.
+            reports. The <code>◇</code> rows are the menu after you answer it;
+            each is a real list you pick from, shown{" "}
+            <a href="#choices">expanded below</a>. The one <code>#</code> line is
+            ours, marking the gap between the two runs.
           </p>
         </div>
 

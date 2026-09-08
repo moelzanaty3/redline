@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError } from '../core/errors.ts';
+import { createGit } from '../core/git.ts';
 import {
   deselectedCapabilities,
   labelsCarriedByGate,
@@ -9,6 +10,8 @@ import {
 } from '../config/redline-json.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { render } from '../render/standards.ts';
+import { COMMAND_HOSTS, renderCommands } from '../render/commands.ts';
+import { CONTEXTS } from '../render/contexts.ts';
 import { LOCAL_HEADING, LOCAL_RULES_FILE, localSection, readLocalRules } from '../render/vendors.ts';
 import {
   observePullRequestTemplates,
@@ -322,6 +325,25 @@ export async function verify(
               : `${machinery.path} publishes ${machinery.publishes}`
   );
 
+  // A mature repository reports twenty-five checks on a pull request, and
+  // printing all of them put a single unreadable line in the middle of the
+  // report — burying the findings either side of it. What the reader needs from
+  // this list is the count and whether anything Redline-shaped is in it; the
+  // rest is noise that a `gh pr checks` away.
+  const CHECK_SAMPLE = 3;
+  const summariseChecks = (names: readonly string[]): string => {
+    if (names.length === 0) return '(nothing)';
+    if (names.length <= CHECK_SAMPLE + 1) return names.join(', ');
+    // Redline's own checks lead, because their presence or absence is the
+    // question this finding exists to answer.
+    const ordered = [
+      ...names.filter((n) => n.toLowerCase().startsWith('redline')),
+      ...names.filter((n) => !n.toLowerCase().startsWith('redline')),
+    ];
+    const shown = ordered.slice(0, CHECK_SAMPLE);
+    return `${names.length} checks (${shown.join(', ')} and ${names.length - shown.length} more)`;
+  };
+
   const pr = await platform.latestPullRequestNumber(ref);
   if (pr === null) {
     add('check-name-reported', true, 'no pull request yet — open one to confirm the check reports');
@@ -361,7 +383,7 @@ export async function verify(
         'check-name-reported',
         false,
         `expected ${missing.join(', ')} but PR #${pr} only reported: ${
-          reported.length > 0 ? reported.join(', ') : '(nothing)'
+          summariseChecks(reported)
         } — ${missing.join(', ')} was never reported${
           // Only a blocking policy blocks. Azure reports required checks off a
           // Status policy that nothing queues a build for, and telling that
@@ -386,7 +408,7 @@ export async function verify(
                 ...(gateOwned ? [] : ['gate']),
                 ...(config.capabilities.mergePolicy ? [] : ['merge-policy']),
               ].join(', ')} ${OFF_BY_CHOICE}`
-        } — PR #${pr} reported: ${reported.length > 0 ? reported.join(', ') : '(nothing)'}`
+        } — PR #${pr} reported: ${summariseChecks(reported)}`
       );
     }
   }
@@ -443,6 +465,10 @@ export async function verify(
     profile: config.profile,
     out: opts.cwd,
     vendors: config.vendors,
+    // The same context selection init rendered with. Without it every
+    // repository that selected one read as stale against a render that had
+    // dropped its section.
+    contexts: CONTEXTS.filter((context) => config.menu[context.key]).map((context) => context.key),
     check: true,
   });
   const stale = rendered.stale;
@@ -496,6 +522,69 @@ export async function verify(
           : localStale
             ? `this repository's own ${LOCAL_RULES_FILE} has changed since the last render — re-run redline init to fold it in: ${stale.join(', ')}`
             : `stale: ${stale.join(', ')}`
+  );
+
+  // `redline init` writes CODEOWNERS and turns on code-owner review in the same
+  // run, and until now nothing ever asked the host whether the owners it wrote
+  // resolve. They do not on a personal account, which has no teams at all: the
+  // seeded `@<owner>/platform-engineering` is an unknown owner on every line,
+  // GitHub reports ten errors, and code-owner review becomes a requirement that
+  // cannot be satisfied — on `.github/workflows/`, `.github/CODEOWNERS`,
+  // `AGENTS.md` and `CLAUDE.md`, which is Redline's own enforcement surface.
+  // The install reported `applied`, the host rejected it, and `verify` said ok.
+  //
+  // Only asserted while code-owner review is actually required. A repository
+  // that deselected review-ownership, or turned the setting off deliberately,
+  // is not failing at owners nothing consults.
+  // The branch in hand, not the default one: on the onboarding pull request the
+  // file exists only here, and this is the last moment the owners can be fixed
+  // before the requirement they feed goes live.
+  const codeownersProblems = await platform.readCodeownersProblems(ref, createGit(opts.cwd).currentBranch());
+  const ownersEnforced = config.menu.sensitivePathReviewers && policy?.requireCodeOwnerReview === true;
+  add(
+    'review-ownership',
+    !ownersEnforced || codeownersProblems === null || codeownersProblems.length === 0,
+    codeownersProblems === null
+      ? 'no CODEOWNERS on this host'
+      : codeownersProblems.length === 0
+        ? 'every owner in CODEOWNERS resolves'
+        : `code-owner review is required but ${codeownersProblems.length} owner problem(s) make it unsatisfiable: ${codeownersProblems.join('; ')}`
+  );
+
+  // Slash-command files were the other thing `verify` could not see. `render()`
+  // enumerates vendor artifacts only, so `.claude/commands/redline-*.md` and its
+  // siblings sat outside the stale set entirely: an edit INSIDE their REDLINE
+  // block — the block that says "do not edit inside this block" — left every
+  // check reporting ok. These files are prompts an assistant executes on
+  // request, which makes them the worst artifact class to leave unwatched.
+  //
+  // Compared by re-rendering, not against the `commandFiles` hash in
+  // `.redline.json`. The hash answers a different question — it is `remove`'s
+  // proof that a file with no block is still Redline's to delete — and it
+  // covers whole-file bytes, so on a file Redline only merged into it would
+  // fail the repository for the human content the merge exists to permit.
+  // Re-rendering asks the question that matters at each path: a file Redline
+  // owns whole is compared whole, because the next init rewrites it whole; a
+  // file it merged into is compared on its block alone.
+  const orgVendors = Object.entries(manifest.vendors)
+    .filter(([, v]) => v.enabled)
+    .map(([k]) => k);
+  const commandDrift = renderCommands({
+    root: opts.root,
+    out: opts.cwd,
+    hosts: config.vendors.flatMap((v) => (orgVendors.includes(v) && v in COMMAND_HOSTS ? [v] : [])),
+    check: true,
+    known: config.commandFiles,
+  });
+  const commandStale = [...commandDrift.written, ...commandDrift.removed];
+  add(
+    'commands-current',
+    commandStale.length === 0 || drift !== 'same',
+    commandStale.length === 0
+      ? 'slash commands match what this CLI renders'
+      : drift === 'same'
+        ? `edited since Redline wrote them — re-run redline init to restore: ${commandStale.join(', ')}`
+        : `standards v${config.standardsVersion} recorded against a CLI rendering v${manifest.version} — re-run redline init: ${commandStale.join(', ')}`
   );
 
   // The pull request template is the one thing `redline init` writes that

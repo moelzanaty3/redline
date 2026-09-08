@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CopyButton } from "@/components/copy-button";
 import { FindingPanel } from "@/components/finding";
 import { Journey } from "@/components/journey";
+import { Choices } from "@/components/choices";
 import { Reveal } from "@/components/reveal";
 import { SEED_FILE, SEED_RULE_ID, seedDiff, seedMarkerExcerpt } from "@/components/seed-excerpt";
 import { ValueCase } from "@/components/value-case";
@@ -10,6 +11,7 @@ import { loadManifest } from "@/lib/manifest";
 import { PACKAGE_NAME, installCommand, packageState } from "@/lib/package-version";
 import { findRule, getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
+import { GITHUB_REPO, GITHUB_URL, NEW_ISSUE_URL } from "@/lib/site";
 
 // Declared, not inherited from Next's default. The loaders behind this page —
 // Journey's profile resolution, the seed reader, the rule lookup below — throw
@@ -31,7 +33,7 @@ export default async function Home() {
   const vendorCount = Object.values(manifest.vendors).filter((v) => v.enabled).length;
   const seedCount = seededFindingCount();
 
-  // The finding in section 3 is a real rule at its real severity. A page that
+  // The finding in section 4 is a real rule at its real severity. A page that
   // typeset `Redline/BLOCKER [javascript/shell-injection]` after that id had
   // been renamed would be printing a contract it no longer honours.
   const demoRule = findRule(SEED_RULE_ID);
@@ -77,6 +79,9 @@ export default async function Home() {
           </div>
           <p className="hm-hero-alt">
             <a href="#finding">See a finding ↓</a>
+            <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
+              {GITHUB_REPO} on GitHub
+            </a>
           </p>
           <p className="hero-proof">
             <span>{ruleCount} rules, each with a permanent id</span>
@@ -88,10 +93,16 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 2 — the problem ============ */}
+      {/* ============ 2 — proof ============ */}
+      <Journey initCmd={initCmd} />
+
+      {/* ============ 2b — the choices behind that run ============ */}
+      <Choices />
+
+      {/* ============ 3 — the problem ============ */}
       <ValueCase />
 
-      {/* ============ 3 — a finding ============ */}
+      {/* ============ 4 — a finding ============ */}
       <section className="hm-sec hm-finding" id="finding">
         <div className="container">
           <div className="hm-sec-head">
@@ -113,7 +124,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 4 — where it sits ============ */}
+      {/* ============ 5 — where it sits ============ */}
       <section className="hm-sec hm-flow" id="workflow">
         <div className="container">
           <Reveal>
@@ -176,7 +187,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 5 — why this is different ============ */}
+      {/* ============ 6 — why this is different ============ */}
       <section className="hm-sec hm-claims" id="different">
         <div className="container">
           <Reveal>
@@ -267,9 +278,6 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 6 — proof ============ */}
-      <Journey initCmd={initCmd} />
-
       {/* ============ 7 — try it ============ */}
       <section className="hm-sec hm-try" id="try">
         <div className="container">
@@ -277,9 +285,11 @@ export default async function Home() {
             <div className="hm-try-card">
               <h2 className="hm-h2">Try it on one repository</h2>
               <p className="hm-try-lead">
-                <code>{initCmd}</code> opens a single pull request on{" "}
-                <code>redline/onboard</code>. It never pushes to your default
-                branch. The gate starts advisory — it comments, it doesn&apos;t
+                <code>{initCmd}</code> asks what your repository is, shows you
+                the plan, and offers <b>Dry run</b> before Apply. Choose Apply
+                and it opens a single pull request on{" "}
+                <code>redline/onboard</code> — it never pushes to your default
+                branch. The gate starts advisory: it comments, it doesn&apos;t
                 block. Don&apos;t like it? Close the pull request. Nothing was
                 changed. <Link href="/docs/removing">Backing it out →</Link>
               </p>
@@ -372,6 +382,12 @@ export default async function Home() {
             <Link href="/docs/quickstart">Quickstart</Link>
             <Link href="/docs/local-review">Local review</Link>
             <Link href="/docs/seeds">The seed corpus</Link>
+            <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
+              Source on GitHub
+            </a>
+            <a href={NEW_ISSUE_URL} rel="noopener noreferrer" target="_blank">
+              Report an issue
+            </a>
           </p>
         </div>
       </section>

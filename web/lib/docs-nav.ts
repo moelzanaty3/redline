@@ -75,8 +75,8 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "CLI commands",
         href: "/docs/cli",
-        description: "Four commands, deliberately — what init and verify do, and what sync and review would do once built.",
-        keywords: "cli command redline init verify sync review flags dry-run skip with repair blocking gate exit codes",
+        description: "Every command you type in a repository — what init and verify do, and what sync, review, policy and exempt do around them.",
+        keywords: "cli command redline init verify sync review policy exempt remove flags dry-run skip with repair blocking rung gate exit codes speckit no-speckit tmf review-ownership codeowners context section",
         children: childrenOf(COMMANDS, "/docs/cli", "cli command"),
       },
     ],

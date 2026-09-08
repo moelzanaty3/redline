@@ -598,46 +598,42 @@ test('installGate writes the packaged PR template whole when the repository has 
   assert.ok(result.files.includes('.github/pull_request_template.md'));
 });
 
-test('installGate does not destroy a pull request template the repository already had', async () => {
+test('installGate does not edit a pull request template the repository already had', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, '.github'), { recursive: true });
   writeFileSync(join(cwd, '.github/pull_request_template.md'), HUMAN_TEMPLATE);
 
   const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
-  const merged = templateAt(cwd);
 
-  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()), 'the human template must survive verbatim');
-  assert.match(merged, /## Our own checklist/);
-  assert.ok(merged.includes(BEGIN) && merged.includes(END), 'the gated content must be marked');
-  assert.match(merged, /## Launch readiness/);
-  assert.ok(!merged.includes('## Change type'), 'the gate does not read Change type — do not append it');
-  assert.equal(
-    (merged.match(/^# /gm) ?? []).length,
-    1,
-    'appending the whole packaged template would duplicate the top-level heading'
-  );
+  assert.equal(templateAt(cwd), HUMAN_TEMPLATE, 'a template the repository wrote is not Redline\'s to edit');
   const templateOutcome = result.outcomes.find((o) => o.detail.includes('pull_request_template.md'));
-  assert.equal(templateOutcome?.status, 'applied');
-  assert.match(templateOutcome?.detail ?? '', /append/i);
+  // Untouched is not silent: the checklist job fails a body with no
+  // `## Launch readiness`, and the author hears it here rather than from a red
+  // check on their first pull request.
+  assert.match(templateOutcome?.detail ?? '', /did not edit it/);
+  assert.match(templateOutcome?.detail ?? '', /Launch readiness/);
+  assert.match(templateOutcome?.detail ?? '', /--skip gate/);
 });
 
 test('installGate replaces only the Redline block in a template that already has one', async () => {
+  // Seeded greenfield: Redline writes the whole template, markers and all, and
+  // that block is the only part a later run may rewrite.
   const cwd = tmp();
   const install = createGitHubInstall(fakeGitHubClient(), gitFor);
-  mkdirSync(join(cwd, '.github'), { recursive: true });
-  writeFileSync(join(cwd, '.github/pull_request_template.md'), HUMAN_TEMPLATE);
   await install.installGate(ref, cwd, gateOpts);
+  const written = templateAt(cwd);
 
-  const merged = templateAt(cwd);
-  const stale = merged.replace(/## Launch readiness/, '## Launch readiness\n\n- [ ] stale item');
+  const stale = `${written}\n\n## Ours\n\n- [ ] our own item\n`.replace(
+    /## Launch readiness/,
+    '## Launch readiness\n\n- [ ] stale item'
+  );
   writeFileSync(join(cwd, '.github/pull_request_template.md'), stale);
 
   const result = await install.installGate(ref, cwd, gateOpts);
   const after = templateAt(cwd);
 
-  assert.equal(after, merged, 'the block is regenerated, everything outside it is untouched');
-  assert.ok(!after.includes('stale item'));
-  assert.ok(after.startsWith(HUMAN_TEMPLATE.trimEnd()));
+  assert.ok(!after.includes('stale item'), 'the block is regenerated');
+  assert.match(after, /## Ours/, 'everything outside the block is untouched');
   assert.ok(result.files.includes('.github/pull_request_template.md'));
 });
 
@@ -677,22 +673,22 @@ test('a second run never appends a second Launch readiness section to the templa
 // template carrying its own Launch readiness section but no ADR affordance
 // would fail a large diff with no line to fill in. Append what is missing, not
 // all-or-nothing.
-test('a template with its own Launch readiness but no ADR affordance gets only the ADR section appended', async () => {
+test('a template of the repository\'s own is left alone, and the gate job it cannot answer is named', async () => {
   const cwd = tmp();
   const own = `# Ours\n\n## Launch readiness\n\n- [ ] our own gate item\n`;
   seedTemplate(cwd, own);
 
   const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
-  const merged = templateAt(cwd);
 
-  assert.ok(merged.startsWith(own), 'the human section must survive byte for byte');
-  assert.equal((merged.match(/^## Launch readiness$/gm) ?? []).length, 1, 'no second gated checklist');
-  assert.match(merged, /## Architecture decision/);
-  assert.match(merged, /docs\/adr\//);
-  assert.ok(result.files.includes('.github/pull_request_template.md'));
+  assert.equal(templateAt(cwd), own, 'the repository\'s template is not Redline\'s to edit');
+  assert.ok(!result.files.includes('.github/pull_request_template.md'));
   const detail = result.outcomes.find((o) => o.detail.includes('pull_request_template.md'))?.detail ?? '';
+  assert.match(detail, /did not edit it/);
+  // Only the job it actually fails: its own Launch readiness already answers
+  // the checklist, so naming that too would send the author after a section
+  // they have.
   assert.match(detail, /Architecture decision/);
-  assert.ok(!detail.includes('Launch readiness'), 'the detail must name only what was appended');
+  assert.ok(!detail.includes('"## Launch readiness"'));
 });
 
 test('a template that already satisfies both gate jobs is left untouched', async () => {
@@ -727,12 +723,10 @@ test('a dry run writes no pull request template, whatever the repository already
   const brownfield = tmp();
   const merged = tmp();
   const install = createGitHubInstall(fakeGitHubClient(), gitFor);
-  for (const dir of [brownfield, merged]) {
-    mkdirSync(join(dir, '.github'), { recursive: true });
-    writeFileSync(join(dir, '.github/pull_request_template.md'), HUMAN_TEMPLATE);
-  }
+  mkdirSync(join(brownfield, '.github'), { recursive: true });
+  writeFileSync(join(brownfield, '.github/pull_request_template.md'), HUMAN_TEMPLATE);
   await install.installGate(ref, merged, gateOpts);
-  const alreadyMerged = templateAt(merged);
+  const alreadyWritten = templateAt(merged);
 
   const plans = await Promise.all(
     [greenfield, brownfield, merged].map((dir) => install.installGate(ref, dir, gateOpts, true))
@@ -740,9 +734,9 @@ test('a dry run writes no pull request template, whatever the repository already
 
   assert.ok(!existsSync(join(greenfield, '.github/pull_request_template.md')));
   assert.equal(templateAt(brownfield), HUMAN_TEMPLATE);
-  assert.equal(templateAt(merged), alreadyMerged);
-  assert.ok(plans[0]?.files.includes('.github/pull_request_template.md'));
-  assert.ok(plans[1]?.files.includes('.github/pull_request_template.md'));
+  assert.equal(templateAt(merged), alreadyWritten);
+  assert.ok(plans[0]?.files.includes('.github/pull_request_template.md'), 'greenfield still plans a write');
+  assert.ok(!plans[1]?.files.includes('.github/pull_request_template.md'), 'a repository template is never planned');
   assert.ok(!plans[2]?.files.includes('.github/pull_request_template.md'));
 });
 
@@ -752,37 +746,38 @@ test('a dry run writes no pull request template, whatever the repository already
 // with ambiguous precedence: if the host serves theirs, the Redline block is
 // invisible and the gate blocks every one of their pull requests.
 
-test('a template at a non-default candidate path is the file merged into, and no second one appears', async () => {
+test('a template at a non-default candidate path is the one reported, and no second one appears', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, 'docs'), { recursive: true });
   writeFileSync(join(cwd, 'docs/pull_request_template.md'), HUMAN_TEMPLATE);
 
   const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
 
-  const merged = readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8');
-  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()));
-  assert.match(merged, /## Launch readiness/);
+  assert.equal(readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
   assert.ok(
     !existsSync(join(cwd, '.github/pull_request_template.md')),
     'no second template may be created beside the one the host resolves'
   );
-  assert.deepEqual(result.files, ['.github/workflows/redline.yml', 'docs/pull_request_template.md']);
+  assert.deepEqual(result.files, ['.github/workflows/redline.yml']);
+  const detail = result.outcomes.find((o) => o.detail.includes('pull_request_template.md'))?.detail ?? '';
+  assert.match(detail, /docs\/pull_request_template\.md/, 'the resolved path is the one reported');
 });
 
-test('a template whose filename differs only in case is the one merged into', async () => {
+test('a template whose filename differs only in case is the one resolved', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, '.github'), { recursive: true });
   writeFileSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE.md'), HUMAN_TEMPLATE);
 
   const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
 
-  const merged = readFileSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8');
-  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()), 'the human template must survive verbatim');
-  assert.match(merged, /## Launch readiness/);
-  assert.ok(result.files.includes('.github/PULL_REQUEST_TEMPLATE.md'));
+  assert.equal(readFileSync(join(cwd, '.github/PULL_REQUEST_TEMPLATE.md'), 'utf8'), HUMAN_TEMPLATE);
+  const detail =
+    result.outcomes.find((o) => /pull_request_template\.md/i.test(o.detail))?.detail ?? '';
+  assert.match(detail, /PULL_REQUEST_TEMPLATE\.md/);
   assert.equal(
     readdirSync(join(cwd, '.github')).filter((n) => n.toLowerCase() === 'pull_request_template.md').length,
-    1
+    1,
+    'no second template beside the case variant the host serves'
   );
 });
 
@@ -884,9 +879,15 @@ test('a candidate directory whose name differs in case is still the one searched
 
   const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
 
-  assert.match(readFileSync(join(cwd, 'DOCS/pull_request_template.md'), 'utf8'), /## Launch readiness/);
-  assert.ok(!existsSync(join(cwd, '.github/pull_request_template.md')), 'no second template beside the served one');
-  assert.ok(result.files.includes('DOCS/pull_request_template.md'));
+  assert.equal(readFileSync(join(cwd, 'DOCS/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
+  assert.ok(
+    !existsSync(join(cwd, '.github/pull_request_template.md')),
+    'the case-variant folder is searched, so no second template is created beside it'
+  );
+  assert.match(
+    result.outcomes.find((o) => o.detail.includes('DOCS/pull_request_template.md'))?.detail ?? '',
+    /did not edit it/
+  );
 });
 
 // Foreign filesystem contents are a real system boundary: readdirSync throws
@@ -916,11 +917,18 @@ test('two case variants of the template in one directory resolve to the canonica
 
   const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
 
+  // Neither is written now, so the resolution shows in what is reported: the
+  // canonical spelling is the one Redline says it looked at.
   assert.deepEqual(
     result.files.filter((f) => f.toLowerCase().includes('pull_request_template')),
-    ['docs/pull_request_template.md']
+    []
+  );
+  assert.match(
+    result.outcomes.find((o) => /pull_request_template\.md/i.test(o.detail))?.detail ?? '',
+    /docs\/pull_request_template\.md/
   );
   assert.equal(readFileSync(join(cwd, 'docs/PULL_REQUEST_TEMPLATE.md'), 'utf8'), '# Upper\n');
+  assert.equal(readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
 });
 
 // GitHub documents only `pull_request_template.md`; `.txt` and extension-less
@@ -1019,53 +1027,43 @@ test('a template hidden below an unclosed code fence is refused, not appended to
 // every run after it refused in the plan pass, so `redline init` and even
 // `--dry-run` stopped working on a repository that was fine before Redline
 // touched it.
-test('a template ending in an open code fence is refused, never written into the fence', async () => {
+test('a template ending in an open code fence is left alone rather than refused', async () => {
+  // It used to be refused because Redline was about to splice a block into it
+  // and could not tell where the fence ended. Nothing is spliced now, so there
+  // is nothing to refuse: the file is simply not Redline's to edit.
   const cwd = tmp();
   const human = '# PR\n\nPaste your logs:\n\n```\n';
   seedTemplate(cwd, human);
   const install = createGitHubInstall(fakeGitHubClient(), gitFor);
 
   for (let run = 1; run <= 3; run += 1) {
-    await assert.rejects(
-      () => install.installGate(ref, cwd, gateOpts),
-      (error: unknown) => {
-        assert.ok(isRedlineError(error));
-        assert.equal(error.exitCode, 1);
-        assert.match(error.message, /pull_request_template\.md/);
-        return true;
-      },
-      `run ${run} must refuse`
-    );
+    const result = await install.installGate(ref, cwd, gateOpts);
     assert.equal(templateAt(cwd), human, `run ${run} must not change a byte`);
+    assert.ok(!result.files.includes('.github/pull_request_template.md'));
   }
 });
 
-test('a dry run refuses the same template rather than reporting a write it could not make', async () => {
+test('a dry run over the same template plans no write', async () => {
   const cwd = tmp();
   const human = '# PR\n\nPaste your logs:\n\n```\n';
   seedTemplate(cwd, human);
 
-  await assert.rejects(() => createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts, true), isRedlineError);
+  const plan = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts, true);
+  assert.ok(!plan.files.includes('.github/pull_request_template.md'));
   assert.equal(templateAt(cwd), human);
 });
 
-test('a template with a balanced fence still merges and is byte-stable across three runs', async () => {
+test('a template with a balanced fence is left alone and is byte-stable across three runs', async () => {
   const cwd = tmp();
   const human = '# PR\n\nPaste your logs:\n\n```\n\n```\n';
   seedTemplate(cwd, human);
   const install = createGitHubInstall(fakeGitHubClient(), gitFor);
 
-  const first = await install.installGate(ref, cwd, gateOpts);
-  const merged = templateAt(cwd);
-  const second = await install.installGate(ref, cwd, gateOpts);
-  await install.installGate(ref, cwd, gateOpts);
-
-  assert.ok(merged.startsWith(human), 'the human template must survive verbatim');
-  assert.match(merged, /## Launch readiness/);
-  assert.equal(merged.split(BEGIN).length - 1, 1);
-  assert.equal(templateAt(cwd), merged, 'byte-stable from the first run');
-  assert.ok(first.files.includes('.github/pull_request_template.md'));
-  assert.ok(!second.files.includes('.github/pull_request_template.md'));
+  for (let run = 1; run <= 3; run += 1) {
+    const result = await install.installGate(ref, cwd, gateOpts);
+    assert.equal(templateAt(cwd), human, `run ${run} must not change a byte`);
+    assert.ok(!result.files.includes('.github/pull_request_template.md'));
+  }
 });
 
 // --- the caller workflow is refused, never merged and never clobbered --------

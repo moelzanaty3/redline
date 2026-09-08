@@ -173,3 +173,16 @@ test('an exemption exactly at the maximum is allowed, not refused as one over', 
   assert.notEqual(parseExemption(at(MAX_DAYS), NOW).exemption, null);
   assert.equal(parseExemption(at(MAX_DAYS + 1), NOW).exemption, null);
 });
+
+test('an empty field does not read the next line as its value', () => {
+  // The shipped template ships `- reason:`, `- until:` and `- scope:` blank. The
+  // run after the colon matched the newline, so reason parsed as `- until:` and
+  // the author was told their reason was 8 characters long.
+  const result = parseExemption(body('- reason:\n- until:\n- scope:'), NOW);
+
+  assert.equal(result.exemption, null);
+  assert.deepEqual(
+    result.problems.map((p) => p.problem),
+    ['no-reason']
+  );
+});

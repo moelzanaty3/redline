@@ -104,6 +104,13 @@
 .hm-hero-alt a:hover {
   color: var(--red-soft);
 }
+/* Same middot separator the final CTA row uses — two link rows on one page that
+   separate their items differently read as two different components. */
+.hm-hero-alt a + a::before {
+  content: "·";
+  margin: 0 12px;
+  color: var(--faint);
+}
 
 /* ================= 2 · the problem ================= */
 .hm-prob-cols,
@@ -843,4 +850,123 @@
 .hm-diff:hover::-webkit-scrollbar-thumb,
 .hm-seed:hover::-webkit-scrollbar-thumb {
   background: #4a4a4a;
+}
+
+/* ================= the init choices ================= */
+
+/* Sits directly under the transcript, which shows one run with its defaults.
+   The grid is the correction to that: three groups, each a real decision the
+   command offers. Tokens only — no colour is introduced here. */
+.hm-choices {
+  padding: 88px 0;
+  border-top: 1px solid var(--border);
+}
+.hm-choices h2 {
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+.hm-choices-lead {
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: 15.5px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+.hm-choices-lead code,
+.hm-choices-foot code {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.hm-choices-grid {
+  display: grid;
+  /* auto-fit rather than a fixed count: three groups today, and a fourth would
+     reflow instead of overflowing the row. */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 36px;
+}
+.hm-choice-group {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  padding: 22px 20px;
+}
+.hm-choice-group h3 {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.hm-choice-lead {
+  color: var(--faint);
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 18px;
+  text-wrap: pretty;
+}
+.hm-choice-group ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.hm-choice-group li {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.hm-choice-group li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.hm-choice-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 3px;
+}
+.hm-choice-head b {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.hm-choice-head code {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--red-soft);
+  white-space: nowrap;
+}
+.hm-choice-default {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+.hm-choice-group li p {
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.hm-choices-foot {
+  max-width: 72ch;
+  margin-top: 32px;
+  color: var(--faint);
+  font-size: 13.5px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+@media (max-width: 640px) {
+  .hm-choices {
+    padding: 60px 0;
+  }
+  .hm-choice-head {
+    flex-direction: column;
+    gap: 2px;
+  }
 }

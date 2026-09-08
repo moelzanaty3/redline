@@ -73,7 +73,7 @@ jobs:
         env:
           STANDARDS_VERSION: ${{ vars.STANDARDS_VERSION }}
         run: |
-          npx --yes "redlinegate@0.0.1" metrics dashboard \
+          npx --yes "redlinegate@0.0.2" metrics dashboard \
             --org "${{ github.repository_owner }}" \
             --data data \
             --days 90 \

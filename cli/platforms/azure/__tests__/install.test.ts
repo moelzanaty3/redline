@@ -261,6 +261,23 @@ test('installGate writes the azure pipeline and PR template', async () => {
   assert.match(yml, /ADR_DIFF_THRESHOLD: 300/);
   assert.match(yml, /genre[^\n]*redline/);
 
+  // The secret scan reaches parity with the GitHub gate's `secrets` job, and
+  // the image is pinned by digest because it handles the diff of every pull
+  // request. scripts/check-pins.mjs re-resolves that digest against the tag in
+  // the trailing comment; the pin is asserted here so a hand-edit that drops
+  // the digest for a floating tag fails the suite rather than CI alone.
+  assert.match(yml, /trufflesecurity\/trufflehog@sha256:[0-9a-f]{64} # \d+\.\d+\.\d+/);
+  assert.match(yml, /--results=verified/);
+
+  // SECURITY REGRESSION GUARD. On GitHub the security jobs sit outside label
+  // exemption structurally — the label only reaches some jobs. Here the whole
+  // gate is one pipeline, so the exclusion is this variable, and the soft-fail
+  // branch must be reached only when it is not set. A refactor that folds
+  // these back into one condition would let `redline-exempt` waive a verified
+  // credential in the diff, which makes the label itself the vulnerability.
+  assert.match(yml, /if \[ "\$\{REDLINE_SECURITY_FAILED:-\}" = "true" \]; then/);
+  assert.match(yml, /elif \[ "\$state" = "failed" \] && \[ -n "\$\{SOFT_FAIL_LABELS:-\}" \]; then/);
+
   // Regression guard: Azure Repos ignores YAML `pr:` triggers (GitHub-only
   // feature) — the Build Validation policy is what queues this pipeline, so
   // a `pr:` block in the template is dead code that misleads readers.
@@ -1102,47 +1119,38 @@ test('installGate writes the packaged PR template whole when the repository has 
   assert.ok(result.files.includes('.azuredevops/pull_request_template.md'));
 });
 
-test('installGate does not destroy a pull request template the repository already had', async () => {
+test('installGate does not edit a pull request template the repository already had', async () => {
   const cwd = tmp();
   seedTemplate(cwd, HUMAN_TEMPLATE);
 
-  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(
-    ref,
-    cwd,
-    gateOpts
-  );
-  const merged = templateAt(cwd);
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
-  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()), 'the human template must survive verbatim');
-  assert.match(merged, /## Our own checklist/);
-  assert.ok(merged.includes(BEGIN) && merged.includes(END), 'the gated content must be marked');
-  assert.match(merged, /## Launch readiness/);
-  assert.ok(!merged.includes('## Change type'), 'the gate does not read Change type — do not append it');
-  assert.equal(
-    (merged.match(/^# /gm) ?? []).length,
-    1,
-    'appending the whole packaged template would duplicate the top-level heading'
-  );
-  const templateOutcome = result.outcomes.find((o) => o.detail.includes('pull_request_template.md'));
-  assert.equal(templateOutcome?.status, 'applied');
-  assert.match(templateOutcome?.detail ?? '', /append/i);
+  assert.equal(templateAt(cwd), HUMAN_TEMPLATE, 'a template the repository wrote is not Redline\'s to edit');
+  const detail = result.outcomes.find((o) => o.detail.includes('pull_request_template.md'))?.detail ?? '';
+  assert.match(detail, /did not edit it/);
+  assert.match(detail, /Launch readiness/);
+  assert.match(detail, /--skip gate/);
 });
 
 test('installGate replaces only the Redline block in a template that already has one', async () => {
   const cwd = tmp();
   const install = createAzureInstall(fakeAzure(registrationRoutes), gitFor);
-  seedTemplate(cwd, HUMAN_TEMPLATE);
   await install.installGate(ref, cwd, gateOpts);
+  const written = templateAt(cwd);
 
-  const merged = templateAt(cwd);
-  seedTemplate(cwd, merged.replace(/## Launch readiness/, '## Launch readiness\n\n- [ ] stale item'));
+  seedTemplate(
+    cwd,
+    `${written}\n\n## Ours\n\n- [ ] our own item\n`.replace(
+      /## Launch readiness/,
+      '## Launch readiness\n\n- [ ] stale item'
+    )
+  );
 
   const result = await install.installGate(ref, cwd, gateOpts);
   const after = templateAt(cwd);
 
-  assert.equal(after, merged, 'the block is regenerated, everything outside it is untouched');
-  assert.ok(!after.includes('stale item'));
-  assert.ok(after.startsWith(HUMAN_TEMPLATE.trimEnd()));
+  assert.ok(!after.includes('stale item'), 'the block is regenerated');
+  assert.match(after, /## Ours/, 'everything outside the block is untouched');
   assert.ok(result.files.includes('.azuredevops/pull_request_template.md'));
 });
 
@@ -1178,22 +1186,19 @@ test('a second run never appends a second Launch readiness section to the templa
 // template carrying its own Launch readiness section but no ADR affordance
 // would fail a large diff with no line to fill in. Append what is missing, not
 // all-or-nothing.
-test('a template with its own Launch readiness but no ADR affordance gets only the ADR section appended', async () => {
+test('a template of the repository\'s own is left alone, and the gate job it cannot answer is named', async () => {
   const cwd = tmp();
   const own = `# Ours\n\n## Launch readiness\n\n- [ ] our own gate item\n`;
   seedTemplate(cwd, own);
 
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
-  const merged = templateAt(cwd);
 
-  assert.ok(merged.startsWith(own), 'the human section must survive byte for byte');
-  assert.equal((merged.match(/^## Launch readiness$/gm) ?? []).length, 1, 'no second gated checklist');
-  assert.match(merged, /## Architecture decision/);
-  assert.match(merged, /docs\/adr\//);
-  assert.ok(result.files.includes('.azuredevops/pull_request_template.md'));
+  assert.equal(templateAt(cwd), own);
+  assert.ok(!result.files.includes('.azuredevops/pull_request_template.md'));
   const detail = result.outcomes.find((o) => o.detail.includes('pull_request_template.md'))?.detail ?? '';
+  assert.match(detail, /did not edit it/);
   assert.match(detail, /Architecture decision/);
-  assert.ok(!detail.includes('Launch readiness'), 'the detail must name only what was appended');
+  assert.ok(!detail.includes('"## Launch readiness"'));
 });
 
 test('a template that already satisfies both gate jobs is left untouched', async () => {
@@ -1226,22 +1231,21 @@ test('a heading the gate matches by prefix is not given a second Launch readines
 test('a dry run writes no pull request template, whatever the repository already has', async () => {
   const greenfield = tmp();
   const brownfield = tmp();
-  const merged = tmp();
+  const written = tmp();
   const install = createAzureInstall(fakeAzure(registrationRoutes), gitFor);
   seedTemplate(brownfield, HUMAN_TEMPLATE);
-  seedTemplate(merged, HUMAN_TEMPLATE);
-  await install.installGate(ref, merged, gateOpts);
-  const alreadyMerged = templateAt(merged);
+  await install.installGate(ref, written, gateOpts);
+  const already = templateAt(written);
 
   const plans = await Promise.all(
-    [greenfield, brownfield, merged].map((dir) => install.installGate(ref, dir, gateOpts, true))
+    [greenfield, brownfield, written].map((dir) => install.installGate(ref, dir, gateOpts, true))
   );
 
   assert.ok(!existsSync(join(greenfield, '.azuredevops/pull_request_template.md')));
   assert.equal(templateAt(brownfield), HUMAN_TEMPLATE);
-  assert.equal(templateAt(merged), alreadyMerged);
+  assert.equal(templateAt(written), already);
   assert.ok(plans[0]?.files.includes('.azuredevops/pull_request_template.md'));
-  assert.ok(plans[1]?.files.includes('.azuredevops/pull_request_template.md'));
+  assert.ok(!plans[1]?.files.includes('.azuredevops/pull_request_template.md'));
   assert.ok(!plans[2]?.files.includes('.azuredevops/pull_request_template.md'));
 });
 
@@ -1250,42 +1254,37 @@ test('a dry run writes no pull request template, whatever the repository already
 // case-insensitively. Same harm as on GitHub if Redline writes beside the one
 // the host actually serves.
 
-test('a template at a non-default candidate path is the file merged into, and no second one appears', async () => {
+test('a template at a non-default candidate path is the one reported, and no second one appears', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, 'docs'), { recursive: true });
   writeFileSync(join(cwd, 'docs/pull_request_template.md'), HUMAN_TEMPLATE);
 
-  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(
-    ref,
-    cwd,
-    gateOpts
-  );
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
-  const merged = readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8');
-  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()));
-  assert.match(merged, /## Launch readiness/);
+  assert.equal(readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
   assert.ok(
     !existsSync(join(cwd, '.azuredevops/pull_request_template.md')),
     'no second template may be created beside the one the host resolves'
   );
-  assert.deepEqual(result.files, ['.azuredevops/redline-gate.yml', 'docs/pull_request_template.md']);
+  assert.deepEqual(result.files, ['.azuredevops/redline-gate.yml']);
+  assert.match(
+    result.outcomes.find((o) => o.detail.includes('docs/pull_request_template.md'))?.detail ?? '',
+    /did not edit it/
+  );
 });
 
-test('a template whose filename differs only in case is the one merged into', async () => {
+test('a template whose filename differs only in case is the one resolved', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
   writeFileSync(join(cwd, '.azuredevops/PULL_REQUEST_TEMPLATE.md'), HUMAN_TEMPLATE);
 
-  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(
-    ref,
-    cwd,
-    gateOpts
-  );
+  const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
-  const merged = readFileSync(join(cwd, '.azuredevops/PULL_REQUEST_TEMPLATE.md'), 'utf8');
-  assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()), 'the human template must survive verbatim');
-  assert.match(merged, /## Launch readiness/);
-  assert.ok(result.files.includes('.azuredevops/PULL_REQUEST_TEMPLATE.md'));
+  assert.equal(readFileSync(join(cwd, '.azuredevops/PULL_REQUEST_TEMPLATE.md'), 'utf8'), HUMAN_TEMPLATE);
+  assert.match(
+    result.outcomes.find((o) => /pull_request_template\.md/i.test(o.detail))?.detail ?? '',
+    /PULL_REQUEST_TEMPLATE\.md/
+  );
   assert.equal(
     readdirSync(join(cwd, '.azuredevops')).filter((n) => n.toLowerCase() === 'pull_request_template.md')
       .length,
@@ -1393,9 +1392,12 @@ test('a candidate directory whose name differs in case is still the one searched
 
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
-  assert.match(readFileSync(join(cwd, 'DOCS/pull_request_template.md'), 'utf8'), /## Launch readiness/);
+  assert.equal(readFileSync(join(cwd, 'DOCS/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
   assert.ok(!existsSync(join(cwd, '.azuredevops/pull_request_template.md')), 'no second template beside the served one');
-  assert.ok(result.files.includes('DOCS/pull_request_template.md'));
+  assert.match(
+    result.outcomes.find((o) => o.detail.includes('DOCS/pull_request_template.md'))?.detail ?? '',
+    /did not edit it/
+  );
 });
 
 // Foreign filesystem contents are a real system boundary: readdirSync throws
@@ -1425,11 +1427,18 @@ test('two case variants of the template in one directory resolve to the canonica
 
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
+  // Neither is written now, so the resolution shows in what is reported: the
+  // canonical spelling is the one Redline says it looked at.
   assert.deepEqual(
     result.files.filter((f) => f.toLowerCase().includes('pull_request_template')),
-    ['docs/pull_request_template.md']
+    []
+  );
+  assert.match(
+    result.outcomes.find((o) => /pull_request_template\.md/i.test(o.detail))?.detail ?? '',
+    /docs\/pull_request_template\.md/
   );
   assert.equal(readFileSync(join(cwd, 'docs/PULL_REQUEST_TEMPLATE.md'), 'utf8'), '# Upper\n');
+  assert.equal(readFileSync(join(cwd, 'docs/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
 });
 
 // Deterministic on every filesystem: Azure serves both extensions from the same
@@ -1442,23 +1451,30 @@ test('a .md and a .txt default template in one folder resolve to the .md', async
 
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
-  assert.ok(result.files.includes('docs/pull_request_template.md'));
+  assert.match(
+    result.outcomes.find((o) => o.detail.includes('pull_request_template'))?.detail ?? '',
+    /docs\/pull_request_template\.md/,
+    'the .md is the resolved one'
+  );
   assert.equal(readFileSync(join(cwd, 'docs/pull_request_template.txt'), 'utf8'), '# Text\n');
 });
 
 // Azure DevOps documents `pull_request_template.md` *and* `.txt` as default
 // templates, searched across `.azuredevops`, `.vsts`, `docs` and the root in
 // that order, first match wins.
-test('a .txt default template is the one merged into on Azure, and no .md is created beside it', async () => {
+test('a .txt default template is the one Azure resolves, and no .md is created beside it', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
   writeFileSync(join(cwd, '.azuredevops/pull_request_template.txt'), HUMAN_TEMPLATE);
 
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
-  assert.match(readFileSync(join(cwd, '.azuredevops/pull_request_template.txt'), 'utf8'), /## Launch readiness/);
+  assert.equal(readFileSync(join(cwd, '.azuredevops/pull_request_template.txt'), 'utf8'), HUMAN_TEMPLATE);
   assert.ok(!existsSync(join(cwd, '.azuredevops/pull_request_template.md')));
-  assert.ok(result.files.includes('.azuredevops/pull_request_template.txt'));
+  assert.match(
+    result.outcomes.find((o) => o.detail.includes('pull_request_template.txt'))?.detail ?? '',
+    /did not edit it/
+  );
 });
 
 test('a template in .vsts is found, because Azure still serves that folder', async () => {
@@ -1468,16 +1484,19 @@ test('a template in .vsts is found, because Azure still serves that folder', asy
 
   const result = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
 
-  assert.match(readFileSync(join(cwd, '.vsts/pull_request_template.md'), 'utf8'), /## Launch readiness/);
+  assert.equal(readFileSync(join(cwd, '.vsts/pull_request_template.md'), 'utf8'), HUMAN_TEMPLATE);
   assert.ok(!existsSync(join(cwd, '.azuredevops/pull_request_template.md')));
-  assert.ok(result.files.includes('.vsts/pull_request_template.md'));
+  assert.match(
+    result.outcomes.find((o) => o.detail.includes('.vsts/pull_request_template.md'))?.detail ?? '',
+    /did not edit it/
+  );
 });
 
 // Azure serves a branch-specific template *in preference to* the default, so a
 // repository with one gets a body Redline never merged into and the checklist
 // job fails every pull request into that branch. Unlike GitHub's opt-in
 // `PULL_REQUEST_TEMPLATE/` directory, these are automatic.
-test('branch-specific templates Azure serves in preference to the default are merged too', async () => {
+test('branch-specific templates Azure serves in preference to the default are left alone too', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, '.azuredevops/pull_request_template/branches/release'), { recursive: true });
   writeFileSync(join(cwd, '.azuredevops/pull_request_template/branches/main.md'), HUMAN_TEMPLATE);
@@ -1489,16 +1508,10 @@ test('branch-specific templates Azure serves in preference to the default are me
     '.azuredevops/pull_request_template/branches/main.md',
     '.azuredevops/pull_request_template/branches/release/october.txt',
   ]) {
-    const merged = readFileSync(join(cwd, rel), 'utf8');
-    assert.ok(merged.startsWith(HUMAN_TEMPLATE.trimEnd()), `${rel} must keep its own content`);
-    assert.match(merged, /## Launch readiness/, `${rel} must satisfy the checklist job`);
-    assert.ok(result.files.includes(rel));
+    assert.equal(readFileSync(join(cwd, rel), 'utf8'), HUMAN_TEMPLATE, `${rel} must keep every byte`);
+    assert.ok(!result.files.includes(rel));
   }
   assert.equal(templateAt(cwd), PACKAGED_TEMPLATE, 'the default still serves branches with no template of their own');
-  assert.match(
-    result.outcomes.find((o) => o.detail.includes('branch-specific'))?.detail ?? '',
-    /branch-specific/
-  );
 });
 
 // Azure searches every candidate folder for a template matching the target
@@ -1507,7 +1520,7 @@ test('branch-specific templates Azure serves in preference to the default are me
 // folder that has a `branches/` directory would leave the second one serving a
 // body Redline never merged into — so both folders are seeded here, and this
 // test fails if the scan stops early.
-test('branch templates in a second candidate folder are merged as well, because Azure searches them all', async () => {
+test('branch templates in a second candidate folder are searched too, and left alone', async () => {
   const cwd = tmp();
   mkdirSync(join(cwd, '.azuredevops/pull_request_template/branches'), { recursive: true });
   mkdirSync(join(cwd, 'docs/pull_request_template/branches'), { recursive: true });
@@ -1520,8 +1533,8 @@ test('branch templates in a second candidate folder are merged as well, because 
     '.azuredevops/pull_request_template/branches/main.md',
     'docs/pull_request_template/branches/dev.md',
   ]) {
-    assert.match(readFileSync(join(cwd, rel), 'utf8'), /## Launch readiness/, `${rel} is served by Azure and must be merged`);
-    assert.ok(result.files.includes(rel), `${rel} must be reported`);
+    assert.equal(readFileSync(join(cwd, rel), 'utf8'), HUMAN_TEMPLATE, `${rel} must keep every byte`);
+    assert.ok(!result.files.includes(rel), `${rel} is served by Azure and must not be rewritten`);
   }
 });
 
@@ -1548,7 +1561,7 @@ test('a dry run writes no branch-specific template either', async () => {
   const plan = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts, true);
 
   assert.equal(readFileSync(join(cwd, '.azuredevops/pull_request_template/branches/main.md'), 'utf8'), HUMAN_TEMPLATE);
-  assert.ok(plan.files.includes('.azuredevops/pull_request_template/branches/main.md'));
+  assert.ok(!plan.files.includes('.azuredevops/pull_request_template/branches/main.md'));
 });
 
 // N2: `mergeTemplate` decides the marked branch first, and refreshing it with
@@ -1632,53 +1645,42 @@ test('a template hidden below an unclosed code fence is refused, not appended to
 // every run after it refused in the plan pass, so `redline init` and even
 // `--dry-run` stopped working on a repository that was fine before Redline
 // touched it.
-test('a template ending in an open code fence is refused, never written into the fence', async () => {
+test('a template ending in an open code fence is left alone rather than refused', async () => {
+  // It used to be refused because Redline was about to splice a block into it
+  // and could not tell where the fence ended. Nothing is spliced now.
   const cwd = tmp();
   const human = '# PR\n\nPaste your logs:\n\n```\n';
   seedTemplate(cwd, human);
   const install = createAzureInstall(fakeAzure(registrationRoutes), gitFor);
 
   for (let run = 1; run <= 3; run += 1) {
-    await assert.rejects(
-      () => install.installGate(ref, cwd, gateOpts),
-      (error: unknown) => {
-        assert.ok(isRedlineError(error));
-        assert.equal(error.exitCode, 1);
-        assert.match(error.message, /pull_request_template\.md/);
-        return true;
-      },
-      `run ${run} must refuse`
-    );
+    const result = await install.installGate(ref, cwd, gateOpts);
     assert.equal(templateAt(cwd), human, `run ${run} must not change a byte`);
+    assert.ok(!result.files.includes('.azuredevops/pull_request_template.md'));
   }
 });
 
-test('a dry run refuses the same template rather than reporting a write it could not make', async () => {
+test('a dry run over the same template plans no write', async () => {
   const cwd = tmp();
   const human = '# PR\n\nPaste your logs:\n\n```\n';
   seedTemplate(cwd, human);
 
-  await assert.rejects(() => createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts, true), isRedlineError);
+  const plan = await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts, true);
+  assert.ok(!plan.files.includes('.azuredevops/pull_request_template.md'));
   assert.equal(templateAt(cwd), human);
 });
 
-test('a template with a balanced fence still merges and is byte-stable across three runs', async () => {
+test('a template with a balanced fence is left alone and is byte-stable across three runs', async () => {
   const cwd = tmp();
   const human = '# PR\n\nPaste your logs:\n\n```\n\n```\n';
   seedTemplate(cwd, human);
   const install = createAzureInstall(fakeAzure(registrationRoutes), gitFor);
 
-  const first = await install.installGate(ref, cwd, gateOpts);
-  const merged = templateAt(cwd);
-  const second = await install.installGate(ref, cwd, gateOpts);
-  await install.installGate(ref, cwd, gateOpts);
-
-  assert.ok(merged.startsWith(human), 'the human template must survive verbatim');
-  assert.match(merged, /## Launch readiness/);
-  assert.equal(merged.split(BEGIN).length - 1, 1);
-  assert.equal(templateAt(cwd), merged, 'byte-stable from the first run');
-  assert.ok(first.files.includes('.azuredevops/pull_request_template.md'));
-  assert.ok(!second.files.includes('.azuredevops/pull_request_template.md'));
+  for (let run = 1; run <= 3; run += 1) {
+    const result = await install.installGate(ref, cwd, gateOpts);
+    assert.equal(templateAt(cwd), human, `run ${run} must not change a byte`);
+    assert.ok(!result.files.includes('.azuredevops/pull_request_template.md'));
+  }
 });
 
 // --- the gate pipeline file is refused, never clobbered ----------------------
