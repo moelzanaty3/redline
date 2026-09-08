@@ -53,6 +53,13 @@ defect that onboarding surfaced, not a feature anyone asked for.
 
 - **Cancelling is not a failure.** Ctrl-C at a prompt exits 130 with no `error` line.
 
+- **A repository can be more than one profile.** `--profile web,infra` — and the menu's
+  standards question is a multi-select — because a React application with its own Terraform
+  beside it was previously forced to pick the half that fitted worst. `.redline.json` is
+  unchanged: `profile` stays a single string, it just may now read `infra,web`. Every reader
+  of that field already hands it straight to `resolveProfile`, which resolves the union and
+  records the list sorted, so the order it is typed in cannot change the rendered artifacts.
+
 ### Standards 0.0.2 — optional context sections
 
 `standards/contexts/` carries background a reviewer needs about how a repository works,

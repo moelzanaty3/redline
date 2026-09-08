@@ -138,11 +138,23 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
 
   p.intro('Redline');
 
-  const profile = await p.select<string>(
+  // Multi-select, because a repository is routinely more than one bundle: a
+  // React application with its own Terraform beside it is `web,infra`, and a
+  // single-choice question made it pick the half that fitted worst.
+  //
+  // `.redline.json` still records one string — resolveProfile takes the list
+  // and sorts it — so nothing downstream had to learn a new shape.
+  const recordedProfiles = recorded?.profile?.split(',').map((s) => s.trim());
+  const profiles = await p.multiselect<string>(
     'Which standards apply here?',
     profileChoices(manifest, facts.detectedProfile),
-    recorded?.profile ?? facts.detectedProfile
+    recordedProfiles ?? [facts.detectedProfile]
   );
+  // Deselecting everything renders no rules at all, which is never what the
+  // operator meant by "none of these" — they meant they could not find theirs.
+  // Falling back to what was detected keeps the run useful and keeps the answer
+  // visible in the summary, where it can be changed.
+  const profile = profiles.length > 0 ? profiles.join(',') : facts.detectedProfile;
 
   const hostChoices: Choice<Host>[] = [
     {

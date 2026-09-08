@@ -154,6 +154,35 @@ test('a profile is described by what it renders, not by its stack ids', async ()
   assert.equal(profiles?.hints[1], 'JavaScript, Node.js (NestJS)');
 });
 
+// A repository is routinely more than one bundle. The recorded value stays a
+// single string — resolveProfile takes the list — so nothing downstream changed.
+test('several standards can be chosen, and the record is one sorted string', async () => {
+  const { prompter } = acceptDefaults({ 'Which standards apply here?': ['service-node', 'web'] });
+  const answers = await runWizard(prompter, FACTS);
+  assert.equal(answers.profile, 'service-node,web');
+});
+
+// Rendering no rules at all is never what "none of these" meant — it meant the
+// operator could not find theirs.
+test('deselecting every standard falls back to what was detected', async () => {
+  const { prompter } = acceptDefaults({ 'Which standards apply here?': [] });
+  const answers = await runWizard(prompter, FACTS);
+  assert.equal(answers.profile, 'web');
+});
+
+test('a recorded multi-profile is preselected on a re-run', async () => {
+  const { prompter, asked } = acceptDefaults();
+  const answers = await runWizard(prompter, {
+    ...FACTS,
+    recorded: { profile: 'service-node,web' },
+  });
+  assert.deepEqual(asked.find((a) => a.title.startsWith('Which standards'))?.initial, [
+    'service-node',
+    'web',
+  ]);
+  assert.equal(answers.profile, 'service-node,web');
+});
+
 // Both of the questions that looked hardcoded are real lists with every option
 // the manifest knows about.
 test('the standards and host questions each offer a real choice', async () => {
