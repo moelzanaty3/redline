@@ -5,7 +5,7 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
-## Unreleased — 0.0.2
+## [0.0.2](https://github.com/moelzanaty3/redline/compare/v0.0.1...v0.0.2) (2026-09-08)
 
 ### CLI — `redline init` asks before it writes
 
