@@ -32,6 +32,7 @@ interface Asked {
   title: string;
   labels: string[];
   hints: (string | undefined)[];
+  disabled: (string | undefined)[];
   initial: unknown;
 }
 
@@ -51,6 +52,7 @@ function acceptDefaults(overrides: Record<string, unknown> = {}): {
         title,
         labels: choices.map((c) => c.label),
         hints: choices.map((c) => c.hint),
+        disabled: choices.map((c) => c.disabled),
         initial,
       });
       if (title in overrides) return overrides[title] as T;
@@ -67,6 +69,7 @@ function acceptDefaults(overrides: Record<string, unknown> = {}): {
         title,
         labels: choices.map((c) => c.label),
         hints: choices.map((c) => c.hint),
+        disabled: choices.map((c) => c.disabled),
         initial,
       });
       if (title in overrides) return overrides[title] as T[];
@@ -84,7 +87,11 @@ const FACTS: WizardFacts = {
     version: '0.0.2',
     profiles: { web: ['javascript', 'react'], 'service-node': ['javascript', 'nodejs'] },
     profileAliases: {},
-    stacks: {},
+    stacks: {
+      javascript: { title: 'JavaScript' },
+      react: { title: 'React (web)' },
+      nodejs: { title: 'Node.js (NestJS)' },
+    },
     vendors: {
       copilot: { title: 'GitHub Copilot code review', enabled: true },
       claude: { title: 'Claude Code', enabled: true },
@@ -125,11 +132,38 @@ test('the default action is a dry run, not an apply', async () => {
   assert.deepEqual(ready?.labels, ['Dry run', 'Apply']);
 });
 
-test('a disabled vendor is never offered', async () => {
+// Shown, not hidden. An operator looking for Cursor and not finding it cannot
+// tell whether Redline forgot about it, does not support it, or was told not to
+// render for it here — and only the last is both true and fixable.
+test('a vendor the org disabled is listed with its reason, not filtered away', async () => {
   const { prompter, asked } = acceptDefaults();
   await runWizard(prompter, FACTS);
   const vendors = asked.find((a) => a.title.startsWith('Which assistants'));
-  assert.deepEqual(vendors?.labels, ['copilot', 'claude']);
+  assert.deepEqual(vendors?.labels, ['copilot', 'claude', 'cursor']);
+  assert.deepEqual(vendors?.disabled, [undefined, undefined, 'not enabled for this organisation — Cursor rules']);
+});
+
+// The stacks' own titles, so two profiles sharing a prefix are told apart by
+// what they contain rather than by the operator guessing.
+test('a profile is described by what it renders, not by its stack ids', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, FACTS);
+  const profiles = asked.find((a) => a.title.startsWith('Which standards'));
+  assert.deepEqual(profiles?.labels, ['web', 'service-node']);
+  assert.equal(profiles?.hints[0], 'JavaScript, React (web)   (detected)');
+  assert.equal(profiles?.hints[1], 'JavaScript, Node.js (NestJS)');
+});
+
+// Both of the questions that looked hardcoded are real lists with every option
+// the manifest knows about.
+test('the standards and host questions each offer a real choice', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, FACTS);
+  assert.equal(asked.find((a) => a.title.startsWith('Which standards'))?.labels.length, 2);
+  assert.deepEqual(asked.find((a) => a.title.startsWith('Where does'))?.labels, [
+    'GitHub',
+    'Azure DevOps',
+  ]);
 });
 
 // The failure this replaces: a GitHub-hosted repository whose real pull request

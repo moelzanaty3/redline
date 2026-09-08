@@ -88,18 +88,39 @@ function profileChoices(manifest: Manifest, detected: string): Choice<string>[] 
     if (b === detected) return 1;
     return a.localeCompare(b);
   });
-  return ids.map((id) => ({
-    value: id,
-    label: id,
-    hint:
-      (manifest.profiles[id] ?? []).join(', ') + (id === detected ? '   (detected)' : ''),
-  }));
+  return ids.map((id) => {
+    // The stacks' own titles, not their ids. `JavaScript, React (web)` tells an
+    // operator what they are choosing; `javascript, react` makes them guess at
+    // the difference between two profiles that share a prefix.
+    const stacks = (manifest.profiles[id] ?? []).map(
+      (stack) => manifest.stacks[stack]?.title ?? stack
+    );
+    return {
+      value: id,
+      label: id,
+      hint: stacks.join(', ') + (id === detected ? '   (detected)' : ''),
+    };
+  });
 }
 
+// Every vendor the standards know about, including the ones this organisation
+// has switched off — shown greyed with the reason rather than filtered out.
+//
+// Hiding them was wrong for the same reason hiding a covered capability would
+// be: an operator looking for Cursor and not finding it cannot tell whether
+// Redline forgot about Cursor, does not support it, or was told not to render
+// for it here. Only the last is true, and only the last is something they can
+// go and change.
 function vendorChoices(manifest: Manifest): Choice<string>[] {
-  return Object.entries(manifest.vendors)
-    .filter(([, vendor]) => vendor.enabled)
-    .map(([id, vendor]) => ({ value: id, label: id, hint: vendor.title }));
+  return Object.entries(manifest.vendors).map(([id, vendor]) => ({
+    value: id,
+    label: id,
+    ...(vendor.enabled
+      ? { hint: vendor.title }
+      : // Reason first: a long vendor title truncates, and the half worth
+        // keeping is the part that says why the row cannot be picked.
+        { disabled: `not enabled for this organisation — ${vendor.title}` }),
+  }));
 }
 
 /**

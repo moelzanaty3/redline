@@ -235,8 +235,15 @@ export function createPrompter(opts: PrompterOptions = {}): Prompter {
       choices: readonly Choice<T>[],
       initial: readonly T[] = []
     ): Promise<T[]> {
+      // A disabled row can never be toggled (movement skips it), so one that
+      // started selected could never be turned off — it would render checked
+      // and come back in the answer with no way for the operator to refuse it.
+      // A vendor the organisation has switched off is exactly that case, and
+      // it is recorded in .redline.json often enough to reach here.
       const selected = new Set(
-        choices.flatMap((ch, i) => (initial.includes(ch.value) ? [i] : []))
+        choices.flatMap((ch, i) =>
+          ch.disabled === undefined && initial.includes(ch.value) ? [i] : []
+        )
       );
       const picked = await list(title, choices, true, selected, firstEnabled(choices));
       const labels = picked.map(

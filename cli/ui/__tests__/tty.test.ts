@@ -161,3 +161,18 @@ test('the painted frame carries escapes and the plain one carries none', () => {
   assert.match(painted, /\x1b\[/);
   assert.doesNotMatch(plainFrame(), /\x1b\[/);
 });
+
+// A disabled row is unreachable by the cursor, so one that started selected
+// could never be turned off. The prompter filters those out of the initial
+// selection; this asserts the reducer's half — that nothing can select one.
+test('a disabled row cannot be toggled into the selection', () => {
+  const withDisabled: Choice<string>[] = [
+    { value: 'a', label: 'alpha' },
+    { value: 'b', label: 'bravo', disabled: 'not enabled for this organisation' },
+  ];
+  // The cursor can only ever be on an enabled row — move() guarantees it — so
+  // toggling from any reachable position never reaches index 1.
+  let cursor = firstEnabled(withDisabled);
+  for (let i = 0; i < 5; i += 1) cursor = move(withDisabled, cursor, 1);
+  assert.equal(cursor, 0);
+});
