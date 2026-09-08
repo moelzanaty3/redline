@@ -20,11 +20,13 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     what: "Onboards this repository: renders the standards into whichever AI tools it uses, applies the organisation's security floor, installs the merge gate advisory-by-default, and records what it did in .redline.json. It is idempotent — a re-run reconciles rather than reinstalls.",
     built: true,
     onboard:
-      "Run it from inside the repository you are onboarding. It reads the git remote to decide whether it is talking to GitHub or Azure DevOps, and detects the profile from what is actually in the tree. On GitHub the org's reusable gate must already exist in the .github repo — see Installation — because init only writes the thin caller that references it.",
+      "Run it from inside the repository you are onboarding, with no flags. At a terminal it walks a menu — standards, host, what runs your checks, which assistants, what to install, how hard the gate bites — with whatever it detected preselected and every term explained beside the choice that uses it. The last question offers Dry run before Apply. In CI, in a pipe, or with any flag present it prompts for nothing and behaves exactly as it always did. On GitHub it resolves the org's reusable gate in the .github repo BEFORE writing the caller that references it: if that workflow does not exist, no caller is written and the gate is recorded as awaiting an administrator, because a workflow that cannot start is a red X on every pull request that looks like Redline working.",
     usage: [
-      "redline init                          # detect everything, onboard",
+      "redline init                          # walk the menu; Dry run offered before Apply",
       "redline init --dry-run                # print the plan; writes nothing, contacts no host",
       "redline init --profile web            # name the profile instead of detecting it",
+      "redline init --profile web,infra      # a React app with its own Terraform beside it",
+      "redline init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines",
       "redline init --vendors claude,copilot # render for these AI tools only",
       "redline init --blocking               # promote the gate from advisory to blocking",
       "redline init --skip gate              # this repository has its own; do not install one",
@@ -34,6 +36,21 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       "redline init --repair                 # re-apply every capability on an already-onboarded repo",
     ],
     flags: [
+      {
+        flag: "(no flags)",
+        detail:
+          "At a terminal, walks the menu. Every question preselects what detection found and explains its own terms — what a rung is, what a capability installs, which tool already covers a check. The standards and assistants questions are multi-selects: a repository is routinely more than one profile, and a vendor the organisation has disabled is listed greyed with the reason rather than hidden. The last question offers Dry run before Apply, so the first run can see the whole plan without writing anything. Any flag, a pipe, or CI suppresses it — a prompt in a pipeline is a hang with nobody there to answer it. REDLINE_NO_PROMPT=1 forces the scripted path.",
+      },
+      {
+        flag: "--profile <list>",
+        detail:
+          "One profile, or several separated by commas, whose stacks render together: a React application with its own Terraform beside it is web,infra, and a single choice made it pick the half that fitted worst. The recorded name is sorted and de-duplicated, so the order you type cannot change the artifacts. Omitted, the stack is detected from the checkout.",
+      },
+      {
+        flag: "--pipeline <name>",
+        detail:
+          "github-actions or azure-pipelines — what actually runs this repository's pull request checks, asked separately from the host because the two come apart. A repository can live on GitHub and be built entirely by Azure Pipelines; deriving one from the other is what put an Actions workflow into a repository that runs no Actions. On a GitHub host, azure-pipelines writes an Azure pipeline definition with the pr: trigger GitHub-hosted repositories honour, and reports that a human still has to register it once — the build result is the check GitHub reads, so there is no status to post and no Build Validation policy to attach.",
+      },
       {
         flag: "--dry-run",
         detail:
