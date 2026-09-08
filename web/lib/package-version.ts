@@ -62,8 +62,19 @@ async function resolve(): Promise<PackageState> {
     "",
   );
 
+  // Next persists its build fetch cache between deployments and keys it on the
+  // request, so the first build's answer was the only one the site ever gave:
+  // 0.0.2 shipped to npm and every page still read `npx redlinegate@0.0.1`.
+  // The key has to differ per build. It cannot be done with `cache: "no-store"`
+  // — that makes a prerendered route throw DynamicServerError, which this
+  // function's own catch turns into "unknown", so the pages lose the version
+  // entirely rather than pinning a stale one. A query parameter the registry
+  // ignores changes the key while leaving the fetch statically prerenderable.
+  const buildId =
+    process.env["VERCEL_GIT_COMMIT_SHA"] ?? process.env["GITHUB_SHA"] ?? String(Date.now());
+
   try {
-    const response = await fetch(`${registry}/${PACKAGE_NAME}`, {
+    const response = await fetch(`${registry}/${PACKAGE_NAME}?redline-build=${buildId}`, {
       // A docs build must not hang on a slow registry, and a missed lookup
       // degrades to a visible "unknown" rather than a wrong number.
       signal: AbortSignal.timeout(8000),
