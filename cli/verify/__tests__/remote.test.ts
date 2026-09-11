@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { verifyRemote, type RemoteVerifyHost } from '../remote.ts';
+import { VENDORED_GATE_PATH, verifyRemote, type RemoteVerifyHost } from '../remote.ts';
 import { RedlineError } from '../../core/errors.ts';
 import type { RepoRef } from '../../platforms/types.ts';
 
@@ -30,6 +30,8 @@ const config = {
   capabilities: { gate: true, mergePolicy: true, labels: true },
   commandFiles: {},
   integrations: [],
+  gateSource: 'org' as const,
+  gateVersion: '',
 };
 
 const host = (over: Partial<RemoteVerifyHost> = {}): RemoteVerifyHost => ({
@@ -74,7 +76,7 @@ const host = (over: Partial<RemoteVerifyHost> = {}): RemoteVerifyHost => ({
   ...over,
 });
 
-const opts = { root: ROOT, standardsVersion: '0.0.1' };
+const opts = { root: ROOT, standardsVersion: '0.0.1', cliVersion: '0.0.3' };
 import type { VerifyReport } from '../../commands/verify.ts';
 
 const find = (r: VerifyReport, check: string) => r.findings.find((f) => f.check === check);
@@ -319,4 +321,78 @@ test('a partly unreadable security floor is unknown, not a clean pass', async ()
   const floor = find(report, 'security-floor');
   assert.equal(floor?.unknown, true);
   assert.match(floor?.detail ?? '', /cannot read/);
+});
+
+// --- vendored gate -----------------------------------------------------------
+
+// An org gate updates itself: one merge reaches every repository pointing at it.
+// A vendored one is a copy, and nothing else in this report would notice a
+// repository three releases behind on the workflow deciding its merges.
+const localConfig = { ...config, gateSource: 'local' as const, gateVersion: '0.0.3' };
+const vendored = (content: string | null, cfg = localConfig): RemoteVerifyHost =>
+  host({
+    async readRemoteConfig() {
+      return { config: cfg };
+    },
+    async readRemoteFile(_r, path) {
+      if (path === VENDORED_GATE_PATH) return content === null ? null : { content };
+      return null;
+    },
+  });
+
+test('a vendored gate at the running version is current', async () => {
+  const report = await verifyRemote(vendored("REDLINE_CLI_VERSION: '0.0.3'"), ref, opts);
+  const check = find(report, 'gate-vendored');
+  assert.equal(check?.ok, true);
+  assert.match(check?.detail ?? '', /current with redlinegate 0\.0\.3/);
+});
+
+test('a vendored gate behind the running version is drift, and names the repair', async () => {
+  const report = await verifyRemote(vendored("REDLINE_CLI_VERSION: '0.0.1'"), ref, opts);
+  const check = find(report, 'gate-vendored');
+  assert.equal(check?.ok, false);
+  assert.match(check?.detail ?? '', /0\.0\.1/);
+  assert.match(check?.detail ?? '', /redline init --repair/);
+});
+
+// The caller references a file that is not there, so the gate cannot start at
+// all — a red X that looks like the gate working and is not.
+test('a config that claims a vendored gate with no file is drift', async () => {
+  const report = await verifyRemote(vendored(null), ref, opts);
+  const check = find(report, 'gate-vendored');
+  assert.equal(check?.ok, false);
+  assert.match(check?.detail ?? '', /is missing/);
+});
+
+// Unknown, not stale: a development build writes no stamp on purpose, and
+// reporting that as drift files work against a gate that may be perfectly
+// current.
+test('a vendored gate with no recorded version is unknown rather than stale', async () => {
+  const report = await verifyRemote(
+    vendored("REDLINE_CLI_VERSION: '0.0.3'", { ...localConfig, gateVersion: '' }),
+    ref,
+    opts
+  );
+  const check = find(report, 'gate-vendored');
+  assert.equal(check?.ok, true);
+  assert.equal(check?.unknown, true);
+});
+
+test('an org-sourced repository is never asked about a vendored gate', async () => {
+  const report = await verifyRemote(host(), ref, opts);
+  assert.equal(find(report, 'gate-vendored'), undefined);
+});
+
+// A repository that deselected the gate keeps its own; asking whether Redline's
+// vendored copy is current is a question about a gate it does not run.
+test('a deselected gate is not asked about its vendored copy either', async () => {
+  const report = await verifyRemote(
+    vendored(null, {
+      ...localConfig,
+      capabilities: { ...localConfig.capabilities, gate: false },
+    }),
+    ref,
+    opts
+  );
+  assert.equal(find(report, 'gate-vendored'), undefined);
 });

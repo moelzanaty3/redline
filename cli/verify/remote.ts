@@ -25,9 +25,17 @@ export interface RemoteVerifyOptions {
   // The package root, for rendering the artifacts a target should carry.
   root: string;
   standardsVersion: string;
+  // Passed rather than read from this module, for the same reason
+  // standardsVersion is: a check that compares a repository against "whatever
+  // version happens to be running" cannot be asserted on, and this one decides
+  // whether a repository's gate is reported as stale.
+  cliVersion: string;
 }
 
 export const CALLER_WORKFLOW = '.github/workflows/redline.yml';
+
+import { VENDORED_GATE_PATH, stampedVersion } from '../platforms/github/vendor.ts';
+export { VENDORED_GATE_PATH } from '../platforms/github/vendor.ts';
 
 // Verify a repository without a checkout.
 //
@@ -116,6 +124,49 @@ export async function verifyRemote(
             ? `${machinery.path} publishes ${machinery.publishes}, but the policy requires ${machinery.expected}`
             : `publishes ${machinery.publishes}`
   );
+
+  // --- vendored gate ---------------------------------------------------------
+  // A gate referenced from the organisation updates itself: one merge there
+  // reaches every repository that points at it. A vendored one does not — it is
+  // a copy, and a copy is only as current as the run that wrote it. Nothing
+  // else in this report would notice a repository sitting three releases behind
+  // on the workflow that decides whether its pull requests can merge.
+  //
+  // Reported against the CLI running the check rather than against npm: this is
+  // the same comparison `redline init --repair` would act on, so a repository
+  // told it is behind can always be brought level by the binary that told it.
+  if (gateOwned && config.gateSource === 'local') {
+    const vendored = await host.readRemoteFile(ref, VENDORED_GATE_PATH);
+    const pin = vendored === null ? null : stampedVersion(vendored.content);
+    if (vendored === null) {
+      add(
+        'gate-vendored',
+        false,
+        `${VENDORED_GATE_PATH} is missing, but .redline.json says the gate is vendored here — ` +
+          'the caller workflow references a file that is not in this repository'
+      );
+    } else if (pin === null || config.gateVersion === '') {
+      // One of the two sides has no version to compare. That is not drift, and
+      // reporting it as stale would file work against a repository whose gate
+      // may be perfectly current — a development build writes no stamp on
+      // purpose. Unknown, with the reason, is the honest answer.
+      add(
+        'gate-vendored',
+        true,
+        'vendored, version not recorded — cannot tell current from stale here',
+        true
+      );
+    } else {
+      add(
+        'gate-vendored',
+        pin === opts.cliVersion,
+        pin === opts.cliVersion
+          ? `vendored, current with redlinegate ${pin}`
+          : `vendored at redlinegate ${pin}, but this check runs ${opts.cliVersion} — ` +
+              're-run redline init --repair in that repository to bring the gate level'
+      );
+    }
+  }
 
   // --- merge policy ----------------------------------------------------------
   const policy = await host.readPolicy(ref);
