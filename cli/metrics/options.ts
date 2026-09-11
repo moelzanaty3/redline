@@ -191,15 +191,6 @@ export const METRICS_COMMANDS: Record<string, CommandSpec> = {
       baseline: { env: 'BASELINE', type: 'boolean', help: 'record as a baseline rather than a run' },
     },
   },
-  context: {
-    summary: 'measure what the skills render target saves, per profile',
-    runsIn: 'the source repo',
-    script: 'scripts/measure-context.mjs',
-    options: {
-      root: { env: 'ROOT', type: 'path', help: 'the repo to measure', default: '.' },
-      out: { env: 'OUT', type: 'path', help: 'also write the rows as JSON here' },
-    },
-  },
 };
 
 export const REGISTRY_COMMAND: CommandSpec = {

@@ -29,6 +29,7 @@ const config = {
   localRules: false,
   capabilities: { gate: true, mergePolicy: true, labels: true },
   commandFiles: {},
+  integrations: [],
 };
 
 const host = (over: Partial<RemoteVerifyHost> = {}): RemoteVerifyHost => ({
