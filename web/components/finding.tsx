@@ -79,7 +79,8 @@ export function FindingPanel({
           <span className="hm-panel-t">the diff</span>
           <code>{file}</code>
         </div>
-        <pre className="hm-diff">
+        <div className="hm-code-box">
+          <pre className="hm-diff">
           {diff.map((line, i) => (
             <span className={`hm-dl hm-dl-${line.kind}`} key={`${i}-${line.text}`}>
               <span className="hm-dl-g" aria-hidden="true">
@@ -88,8 +89,9 @@ export function FindingPanel({
               {line.text === "" ? " " : line.text}
               {"\n"}
             </span>
-          ))}
-        </pre>
+            ))}
+          </pre>
+        </div>
       </div>
 
       <div className="hm-find-out">

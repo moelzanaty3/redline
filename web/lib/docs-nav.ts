@@ -1,4 +1,5 @@
 import { COMMANDS, PLANS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
+import { entriesOfKind, hrefOf, publisherOf, type Kind } from "@/lib/skills-catalog";
 
 export type DocLink = {
   title: string;
@@ -11,6 +12,21 @@ export type DocLink = {
   // what it is not — there are eight of them and each has its own onboarding,
   // edit loop and output.
   children?: DocLink[];
+
+  // How many children to show while the reader is somewhere else. Off by
+  // default: Reference alone has four categories with children, and previewing
+  // every one of them rebuilds the wall the collapse exists to prevent. Set it
+  // where a closed category would otherwise look empty and the reader has a
+  // real reason to compare it with its sibling.
+  preview?: number;
+
+  // Whether these children form a reading order. A reference category does —
+  // the pager walks Standards → core → manifest → javascript. The catalogue
+  // does not: it is entered from its explorer or from search and left from
+  // Related, so its 59 alphabetical neighbours are not a sequence, and
+  // threading them through the pager puts 60 presses of Next between Skills
+  // and the page that actually follows it.
+  orderedChildren?: boolean;
 };
 
 export type DocSection = {
@@ -31,6 +47,23 @@ const childrenOf = (
     description: e.description,
     keywords: `${keywords} ${e.file} ${e.slug}`,
   }));
+
+// Catalogue entries are real pages, so they live in the nav like every other
+// page rather than being reachable only from search. Alphabetical: a sidebar
+// list of this length is scanned for a name, and delivery order — which is what
+// the index page is for — gives no clue where to look.
+const catalogChildren = (kind: Kind): DocLink[] =>
+  entriesOfKind(kind)
+    .map((entry) => {
+      const p = publisherOf(entry);
+      return {
+        title: entry.title,
+        href: hrefOf(entry),
+        description: entry.summary,
+        keywords: `${kind} ${entry.name} ${p.owner} ${p.repo} ${p.name} ${entry.phases.join(" ")} ${entry.stacks.join(" ")} skills.sh install`,
+      };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
 
 export const DOCS_NAV: DocSection[] = [
   {
@@ -93,7 +126,7 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Profiles & stacks",
         href: "/docs/profiles",
-        description: "12 stack rule sets composed into profiles — a repo installs exactly one.",
+        description: "16 stack rule sets composed into profiles — a repo installs exactly one.",
         keywords: "profiles stacks javascript react nodejs java go python kotlin swift terraform glob negation",
       },
       {
@@ -174,12 +207,6 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "agents.md adaptor codex jules devin cursor agent openai concatenated",
       },
       {
-        title: "Claude skills",
-        href: "/docs/adaptors/skills",
-        description: "Per-stack rules that load only when that stack is in play — measured, and not always worth it.",
-        keywords: "claude skills adaptor per-stack conditional loading context window SKILL.md frontmatter description trigger",
-      },
-      {
         title: "Cursor rules",
         href: "/docs/adaptors/cursor",
         description: "Scoped .mdc rules for the Cursor IDE.",
@@ -190,6 +217,32 @@ export const DOCS_NAV: DocSection[] = [
         href: "/docs/adaptors/custom",
         description: "One function in cli/render/vendors.ts — merge markers, pruning, manifest toggle.",
         keywords: "custom vendor adaptor cli render vendors.ts add new vendor merge prune manifest",
+      },
+    ],
+  },
+  {
+    // One section, two links. Labelling a section "Skills" and then putting a
+    // link called "Skills" inside it reads as a stutter and costs a line of
+    // sidebar for nothing.
+    label: "Catalogue",
+    links: [
+      {
+        title: "Skills",
+        href: "/docs/skills",
+        description: "Public agent skills from skills.sh, mapped onto the eight stages of delivery — what to load, and when.",
+        keywords: "skills skills.sh catalogue catalog registry npx skills add sdlc lifecycle plan design build test review secure ship operate superpowers addyosmani anthropic vercel expo trail of bits claude code cursor codex install public open knowledge",
+        children: catalogChildren("skill"),
+        preview: 5,
+        orderedChildren: false,
+      },
+      {
+        title: "Agents",
+        href: "/docs/agents",
+        description: "Public agents from skills.sh — the ones that run their own loop: subagents, browsers, artifacts.",
+        keywords: "agents subagent autonomous loop skills.sh catalogue registry npx skills add browser automation parallel worktree orchestration codex claude code cursor install public open",
+        children: catalogChildren("agent"),
+        preview: 5,
+        orderedChildren: false,
       },
     ],
   },
@@ -253,10 +306,20 @@ export const DOCS_NAV: DocSection[] = [
   },
 ];
 
-// Children are inlined directly after their parent, so prev/next walks the docs
-// in reading order: Standards → core → manifest → javascript → … → Workflows.
+// Every page the nav can reach, parents and children alike. This is the count
+// the sidebar reports, so it has to include the catalogue: those pages exist.
 export const FLAT_DOCS: DocLink[] = DOCS_NAV.flatMap((s) =>
   s.links.flatMap((l) => [l, ...(l.children ?? [])]),
+);
+
+// The same list minus the categories that are destinations rather than steps,
+// so the pager walks the docs in reading order: Standards → core → manifest →
+// javascript → … → Workflows, and skips straight over the catalogue.
+const PAGER_DOCS: DocLink[] = DOCS_NAV.flatMap((s) =>
+  s.links.flatMap((l) => [
+    l,
+    ...(l.orderedChildren === false ? [] : (l.children ?? [])),
+  ]),
 );
 
 export type SearchEntry = DocLink & { group: string };
@@ -272,10 +335,13 @@ export function adjacentDocs(href: string): {
   prev: DocLink | null;
   next: DocLink | null;
 } {
-  const i = FLAT_DOCS.findIndex((d) => d.href === href);
+  // A catalogue entry is not in this list, so it gets no pager at all — which
+  // is right: its neighbours downstairs are Related, not the next skill in the
+  // alphabet.
+  const i = PAGER_DOCS.findIndex((d) => d.href === href);
   if (i === -1) return { prev: null, next: null };
   return {
-    prev: i > 0 ? (FLAT_DOCS[i - 1] ?? null) : null,
-    next: i < FLAT_DOCS.length - 1 ? (FLAT_DOCS[i + 1] ?? null) : null,
+    prev: i > 0 ? (PAGER_DOCS[i - 1] ?? null) : null,
+    next: i < PAGER_DOCS.length - 1 ? (PAGER_DOCS[i + 1] ?? null) : null,
   };
 }

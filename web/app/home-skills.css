@@ -1,0 +1,124 @@
+/* The skills & agents section of the landing page. Its own file rather than an
+   addition to home.css: that file is 2,000 lines of a carefully tuned page, and
+   a new section is easier to reason about — and to remove — when it is not
+   interleaved with one. */
+
+.hm-sk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  margin-top: 26px;
+}
+
+.hm-sk-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 24px 24px 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-decoration: none;
+  transition:
+    border-color 0.18s,
+    transform 0.18s;
+}
+
+/* .hm-sec a:hover in home.css sets text-decoration: underline globally, and
+   its selector (.hm-sec a:not(.hm-switch-b):hover) is more specific than any
+   class-only selector here could match without also duplicating its `a` and
+   :not() qualifiers — !important is the deliberate, narrow override for the
+   one card on the page that is a link but must not look like inline text. */
+.hm-sk-card:hover,
+.hm-sk-card:focus-visible {
+  text-decoration: none !important;
+}
+
+.hm-sk-card:hover {
+  border-color: var(--red);
+  transform: translateY(-2px);
+}
+
+.hm-sk-card:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 3px;
+}
+
+.hm-sk-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.hm-sk-card h3 span {
+  color: var(--faint);
+  transition:
+    color 0.18s,
+    transform 0.18s;
+}
+
+.hm-sk-card:hover h3 span {
+  color: var(--red-soft);
+  transform: translateX(3px);
+}
+
+.hm-sk-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* Deliberately not a box. Boxed and bordered it was indistinguishable from the
+   hero's copy field, which promises a click that copies — but the whole card is
+   a link, so the click navigates and the text cannot even be selected cleanly.
+   Stripped back to a prompt line it reads as what it is: an example of what you
+   will run, with the real copy button waiting on the page this links to. */
+.hm-sk-card code {
+  margin-top: auto;
+  padding-top: 2px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.hm-sk-card code::before {
+  content: "$ ";
+  color: var(--faint);
+}
+
+.hm-sk-note {
+  margin: 18px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+[data-theme="light"] .hm-sk-card {
+  background: #fff;
+}
+
+[data-theme="light"] .hm-sk-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hm-sk-card,
+  .hm-sk-card h3 span {
+    transition: none;
+  }
+
+  .hm-sk-card:hover,
+  .hm-sk-card:hover h3 span {
+    transform: none;
+  }
+}

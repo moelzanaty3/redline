@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CopyButton } from "@/components/copy-button";
 import { FindingPanel } from "@/components/finding";
+import { HeroFinding } from "@/components/hero-finding";
 import { Journey } from "@/components/journey";
 import { Choices } from "@/components/choices";
 import { Reveal } from "@/components/reveal";
@@ -11,7 +12,8 @@ import { loadManifest } from "@/lib/manifest";
 import { PACKAGE_NAME, installCommand, packageState } from "@/lib/package-version";
 import { findRule, getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
-import { GITHUB_REPO, GITHUB_URL, NEW_ISSUE_URL } from "@/lib/site";
+import { GITHUB_REPO, GITHUB_URL } from "@/lib/site";
+import "./home-skills.css";
 
 // Declared, not inherited from Next's default. The loaders behind this page —
 // Journey's profile resolution, the seed reader, the rule lookup below — throw
@@ -24,6 +26,11 @@ export const dynamic = "force-static";
 // slug in lib/registry.ts; the rule lookup below is what fails the build if the
 // rule itself is ever renamed or removed.
 const RULE_HREF = "/docs/standards/javascript";
+
+// A second rule, for the one panel whose claim is that ids are many and each is
+// countable on its own. Illustrating that with the same id the hero and the
+// finding already carry made the page look like it owns one example.
+const COUNT_RULE_ID = "core/hardcoded-secrets";
 
 export default async function Home() {
   const rules = getRules();
@@ -43,6 +50,13 @@ export default async function Home() {
     );
   }
 
+  const countRule = findRule(COUNT_RULE_ID);
+  if (countRule === undefined) {
+    throw new Error(
+      `standards/ no longer defines "${COUNT_RULE_ID}"; the home page renders a finding citing it`,
+    );
+  }
+
   // One invocation, everywhere on the page. `npx` needs no prior install, so
   // there is nothing to say twice — and when the package is not installable the
   // command degrades to the one that does work rather than to a lie.
@@ -59,52 +73,72 @@ export default async function Home() {
       <section className="hero">
         <div className="hero-glow" aria-hidden="true" />
         <div className="hero-lines" aria-hidden="true" />
-        <div className="container">
-          <h1>
-            AI writes the code.
-            <br />
-            <span className="grad">Redline holds the line.</span>
-          </h1>
-          <p className="sub">
-            One versioned rule set your AI reviewer, your teammates and a local
-            model all review against — with <b>every finding tagged</b>, so you
-            can measure which rules are worth keeping.
-          </p>
-          <div className="hm-hero-cmd">
-            <code>
-              <span className="tk-prompt">$ </span>
-              {initCmd}
-            </code>
-            <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+        <div className="container hero-split">
+          <div className="hero-copy">
+            {/* Two block spans rather than a hard <br/>: each sentence owns its
+                own line at every width, so the headline cannot fold into four
+                ragged rows on a narrow screen, and the two halves can be sized
+                apart — the first sets up, the second is the claim. */}
+            <h1 className="hm-hero-in" style={{ animationDelay: "40ms" }}>
+              <span className="hero-h1-a">AI writes the code.</span>
+              <span className="hero-h1-b">
+                <span className="hero-mark">Redline</span> holds the line.
+              </span>
+            </h1>
+            <p className="sub hm-hero-in" style={{ animationDelay: "140ms" }}>
+              One versioned rule set every reviewer — human, AI, or local —
+              checks the same diff against, with <b>every finding tagged</b>, so
+              you can measure which rules are worth keeping.
+            </p>
+            <div className="hm-hero-cmd hm-hero-in" style={{ animationDelay: "220ms" }}>
+              <code>
+                <span className="tk-prompt">$ </span>
+                {initCmd}
+              </code>
+              <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+            </div>
+            {/* "See a finding ↓" is gone: the finding is in the hero now, and a
+                link down to it was the hero apologising for not having one. */}
+            <p className="hm-hero-alt hm-hero-in" style={{ animationDelay: "290ms" }}>
+              <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
+                {GITHUB_REPO} on GitHub
+              </a>
+            </p>
+            {/* One quiet row, not a table. Six bordered cells outweighed the
+                install command they sat under, and the catalogue counts belong
+                to the section that is about the catalogue. */}
+            <ul className="hero-proof hm-hero-in" style={{ animationDelay: "350ms" }}>
+              <li>{ruleCount} rules with permanent ids</li>
+              <li>{stackCount} stacks</li>
+              <li>GitHub &amp; Azure DevOps</li>
+              <li>MIT</li>
+            </ul>
           </div>
-          <p className="hm-hero-alt">
-            <a href="#finding">See a finding ↓</a>
-            <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
-              {GITHUB_REPO} on GitHub
-            </a>
-          </p>
-          <p className="hero-proof">
-            <span>{ruleCount} rules, each with a permanent id</span>
-            <span>{stackCount} stack rule sets</span>
-            <span>GitHub &amp; Azure DevOps</span>
-            <span>MIT</span>
-            <span>no servers</span>
-          </p>
+
+          <div className="hero-art hm-hero-in" style={{ animationDelay: "430ms" }}>
+            <HeroFinding
+              file={SEED_FILE}
+              ruleHref={RULE_HREF}
+              ruleId={demoRule.id}
+              severity={demoRule.severity}
+            />
+          </div>
         </div>
       </section>
 
       {/* ============ 2 — proof ============ */}
       <Journey initCmd={initCmd} />
 
-      {/* ============ 2b — the choices behind that run ============ */}
-      <Choices />
-
       {/* ============ 3 — the problem ============ */}
       <ValueCase />
+
+      {/* ============ 3b — the choices behind that run ============ */}
+      <Choices />
 
       {/* ============ 4 — a finding ============ */}
       <section className="hm-sec hm-finding" id="finding">
         <div className="container">
+          <Reveal>
           <div className="hm-sec-head">
             <h2 className="hm-h2">This is what Redline produces</h2>
             <p className="hm-lead">
@@ -121,6 +155,7 @@ export default async function Home() {
             severity={demoRule.severity}
           />
           <SeverityFloor />
+          </Reveal>
         </div>
       </section>
 
@@ -208,8 +243,8 @@ export default async function Home() {
               </div>
               <div className="hm-claim-art">
                 <div className="hm-mini">
-                  <span className="tk-red">Redline/BLOCKER</span>{" "}
-                  <span className="tk-blue">[{demoRule.id}]</span>
+                  <span className="tk-red">Redline/{countRule.severity}</span>{" "}
+                  <span className="tk-blue">[{countRule.id}]</span>
                   <span className="tk-dim">: …</span>
                   {"\n"}
                   <span className="tk-dim">
@@ -232,7 +267,8 @@ export default async function Home() {
                 </p>
               </div>
               <div className="hm-claim-art">
-                <pre className="hm-seed">
+                <div className="hm-code-box">
+                  <pre className="hm-seed">
                   {seedExcerpt.map((line, i) => (
                     <span
                       key={`${i}-${line}`}
@@ -241,8 +277,9 @@ export default async function Home() {
                       {line === "" ? " " : line}
                       {"\n"}
                     </span>
-                  ))}
-                </pre>
+                    ))}
+                  </pre>
+                </div>
               </div>
             </div>
 
@@ -293,6 +330,13 @@ export default async function Home() {
                 block. Don&apos;t like it? Close the pull request. Nothing was
                 changed. <Link href="/docs/removing">Backing it out →</Link>
               </p>
+              <div className="hm-hero-cmd hm-try-cmd">
+                <code>
+                  <span className="tk-prompt">$ </span>
+                  {initCmd}
+                </code>
+                <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+              </div>
               <ul className="hm-try-list">
                 <li>
                   <b>No admin rights needed.</b> An engineer without them still
@@ -360,7 +404,59 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 9 — final cta ============ */}
+      {/* ============ 9 — skills & agents ============ */}
+      {/* Placed after the disqualifier on purpose: a reader who has just been
+          told Redline is not for them still gets something they can use today,
+          and it is the one section on the page that is not about our software. */}
+      <section className="hm-sec hm-sk" id="skills">
+        <div className="container">
+          <Reveal>
+            <div className="hm-sec-head">
+              <h2 className="hm-h2">What to give the agent</h2>
+              <p className="hm-lead">
+                Redline reviews the diff. It has no opinion on how the diff gets
+                written — but that is the next question everyone asks, and the
+                answer is public. Skills and agents from{" "}
+                <a href="https://www.skills.sh" rel="noopener noreferrer" target="_blank">
+                  skills.sh
+                </a>
+                , sorted onto the eight stages of delivery. None of it is ours;
+                each one installs from its publisher.
+              </p>
+            </div>
+            <div className="hm-sk-grid">
+              <Link className="hm-sk-card" href="/docs/skills">
+                <h3>
+                  Skills <span aria-hidden="true">→</span>
+                </h3>
+                <p>
+                  Knowledge the model reads and applies to work already in
+                  progress. Nearly free: it loads, it shifts the output, you
+                  move on.
+                </p>
+                <code>npx skills add addyosmani/agent-skills</code>
+              </Link>
+              <Link className="hm-sk-card" href="/docs/agents">
+                <h3>
+                  Agents <span aria-hidden="true">→</span>
+                </h3>
+                <p>
+                  The ones that take the wheel — spawn subagents, drive a
+                  browser, write artifacts. Costs tokens and wall-clock time, so
+                  it needs a job worth handing over.
+                </p>
+                <code>npx skills add obra/superpowers</code>
+              </Link>
+            </div>
+            <p className="hm-sk-note">
+              Skills raise the floor on what gets written. The gate catches what
+              still gets through. Neither replaces the other.
+            </p>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ============ 10 — final cta ============ */}
       <section className="final-cta">
         <div className="glow" aria-hidden="true" />
         <div className="container">
@@ -377,16 +473,11 @@ export default async function Home() {
             <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
           </div>
           <p className="hm-cta-links">
+            <Link href="/docs/quickstart">Quickstart</Link>
             <Link href="/docs">Documentation</Link>
             <Link href="/docs/standards">The {ruleCount} rules</Link>
-            <Link href="/docs/quickstart">Quickstart</Link>
-            <Link href="/docs/local-review">Local review</Link>
-            <Link href="/docs/seeds">The seed corpus</Link>
             <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
               Source on GitHub
-            </a>
-            <a href={NEW_ISSUE_URL} rel="noopener noreferrer" target="_blank">
-              Report an issue
             </a>
           </p>
         </div>

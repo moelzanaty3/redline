@@ -14,6 +14,9 @@
 // and this list share their wording with commands-info.ts rather than inventing
 // a second description of the same switch.
 
+import type { ReactElement } from "react";
+import { Reveal } from "@/components/reveal";
+
 type Choice = {
   readonly label: string;
   readonly flag: string;
@@ -24,12 +27,38 @@ type Choice = {
 type Group = {
   readonly title: string;
   readonly lead: string;
+  readonly icon: "host" | "checks" | "context" | "install";
+  // Distinguishes the one category the CLI resolves for you from the three
+  // it asks you to decide — a difference the copy already draws ("detected...
+  // asked anyway" vs "on/off by default") but the layout didn't, until now.
+  readonly mode: "detected" | "your call";
   readonly choices: readonly Choice[];
+};
+
+// One stroke icon per group, drawn inline rather than pulled from an icon
+// library — four glyphs don't earn a dependency. Single colour, matched to
+// the surrounding text rather than a new hue, so the accent stays spent on
+// the three things the file header above already commits it to.
+const ICONS: Record<Group["icon"], ReactElement> = {
+  host: (
+    <path d="M4 3h16v6H4V3Zm0 12h16v6H4v-6ZM7 6h.01M7 18h.01M12 6h5M12 18h5" />
+  ),
+  checks: (
+    <path d="m9 12 2 2 4-4M12 3l8 4v5c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V7l8-4Z" />
+  ),
+  context: (
+    <path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+  ),
+  install: (
+    <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+  ),
 };
 
 const GROUPS: readonly Group[] = [
   {
     title: "Where it runs",
+    icon: "host",
+    mode: "detected",
     lead: "Detected from your git remote, and asked anyway — detection can be wrong, and it is one keystroke to overrule.",
     choices: [
       {
@@ -50,6 +79,8 @@ const GROUPS: readonly Group[] = [
   },
   {
     title: "What runs your checks",
+    icon: "checks",
+    mode: "your call",
     lead: "Asked separately from the host, because the two come apart.",
     choices: [
       {
@@ -70,6 +101,8 @@ const GROUPS: readonly Group[] = [
   },
   {
     title: "What the AI is told",
+    icon: "context",
+    mode: "your call",
     lead: "Context sections rendered into the same artifacts as the rules.",
     choices: [
       {
@@ -90,6 +123,8 @@ const GROUPS: readonly Group[] = [
   },
   {
     title: "What it installs",
+    icon: "install",
+    mode: "your call",
     lead: "Anything your repository already answers for itself can be deselected, and re-selected later.",
     choices: [
       {
@@ -134,24 +169,47 @@ export function Choices() {
           back out.
         </p>
 
-        <div className="hm-choices-grid">
-          {GROUPS.map((group) => (
-            <div className="hm-choice-group" key={group.title}>
-              <h3>{group.title}</h3>
-              <p className="hm-choice-lead">{group.lead}</p>
-              <ul>
-                {group.choices.map((choice) => (
-                  <li key={choice.label}>
-                    <div className="hm-choice-head">
-                      <b>{choice.label}</b>
-                      <code>{choice.flag}</code>
+        <div className="hm-choices-steps">
+          {GROUPS.map((group, i) => (
+            <Reveal className="hm-step" key={group.title} delay={i * 90}>
+              <div className="hm-step-marker">
+                <div className="hm-step-node" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    {ICONS[group.icon]}
+                  </svg>
+                </div>
+              </div>
+              <div className="hm-step-body">
+                <div className="hm-step-head">
+                  <h3>{group.title}</h3>
+                  <span className={`hm-step-mode hm-step-mode-${group.mode === "detected" ? "detected" : "choice"}`}>
+                    {group.mode}
+                  </span>
+                </div>
+                <p className="hm-choice-lead">{group.lead}</p>
+                <div className="hm-step-choices">
+                  {group.choices.map((choice) => (
+                    <div className="hm-step-choice" key={choice.label}>
+                      <div className="hm-choice-head">
+                        <b>{choice.label}</b>
+                        <code>{choice.flag}</code>
+                      </div>
+                      <span className="hm-choice-default">
+                        {choice.fallback}
+                      </span>
+                      <p>{choice.detail}</p>
                     </div>
-                    <span className="hm-choice-default">{choice.fallback}</span>
-                    <p>{choice.detail}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                  ))}
+                </div>
+              </div>
+            </Reveal>
           ))}
         </div>
 

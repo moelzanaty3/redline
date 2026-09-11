@@ -35,6 +35,8 @@ export type NavLink = { readonly href: string; readonly label: string };
 export const NAV_LINKS: readonly NavLink[] = [
   { href: "/docs", label: "Docs" },
   { href: "/docs/standards", label: "Standards" },
+  { href: "/docs/skills", label: "Skills" },
+  { href: "/docs/agents", label: "Agents" },
   { href: "/docs/adaptors/github-copilot", label: "Adaptors" },
   { href: "/docs/installation", label: "Installation" },
 ];

@@ -20,7 +20,7 @@ export default function Page() {
     <DocsPage
       crumb="Reference"
       title="Standards"
-      intro={`A versioned catalogue of ${rules.length} rules — core plus 12 stacks — and the only files a human edits. Everything a developer's tooling actually sees is generated from these.`}
+      intro={`A versioned catalogue of ${rules.length} rules — core plus 16 stacks — and the only files a human edits. Everything a developer's tooling actually sees is generated from these.`}
       href="/docs/standards"
     >
       <h2>What a standard is here</h2>

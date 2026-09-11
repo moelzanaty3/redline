@@ -15,7 +15,7 @@ export default function Page() {
     >
       <h2>Why bounding matters more than the model</h2>
       <p>
-        Hand a model the composed standard for a twelve-stack profile and it
+        Hand a model the composed standard for a sixteen-stack profile and it
         spends most of its attention on rules for languages your change never
         touched. <b>The findings get worse, not better.</b>{" "}
         <code>redline review</code> resolves the applicable stacks from the

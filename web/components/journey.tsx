@@ -27,7 +27,7 @@ import { JourneyTerminal, type Line, type Tok } from "@/components/journey-termi
 // rest is stated in the caption outside the terminal rather than faked as a
 // line the CLI never printed.
 
-const PROFILE = "web";
+const PROFILE = "web-react";
 const EXAMPLE_REPO = "acme/checkout-service";
 const EXAMPLE_PR = 42;
 
@@ -47,7 +47,7 @@ const SYNC_LABEL = "redline-sync";
 // The last one is the reason the writes below happen at all: nothing is written
 // until Apply is chosen, and the menu offers Dry run first.
 const MENU: [string, string][] = [
-  ["Which standards apply here?", "web"],
+  ["Which standards apply here?", "web-react"],
   ["Where does this repository live?", "GitHub"],
   ["What runs your pull request checks?", "GitHub Actions"],
   ["Which assistants should read the standards?", "copilot, agents, claude"],
