@@ -47,6 +47,8 @@ export default function Page() {
             <tr><td><code>--profile &lt;name&gt;</code></td><td>detected</td><td>Overrides stack detection.</td></tr>
             <tr><td><code>--vendors &lt;list&gt;</code></td><td>detected</td><td>Comma-separated vendor ids (<code>copilot,agents,claude,cursor</code>) to render for — overrides detection and any recorded selection; a vendor the org has not enabled never renders regardless.</td></tr>
             <tr><td><code>--dry-run</code></td><td>off</td><td>Prints the plan — files, repository settings, resolved menu — and exits; writes nothing, needs no credential.</td></tr>
+            <tr><td><code>--no-commit</code></td><td>off</td><td>Writes the files into your working tree and stops: no repository setting is changed, no branch is made, nothing is committed and no pull request is opened. Needs no credential and contacts no host, so it works offline — which also means an org-sourced caller is written without confirming the organisation publishes the gate it references. Review the diff, commit it, then run <code>redline init</code> to apply the settings and open the pull request.</td></tr>
+            <tr><td><code>--gate-source org|local</code></td><td><code>org</code></td><td>Where the gate machinery lives. <code>org</code> references the reusable workflow published at <code>&lt;org&gt;/.github</code>. <code>local</code> vendors a copy into this repository at <code>.github/workflows/redline-gate.yml</code>, for a repository whose organisation has no shared <code>.github</code> repo yet. Either way the required check stays <code>redline-gate / gate</code>, so a repository can move between them with a re-run. Omitting the flag keeps whatever the repository already recorded.</td></tr>
             <tr><td><code>--repair</code></td><td>off</td><td>Re-applies capabilities a plain re-run treats as already settled — the fix once an administrator grants rights a read can never confirm on its own.</td></tr>
             <tr><td><code>--no-a11y</code></td><td>on</td><td>Recorded in <code>.redline.json</code>; doesn&apos;t change what&apos;s rendered yet.</td></tr>
             <tr><td><code>--speckit</code> / <code>--no-speckit</code></td><td>on</td><td>Renders the spec-first context section into the standards artifacts. Dropped automatically, with a note in the report, where the repository already runs Spec Kit — that is a separate tool with its own installer, and Redline neither creates nor edits its files. <code>--no-speckit</code> on a later run removes a section already rendered.</td></tr>
@@ -55,6 +57,48 @@ export default function Page() {
           </tbody>
         </table>
       </div>
+      <h2 id="gate-source">Where the gate lives</h2>
+      <p>
+        By default the caller workflow Redline writes references a reusable
+        workflow published once at <code>&lt;org&gt;/.github</code>. One merge
+        there reaches every onboarded repository, and the gate sits outside the
+        blast radius of the pull requests it judges — nobody raising a pull
+        request can change the thing reviewing it.
+      </p>
+      <p>
+        Most organisations do not have that repository on day one, and
+        &ldquo;go and get a shared <code>.github</code> repo created&rdquo; is a
+        long way to travel before finding out whether any of this is worth
+        having. So <code>--gate-source local</code> vendors the gate into the
+        repository itself at{" "}
+        <code>.github/workflows/redline-gate.yml</code> and points the caller at
+        it. It is the same file the organisation copy is published from. The
+        required check name does not change — a local reusable workflow still
+        reports as <code>redline-gate / gate</code> — so rulesets, branch policy
+        and <code>redline verify</code> are identical either way, and moving
+        between the two is a re-run with a different flag.
+      </p>
+      <div className="callout">
+        <p>
+          <b>A vendored gate is the weaker control, not an equal one.</b> A
+          workflow triggered by <code>pull_request</code> runs from the pull
+          request&apos;s own head commit, so a pull request that edits{" "}
+          <code>.github/workflows/redline-gate.yml</code> changes the gate
+          judging it — including standing down the dependency and secret jobs,
+          which are the two checks no label can waive. Protect{" "}
+          <code>.github/workflows/</code> with{" "}
+          <code>--with review-ownership --review-owners &lt;team&gt;</code> so
+          that edit needs an owner&apos;s approval, and move to{" "}
+          <code>--gate-source org</code> once the organisation publishes a gate.
+        </p>
+      </div>
+      <p>
+        A vendored gate is a copy, so it does not update itself the way the
+        organisation one does. <code>redline verify</code> reports a{" "}
+        <code>gate-vendored</code> check comparing the version stamped in the
+        file against the CLI running the check;{" "}
+        <code>redline init --repair</code> brings it level.
+      </p>
       <p>
         A repo installs exactly one profile — see <b>Profiles &amp; stacks</b>{" "}
         for the full table.

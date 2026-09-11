@@ -51,6 +51,10 @@ const MENU: [string, string][] = [
   ["Where does this repository live?", "GitHub"],
   ["What runs your pull request checks?", "GitHub Actions"],
   ["Which assistants should read the standards?", "copilot, agents, claude"],
+  ["Extra context to render beside the rules", "Spec-driven development"],
+  ["What should Redline set up alongside its own checks?", "none"],
+  ["What should Redline install?", "gate, merge-policy, labels"],
+  ["Where should the merge gate live?", "in the organisation"],
   ["How hard should the check bite?", "observe"],
   ["Ready?", "Apply"],
 ];
@@ -93,6 +97,57 @@ function resolveStacks(manifest: Manifest, profile: string): string[] {
   return out;
 }
 
+// Questions the wizard asks that a default run never sees, so a transcript of a
+// default run must not show them. Each one needs a reason, because the list is
+// the only way a genuinely new question can be kept off this page.
+const CONDITIONAL = new Set([
+  // Asked only when review-ownership was selected, which it is not by default.
+  "Who owns the paths Redline protects?",
+]);
+
+/**
+ * Fail the build when MENU and the wizard disagree.
+ *
+ * MENU is hand-written, and hand-written mirrors drift: this page showed six
+ * questions for a wizard that had grown to ten, so the first thing a visitor
+ * saw was a menu that no longer existed. Every other number on this page is
+ * derived from the repository and throws rather than degrade, and the list of
+ * questions is the part a reader actually reads.
+ *
+ * Parsed rather than imported because the CLI is TypeScript run by Node's own
+ * type stripping and this is a Next build — reading the source is the cheap
+ * boundary between the two, and it is checked at build time so a stale page
+ * cannot reach a green deploy.
+ */
+function assertMenuMatchesWizard(): void {
+  const source = readFileSync(join(repoRoot(), "cli/ui/wizard.ts"), "utf8");
+  const asked: string[] = [];
+  for (const match of source.matchAll(
+    /\bp\.(?:multiselect|select|text)\s*(?:<[^>]*>)?\s*\(\s*(['"])(.*?)\1/g
+  )) {
+    const title = match[2];
+    // The profile question is asked twice — once, then again when the first
+    // answer was empty. It is one question to a reader.
+    if (title !== undefined && asked.at(-1) !== title) asked.push(title);
+  }
+  if (asked.length === 0) {
+    throw new Error(
+      "could not read any question out of cli/ui/wizard.ts; the home page mirrors its menu"
+    );
+  }
+  const expected = asked.filter((title) => !CONDITIONAL.has(title));
+  const shown = MENU.map(([title]) => title);
+  if (expected.join("\n") !== shown.join("\n")) {
+    throw new Error(
+      "components/journey.tsx MENU no longer matches the questions cli/ui/wizard.ts asks.\n" +
+        `  wizard: ${JSON.stringify(expected)}\n` +
+        `  page:   ${JSON.stringify(shown)}\n` +
+        "Update MENU with the new question and its answer, or add it to CONDITIONAL with the " +
+        "reason a default run never sees it."
+    );
+  }
+}
+
 // Mirrors cli/render/commands.ts loadCommands: one slash command per .md file in
 // commands/, rendered once per vendor host. Read at build time so the page
 // cannot count files that are not on disk — and throws rather than degrading.
@@ -116,6 +171,7 @@ function commandCount(): number {
 }
 
 export function Journey({ initCmd }: { initCmd: string }) {
+  assertMenuMatchesWizard();
   const manifest = loadManifest();
   const version = manifest.version;
   const stacks = resolveStacks(manifest, PROFILE);
