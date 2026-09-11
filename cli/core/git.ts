@@ -3,8 +3,46 @@ import { RedlineError } from './errors.ts';
 
 export type GitRunner = (args: string[], cwd: string) => string;
 
+// Every git call here runs with stdin ignored and stderr captured, so anything
+// git decides to ASK rather than answer has nowhere to print the question and
+// nowhere to read the reply — it simply waits. A real onboarding sat on
+// "committing and opening the pull request" forever because `git push` reached
+// an ssh that wanted a passphrase, and the spinner kept turning over a process
+// that was never going to finish.
+//
+// So the prompts are switched off rather than hidden: git fails immediately and
+// says why, and `push()` below turns that into an error naming the branch the
+// work is already committed on. An operator's own GIT_SSH_COMMAND wins — a
+// repository reached through a custom ssh wrapper is a deliberate arrangement,
+// and overriding it would break a working setup to fix a hanging one.
+const NON_INTERACTIVE = {
+  // Suppresses the username/password prompt on an HTTPS remote.
+  GIT_TERMINAL_PROMPT: '0',
+  // BatchMode stops ssh asking for a passphrase or an unknown host key;
+  // ConnectTimeout stops a silently dropped connection replacing the prompt
+  // with an equally invisible wait.
+  GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o ConnectTimeout=10',
+} as const;
+
+/**
+ * The environment git runs in: prompts off, unless the operator has already
+ * said otherwise.
+ *
+ * Exported to be asserted on. Which side of the merge wins is the whole
+ * decision — spread the defaults last and a custom ssh wrapper is silently
+ * replaced, which breaks a working setup in order to fix a hanging one.
+ */
+export function gitEnv(from: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return { ...NON_INTERACTIVE, ...from };
+}
+
 export const execGit: GitRunner = (args, cwd) =>
-  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: gitEnv(),
+  }).trim();
 
 export interface Git {
   isRepo(): boolean;
@@ -203,7 +241,9 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
         throw new RedlineError(
           'permission',
           `could not push "${branch}" to origin: ${gitFailure(error)}`,
-          `the Redline changes are committed locally on "${branch}" — push that branch and open the pull request yourself, or get push access and re-run`
+          `the Redline changes are committed locally on "${branch}" — push that branch and open the pull request yourself, or get push access and re-run. ` +
+            'Redline runs ssh in batch mode so a credential prompt cannot hang the run: if the error above is about a key or a host key, ' +
+            'add the key to your agent (ssh-add) or accept the host once by hand, then re-run'
         );
       }
     },

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGit, type GitRunner } from '../git.ts';
+import { createGit, gitEnv, type GitRunner } from '../git.ts';
 import { isRedlineError } from '../errors.ts';
 
 function recorder(responses: Record<string, string> = {}): { run: GitRunner; calls: string[][] } {
@@ -182,4 +182,29 @@ test('a failed branch checkout becomes a host RedlineError and reports nothing w
       err.kind === 'host' &&
       (err.hint ?? '').includes('nothing was committed'),
   );
+});
+
+
+// A real onboarding sat on "committing and opening the pull request" forever:
+// `git push` reached an ssh wanting a passphrase, stdin was ignored so nobody
+// could answer it and stderr was captured so nobody could see it. The run waited
+// on a question that was never displayed.
+test('git is run with every interactive prompt switched off', () => {
+  const env = gitEnv({});
+  assert.equal(env['GIT_TERMINAL_PROMPT'], '0');
+  assert.match(String(env['GIT_SSH_COMMAND']), /BatchMode=yes/);
+  assert.match(String(env['GIT_SSH_COMMAND']), /ConnectTimeout=/);
+});
+
+// A repository reached through a custom ssh wrapper is a deliberate
+// arrangement. Switching prompts off must not switch that off with it.
+test('an operator who has set their own ssh command keeps it', () => {
+  const env = gitEnv({ GIT_SSH_COMMAND: 'ssh -i ~/.ssh/work' });
+  assert.equal(env['GIT_SSH_COMMAND'], 'ssh -i ~/.ssh/work');
+});
+
+test('the rest of the environment is carried through untouched', () => {
+  const env = gitEnv({ PATH: '/usr/bin', HOME: '/home/x' });
+  assert.equal(env['PATH'], '/usr/bin');
+  assert.equal(env['HOME'], '/home/x');
 });
