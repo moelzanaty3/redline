@@ -12,7 +12,7 @@ export default function Page() {
     <DocsPage
       crumb="Who runs what"
       title="Who runs what"
-      intro="redline --help prints nine commands as one flat list. They are not one thing: they run in four different places, under three different credentials, with three different blast radii. This page is that map, with the file and the environment variable for each."
+      intro="redline --help prints eleven commands as one flat list. They are not one thing: they run in four different places, under three different credentials, with three different blast radii. This page is that map, with the file and the environment variable for each."
       href="/docs/who-runs-what"
     >
       <p>

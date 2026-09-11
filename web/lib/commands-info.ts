@@ -1,10 +1,12 @@
-// The commands a person types in a repository they are standing in. All nine
-// are built; `built` stays on the type because the estate-level commands (metrics,
-// registry) are documented elsewhere and this shape is shared with them, and
-// because a command that is later specified ahead of its implementation should
-// be documented as unbuilt rather than omitted — "does redline review exist?"
-// is a question people ask, and a page that lacks the answer reads as an
-// oversight instead of a decision.
+// Every command the CLI has, including the two that act on the estate rather
+// than on a repository. All eleven are built; `built` stays on the type because
+// a command that is later specified ahead of its implementation should be
+// documented as unbuilt rather than omitted — "does redline review exist?" is a
+// question people ask, and a page that lacks the answer reads as an oversight
+// instead of a decision.
+//
+// The set here is the set `redline --help` prints. That is the invariant worth
+// keeping: a command that exists and is documented nowhere is one nobody runs.
 export type CommandInfo = {
   what: string;
   built: boolean;
@@ -298,5 +300,75 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     output:
       "Severity and id, the rule text, then four attributions: who decided it, the standards file and line it is defined at, which files it is scoped to, and every profile that receives it. An unknown id is an error that names `--list` rather than a guess at what you meant — a rule explained approximately is worse than one not explained, because the reader acts on it.",
     edit: "cli/rules/catalogue.ts compiles the catalogue from standards/; the command surface is in cli/bin/redline.ts. Ids are permanent by design — reword a rule freely, but never edit its id, or every historical telemetry record for it orphans and its tuning history resets to nothing.",
+  },
+  registry: {
+    what: "Derives the register of onboarded repositories by walking the organisation and reading the .redline.json each one carries. It is the input both redline sync and the estate dashboard run off — sync needs to know who to open a pull request on, and coverage needs to know the denominator.",
+    built: true,
+    onboard:
+      "It runs in the source repository, nightly, from workflows/registry.yml — not in a product repository, where it would be meaningless. It needs a token with org read access and nothing more: the register is derived from what each repository already publishes about itself, so nothing here is hand-maintained. A repository that removes Redline stops appearing, and stops being a sync target, without anyone editing a list.",
+    usage: [
+      "redline registry --org acme --source acme/redline",
+      "redline registry --org acme --source acme/redline --out registry.json",
+    ],
+    flags: [
+      {
+        flag: "--org <name>",
+        detail: "The organisation to walk. Required — there is no default, because a default here would be a guess about whose estate you meant.",
+      },
+      {
+        flag: "--source <owner/name>",
+        detail:
+          "This repository, recorded into the register so a consumer knows which estate the file describes. Required: a registry.json that does not say where it came from is one nobody can safely act on when two of them exist.",
+      },
+      {
+        flag: "--token <string>, --out <path>",
+        detail:
+          "A token with org read access (or GH_TOKEN in the environment), and where to write the file — registry.json by default.",
+      },
+    ],
+    output:
+      "A JSON register of every onboarded repository with the profile, vendors, rung, capabilities and standards version each one recorded. Read-only on every repository it walks: deriving the register grants Redline no write access to anything in it.",
+    edit: "cli/registry/discover.ts walks the org and reads each .redline.json; serialize.ts is the file shape. The register's contract matters more than its content — cli/sync/plan.ts and scripts/build-dashboard.mjs both consume it, so a field removed here goes missing in two places at once.",
+  },
+  metrics: {
+    what: "The estate's measurement plane, as eight subcommands over the runners in scripts/. These act on an organisation or on its collected telemetry, never on the repository you are standing in — several of them are meaningless in a product repo, and each one says where it runs in its own --help rather than letting you find out the slow way.",
+    built: true,
+    onboard:
+      "Mostly nothing you run by hand. collect, dashboard, digest and inbox are driven by the scheduled workflows in workflows/, in the metrics repo or the source repo; the CLI exists so the same run is reproducible in a terminal when a scheduled one looks wrong. baseline is run once, by a maintainer, before any of it means anything. What this layer adds over the runners is a front door: every flag has a type, a default and a help line, and an unknown value is refused by name instead of quietly becoming \"unknown\" inside a figure someone later quotes.",
+    usage: [
+      "redline metrics                                   # the eight subcommands",
+      "redline metrics collect --help                    # and the flags for one",
+      "redline metrics collect --org acme --days 8",
+      "redline metrics dashboard --org acme --data data --out dist",
+      "redline metrics digest --org acme --days 7",
+      "redline metrics inbox --org acme --out dist",
+      "redline metrics score-seeds --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl",
+      "redline metrics roi --data data --spend-total 4200 --spend-grain org",
+    ],
+    flags: [
+      {
+        flag: "collect · dashboard · digest · inbox",
+        detail:
+          "The loop. collect pulls review outcomes for merged pull requests across the org with a read-only token; dashboard builds the static page (acted-on rate, trends, seed-recall history, the rule tuning queue); digest builds the weekly Adaptive Card; inbox builds the org-wide prioritised pull request page. Each is also a scheduled workflow — running one here reproduces that run.",
+      },
+      {
+        flag: "score-seeds",
+        detail:
+          "Scores an automated reviewer against the seeded corpus on a pull request that carries it: recall, precision and attribution. --history appends to a JSONL so recall has a trend rather than a single reading, and --baseline records the first one as the line everything after is compared to. This is the command that tells \"no findings\" apart from \"nothing to find\".",
+      },
+      {
+        flag: "baseline · roi · correlate",
+        detail:
+          "baseline computes the figures every later phase is judged against, once, from a maintainer terminal. roi sets what review cost against what it caught — and refuses to answer a per-repository question with an org-wide spend figure, which is why --spend-grain exists. correlate is explicitly research, not a loop: whether ignoring a finding cost anything later.",
+      },
+      {
+        flag: "every flag has an environment variable",
+        detail:
+          "The runners under scripts/ are env-configured programs, so each flag maps to a documented variable (--days to DAYS, --data to DATA_DIR). The names are deliberately the same ones the workflows set, so somebody debugging a scheduled run reads one vocabulary and not two.",
+      },
+    ],
+    output:
+      "Per subcommand: JSONL telemetry, a static HTML page, an Adaptive Card, or a score. What none of them will do is invent a number — a figure that could not be computed states why instead of defaulting, because a measurement plane that fills gaps with zeros is one that reports a stalled collector as a quiet week.",
+    edit: "cli/metrics/options.ts declares the whole flag surface as data — env name, type, default, help, and the accepted values for an enum. Adding a flag is a row in that table, and the tests assert the mapping (that --days 90 becomes DAYS=90, that --days banana is refused by name). The work itself stays in scripts/; this layer only configures and validates.",
   },
 };

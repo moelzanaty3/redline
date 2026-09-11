@@ -136,6 +136,33 @@ Two things worth knowing before you reach for these:
   `standards/`, and the profiles it reaches. That closes the loop between a comment on a
   pull request and the file a human edits to change it.
 
+## Is it working?
+
+Redline's hardest failure mode is not breaking — it is running, looking green, and doing
+nothing. Each checkpoint below has a command that proves it, and a quiet failure that
+looks identical from the outside. The long version, with the numbers to expect, is
+[docs/success](https://redline-gate.vercel.app/docs/success).
+
+| Question | Command | Quiet failure it rules out |
+| --- | --- | --- |
+| What is installed here? | `redline status` | A non-empty `pendingAdmin` nobody read — the files landed, the merge policy never applied. Fix with `--repair` once an admin grants the rights |
+| Does the host agree? | `redline verify` | A required check whose name nothing reports: every PR stuck on "Expected — waiting for status" forever |
+| What does this finding mean? | `redline explain <id>` | An id `explain --list` does not know was invented by the model, and every aggregate keyed on it is fiction |
+| Would this diff pass? | `redline review` | — run it before you push, against only the rules your files touch |
+| Who is onboarded? | `redline registry` | A register nobody derived, so `sync` reaches a stale list |
+| Is review being acted on? | `redline metrics dashboard` | Review running and being ignored. The hero number is **findings acted on**; the rule tuning queue names the rules responsible |
+| Does it still catch defects? | `redline metrics score-seeds` | "No findings" and "nothing to find" are indistinguishable without it. Recall below 100% means do not widen the rollout |
+| What did it cost? | `redline metrics roi` | Spend measured against what was caught — it refuses to answer a per-repo question with an org-wide figure |
+
+A dashboard built in week one is empty, and that is a sample size, not a failure. Nothing
+in the measurement plane reports a number it could not compute: a missing figure states
+why rather than defaulting to zero, because filling gaps with zeros reports a stalled
+collector as a quiet week.
+
+**Where this honestly stands:** no seed scores have been recorded yet. Until a recall
+number exists, every repository is legitimately at `observe` or `warn`, and a blocking
+rung is not something to reach for. See [CHANGELOG.md](CHANGELOG.md).
+
 ## Verify before you trust
 
 The single most common silent failure in a system like this is a required status check

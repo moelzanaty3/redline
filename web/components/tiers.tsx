@@ -42,7 +42,7 @@ const ROWS: Row[] = [
     tier: 1,
     name: "Developer",
     where: "your own machine, in one repository",
-    commands: "init · verify · review · remove",
+    commands: "init · status · verify · review · explain · remove",
     estateRepos: 1,
     estateMode: "write",
     sourceMode: "none",

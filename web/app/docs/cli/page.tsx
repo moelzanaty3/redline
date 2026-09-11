@@ -25,10 +25,19 @@ export default function Page() {
         are what the gate calls; <code>redline remove</code> takes Redline back
         out as a pull request; and <code>redline sync</code> runs from a checkout
         of this repository to open a pull request on every registered repository
-        whose standards are behind. Two more —{" "}
+        whose standards are behind. The last two —{" "}
         <code>redline registry</code> and <code>redline metrics</code> — act on
-        the estate rather than on a repository, and are documented under
-        Scripts and Telemetry.
+        the estate rather than on a repository, and say so in their own{" "}
+        <code>--help</code>: running them where they do not belong is a wasted
+        afternoon, not an error message.
+      </p>
+      <p>
+        This list is every command <code>redline --help</code> prints. If you are
+        asking what any of it is <i>for</i>, start with{" "}
+        <Link href="/docs/success">What success looks like</Link>, which walks
+        the commands in the order you would actually reach for them; for who may
+        run what, under which credential, see{" "}
+        <Link href="/docs/who-runs-what">Who runs what</Link>.
       </p>
       <div className="doc-cards" style={{ marginTop: 24 }}>
         {COMMANDS.map((c) => (

@@ -78,6 +78,8 @@ export const COMMANDS: RegistryEntry[] = [
   { slug: "review", title: "redline review", file: "cli/commands/review.ts", description: "Reviews a change against only the rules that apply to the files it touches — locally, in either engine, before you push." },
   { slug: "status", title: "redline status", file: "cli/commands/status.ts", description: "What is installed here, how hard it bites, what an administrator still owes you, and whether the standards have moved on — from the checkout alone, with no credential." },
   { slug: "explain", title: "redline explain", file: "cli/rules/catalogue.ts", description: "What a rule means, who decided it, which files it is scoped to and which profiles receive it — the bracketed id in a finding, turned back into the line a human edits." },
+  { slug: "registry", title: "redline registry", file: "cli/registry/discover.ts", description: "Derives the register of onboarded repositories by walking the org, from the .redline.json each one carries. Nothing about it is hand-maintained." },
+  { slug: "metrics", title: "redline metrics", file: "cli/metrics/options.ts", description: "The estate's measurement plane as eight subcommands — collect, dashboard, digest, inbox, baseline, roi, correlate and score-seeds — each with a validated flag surface over the runner it drives." },
 ];
 
 export const SEEDS: RegistryEntry[] = [
