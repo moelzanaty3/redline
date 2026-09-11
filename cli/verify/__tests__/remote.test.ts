@@ -48,6 +48,7 @@ const host = (over: Partial<RemoteVerifyHost> = {}): RemoteVerifyHost => ({
     return {
       path: '.github/workflows/redline.yml',
       expected: 'redline-gate / gate',
+      vendored: null,
       present: body !== null,
       publishes: body === null ? null : 'redline-gate / gate',
     };
@@ -123,6 +124,7 @@ test('a caller whose job id was renamed is drift, and names both sides', async (
         return {
           path: '.github/workflows/redline.yml',
           expected: 'redline-gate / gate',
+          vendored: null,
           present: body !== null,
           publishes: body === null ? null : 'other / gate',
         };

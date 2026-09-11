@@ -201,7 +201,22 @@ const AGGREGATE_JOB = REQUIRED_CHECK.slice(REQUIRED_CHECK.indexOf(CHECK_SEPARATO
 // message that admits it could not tell is honest, a fabricated job name is
 // not.
 const KEY = /^\s*(?:(["'])([\w.-]+)\1|([\w.-]+))\s*:(.*)$/;
-const USES_THE_GATE = /^\s*uses:\s*["']?\S*redline-gate\.yml@/;
+// Both gate sources. An org caller carries
+// `<org>/.github/.github/workflows/redline-gate.yml@main`; a local one carries
+// `./.github/workflows/redline-gate.yml` and can carry no `@ref`, because a
+// local reusable workflow is always resolved at the caller's own commit.
+//
+// Requiring the `@` read every locally-sourced repository as a caller whose job
+// id had been edited away — `verify` called the gate broken on repositories
+// where it was working, which is the one direction this check must never fail
+// in, because it is the check that tells a real outage from a slow run.
+const USES_THE_GATE = /^\s*uses:\s*["']?(?:\S*redline-gate\.yml@|\.\/\S*redline-gate\.yml\s*$)/;
+
+// The one local path Redline writes, matched exactly rather than taken from
+// whatever the caller says. `remove` deletes what this returns, and a caller is
+// a file anybody can edit: resolving an arbitrary `./…` out of it would let a
+// hand-edited workflow name any path in the repository as the thing to delete.
+const LOCAL_GATE_REF = /^\s*uses:\s*["']?\.\/(\.github\/workflows\/redline-gate\.yml)["']?\s*$/m;
 
 const indentOf = (line: string): number => line.length - line.trimStart().length;
 const skippable = (line: string): boolean => line.trim() === '' || line.trimStart().startsWith('#');
@@ -278,12 +293,13 @@ export function callerJobId(body: string): string | null {
 // broken.
 export function machineryFromBody(body: string | null): GateMachinery {
   const base = { path: CALLER_WORKFLOW, expected: REQUIRED_CHECK };
-  if (body === null) return { ...base, present: false, publishes: null };
+  if (body === null) return { ...base, present: false, publishes: null, vendored: null };
   const jobId = triggersOnPullRequest(body) ? callerJobId(body) : null;
   return {
     ...base,
     present: true,
     publishes: jobId === null ? null : `${jobId}${CHECK_SEPARATOR}${AGGREGATE_JOB}`,
+    vendored: LOCAL_GATE_REF.exec(body)?.[1] ?? null,
   };
 }
 

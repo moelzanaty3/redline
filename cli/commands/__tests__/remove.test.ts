@@ -165,6 +165,7 @@ test('a gate workflow that carries nothing attributing it to Redline is kept', a
       present: true,
       publishes: null,
       expected: 'redline-gate / gate',
+      vendored: null,
     },
   });
   const report = await remove(platform, () => fakeWithdrawal(), { cwd, root });
@@ -336,4 +337,83 @@ test('a ruleset list the token cannot read is denied, never reported as removed'
     client.calls.some((call) => call.method === 'DELETE' && call.path.includes('rulesets')),
     false
   );
+});
+
+// --- the vendored gate -------------------------------------------------------
+
+const VENDORED = '.github/workflows/redline-gate.yml';
+
+// Deleting the caller and leaving this behind left a workflow nothing calls
+// sitting in .github/workflows/ after a removal that reported itself complete.
+const localGate = (cwd: string, body: string): ReturnType<typeof fakePlatform> => {
+  writeFileSync(join(cwd, VENDORED), body);
+  return fakePlatform({
+    gateMachinery: {
+      path: '.github/workflows/redline.yml',
+      present: true,
+      publishes: 'redline-gate / gate',
+      expected: 'redline-gate / gate',
+      vendored: VENDORED,
+    },
+  });
+};
+
+test('a vendored gate is removed along with the caller that ran it', async () => {
+  const cwd = await onboarded();
+  const platform = localGate(cwd, '# Managed by Redline.\non:\n  workflow_call:\njobs:\n  gate:\n');
+  const report = await remove(platform, () => fakeWithdrawal(), { cwd, root });
+
+  assert.equal(existsSync(join(cwd, VENDORED)), false);
+  assert.equal(acted(report, VENDORED)?.kind, 'delete');
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false);
+});
+
+// Same rule the caller has always had: what init is allowed to overwrite is
+// exactly what remove is allowed to delete.
+test('a workflow at the vendored path that is not Redline\'s is kept', async () => {
+  const cwd = await onboarded();
+  const theirs = 'name: their reusable thing\non:\n  workflow_call:\njobs:\n  build:\n';
+  const platform = localGate(cwd, theirs);
+  const report = await remove(platform, () => fakeWithdrawal(), { cwd, root });
+
+  assert.equal(readFileSync(join(cwd, VENDORED), 'utf8'), theirs);
+  assert.equal(acted(report, VENDORED)?.kind, 'kept');
+});
+
+test('an organisation-sourced repository has no vendored gate to remove', async () => {
+  const cwd = await onboarded();
+  writeFileSync(join(cwd, VENDORED), '# Managed by Redline.\non:\n  workflow_call:\n');
+  const report = await remove(fakePlatform(), () => fakeWithdrawal(), { cwd, root });
+
+  // The caller never named it, so remove does not reach past what the
+  // repository actually points at.
+  assert.equal(acted(report, VENDORED), undefined);
+  assert.equal(existsSync(join(cwd, VENDORED)), true);
+});
+
+test('a caller naming a vendored gate that is not there removes the caller anyway', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    gateMachinery: {
+      path: '.github/workflows/redline.yml',
+      present: true,
+      publishes: 'redline-gate / gate',
+      expected: 'redline-gate / gate',
+      vendored: VENDORED,
+    },
+  });
+  const report = await remove(platform, () => fakeWithdrawal(), { cwd, root });
+
+  assert.equal(acted(report, VENDORED), undefined);
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false);
+});
+
+test('--dry-run leaves the vendored gate where it is', async () => {
+  const cwd = await onboarded();
+  const platform = localGate(cwd, '# Managed by Redline.\non:\n  workflow_call:\n');
+  const before = snapshot(cwd);
+  const report = await remove(platform, () => fakeWithdrawal(), { cwd, root, dryRun: true });
+
+  assert.deepEqual(snapshot(cwd), before);
+  assert.equal(acted(report, VENDORED)?.kind, 'delete');
 });

@@ -250,7 +250,7 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
     readGateMachinery(cwd: string): GateMachinery {
       const abs = join(cwd, GATE_PIPELINE);
       const base = { path: GATE_PIPELINE, expected: AZURE_STATUS_CONTEXT };
-      if (!existsSync(abs)) return { ...base, present: false, publishes: null };
+      if (!existsSync(abs)) return { ...base, present: false, publishes: null, vendored: null };
       // Same guard as the GitHub adapter: a local read that cannot be
       // completed is a finding about this repository, not an internal defect.
       let body: string;
@@ -283,7 +283,9 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
         declares('name', AZURE_STATUS_NAME) && declares('genre', AZURE_STATUS_GENRE)
           ? AZURE_STATUS_CONTEXT
           : null;
-      return { ...base, present: true, publishes };
+      // Azure has one gate source: a registered pipeline definition. There is
+      // no reusable workflow to vendor, so there is never a second file here.
+      return { ...base, present: true, publishes, vendored: null };
     },
 
     async readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]> {

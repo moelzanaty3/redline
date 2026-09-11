@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fakeGitHubClient } from '../../__tests__/fake-client.ts';
-import { createGitHubVerify } from '../verify.ts';
+import { createGitHubVerify, machineryFromBody } from '../verify.ts';
 import { createGitHubPlatform } from '../index.ts';
 import { createGit, type GitRunner } from '../../../core/git.ts';
 import { isRedlineError } from '../../../core/errors.ts';
@@ -597,4 +597,54 @@ test('a check name reported by several run attempts is listed once', async () =>
   });
   const names = await createGitHubVerify(client).readReportedCheckNames(ref, 12);
   assert.deepEqual(names, ['redline-gate / gate', 'lint', 'build']);
+});
+
+// --- local gate source -------------------------------------------------------
+
+const LOCAL_CALLER =
+  '# Managed by Redline.\non:\n  pull_request:\n    types: [opened]\njobs:\n' +
+  '  redline-gate:\n    uses: ./.github/workflows/redline-gate.yml\n    with:\n      rung: observe\n';
+
+// The pattern required a trailing `@`, which is a reusable-workflow ref a local
+// `uses: ./…` cannot carry. Every locally-sourced repository read back as a
+// caller whose job id had been edited away — verify calling the gate broken on
+// repositories where it was working, which is the one direction this check must
+// never fail in.
+test('a caller that runs the gate from inside the repository still publishes the check', () => {
+  const machinery = machineryFromBody(LOCAL_CALLER);
+  assert.equal(machinery.present, true);
+  assert.equal(machinery.publishes, 'redline-gate / gate');
+  assert.equal(machinery.publishes, machinery.expected);
+});
+
+test('a local caller reports where the gate it runs actually lives', () => {
+  assert.equal(machineryFromBody(LOCAL_CALLER).vendored, '.github/workflows/redline-gate.yml');
+});
+
+test('an organisation caller has no vendored gate to report', () => {
+  const org =
+    '# Managed by Redline.\non:\n  pull_request:\njobs:\n' +
+    '  redline-gate:\n    uses: acme/.github/.github/workflows/redline-gate.yml@main\n';
+  const machinery = machineryFromBody(org);
+  assert.equal(machinery.publishes, 'redline-gate / gate');
+  assert.equal(machinery.vendored, null);
+});
+
+// `remove` deletes what this returns, and a caller is a file anybody can edit.
+// Resolving an arbitrary `./…` out of it would let a hand-edited workflow
+// nominate any path in the repository for deletion.
+test('a local reference to anything but the path Redline writes is not reported', () => {
+  for (const ref of [
+    './../../etc/redline-gate.yml',
+    './.github/workflows/../../secrets/redline-gate.yml',
+    './redline-gate.yml',
+    './deploy.yml',
+  ]) {
+    const body = `on:\n  pull_request:\njobs:\n  redline-gate:\n    uses: ${ref}\n`;
+    assert.equal(machineryFromBody(body).vendored, null, ref);
+  }
+});
+
+test('a caller that is not there reports no vendored gate either', () => {
+  assert.equal(machineryFromBody(null).vendored, null);
 });

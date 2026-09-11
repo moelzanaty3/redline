@@ -254,6 +254,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
           present: true,
           publishes: host.publishes,
           expected: host.publishes,
+          vendored: null,
         }
       );
     },

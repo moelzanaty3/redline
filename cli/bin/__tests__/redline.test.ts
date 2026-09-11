@@ -619,7 +619,7 @@ test('verify --repo reports drift over the API and exits 1', async () => {
         return null;
       },
       machineryFromBody() {
-        return { path: 'x', expected: 'y', present: false, publishes: null };
+        return { path: 'x', expected: 'y', present: false, publishes: null, vendored: null };
       },
       async readPolicy() {
         return null;

@@ -578,6 +578,7 @@ test('a blocking repository whose gate workflow was deleted fails instead of bei
     present: false,
     publishes: null,
     expected: 'redline-gate / gate',
+    vendored: null,
   });
 
   const report = await verify(() => platform, { cwd, root });
@@ -607,6 +608,7 @@ test('a caller job renamed away from the required check name fails', async () =>
     present: true,
     publishes: 'ci-gate / gate',
     expected: 'redline-gate / gate',
+    vendored: null,
   });
 
   const report = await verify(() => platform, { cwd, root });
@@ -805,6 +807,7 @@ test('a renamed gate job fails even where the policy requires no checks yet', as
       present: true,
       publishes: 'ci-gate / gate',
       expected: 'redline-gate / gate',
+      vendored: null,
     },
   });
   const finding = find(await verify(() => platform, { cwd, root }), 'gate-machinery');
@@ -967,6 +970,7 @@ test('a deselected gate is reported as off by choice rather than as a missing ga
       present: false,
       publishes: null,
       expected: 'redline-gate / gate',
+      vendored: null,
     },
   });
   const report = await verify(() => platform, { cwd, root });
@@ -1086,6 +1090,7 @@ test('a live blocking policy with nothing left to publish its check fails', asyn
     present: false,
     publishes: null,
     expected: 'redline-gate / gate',
+    vendored: null,
   });
 
   const report = await verify(() => platform, { cwd, root });

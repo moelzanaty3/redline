@@ -127,6 +127,18 @@ export interface GateOptions {
   // to a shared `.github` repository cannot adopt Redline at all otherwise, and
   // a gate a repository actually runs beats a stronger one nobody installed.
   gateSource?: GateSource;
+  // Write the gate's files and make no host request at all — no preflight read,
+  // no label creation. `redline init --no-commit`, which exists to put the
+  // artifacts in a working tree for review and is documented as contacting
+  // nothing, so a single read here would make that untrue.
+  //
+  // The cost is real and is reported rather than hidden: without the preflight
+  // an org-sourced caller is written without confirming the organisation
+  // publishes the workflow it references. That is acceptable only because the
+  // operator is about to read the diff — it is never acceptable on a run that
+  // commits and opens a pull request, which is why this is not reachable from
+  // one.
+  offline?: boolean;
 }
 
 export interface MergePolicy {
@@ -265,6 +277,15 @@ export interface GateMachinery {
   // requires something else is the policy having moved, which is a different
   // sentence to say to an operator.
   expected: string;
+  // Repository-relative path of a gate workflow this caller runs from inside
+  // the repository, when it does — `--gate-source local`. null on an org-sourced
+  // caller, which references a workflow in another repository entirely, and on
+  // every host with no such mode.
+  //
+  // Read out of the caller rather than guessed from a constant, because it is
+  // the caller that decides what runs: `remove` deletes what the repository
+  // actually points at, not what a run three versions ago would have written.
+  vendored: string | null;
 }
 
 export interface PlatformVerify {
