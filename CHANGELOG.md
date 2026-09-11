@@ -5,6 +5,63 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
+## [Unreleased]
+
+### `redline init` — a gate for a repository whose organisation has not agreed to one yet
+
+Redline's merge gate lived in exactly one place: a reusable workflow published at
+`<org>/.github`. A repository whose organisation has no such repo could not install a gate
+at all — it got `denied gate`, a list of things for an administrator to do, and no way to
+proceed on its own. That is most repositories on their first day, and "get your org to
+create a shared `.github` repo first" is a long way to travel before seeing whether any of
+this is worth having.
+
+- **`redline init --gate-source local`** vendors the gate into the repository at
+  `.github/workflows/redline-gate.yml` and points the caller at it with
+  `uses: ./.github/workflows/redline-gate.yml`. It is the same file the organisation copy
+  is published from, with a header and the CLI version stamped in — not a second
+  implementation, and a test pins it to the byte so it cannot become one.
+- **The required check does not move.** A local reusable workflow still reports as
+  `<caller job id> / <called job id>`, and both job ids are unchanged, so the context stays
+  exactly `redline-gate / gate`. Rulesets, branch policy and `verify` need no change, and a
+  repository can move between the two sources with a re-run.
+- **The wizard offers it when the organisation has no gate.** The planning pass — which
+  runs before a single byte is written — now reports whether the refusal is one vendoring
+  would solve, and a run at a terminal is asked. A scripted run gets the denial it always
+  got: vendoring is a weaker control, and nothing unattended chooses it for an operator.
+  A refusal that is merely an unreadable host (a 401, a 500) is never offered the fallback
+  — answering a transient failure with a standing security decision is the wrong trade.
+- **`.redline.json` records `gateSource` and `gateVersion`.** Absent reads back as `org`,
+  which is what every repository onboarded before this has. An unrecognised value reads
+  back as `org` too: a hand edit must not be able to make `verify` stop asking whether the
+  organisation gate resolves.
+- **`redline verify` reports a stale vendored gate.** An org gate updates itself — one
+  merge reaches everything pointing at it — and a vendored one does not. `gate-vendored`
+  compares the stamp against the CLI running the check and names `redline init --repair`.
+  A missing file is drift; an unrecorded version is `unknown`, not stale.
+
+**A vendored gate is a weaker control, and Redline says so rather than implying the two are
+equivalent.** A workflow triggered by `pull_request` runs from the pull request's own head
+commit, so a pull request that edits the vendored file changes the gate judging it —
+including standing down the `dependencies` and `secrets` jobs, which are the gate's two
+non-exemptible checks and which no label can waive. `init` prints that on every local run,
+not only the one that chose it, and the vendored file repeats it in its own header. The
+mitigation already existed and was simply off: `/.github/workflows/` is the first entry in
+`SENSITIVE_PATHS`, so `--with reviewOwnership --review-owners <team>` requires an owner's
+approval on exactly that edit. Redline names the command rather than running it, because
+the owner it would otherwise guess is a team that may not exist — and a `CODEOWNERS` line
+naming a team that does not exist blocks every pull request in the repository, which is
+worse than the exposure it was meant to close.
+
+Two guards widened to match:
+
+- **`.github/workflows/redline-gate.yml` is now protected from being clobbered** the way
+  the caller has always been. It is YAML, so it can take no marker-block merge, and a
+  repository with an unrelated workflow already at that path would have had it destroyed.
+- **The attribution check recognises a local caller.** It required a trailing `@` — a
+  reusable-workflow ref — which a local `uses: ./...` cannot carry, so Redline read a
+  caller it had written itself as somebody else's workflow and refused to touch it.
+
 ## [0.0.3](https://github.com/moelzanaty3/redline/compare/v0.0.2...v0.0.3) (2026-09-11)
 
 ### Vendors — Cursor on, Codex named, skills gone
