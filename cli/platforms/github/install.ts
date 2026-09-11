@@ -19,6 +19,12 @@ import type {
 } from '../types.ts';
 import type { GitHubClient } from './client.ts';
 import { checkReusableGate } from './preflight.ts';
+import {
+  VENDORED_GATE_PATH,
+  pointCallerAtLocalGate,
+  renderVendoredGate,
+} from './vendor.ts';
+import { CLI_VERSION, UNPUBLISHED_VERSION } from '../../core/version.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
 import { BEGIN_PREFIX, END, findBlock, wrapBlock } from '../../render/markers.ts';
 import { TEMPLATE_DIRS as PULL_REQUEST_TEMPLATE_DIRS } from '../pull-request-templates.ts';
@@ -449,14 +455,47 @@ const CALLER_PATH = '.github/workflows/redline.yml';
 // thing exists to pin, so it is refused rather than guessed at — `adoptCaller`
 // is where that decision belongs.
 const MANAGED_BY_REDLINE = /^#[ \t]*Managed by Redline\b/m;
-const USES_REDLINE_GATE = /\.github\/workflows\/redline-gate\.yml@/;
+// Both gate sources count as attribution: an org caller carries
+// `<org>/.github/.github/workflows/redline-gate.yml@main`, and a local one carries
+// `./.github/workflows/redline-gate.yml` — no `@ref`, because a local reusable
+// workflow is always resolved at the caller's own commit and cannot take one.
+// Matching only the `@` form read a caller Redline itself had just written in
+// local mode as somebody else's workflow, and refused to touch it on the re-run.
+const USES_REDLINE_GATE =
+  /\.github\/workflows\/redline-gate\.yml@|uses: *\.\/\.github\/workflows\/redline-gate\.yml/;
+
+// Does a file at `relPath` carry something that attributes it to Redline?
+// Absent counts as ours to write; present-and-unattributed is the case that
+// must stop the run rather than overwrite.
+function attributedToRedline(cwd: string, relPath: string): boolean | null {
+  const target = join(cwd, relPath);
+  if (!existsSync(target)) return null;
+  const existing = readFileSync(target, 'utf8');
+  return MANAGED_BY_REDLINE.test(existing) || USES_REDLINE_GATE.test(existing);
+}
+
+// The vendored gate gets the same protection the caller has always had, for the
+// same reason: it is YAML, so it can take no marker-block merge, and a repo that
+// already has a workflow at this path would have it destroyed rather than
+// merged. The path is only reachable in local mode, so an org-mode install never
+// asks the question.
+function refuseForeignVendoredGate(cwd: string, opts: GateOptions): void {
+  if (opts.gateSource !== 'local' || opts.adoptCaller === true) return;
+  if (attributedToRedline(cwd, VENDORED_GATE_PATH) !== false) return;
+  throw new RedlineError(
+    'failed',
+    `${VENDORED_GATE_PATH} already exists in this repository and carries nothing that ` +
+      'attributes it to Redline, so vendoring the merge gate there would destroy it. ' +
+      'Nothing was written',
+    'Move or rename that workflow and re-run redline init --gate-source local, or re-run ' +
+      'with --gate-source org to reference the organisation gate instead and leave this file ' +
+      'alone. --adopt-caller overwrites it if it really is an earlier Redline gate.'
+  );
+}
 
 function refuseForeignCaller(cwd: string, opts: GateOptions): void {
   if (opts.adoptCaller === true) return;
-  const target = join(cwd, CALLER_PATH);
-  if (!existsSync(target)) return;
-  const existing = readFileSync(target, 'utf8');
-  if (MANAGED_BY_REDLINE.test(existing) || USES_REDLINE_GATE.test(existing)) return;
+  if (attributedToRedline(cwd, CALLER_PATH) !== false) return;
   throw new RedlineError(
     'failed',
     `${CALLER_PATH} already exists in this repository and carries nothing that attributes it to ` +
@@ -631,6 +670,12 @@ export function createGitHubInstall(
       }
 
       refuseForeignCaller(cwd, opts);
+      refuseForeignVendoredGate(cwd, opts);
+
+      // Where the gate's machinery comes from. `local` vendors it here; see
+      // GateOptions.gateSource for why that is a weaker control and not an
+      // equivalent one.
+      const local = opts.gateSource === 'local';
 
       // Does the workflow the caller is about to reference exist? Asked on
       // every pass that is allowed to contact the host — which is the real
@@ -647,11 +692,18 @@ export function createGitHubInstall(
       // template and the labels below are independently useful and break
       // nothing, so withholding them would punish the repository for an
       // org-level gap it did not create.
+      //
+      // A vendored gate references nothing outside this repository, so local
+      // mode has no preflight to run: the question `checkReusableGate` answers —
+      // does the organisation publish the workflow this caller points at — has
+      // no subject. It also means the gate decision needs no credential, which
+      // is the point for a repository whose organisation has not agreed to a
+      // shared `.github` yet.
       const preflight =
-        check && opts.preflight !== true
+        local || (check && opts.preflight !== true)
           ? { ok: true as const }
           : await checkReusableGate(client, ref.org);
-      const caller = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
+      const rendered = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
         .replaceAll('<org>', ref.org)
         .replace(/adr-diff-threshold: \d+/, `adr-diff-threshold: ${opts.adrDiffThreshold}`)
         .replace(
@@ -661,8 +713,26 @@ export function createGitHubInstall(
         .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`)
         .replace(/rung: \w[\w-]*/, `rung: ${opts.rung ?? 'observe'}`)
         .replace(/stand-down: .*/, `stand-down: '${(opts.standDown ?? []).join(',')}'`);
-      if (preflight.ok && syncFile(cwd, '.github/workflows/redline.yml', caller, check)) {
-        files.push('.github/workflows/redline.yml');
+      const caller = local ? pointCallerAtLocalGate(rendered) : rendered;
+      if (preflight.ok && syncFile(cwd, CALLER_PATH, caller, check)) {
+        files.push(CALLER_PATH);
+      }
+
+      // Written from workflows/redline-gate.yml — the same bytes the org copy
+      // is published from, so there is one gate definition in this repository
+      // and local mode cannot drift into a second implementation of it.
+      //
+      // Both passes must plan the identical set of paths. A planning pass that
+      // decided this file differently from the install is exactly the shape of
+      // the bug that staged `.github/workflows/redline.yml` without writing it
+      // and lost a finished run its pull request, and local mode doubles the
+      // surface for it.
+      if (local) {
+        const vendored = renderVendoredGate(
+          readFileSync(join(PACKAGE_ROOT, 'workflows/redline-gate.yml'), 'utf8'),
+          CLI_VERSION === UNPUBLISHED_VERSION ? null : CLI_VERSION
+        );
+        if (syncFile(cwd, VENDORED_GATE_PATH, vendored, check)) files.push(VENDORED_GATE_PATH);
       }
 
       // Read from templates/, never from this repository's own .github/:
@@ -682,7 +752,18 @@ export function createGitHubInstall(
       );
       files.push(...prTemplate.files);
 
-      if (check) return { files, outcomes: [] };
+      // A planning pass reports no outcome for work it did not do — but a failed
+      // preflight is not work, it is an answer, and it is the one thing the
+      // caller has to know before anything is written: `no-dot-github-repo` and
+      // `no-workflow` both mean the organisation publishes no gate, which is
+      // exactly what local mode exists for. `unreadable` does not qualify.
+      if (check) {
+        return {
+          files,
+          outcomes: [],
+          ...(preflight.ok || preflight.reason === 'unreadable' ? {} : { vendorableGate: true }),
+        };
+      }
 
       // Deselected: not attempted, and no outcome either. An outcome for work
       // that never happened is how a deliberate choice gets read back as a

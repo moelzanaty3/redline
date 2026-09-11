@@ -1,7 +1,13 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RedlineError } from '../core/errors.ts';
-import { ADMIN_CAPABILITIES, HOSTS, type AdminCapability, type Host } from '../platforms/types.ts';
+import {
+  ADMIN_CAPABILITIES,
+  HOSTS,
+  type AdminCapability,
+  type GateSource,
+  type Host,
+} from '../platforms/types.ts';
 import { isRung, type Rung } from '../enforce/ladder.ts';
 
 export const CONFIG_FILE = '.redline.json';
@@ -85,6 +91,22 @@ export interface RedlineConfig {
   // Empty for a repository onboarded before the field existed, which reads back
   // as "ask detection", not as "runs nothing".
   integrations: string[];
+  // Where this repository's gate machinery lives. Absent reads back as `org`,
+  // which is what every repository onboarded before the choice existed has: it
+  // references the organisation's reusable workflow. `local` means the gate is
+  // vendored into this repository, which is a weaker control — see
+  // GateOptions.gateSource — and `verify` reports it as such rather than
+  // treating the two as equivalent.
+  //
+  // An unrecognised value reads back as `org`. A hand edit must not be able to
+  // make verify stop asking whether the organisation gate resolves, and `org`
+  // is the reading that keeps every check running.
+  gateSource: GateSource;
+  // The CLI version stamped into the vendored gate at the last run. Empty when
+  // the gate is not vendored, and when a development build wrote it — neither
+  // is a drift measurement, and reporting either as stale would file work
+  // nobody can do.
+  gateVersion: string;
 }
 
 // What each menu key means when a repository has not recorded one. Lives here
@@ -306,6 +328,8 @@ export function parseConfig(raw: unknown): RedlineConfig {
     integrations: Array.isArray(o['integrations'])
       ? o['integrations'].filter((id): id is string => typeof id === 'string')
       : [],
+    gateSource: o['gateSource'] === 'local' ? 'local' : 'org',
+    gateVersion: typeof o['gateVersion'] === 'string' ? o['gateVersion'] : '',
   };
 }
 
@@ -338,6 +362,9 @@ const EXPLAINER: readonly string[] = [
   'capabilities.* — false means "this repository has its own"; Redline does not install or report it.',
   'rung — how hard the gate bites: observe, warn, block-blocker, block-high. Promotion needs evidence.',
   'pendingAdmin — capabilities an administrator still has to grant. Not a failure, a to-do list.',
+  'gateSource — org: the gate lives in the organisation .github repo. local: vendored into this',
+  '  repository, which means a pull request can edit the gate judging it. `--gate-source`.',
+  'gateVersion — the redlinegate version the vendored gate was written by. Empty when not vendored.',
   'commandFiles, standardsVersion, cliVersion, onboardedAt, lastRunAt — Redline\'s own bookkeeping.',
 ];
 

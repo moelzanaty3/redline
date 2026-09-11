@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError, RedlineError } from '../core/errors.ts';
-import { CLI_VERSION } from '../core/version.ts';
+import { CLI_VERSION, UNPUBLISHED_VERSION } from '../core/version.ts';
+import { VENDORED_GATE_PATH } from '../platforms/github/vendor.ts';
 import { canPromote, type Evidence, type Rung } from '../enforce/ladder.ts';
 import {
   CAPABILITY_KEYS,
@@ -32,6 +33,7 @@ import type {
   GateMachinery,
   GateOptions,
   GatePipeline,
+  GateSource,
   OwnershipRule,
   Platform,
   PullRequestRef,
@@ -307,6 +309,22 @@ export interface InitOptions {
   // host's default. A repository on GitHub built by Azure Pipelines is the
   // case this exists for; see GatePipeline in cli/platforms/types.ts.
   pipeline?: GatePipeline;
+  // `--gate-source org|local`. Same precedence as the rung and the menu: absent
+  // keeps whatever the repository already recorded, so a re-run never moves a
+  // repository between gate sources by accident. Moving it is a security change
+  // in one direction — see GateSource — so it takes saying so.
+  gateSource?: GateSource;
+  // Asked when the planning pass finds the organisation publishes no reusable
+  // gate, and only then. Returning true vendors the gate into this repository
+  // for this run; returning false leaves the gate denied, exactly as before.
+  //
+  // It is a callback rather than a wizard answer because the wizard runs before
+  // the platform is resolved, so nothing knows the answer yet at that point —
+  // and asking every operator up front to choose a gate source is a question
+  // almost none of them can answer before seeing the denial. The callback fires
+  // after the plan and before the first byte is written, so saying yes costs
+  // nothing already done.
+  onGateFallback?: (detail: string) => Promise<boolean>;
   // Evidence for a promotion, read from collected telemetry by the caller. Absent
   // means none was supplied, which is not the same as evidence that failed — a
   // promotion asked for without it is refused and says so.
@@ -423,6 +441,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // enforcement keeps what the repository already had: a re-run for an unrelated
   // reason silently promoting a repository is how a ladder loses the trust it
   // exists to build.
+  // Absent keeps what the repository recorded, for the same reason the rung
+  // does: `local` is the weaker control, and a re-run that said nothing about
+  // the gate must not be able to move a repository onto it — or, just as bad,
+  // silently move a deliberately-local repository back to an organisation gate
+  // that does not exist and lose it the gate entirely.
+  let gateSource: GateSource = opts.gateSource ?? existing?.gateSource ?? 'org';
+
   const currentRung: Rung = existing?.rung ?? 'observe';
   const rungNotes: string[] = [];
   let rung = currentRung;
@@ -517,13 +542,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ),
   ];
 
-  const gateOptions: GateOptions = {
+  let gateOptions: GateOptions = {
     ...FLOOR_GATE,
     ...(opts.pipeline ? { pipeline: opts.pipeline } : {}),
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
     ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
     ...(capabilities.labels ? {} : { manageLabels: false }),
     ...(standDown.length > 0 ? { standDown } : {}),
+    ...(gateSource === 'local' ? { gateSource } : {}),
     // Written into the caller workflow, so the gate blocks or reports according
     // to the rung recorded here rather than needing a second source of truth.
     rung,
@@ -546,7 +572,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // exists, and must, because the answer decides which paths it will stage. A
   // dry run may not — it contacts no host and needs no credential.
   step('planning the change');
-  const gatePlan = capabilities.gate
+  let gatePlan = capabilities.gate
     ? await platform.installGate(ref, cwd, { ...gateOptions, preflight: !dryRun }, true)
     : { files: [], outcomes: [] };
 
@@ -558,6 +584,45 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // acting on any of it. Detection informs; it does not decide.
   const machinery = observeGateMachinery(platform, cwd);
   const notes: string[] = [...rungNotes];
+
+  // The organisation publishes no gate, and this run has written nothing yet.
+  // Offer the repository the one that fits in it, and re-plan so both passes
+  // agree on the paths — planning one gate source and installing another is
+  // exactly how a run stages a file nothing wrote.
+  if (gatePlan.vendorableGate === true && opts.onGateFallback !== undefined) {
+    const detail = `${ref.org}/.github publishes no Redline gate`;
+    if (await opts.onGateFallback(detail)) {
+      gateSource = 'local';
+      gateOptions = { ...gateOptions, gateSource };
+      gatePlan = await platform.installGate(ref, cwd, { ...gateOptions, preflight: !dryRun }, true);
+      notes.push(`${detail}, so the gate is vendored into this repository instead`);
+    }
+  }
+
+  // Said on every local run, not only the one that chose it here: a repository
+  // that recorded `local` three runs ago carries the same property and the same
+  // exposure, and a note that appears once at onboarding and never again is a
+  // note nobody reads at the moment it matters.
+  if (capabilities.gate && gateSource === 'local') {
+    notes.push(
+      `the gate is vendored at ${VENDORED_GATE_PATH} rather than referenced from ` +
+        `${ref.org}/.github. It runs from the pull request's own head commit, so a pull ` +
+        'request that edits it changes the gate judging it — including standing down the ' +
+        'dependency and secret jobs, which no label can waive. Move to --gate-source org ' +
+        'once the organisation publishes a gate'
+    );
+    // The protection already exists and is simply off: `/.github/workflows/` is
+    // the first entry in SENSITIVE_PATHS. Naming the command rather than
+    // turning it on, because the owner it would write is a guess — a CODEOWNERS
+    // line naming a team that does not exist blocks every pull request in the
+    // repository, which is worse than the exposure it was meant to close.
+    if (!menu.sensitivePathReviewers) {
+      notes.push(
+        'nothing requires review on .github/workflows/ here, so that edit needs no owner\'s ' +
+          'approval. Re-run with --with reviewOwnership --review-owners <team> to require one'
+      );
+    }
+  }
 
   // Detection, not a decision. `readGateMachinery` is local and free, and what
   // it gives that nothing else here has is the path this host runs its gate
@@ -925,6 +990,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     // a re-run for an unrelated reason silently promoting a repository is how a
     // ladder loses the trust it exists to build.
     rung,
+    gateSource,
+    // Only a vendored gate has a version to record, and only a published CLI
+    // stamps one: a development build leaves the reusable copy's own pin alone
+    // rather than writing a version npm has never heard of, so there is nothing
+    // for verify to compare and the field stays empty.
+    gateVersion:
+      gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
   });
 
   step('committing and opening the pull request');

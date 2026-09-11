@@ -18,6 +18,7 @@ import { createGit, type GitRunner } from '../../../core/git.ts';
 import { isRedlineError } from '../../../core/errors.ts';
 import { BEGIN, END, findBlock } from '../../../render/markers.ts';
 import { createGitHubInstall, REQUIRED_CHECK, RULESET_NAME } from '../install.ts';
+import { VENDORED_GATE_PATH } from '../vendor.ts';
 import { isPending, type GateOptions, type MergePolicy, type RepoRef } from '../../types.ts';
 
 const ref: RepoRef = { host: 'github', org: 'acme', repo: 'web', defaultBranch: 'main' };
@@ -1271,4 +1272,144 @@ test('a caller written without a rung says observe — the rung that changes not
   await install.installGate(ref, cwd, gateOpts);
 
   assert.match(readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8'), /^\s+rung: observe$/m);
+});
+
+// --- local gate source -------------------------------------------------------
+
+const NO_ORG_GATE = {
+  'GET /repos/acme/.github/contents/.github/workflows/redline-gate.yml?ref=main': { status: 404 },
+  'GET /repos/acme/.github': { status: 404 },
+};
+const localOpts: GateOptions = { ...gateOpts, gateSource: 'local' };
+
+test('a local gate is vendored into the repository and the caller points at it', async () => {
+  const cwd = tmp();
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(
+    ref,
+    cwd,
+    localOpts
+  );
+
+  assert.ok(result.files.includes(VENDORED_GATE_PATH));
+  assert.ok(result.files.includes('.github/workflows/redline.yml'));
+  const caller = readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8');
+  assert.match(caller, /uses: \.\/\.github\/workflows\/redline-gate\.yml/);
+  assert.ok(!caller.includes('acme/.github'));
+  assert.match(readFileSync(join(cwd, VENDORED_GATE_PATH), 'utf8'), /^# Managed by Redline\b/);
+});
+
+// The whole reason local mode is usable: the organisation has no gate, which is
+// exactly the state that denies an org-source install.
+test('a local gate installs where the org has no gate at all', async () => {
+  const cwd = tmp();
+  const client = fakeGitHubClient(NO_ORG_GATE);
+  const result = await createGitHubInstall(client, gitFor).installGate(ref, cwd, localOpts);
+
+  assert.ok(result.files.includes(VENDORED_GATE_PATH));
+  assert.equal(
+    result.outcomes.find((o) => o.capability === 'gate')?.status === 'denied',
+    false,
+    'a vendored gate cannot be denied for a workflow it never references'
+  );
+});
+
+// No org repository is consulted, so no credential is needed to decide the gate
+// — the point of the mode for a repository whose org has agreed to nothing yet.
+test('a local gate asks the host nothing about the organisation', async () => {
+  const client = fakeGitHubClient();
+  await createGitHubInstall(client, gitFor).installGate(ref, tmp(), localOpts, true);
+  assert.deepEqual(
+    client.calls.filter((c) => c.path.includes('/.github')),
+    []
+  );
+});
+
+// The defect that lost a finished run its pull request: the planning pass
+// decided a path the install then did not write, and `git add` died on it. A
+// second gate path doubles the surface, so the two passes are compared directly.
+test('the planning pass and the install agree on every path in local mode', async () => {
+  const planCwd = tmp();
+  const realCwd = tmp();
+  const plan = await createGitHubInstall(fakeGitHubClient(NO_ORG_GATE), gitFor).installGate(
+    ref,
+    planCwd,
+    { ...localOpts, preflight: true },
+    true
+  );
+  const real = await createGitHubInstall(fakeGitHubClient(NO_ORG_GATE), gitFor).installGate(
+    ref,
+    realCwd,
+    localOpts
+  );
+
+  assert.deepEqual([...plan.files].sort(), [...real.files].sort());
+  for (const path of plan.files) {
+    assert.ok(existsSync(join(realCwd, path)), `${path} was planned but never written`);
+  }
+  assert.equal(existsSync(join(planCwd, VENDORED_GATE_PATH)), false, 'a plan writes nothing');
+});
+
+test('an org gate leaves no vendored workflow behind', async () => {
+  const cwd = tmp();
+  const result = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(
+    ref,
+    cwd,
+    gateOpts
+  );
+  assert.ok(!result.files.includes(VENDORED_GATE_PATH));
+  assert.equal(existsSync(join(cwd, VENDORED_GATE_PATH)), false);
+});
+
+// Re-running must recognise its own output. The attribution test used to require
+// an `@ref`, which a local caller cannot carry.
+test('a local install re-runs over its own output without refusing it', async () => {
+  const cwd = tmp();
+  const install = createGitHubInstall(fakeGitHubClient(), gitFor);
+  await install.installGate(ref, cwd, localOpts);
+  const second = await install.installGate(ref, cwd, localOpts);
+  assert.deepEqual(second.files, []);
+});
+
+test('a foreign workflow at the vendored path stops the run rather than being overwritten', async () => {
+  const cwd = tmp();
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(join(cwd, VENDORED_GATE_PATH), 'name: Something Else\non: push\n');
+
+  await assert.rejects(
+    () => createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, localOpts),
+    (error: unknown) => isRedlineError(error) && /already exists/.test(error.message)
+  );
+  assert.match(readFileSync(join(cwd, VENDORED_GATE_PATH), 'utf8'), /Something Else/);
+});
+
+// `unreadable` is a token or an outage. Offering to permanently downgrade a
+// repository's gate over a transient 500 answers the wrong question.
+test('only a missing org gate is reported as vendorable, never an unreadable one', async () => {
+  const missing = await createGitHubInstall(fakeGitHubClient(NO_ORG_GATE), gitFor).installGate(
+    ref,
+    tmp(),
+    { ...gateOpts, preflight: true },
+    true
+  );
+  assert.equal(missing.vendorableGate, true);
+
+  const unreadable = await createGitHubInstall(
+    fakeGitHubClient({
+      'GET /repos/acme/.github/contents/.github/workflows/redline-gate.yml?ref=main': {
+        status: 500,
+      },
+    }),
+    gitFor
+  ).installGate(ref, tmp(), { ...gateOpts, preflight: true }, true);
+  assert.notEqual(unreadable.vendorableGate, true);
+});
+
+test('an installable org gate is never reported as vendorable', async () => {
+  const fine = await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(
+    ref,
+    tmp(),
+    { ...gateOpts, preflight: true },
+    true
+  );
+  assert.notEqual(fine.vendorableGate, true);
 });

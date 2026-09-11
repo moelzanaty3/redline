@@ -71,6 +71,13 @@ export function isGatePipeline(value: string): value is GatePipeline {
   return (GATE_PIPELINES as readonly string[]).includes(value);
 }
 
+export const GATE_SOURCES = ['org', 'local'] as const;
+export type GateSource = (typeof GATE_SOURCES)[number];
+
+export function isGateSource(value: string): value is GateSource {
+  return (GATE_SOURCES as readonly string[]).includes(value);
+}
+
 export interface GateOptions {
   // Absent means "whatever this host's default is" — Actions on GitHub, an
   // Azure pipeline definition on Azure DevOps — which is what every caller
@@ -108,6 +115,18 @@ export interface GateOptions {
   // pass inside a live run must, or it plans a file the real install then
   // suppresses and the run stages a path nothing wrote.
   preflight?: boolean;
+  // Where the gate's machinery comes from. Absent means `org`, which is what
+  // every caller written before the choice existed meant.
+  //
+  // `local` vendors the reusable workflow into this repository and points the
+  // caller at it. That is a WEAKER gate, not an equivalent one: a workflow
+  // triggered by `pull_request` runs from the pull request's own head commit,
+  // so a pull request that edits the vendored file changes the gate that is
+  // judging it — including standing down `dependencies` or `secrets`, which no
+  // label can waive. It exists because an organisation that has not yet agreed
+  // to a shared `.github` repository cannot adopt Redline at all otherwise, and
+  // a gate a repository actually runs beats a stronger one nobody installed.
+  gateSource?: GateSource;
 }
 
 export interface MergePolicy {
@@ -184,6 +203,18 @@ export interface PullRequestRef {
 export interface InstallResult {
   files: string[];
   outcomes: CapabilityOutcome[];
+  // Set by a gate install that was refused for a reason vendoring the gate into
+  // this repository would actually solve — the organisation publishes no
+  // reusable workflow. Absent everywhere else, and deliberately NOT set when the
+  // host merely could not be read: offering to permanently downgrade a
+  // repository's gate because a token expired or GitHub returned a 500 answers
+  // a transient failure with a standing security decision.
+  //
+  // It exists because the wizard runs before the platform is resolved, so the
+  // only place that knows the organisation has no gate is the planning pass —
+  // which runs before a single byte is written, and is therefore still a safe
+  // moment to ask.
+  vendorableGate?: boolean;
 }
 
 export interface PolicyResult {

@@ -42,7 +42,7 @@ import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
 import { standardsVersion } from '../commands/sync.ts';
-import { isGatePipeline } from '../platforms/types.ts';
+import { isGatePipeline, isGateSource } from '../platforms/types.ts';
 import type { Platform } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
 import type { RemoteVerifyHost } from '../verify/remote.ts';
@@ -55,6 +55,7 @@ const USAGE = [
   '',
   '  redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]',
   '               [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]',
+  '               [--gate-source org|local]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
   '      --profile <list>  one profile, or several separated by commas, whose stacks are',
@@ -81,6 +82,13 @@ const USAGE = [
   '                  organisation-wide minimum and is refused by name rather than deselected',
   '      --with <list>  the same names, selected again — how a deselection recorded in .redline.json is',
   '                  reversed',
+  '      --gate-source org|local  where the gate machinery lives. org (the default) references the',
+  '                  reusable workflow published at <org>/.github; local vendors a copy into this',
+  '                  repository at .github/workflows/redline-gate.yml, for a repository whose',
+  '                  organisation has no shared .github repo yet. local is the WEAKER control: the',
+  '                  workflow runs from the pull request\'s own head commit, so a pull request can',
+  '                  edit the gate that is judging it — protect .github/workflows/ with CODEOWNERS.',
+  '                  Omitting the flag keeps whatever the repository already recorded',
   `      --rung <name>  the enforcement rung: ${RUNGS.join(', ')}. A promotion needs recorded`,
   '                  evidence and is refused without it; a demotion is always allowed. Omitting',
   '                  the flag keeps whatever the repository already recorded',
@@ -283,6 +291,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             with: { type: 'string' },
             rung: { type: 'string' },
             pipeline: { type: 'string' },
+            'gate-source': { type: 'string' },
             integrations: { type: 'string' },
             'review-owners': { type: 'string' },
             setup: { type: 'string' },
@@ -359,7 +368,16 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           'a repository on GitHub whose pull request checks are Azure Pipelines wants azure-pipelines'
         );
       }
+      if (values['gate-source'] !== undefined && !isGateSource(values['gate-source'])) {
+        throw new RedlineError(
+          'usage',
+          `--gate-source must be org or local, not "${values['gate-source']}"`,
+          'org references the reusable gate in the organisation .github repository; local vendors a ' +
+            'copy into this repository, which means a pull request can edit the gate judging it'
+        );
+      }
       const pipelineChoice = wizard?.answers.pipeline ?? values.pipeline;
+      const gateSourceChoice = values['gate-source'];
 
       const dryRun = values['dry-run'] === true || wizard?.answers.action === 'dry-run';
       const repair = values.repair === true;
@@ -384,11 +402,15 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
       // Only the wizard path spins: a scripted `redline init` in CI has nobody
       // watching, and an animated line in a build log is noise with no reader.
-      const task: Task | null = wizard?.prompter.task('onboarding this repository') ?? null;
+      // Reassigned, not just stopped: the fallback prompt below has to take the
+      // terminal back from the spinner to be readable at all, and the run
+      // carries on afterwards — so it gets a fresh one rather than finishing in
+      // silence.
+      let task: Task | null = wizard?.prompter.task('onboarding this repository') ?? null;
       const report = await init(platform, {
         cwd,
         root,
-        ...(task ? { onStep: (label: string) => task.update(label) } : {}),
+        ...(wizard ? { onStep: (label: string) => task?.update(label) } : {}),
         ...(profileChoice ? { profile: profileChoice } : {}),
         ...(vendorChoice ? { vendors: vendorChoice } : {}),
         ...(dryRun ? { dryRun: true } : {}),
@@ -400,6 +422,36 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(branchChoice && branchChoice.length > 0 ? { branches: branchChoice } : {}),
         ...(setupChoice && setupChoice.length > 0 ? { setup: setupChoice } : {}),
         ...(pipelineChoice ? { pipeline: pipelineChoice } : {}),
+        ...(gateSourceChoice ? { gateSource: gateSourceChoice } : {}),
+        // Offered only at a terminal, and only when the planning pass finds the
+        // organisation publishes no gate. A scripted run gets the denial it has
+        // always got: vendoring the gate is a weaker control, and nothing
+        // unattended should be able to choose it on an operator's behalf.
+        ...(wizard
+          ? {
+              onGateFallback: async (detail: string): Promise<boolean> => {
+                task?.stop();
+                const vendor = await wizard.prompter.select(
+                  `${detail}. Install the gate where?`,
+                  [
+                    {
+                      value: false,
+                      label: 'skip the gate for now',
+                      hint: 'everything else installs; re-run once the org publishes one',
+                    },
+                    {
+                      value: true,
+                      label: 'vendor it into this repository',
+                      hint: 'weaker: a pull request can edit the gate that judges it',
+                    },
+                  ],
+                  false
+                );
+                task = wizard.prompter.task('onboarding this repository');
+                return vendor;
+              },
+            }
+          : {}),
         menu,
         capabilities: selection.capabilities,
       }).finally(() => task?.stop());
@@ -576,6 +628,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         const remoteReport = await verifyRemote(remoteHost, remoteRef, {
           root,
           standardsVersion: standardsVersion(root),
+          cliVersion: CLI_VERSION,
         });
         if (values.json === true) {
           log.info(JSON.stringify({ repo: values.repo, ref: remoteRef.defaultBranch, ...remoteReport }, null, 2));

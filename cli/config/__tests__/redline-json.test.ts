@@ -27,6 +27,8 @@ const valid: RedlineConfig = {
   capabilities: { gate: true, mergePolicy: true, labels: true },
   commandFiles: { '.claude/commands/redline-init.md': 'sha256:abc' },
   rung: 'observe' as const,
+  gateSource: 'org' as const,
+  gateVersion: '',
 };
 
 // Absent means "nobody has said", which must fall back to detection rather than
@@ -178,4 +180,39 @@ test('a menu key that is present and not a boolean is still a corrupt file', () 
   );
 
   assert.throws(() => readConfig(cwd), /menu\.tmf must be a boolean/);
+});
+
+// Every repository onboarded before the choice existed references the
+// organisation gate. Reading an absent key as anything else would tell verify a
+// settled repository had vendored a gate it does not have.
+test('a config written before gate sources existed reads back as org', () => {
+  const { gateSource, ...older } = valid;
+  const parsed = parseConfig(JSON.parse(JSON.stringify(older)));
+  assert.equal(parsed.gateSource, 'org');
+  assert.equal(parsed.gateVersion, '');
+});
+
+test('a recorded local gate survives the round trip', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-config-'));
+  try {
+    writeConfig(dir, { ...valid, gateSource: 'local', gateVersion: '0.0.3' });
+    const back = readConfig(dir);
+    assert.equal(back?.gateSource, 'local');
+    assert.equal(back?.gateVersion, '0.0.3');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// `org` is the reading that keeps every check running, so an unreadable value
+// must fall that way: a hand edit must never be able to make verify stop asking
+// whether the organisation gate resolves.
+test('an unrecognised gate source reads back as org, not as local', () => {
+  for (const bad of ['LOCAL', 'vendored', '', 0, null, true]) {
+    assert.equal(parseConfig({ ...valid, gateSource: bad }).gateSource, 'org', String(bad));
+  }
+});
+
+test('a non-string gate version reads back as no version rather than as a value', () => {
+  assert.equal(parseConfig({ ...valid, gateVersion: 3 }).gateVersion, '');
 });

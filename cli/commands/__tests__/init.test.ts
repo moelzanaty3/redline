@@ -1731,3 +1731,136 @@ test('an explicit --speckit still wins over the detection', async () => {
   await init(fakePlatform(), { cwd, root, now, menu: { speckit: true } });
   assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: spec-driven development'));
 });
+
+// --- gate source -------------------------------------------------------------
+
+test('a repository that asks for a local gate records it and tells the operator why it is weaker', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+
+  assert.equal(readConfig(cwd)?.gateSource, 'local');
+  assert.ok(
+    report.notes.some((note) => /head commit/.test(note) && /no label can waive/.test(note)),
+    report.notes.join('\n')
+  );
+});
+
+// The property does not stop being true after onboarding, and a warning shown
+// once at install time is not shown at the moment anybody acts on it.
+test('the local gate warning is repeated on every run, not only the one that chose it', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+  const second = await init(fakePlatform(), { cwd, root, now, repair: true });
+
+  assert.ok(second.notes.some((note) => /head commit/.test(note)));
+});
+
+test('an org gate says none of that', async () => {
+  const report = await init(fakePlatform(), { cwd: repo(), root, now });
+  assert.ok(!report.notes.some((note) => /head commit/.test(note)));
+});
+
+// `local` is the weaker control, and `org` on a repository whose org has no gate
+// loses it the gate entirely. Neither may happen because a run said nothing.
+test('a re-run that says nothing about the gate keeps the source already recorded', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+  await init(fakePlatform(), { cwd, root, now, repair: true });
+  assert.equal(readConfig(cwd)?.gateSource, 'local');
+});
+
+test('a local gate is recorded with the version that wrote it', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+  const config = readConfig(cwd);
+  // A development checkout stamps nothing on purpose — see renderVendoredGate.
+  assert.equal(config?.gateVersion, config?.cliVersion === '0.0.0-development' ? '' : config?.cliVersion);
+});
+
+test('an org gate records no vendored version to go stale', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.equal(readConfig(cwd)?.gateVersion, '');
+});
+
+test('the gate source reaches both passes, so they plan the same paths', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, gateSource: 'local' });
+  assert.ok(platform.gateOptions.length >= 2);
+  for (const opts of platform.gateOptions) assert.equal(opts.gateSource, 'local');
+});
+
+// --- the fallback offer ------------------------------------------------------
+
+test('an organisation with no gate is offered the local one, and taking it switches the run', async () => {
+  const cwd = repo();
+  const platform = fakePlatform({ noOrgGate: true });
+  const asked: string[] = [];
+  await init(platform, {
+    cwd,
+    root,
+    now,
+    onGateFallback: async (detail) => {
+      asked.push(detail);
+      return true;
+    },
+  });
+
+  assert.deepEqual(asked, ['acme/.github publishes no Redline gate']);
+  assert.equal(readConfig(cwd)?.gateSource, 'local');
+  assert.equal(platform.gateOptions.at(-1)?.gateSource, 'local');
+});
+
+// The offer is made after the plan and before the first byte is written, so
+// declining has to leave the run exactly where refusing the gate always left it.
+test('declining the offer leaves the repository on the organisation gate', async () => {
+  const cwd = repo();
+  await init(fakePlatform({ noOrgGate: true }), {
+    cwd,
+    root,
+    now,
+    onGateFallback: async () => false,
+  });
+  assert.equal(readConfig(cwd)?.gateSource, 'org');
+});
+
+// Vendoring is a standing security decision. Nothing unattended chooses it.
+test('a run with nobody to ask is never quietly moved onto a local gate', async () => {
+  const cwd = repo();
+  await init(fakePlatform({ noOrgGate: true }), { cwd, root, now });
+  assert.equal(readConfig(cwd)?.gateSource, 'org');
+});
+
+test('a repository already on a local gate is not asked again', async () => {
+  const cwd = repo();
+  let asked = 0;
+  await init(fakePlatform({ noOrgGate: true }), {
+    cwd,
+    root,
+    now,
+    gateSource: 'local',
+    onGateFallback: async () => {
+      asked += 1;
+      return true;
+    },
+  });
+  assert.equal(asked, 0);
+});
+
+// The protection already exists and is simply off — /.github/workflows/ is the
+// first entry in SENSITIVE_PATHS. Saying so is the whole mitigation.
+test('a local gate with nothing owning the workflows directory says so', async () => {
+  const report = await init(fakePlatform(), { cwd: repo(), root, now, gateSource: 'local' });
+  assert.ok(report.notes.some((note) => /--with reviewOwnership/.test(note)), report.notes.join('\n'));
+});
+
+test('a local gate whose workflows already need an owner is not nagged about it', async () => {
+  const report = await init(fakePlatform(), {
+    cwd: repo(),
+    root,
+    now,
+    gateSource: 'local',
+    menu: { sensitivePathReviewers: true },
+  });
+  assert.ok(!report.notes.some((note) => /--with reviewOwnership/.test(note)));
+});

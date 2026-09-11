@@ -48,6 +48,11 @@ export interface FakePlatformOptions {
   // This models that refusal so `init`'s ordering can be tested: nothing may be
   // on disk by the time it fires.
   refuseGate?: string;
+  // Models an organisation that publishes no reusable gate: the planning pass
+  // reports the refusal as one vendoring would solve, exactly as the GitHub
+  // adapter does. Cleared as soon as a call arrives with gateSource 'local',
+  // because a vendored gate references no organisation to be missing.
+  noOrgGate?: boolean;
 }
 
 export interface FakePlatform extends Platform {
@@ -186,7 +191,12 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       );
       const templatePath = HOST_FILES[ref.host].template;
       if (seed(cwd, templatePath, TEMPLATE_BODY, check)) files.push(templatePath);
-      return { files, outcomes: check ? [] : (opts.gate ?? [ok('labels')]) };
+      const vendorable = opts.noOrgGate === true && gateOptions.gateSource !== 'local';
+      return {
+        files,
+        outcomes: check ? [] : (opts.gate ?? [ok('labels')]),
+        ...(check && vendorable ? { vendorableGate: true } : {}),
+      };
     },
     async applyPolicy(_ref: RepoRef, policy: MergePolicy): Promise<PolicyResult> {
       applied.push('applyPolicy');
