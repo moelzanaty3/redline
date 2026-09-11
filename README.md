@@ -29,13 +29,13 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | `rulesets/redline-ruleset.json` | Reference shape of the per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | nothing reads this file — `redline init` builds the equivalent ruleset at runtime |
 | `rulesets/redline-org-ruleset.json` | Same rules applied org-wide by custom repository property — no per-repo drift | applied once at org level |
 | `workflows/redline-gate.yml` | Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation | org `.github` repo |
-| `workflows/redline-sync.yml` | Distributes standards, gate caller and template to onboarded repos as PRs — **disabled in Phase 1**, see [CHANGELOG.md](CHANGELOG.md) | this (source) repo |
+| `workflows/redline-sync.yml` | Distributes standards, gate caller and template to onboarded repos as PRs. **Live** — runs `redline sync` on a push to `main` touching `standards/**`, `cli/render/**` or `templates/**`, and on `workflow_dispatch` | this (source) repo |
 | `workflows/redline-collect.yml` + `scripts/collect-telemetry.mjs` | Nightly central pull of review outcomes across the org | `redline-metrics` repo |
 | `workflows/weekly-digest.yml` + `scripts/build-digest.mjs` | Monday Teams digest as an Adaptive Card | `redline-metrics` repo |
 | `workflows/inbox.yml` + `scripts/build-inbox.mjs` | Org-wide prioritised PR inbox on GitHub Pages | this (source) repo |
 | `workflows/dashboard.yml` + `scripts/build-dashboard.mjs` | Static dashboard on Pages: acted-on rate, trends, seed recall history, the rule tuning queue | `redline-metrics` repo |
 | `workflows/seed-canary.yml` | Weekly regression test of the reviewer itself: opens a seeded PR, scores it, closes it | `redline-metrics` repo |
-| `workflows/verify-onboarding.yml` | Weekly re-verification of every onboarded repo; opens an issue on drift — **disabled in Phase 1**, see [CHANGELOG.md](CHANGELOG.md) | this (source) repo |
+| `workflows/verify-onboarding.yml` | Weekly re-verification of every onboarded repo; opens an issue on drift. **Live** — cron `0 6 * * 2`, plus `workflow_dispatch` | this (source) repo |
 | `scripts/validate.mjs` | Bundle self-check, run by this repo's CI | this repo |
 | `scripts/check-pins.mjs` | Re-resolves SHA-pinned actions against their upstream tag | this repo's CI |
 | `scripts/assign-rule-ids.mjs` | Assigns and verifies the stable `<stack>/<slug>` id on every rule | this repo |
@@ -89,11 +89,79 @@ npm registry by an unrelated package, so `npx redline …` always resolves to th
 The binary it installs is named `redline`, which is why the everyday command reads `redline
 init` / `redline verify` once it is installed rather than `redlinegate init`.
 
-`redline verify` checks the repository still matches what it claims. Run it any time —
-scheduled estate-wide re-verification is Phase 3 work, not yet wired up; see
-[CHANGELOG.md](CHANGELOG.md) known limitations.
+`redline verify` checks the repository still matches what it claims. Run it any time.
+Estate-wide re-verification runs on a schedule from `workflows/verify-onboarding.yml`
+(weekly, Tuesday 06:00 UTC) against the register, and opens one tracking issue on drift.
 
 Both GitHub and Azure DevOps are supported. Redline detects which from your git remote.
+
+## The whole command surface
+
+`init` and `verify` are what a repository uses day to day, but they are two of eleven.
+`redline --help` prints every flag; this is the map.
+
+**In a repository you are standing in:**
+
+| Command | What it does |
+| --- | --- |
+| `redline init` | Onboard: render standards, apply the security floor, install the gate (advisory), register. Idempotent — a re-run reconciles |
+| `redline status` | What is installed here, how hard it bites, what an administrator still owes you, and whether the standards have moved on. Reads the checkout only — no credential, no host |
+| `redline verify` | Check the repository still matches what `.redline.json` claims. `--repo owner/name` checks over the API with no checkout; `--json` for a wrapper |
+| `redline review` | Review a change against **only** the rules its files touch. `--engine embedded` (default) hands the bounded prompt to the assistant running it; `--engine api` calls a configured endpoint, local or hosted. Findings never reach rule-tuning telemetry |
+| `redline explain <rule-id>` | What a rule means, who decided it, which files it scopes to, which profiles receive it. `--list` prints every id with its severity |
+| `redline remove` | Take Redline back out, as a pull request. Only content it can prove it wrote; the security floor is the org's minimum and no flag here turns it off |
+
+**What the gate calls** (no model, deterministic, exit code is the answer):
+
+| Command | What it does |
+| --- | --- |
+| `redline policy --diff-file <path>` | Evaluate the rules a checker can decide without a model call. Exit 1 on a BLOCKER |
+| `redline exempt --body-file <path>` | Decide whether a pull request carries a *valid* exemption for a failing process check — a reason, an actor and an expiry, not a bare label |
+
+**Estate-level, from a checkout of this repository:**
+
+| Command | What it does |
+| --- | --- |
+| `redline sync` | Open a pull request on every registered repository whose standards are behind. `--dry-run` prints the plan and opens nothing; `--repo` for one; `--force` to re-render one already current |
+| `redline registry` | Derive the register of onboarded repositories by walking the org. Runs nightly in the source repo |
+| `redline metrics <cmd>` | The measurement plane: `collect`, `dashboard`, `digest`, `inbox`, `baseline`, `roi`, `correlate`, `score-seeds`. `redline metrics <cmd> --help` for flags |
+
+Two things worth knowing before you reach for these:
+
+- **`redline status` is the cheapest question you can ask.** It contacts no host and needs
+  no credential, so it is the right first command on an unfamiliar repository — it will
+  tell you it is not onboarded rather than failing at an API call.
+- **`redline explain` is how a finding becomes actionable.** Every finding cites a rule id
+  in brackets; paste it into `explain` and you get the rule, its source line in
+  `standards/`, and the profiles it reaches. That closes the loop between a comment on a
+  pull request and the file a human edits to change it.
+
+## Is it working?
+
+Redline's hardest failure mode is not breaking — it is running, looking green, and doing
+nothing. Each checkpoint below has a command that proves it, and a quiet failure that
+looks identical from the outside. The long version, with the numbers to expect, is
+[docs/success](https://redline-gate.vercel.app/docs/success).
+
+| Question | Command | Quiet failure it rules out |
+| --- | --- | --- |
+| What is installed here? | `redline status` | A non-empty `pendingAdmin` nobody read — the files landed, the merge policy never applied. Fix with `--repair` once an admin grants the rights |
+| Does the host agree? | `redline verify` | A required check whose name nothing reports: every PR stuck on "Expected — waiting for status" forever |
+| What does this finding mean? | `redline explain <id>` | An id `explain --list` does not know was invented by the model, and every aggregate keyed on it is fiction |
+| Would this diff pass? | `redline review` | — run it before you push, against only the rules your files touch |
+| Who is onboarded? | `redline registry` | A register nobody derived, so `sync` reaches a stale list |
+| Is review being acted on? | `redline metrics dashboard` | Review running and being ignored. The hero number is **findings acted on**; the rule tuning queue names the rules responsible |
+| Does it still catch defects? | `redline metrics score-seeds` | "No findings" and "nothing to find" are indistinguishable without it. Recall below 100% means do not widen the rollout |
+| What did it cost? | `redline metrics roi` | Spend measured against what was caught — it refuses to answer a per-repo question with an org-wide figure |
+
+A dashboard built in week one is empty, and that is a sample size, not a failure. Nothing
+in the measurement plane reports a number it could not compute: a missing figure states
+why rather than defaulting to zero, because filling gaps with zeros reports a stalled
+collector as a quiet week.
+
+**Where this honestly stands:** no seed scores have been recorded yet. Until a recall
+number exists, every repository is legitimately at `observe` or `warn`, and a blocking
+rung is not something to reach for. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Verify before you trust
 
@@ -128,10 +196,11 @@ $EDITOR CHANGELOG.md                       # 6. say what changed and why
 Rule ids are permanent. Reword a rule freely; never edit its id, or every historical
 telemetry record for it orphans and the tuning history resets.
 
-Distribution to already-onboarded repos (`redline sync`) is Phase 3 — see
-[CHANGELOG.md](CHANGELOG.md). Until then, an onboarded repo picks up a standards change by
-re-running `redline init`. Redline never pushes to a default branch; every change lands as
-a pull request a team reviews and merges itself.
+Merging that change to `main` triggers `workflows/redline-sync.yml`, which runs `redline
+sync` and opens a pull request on every registered repository whose standards are behind.
+Rehearse it first — `redline sync --dry-run` prints the plan and opens nothing. Redline
+never pushes to a default branch; every change lands as a pull request a team reviews and
+merges itself.
 
 ## Two version axes
 
@@ -167,14 +236,13 @@ exact semantic-release version pinned in the lockfile.
   dashboard turns that into a tuning queue: the specific rules to cut, named. See
   [docs/measurement.md](docs/measurement.md).
 - **The reviewer itself is regression-tested.** A weekly canary opens a PR of known-bad
-  code against a pilot repo, scores what came back against 82 seeded BLOCKER defects and
+  code against a pilot repo, scores what came back against 117 seeded BLOCKER defects and
   a corpus of correct code that must draw zero comments, then closes it. "No findings"
   and "nothing to find" are otherwise indistinguishable.
-- **Distribution.** One source of truth, rendered per profile. `redline sync` — syncing
-  standards to already-onboarded repos as reviewable PRs — is Phase 3 (see
-  [CHANGELOG.md](CHANGELOG.md)); until then a repo picks up a standards change by
-  re-running `redline init`. Never copy-paste per project, never a stale rule file left
-  behind when a repo changes stack.
+- **Distribution.** One source of truth, rendered per profile. `redline sync` lands the
+  current standards on every registered repository as a reviewable pull request, driven
+  off the register `redline registry` derives nightly from the estate. Never copy-paste
+  per project, never a stale rule file left behind when a repo changes stack.
 - **Hard enforcement.** Org-level ruleset plus a required check that is name-verified.
   CODEOWNERS on the enforcement surface, so nobody can weaken their own gate unreviewed.
 - **A real security floor.** Secret scanning with push protection, Dependabot alerts,

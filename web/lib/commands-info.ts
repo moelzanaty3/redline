@@ -1,10 +1,12 @@
-// The commands a person types in a repository they are standing in. All seven
-// are built; `built` stays on the type because the estate-level commands (metrics,
-// registry) are documented elsewhere and this shape is shared with them, and
-// because a command that is later specified ahead of its implementation should
-// be documented as unbuilt rather than omitted — "does redline review exist?"
-// is a question people ask, and a page that lacks the answer reads as an
-// oversight instead of a decision.
+// Every command the CLI has, including the two that act on the estate rather
+// than on a repository. All eleven are built; `built` stays on the type because
+// a command that is later specified ahead of its implementation should be
+// documented as unbuilt rather than omitted — "does redline review exist?" is a
+// question people ask, and a page that lacks the answer reads as an oversight
+// instead of a decision.
+//
+// The set here is the set `redline --help` prints. That is the invariant worth
+// keeping: a command that exists and is documented nowhere is one nobody runs.
 export type CommandInfo = {
   what: string;
   built: boolean;
@@ -252,5 +254,121 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     output:
       "One line per finding in the output contract, with the file and line. The CLI renders that line itself from the validated rule id and severity — a model that writes the prefix will eventually write a severity that does not exist or an id it invented, and every aggregate keyed on that line becomes fiction. A finding citing a rule the prompt did not carry is discarded with the reason said out loud. A changed file no stack covers is reported too, because that is a gap in the standard and reviewing it against core alone while saying nothing hides it. It always exits 0: a non-zero exit would invite someone to wire this into CI as a second gate, where it would enforce nothing while looking like it did.",
     edit: "cli/review/ — scope.ts resolves the applicable rules, prompt.ts builds the bounded prompt, schema.ts is the published findings contract, engines/ holds the two engines. Local findings are excluded from rule-tuning telemetry by construction and the report says so on every run: a local run has no thread to resolve and no reviewer to attribute, so counting it would compute acted-on rate partly from runs nobody can verify.",
+  },
+  status: {
+    what: "Answers \"what is Redline doing in this repository?\" from the checkout alone. What is installed, which rung the gate sits at, what an administrator still owes you, and whether the standards this CLI carries have moved on from the ones the repository was rendered against.",
+    built: true,
+    onboard:
+      "Nothing to install, and nothing to authorise. It reads .redline.json and the rendered artifacts in the working tree — it contacts no host and needs no credential, which is what makes it the right first command on a repository you have not seen before. On a repository that was never onboarded it says so and names the next command rather than failing at an API call it should not have attempted.",
+    usage: [
+      "redline status                        # what is installed here",
+      "redline status --json                 # the same, for a wrapper that has to act on it",
+    ],
+    flags: [
+      {
+        flag: "--json",
+        detail:
+          "The whole report as a stable object — onboarded, profile, stacks, host, rung, vendors, capabilities, integrations, pendingAdmin, standardsVersion against currentStandards, drifted, and the two timestamps. Shaped so a script can branch on `drifted` or on a non-empty `pendingAdmin` without parsing prose.",
+      },
+    ],
+    output:
+      "Three or four lines on a healthy repository, naming the profile, the rung and the standards version it was rendered from. Two things it will not do: it will not report a repository healthy on the strength of a check it could not run, and it will not claim a host setting it never read — everything here comes from the working tree, so a ruleset edited by hand in the GitHub UI is invisible to it by design. That is what `redline verify` is for, and status says so rather than implying it covered it.",
+    edit: "cli/commands/status.ts, reading cli/config/redline-json.ts for the recorded state and cli/render/manifest.ts for the standards version to compare against. The drift comparison is a version comparison, not a content diff: a repository that re-rendered from the same version is current even if a human has since edited an artifact, which is the case `redline verify` catches.",
+  },
+  explain: {
+    what: "Turns the bracketed rule id in a finding back into the rule, the file it is defined in, and the profiles that receive it. Every finding Redline posts cites an id; this is the command that makes that id mean something to the person who has to act on it.",
+    built: true,
+    onboard:
+      "Nothing to install. The rule catalogue is compiled from standards/ inside the CLI, so explain works in any directory — including one that has never been onboarded. It is the fastest route from a comment on a pull request to the line in standards/ a human would edit to change the rule.",
+    usage: [
+      "redline explain core/hardcoded-secrets    # what this rule is and where it came from",
+      "redline explain --list                    # every rule id in the standards, with severity",
+      "redline explain react/effect-derived-state --json",
+    ],
+    flags: [
+      {
+        flag: "--list",
+        detail:
+          "Every id in the standards with its severity, which is how you find the id you half-remember. It is also the check that a finding cited a real rule: an id that does not appear here was invented by the model, and the output contract treats it as untagged.",
+      },
+      {
+        flag: "--json",
+        detail:
+          "The rule (id, stack, severity, text, source file and line) plus the full profile list. The source line is what makes this actionable — it is the exact place in standards/ to edit, not a paraphrase of it.",
+      },
+    ],
+    output:
+      "Severity and id, the rule text, then four attributions: who decided it, the standards file and line it is defined at, which files it is scoped to, and every profile that receives it. An unknown id is an error that names `--list` rather than a guess at what you meant — a rule explained approximately is worse than one not explained, because the reader acts on it.",
+    edit: "cli/rules/catalogue.ts compiles the catalogue from standards/; the command surface is in cli/bin/redline.ts. Ids are permanent by design — reword a rule freely, but never edit its id, or every historical telemetry record for it orphans and its tuning history resets to nothing.",
+  },
+  registry: {
+    what: "Derives the register of onboarded repositories by walking the organisation and reading the .redline.json each one carries. It is the input both redline sync and the estate dashboard run off — sync needs to know who to open a pull request on, and coverage needs to know the denominator.",
+    built: true,
+    onboard:
+      "It runs in the source repository, nightly, from workflows/registry.yml — not in a product repository, where it would be meaningless. It needs a token with org read access and nothing more: the register is derived from what each repository already publishes about itself, so nothing here is hand-maintained. A repository that removes Redline stops appearing, and stops being a sync target, without anyone editing a list.",
+    usage: [
+      "redline registry --org acme --source acme/redline",
+      "redline registry --org acme --source acme/redline --out registry.json",
+    ],
+    flags: [
+      {
+        flag: "--org <name>",
+        detail: "The organisation to walk. Required — there is no default, because a default here would be a guess about whose estate you meant.",
+      },
+      {
+        flag: "--source <owner/name>",
+        detail:
+          "This repository, recorded into the register so a consumer knows which estate the file describes. Required: a registry.json that does not say where it came from is one nobody can safely act on when two of them exist.",
+      },
+      {
+        flag: "--token <string>, --out <path>",
+        detail:
+          "A token with org read access (or GH_TOKEN in the environment), and where to write the file — registry.json by default.",
+      },
+    ],
+    output:
+      "A JSON register of every onboarded repository with the profile, vendors, rung, capabilities and standards version each one recorded. Read-only on every repository it walks: deriving the register grants Redline no write access to anything in it.",
+    edit: "cli/registry/discover.ts walks the org and reads each .redline.json; serialize.ts is the file shape. The register's contract matters more than its content — cli/sync/plan.ts and scripts/build-dashboard.mjs both consume it, so a field removed here goes missing in two places at once.",
+  },
+  metrics: {
+    what: "The estate's measurement plane, as eight subcommands over the runners in scripts/. These act on an organisation or on its collected telemetry, never on the repository you are standing in — several of them are meaningless in a product repo, and each one says where it runs in its own --help rather than letting you find out the slow way.",
+    built: true,
+    onboard:
+      "Mostly nothing you run by hand. collect, dashboard, digest and inbox are driven by the scheduled workflows in workflows/, in the metrics repo or the source repo; the CLI exists so the same run is reproducible in a terminal when a scheduled one looks wrong. baseline is run once, by a maintainer, before any of it means anything. What this layer adds over the runners is a front door: every flag has a type, a default and a help line, and an unknown value is refused by name instead of quietly becoming \"unknown\" inside a figure someone later quotes.",
+    usage: [
+      "redline metrics                                   # the eight subcommands",
+      "redline metrics collect --help                    # and the flags for one",
+      "redline metrics collect --org acme --days 8",
+      "redline metrics dashboard --org acme --data data --out dist",
+      "redline metrics digest --org acme --days 7",
+      "redline metrics inbox --org acme --out dist",
+      "redline metrics score-seeds --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl",
+      "redline metrics roi --data data --spend-total 4200 --spend-grain org",
+    ],
+    flags: [
+      {
+        flag: "collect · dashboard · digest · inbox",
+        detail:
+          "The loop. collect pulls review outcomes for merged pull requests across the org with a read-only token; dashboard builds the static page (acted-on rate, trends, seed-recall history, the rule tuning queue); digest builds the weekly Adaptive Card; inbox builds the org-wide prioritised pull request page. Each is also a scheduled workflow — running one here reproduces that run.",
+      },
+      {
+        flag: "score-seeds",
+        detail:
+          "Scores an automated reviewer against the seeded corpus on a pull request that carries it: recall, precision and attribution. --history appends to a JSONL so recall has a trend rather than a single reading, and --baseline records the first one as the line everything after is compared to. This is the command that tells \"no findings\" apart from \"nothing to find\".",
+      },
+      {
+        flag: "baseline · roi · correlate",
+        detail:
+          "baseline computes the figures every later phase is judged against, once, from a maintainer terminal. roi sets what review cost against what it caught — and refuses to answer a per-repository question with an org-wide spend figure, which is why --spend-grain exists. correlate is explicitly research, not a loop: whether ignoring a finding cost anything later.",
+      },
+      {
+        flag: "every flag has an environment variable",
+        detail:
+          "The runners under scripts/ are env-configured programs, so each flag maps to a documented variable (--days to DAYS, --data to DATA_DIR). The names are deliberately the same ones the workflows set, so somebody debugging a scheduled run reads one vocabulary and not two.",
+      },
+    ],
+    output:
+      "Per subcommand: JSONL telemetry, a static HTML page, an Adaptive Card, or a score. What none of them will do is invent a number — a figure that could not be computed states why instead of defaulting, because a measurement plane that fills gaps with zeros is one that reports a stalled collector as a quiet week.",
+    edit: "cli/metrics/options.ts declares the whole flag surface as data — env name, type, default, help, and the accepted values for an enum. Adding a flag is a row in that table, and the tests assert the mapping (that --days 90 becomes DAYS=90, that --days banana is refused by name). The work itself stays in scripts/; this layer only configures and validates.",
   },
 };

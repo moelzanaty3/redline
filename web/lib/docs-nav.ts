@@ -94,6 +94,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "onboard repo redline init verify profile security floor merge policy pending admin azure github",
       },
       {
+        title: "What success looks like",
+        href: "/docs/success",
+        description: "Five checkpoints after onboarding — the command that proves each one, and the quiet failure that looks identical from the outside.",
+        keywords: "success working proof checkpoint what should i see after onboarding statistics dashboard metrics acted on rate seed recall tuning queue status verify explain score-seeds roi healthy numbers quiet failure waiting for status empty dashboard",
+      },
+      {
         title: "Adopting Redline",
         href: "/docs/adopting",
         description: "Day one to month two: what happens in order, and when it is reasonable to start blocking merges.",
@@ -108,8 +114,8 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "CLI commands",
         href: "/docs/cli",
-        description: "Every command you type in a repository — what init and verify do, and what sync, review, policy and exempt do around them.",
-        keywords: "cli command redline init verify sync review policy exempt remove flags dry-run skip with repair blocking rung gate exit codes speckit no-speckit tmf review-ownership codeowners context section",
+        description: "Every command you type in a repository — what init and verify do, and what status, explain, sync, review, policy and exempt do around them.",
+        keywords: "cli command redline init verify status explain sync review policy exempt remove registry metrics flags dry-run json list rule id skip with repair blocking rung gate exit codes speckit no-speckit tmf review-ownership codeowners context section",
         children: childrenOf(COMMANDS, "/docs/cli", "cli command"),
       },
     ],
