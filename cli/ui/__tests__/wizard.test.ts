@@ -422,3 +422,44 @@ test('findExistingPipeline ignores a pipeline that is not pull-request shaped', 
 test('findExistingPipeline reports nothing for a repository with no pipelines', () => {
   assert.equal(findExistingPipeline(tmp()), null);
 });
+
+// --- gate source -------------------------------------------------------------
+
+const GATE_QUESTION = 'Where should the merge gate live?';
+
+test('pressing enter through the menu leaves the gate in the organisation', async () => {
+  const { prompter, asked } = acceptDefaults();
+  const answers = await runWizard(prompter, FACTS);
+
+  assert.equal(answers.gateSource, 'org');
+  assert.equal(asked.find((q) => q.title === GATE_QUESTION)?.initial, 'org');
+});
+
+test('the question says what each choice costs, not just what it is', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, FACTS);
+
+  const gate = asked.find((q) => q.title === GATE_QUESTION);
+  const local = gate?.labels.indexOf('in this repository') ?? -1;
+  assert.ok(local >= 0);
+  assert.match(String(gate?.hints[local]), /weaker/);
+  assert.match(String(gate?.hints[local]), /edit its own gate/);
+});
+
+test('choosing the local gate in the menu is carried out of the wizard', async () => {
+  const { prompter } = acceptDefaults({ [GATE_QUESTION]: 'local' });
+  const answers = await runWizard(prompter, FACTS);
+  assert.equal(answers.gateSource, 'local');
+});
+
+// A repository that deselected the gate has no gate for the question to be
+// about, and asking anyway is a question with no consequence either way.
+test('a repository that skips the gate is never asked where to put it', async () => {
+  const { prompter, asked } = acceptDefaults({
+    'What should Redline install?': ['merge-policy', 'labels'],
+  });
+  const answers = await runWizard(prompter, FACTS);
+
+  assert.equal(asked.find((q) => q.title === GATE_QUESTION), undefined);
+  assert.equal(answers.gateSource, 'org');
+});

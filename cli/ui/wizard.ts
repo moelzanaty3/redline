@@ -2,6 +2,7 @@ import type { Manifest } from '../render/manifest.ts';
 import { RedlineError } from '../core/errors.ts';
 import { TOOL_PROBES, type RepoSurvey } from '../detect/existing.ts';
 import { RUNGS, type Rung } from '../enforce/ladder.ts';
+import type { GateSource } from '../platforms/types.ts';
 import type { Choice, Prompter } from './prompt.ts';
 
 // The questions `redline init` asks, and the order it asks them in.
@@ -80,6 +81,10 @@ export interface WizardAnswers {
   // stands — the wizard only asks when review-ownership was actually selected.
   readonly reviewOwners: readonly string[];
   readonly rung: Rung;
+  // Where the gate machinery lives. Asked only when the gate was kept, because
+  // a repository that deselected it has no gate for the question to be about.
+  // `org` when it was not asked, which is the answer that changes nothing.
+  readonly gateSource: GateSource;
   readonly action: 'apply' | 'dry-run';
 }
 
@@ -352,6 +357,31 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     ['gate', 'merge-policy', 'labels']
   );
 
+  // Asked here, and asked blind: the wizard runs before the platform is
+  // resolved, so nothing yet knows whether this organisation publishes a gate.
+  // That is why it defaults to `org` and why the mid-run offer still exists —
+  // this question is the operator's preference, and the later one is the same
+  // question asked once the host has actually answered. An operator who already
+  // knows their organisation has nothing can say so here and never see it.
+  const gateSource = capabilities.includes('gate')
+    ? await p.select<GateSource>(
+        'Where should the merge gate live?',
+        [
+          {
+            value: 'org',
+            label: 'in the organisation',
+            hint: 'one shared workflow; a pull request cannot edit the gate that judges it',
+          },
+          {
+            value: 'local',
+            label: 'in this repository',
+            hint: 'no organisation setup needed — weaker: a PR can edit its own gate',
+          },
+        ],
+        'org'
+      )
+    : 'org';
+
   // Asked only when the capability was taken. GitHub silently ignores an owner
   // it cannot resolve, so a CODEOWNERS seeded with a team that does not exist
   // reports as installed and enforces nothing — the one failure mode worth a
@@ -424,6 +454,7 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     setup,
     reviewOwners,
     rung,
+    gateSource,
     action,
   };
 }

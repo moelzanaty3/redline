@@ -377,7 +377,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         );
       }
       const pipelineChoice = wizard?.answers.pipeline ?? values.pipeline;
-      const gateSourceChoice = values['gate-source'];
+      const gateSourceChoice = wizard?.answers.gateSource ?? values['gate-source'];
 
       const dryRun = values['dry-run'] === true || wizard?.answers.action === 'dry-run';
       const repair = values.repair === true;
