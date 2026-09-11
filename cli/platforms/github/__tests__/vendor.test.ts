@@ -27,10 +27,16 @@ test('the vendored gate is the reusable one, not a second implementation of it',
   assert.ok(out.startsWith('# Managed by Redline'));
 });
 
+// The shipped pin is read out of the file rather than written here. Spelling it
+// out meant the assertion went quiet the moment the source was bumped past it:
+// it kept passing while proving nothing, which is the failure mode a pin check
+// exists to catch in the first place.
 test('a vendored gate records the version that wrote it', () => {
+  const shipped = stampedVersion(reusable());
   const out = renderVendoredGate(reusable(), '9.9.9');
   assert.equal(stampedVersion(out), '9.9.9');
-  assert.ok(!out.includes("REDLINE_CLI_VERSION: '0.0.2'"));
+  assert.ok(shipped !== null && shipped !== '9.9.9', `the shipped pin is ${shipped}`);
+  assert.ok(!out.includes(`REDLINE_CLI_VERSION: '${shipped}'`));
 });
 
 // Both the policy job and the aggregate carry the pin. Stamping only the first
