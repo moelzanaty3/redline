@@ -85,7 +85,7 @@ export interface WizardAnswers {
   // a repository that deselected it has no gate for the question to be about.
   // `org` when it was not asked, which is the answer that changes nothing.
   readonly gateSource: GateSource;
-  readonly action: 'apply' | 'dry-run';
+  readonly action: 'apply' | 'dry-run' | 'no-commit';
 }
 
 // Plain-English, at the moment of choosing. Every one of these was a term the
@@ -432,6 +432,11 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
         value: 'dry-run' as const,
         label: 'Dry run',
         hint: 'print the plan — writes nothing, contacts no host, needs no credential',
+      },
+      {
+        value: 'no-commit' as const,
+        label: 'Write the files only',
+        hint: 'writes into your working tree, uncommitted — no host changes, no pull request',
       },
       {
         value: 'apply' as const,

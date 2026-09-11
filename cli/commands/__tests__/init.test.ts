@@ -1489,6 +1489,7 @@ test('init names the pipelines already in the repository and offers the opt-out'
       present: false,
       publishes: null,
       expected: 'redline-gate / gate',
+      vendored: null,
     },
   });
   const report = await init(platform, { cwd, root, now, dryRun: true });
@@ -1506,6 +1507,7 @@ test('a repository with nothing already wired is told nothing', async () => {
       present: false,
       publishes: null,
       expected: 'redline-gate / gate',
+      vendored: null,
     },
   });
   const report = await init(platform, { cwd: repo(), root, now, dryRun: true });
@@ -1863,4 +1865,79 @@ test('a local gate whose workflows already need an owner is not nagged about it'
     menu: { sensitivePathReviewers: true },
   });
   assert.ok(!report.notes.some((note) => /--with reviewOwnership/.test(note)));
+});
+
+// --- --no-commit -------------------------------------------------------------
+
+// There was nothing between `--dry-run`, which writes nothing at all, and a
+// full run, which commits to a branch and opens a pull request on the remote.
+// An operator who wanted to read what Redline produces before letting it near
+// their history had no way to ask, and the first they saw of the pull request
+// was the run trying to push one.
+test('--no-commit writes the files and touches neither the host nor git', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+  const report = await init(platform, { cwd, root, now, noCommit: true });
+
+  assert.equal(report.noCommit, true);
+  assert.ok(report.files.includes('AGENTS.md'));
+  assert.ok(existsSync(join(cwd, 'AGENTS.md')));
+  assert.deepEqual(platform.applied, ['installGate']);
+  assert.equal(report.pullRequest, null);
+});
+
+// The whole point of the mode: it must run with no credential and no network,
+// so the one live read the plan normally makes is not made either.
+test('--no-commit resolves the repository from the clone, not from the host', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, noCommit: true });
+  assert.ok(!platform.reads.includes('repoRef'));
+});
+
+test('--no-commit records the run without claiming work an administrator owes', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, noCommit: true });
+  const config = readConfig(cwd);
+  assert.equal(config?.profile, 'web-react');
+  assert.deepEqual(config?.pendingAdmin, []);
+});
+
+// Without the preflight nothing confirmed the organisation publishes the gate
+// the caller points at, and an operator who is about to commit that file has to
+// be told so rather than left to find out on their first pull request.
+test('--no-commit says the organisation gate reference went unchecked', async () => {
+  const report = await init(fakePlatform(), { cwd: repo(), root, now, noCommit: true });
+  assert.ok(
+    report.notes.some((note) => /nothing checked that it publishes/.test(note)),
+    report.notes.join('\n')
+  );
+});
+
+// A vendored gate references nothing outside the repository, so there is
+// nothing that could have been checked and nothing to warn about.
+test('a local gate has no unchecked reference to warn about', async () => {
+  const report = await init(fakePlatform(), {
+    cwd: repo(),
+    root,
+    now,
+    noCommit: true,
+    gateSource: 'local',
+  });
+  assert.ok(!report.notes.some((note) => /nothing checked that it publishes/.test(note)));
+});
+
+test('--no-commit still writes the gate files it would have committed', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, noCommit: true });
+  assert.ok(report.files.includes('.github/workflows/redline.yml'));
+  assert.ok(existsSync(join(cwd, '.github/workflows/redline.yml')));
+});
+
+// Distinct answers, and the report has to be able to give both: a dry run
+// wrote nothing, --no-commit wrote files nobody has committed.
+test('--no-commit is not a dry run and does not report as one', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, noCommit: true });
+  assert.equal(report.dryRun, false);
+  assert.ok(existsSync(join(cwd, '.redline.json')));
 });

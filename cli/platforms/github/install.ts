@@ -700,7 +700,7 @@ export function createGitHubInstall(
       // is the point for a repository whose organisation has not agreed to a
       // shared `.github` yet.
       const preflight =
-        local || (check && opts.preflight !== true)
+        local || opts.offline === true || (check && opts.preflight !== true)
           ? { ok: true as const }
           : await checkReusableGate(client, ref.org);
       const rendered = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
@@ -769,7 +769,7 @@ export function createGitHubInstall(
       // that never happened is how a deliberate choice gets read back as a
       // capability that failed.
       const labelOutcomes: CapabilityOutcome[] = [];
-      for (const label of opts.manageLabels === false ? [] : GATE_LABELS) {
+      for (const label of opts.manageLabels === false || opts.offline === true ? [] : GATE_LABELS) {
         const res = await client.rest('POST', `${repoPath(ref)}/labels`, label);
         labelOutcomes.push(
           res.status === 422

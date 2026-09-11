@@ -314,6 +314,15 @@ export interface InitOptions {
   // repository between gate sources by accident. Moving it is a security change
   // in one direction — see GateSource — so it takes saying so.
   gateSource?: GateSource;
+  // `--no-commit`. Write the artifacts into the working tree and stop: no host
+  // request, no branch, no commit, no push, no pull request.
+  //
+  // It exists because there was nothing between `--dry-run`, which writes
+  // nothing at all, and a full run, which commits to a branch and opens a pull
+  // request on the remote. An operator who wanted to look at what Redline
+  // produces before letting it near their history had no way to ask for that,
+  // and the first they saw of the pull request was the run trying to push one.
+  noCommit?: boolean;
   // Asked when the planning pass finds the organisation publishes no reusable
   // gate, and only then. Returning true vendors the gate into this repository
   // for this run; returning false leaves the gate denied, exactly as before.
@@ -359,6 +368,11 @@ export interface InitReport {
   migratedFrom: string | null;
   alreadyOnboarded: boolean;
   dryRun: boolean;
+  // The run wrote its files and stopped: no host setting was changed, nothing
+  // was committed. Distinct from `dryRun`, which wrote nothing at all — the
+  // report has to be able to say "these files are on disk and uncommitted",
+  // which is neither of the two answers it could give before.
+  noCommit?: boolean;
   // The menu this run resolved, and the host settings it would change. Both
   // exist so `--dry-run` can print a plan the operator can act on.
   menu: MenuSelections;
@@ -488,8 +502,12 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   // A dry run must work offline and with an unscoped token: repoRef() is a
   // live GET, so the plan is built from what the local clone already knows.
-  step(dryRun ? 'reading the repository' : `reading ${platform.host}`);
-  const ref = dryRun ? platform.localRef(cwd) : await platform.repoRef(cwd);
+  // `--no-commit` is under the same rule and for the same reason — it is
+  // documented as contacting no host, and this read is a host contact whatever
+  // else the run goes on to skip.
+  const offline = dryRun || opts.noCommit === true;
+  step(offline ? 'reading the repository' : `reading ${platform.host}`);
+  const ref = offline ? platform.localRef(cwd) : await platform.repoRef(cwd);
   // detected <- what this repository already recorded <- what the caller
   // typed, the same precedence the menu resolves under. The org ceiling is
   // deliberately not applied to the RECORD: render() enforces it on every call
@@ -550,6 +568,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ...(capabilities.labels ? {} : { manageLabels: false }),
     ...(standDown.length > 0 ? { standDown } : {}),
     ...(gateSource === 'local' ? { gateSource } : {}),
+    ...(opts.noCommit === true ? { offline: true } : {}),
     // Written into the caller workflow, so the gate blocks or reports according
     // to the rung recorded here rather than needing a second source of truth.
     rung,
@@ -923,6 +942,72 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const gate = capabilities.gate
     ? await platform.installGate(ref, cwd, gateOptions)
     : { files: [], outcomes: [] };
+
+  // Files written, nothing else attempted. Everything below this point either
+  // changes a setting on the host or puts a commit in the repository's history,
+  // and `--no-commit` exists precisely to reach neither.
+  //
+  // The config is written here rather than at the shared site below so this
+  // path records what it actually did: a repository whose settings were never
+  // applied must not carry a pendingAdmin list computed from outcomes that
+  // never happened, and must not read back as fully onboarded on the next run.
+  if (opts.noCommit === true) {
+    if (capabilities.gate && gateSource === 'org') {
+      notes.push(
+        `the caller workflow references ${ref.org}/.github and nothing checked that it publishes ` +
+          'the gate, because --no-commit contacts no host. Run redline verify after you commit, ' +
+          'or re-run without --no-commit, before relying on the check'
+      );
+    }
+    const written = [
+      ...rendered.written,
+      ...removals,
+      ...commands.written,
+      ...gate.files,
+      ...setupResult.written,
+      CONFIG_FILE,
+    ];
+    step('recording .redline.json');
+    writeConfig(cwd, {
+      standardsVersion: manifest.version,
+      cliVersion: CLI_VERSION,
+      host: platform.host,
+      profile,
+      vendors,
+      menu,
+      capabilities,
+      integrations,
+      // Nothing was applied, so nothing is owed to an administrator yet. The
+      // run that does apply them computes this from real outcomes.
+      pendingAdmin: existing?.pendingAdmin ?? [],
+      onboardedAt: existing?.onboardedAt ?? now().toISOString(),
+      lastRunAt: now().toISOString(),
+      localRules: existsSync(join(cwd, LOCAL_RULES_FILE)),
+      commandFiles: commands.contentIds,
+      rung,
+      gateSource,
+      gateVersion:
+        gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
+    });
+    return {
+      profile,
+      files: written,
+      removals,
+      outcomes: [],
+      pendingAdmin: existing?.pendingAdmin ?? [],
+      pullRequest: null,
+      pullRequestError: null,
+      migratedFrom,
+      alreadyOnboarded: false,
+      dryRun: false,
+      noCommit: true,
+      menu,
+      capabilities,
+      optedOut,
+      notes,
+      hostPlan,
+    };
+  }
 
   const ownership = menu.sensitivePathReviewers
     ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules)

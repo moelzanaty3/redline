@@ -55,9 +55,14 @@ const USAGE = [
   '',
   '  redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]',
   '               [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]',
-  '               [--gate-source org|local]',
+  '               [--gate-source org|local] [--no-commit]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
+  '      --no-commit write the files into the working tree and stop: no repository setting is',
+  '                  changed, no branch is made, nothing is committed and no pull request is',
+  '                  opened. Needs no credential and contacts no host, so it works offline — and',
+  '                  so an org-sourced caller is written without checking the organisation',
+  '                  publishes the gate it references. Run redline verify once you have committed',
   '      --profile <list>  one profile, or several separated by commas, whose stacks are',
   '                  rendered together — a React app with its own Terraform beside it is',
   '                  web,infra. The recorded name is sorted, so the order you type cannot',
@@ -285,6 +290,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             tmf: { type: 'boolean' },
             'no-tmf': { type: 'boolean' },
             'dry-run': { type: 'boolean' },
+            'no-commit': { type: 'boolean' },
             repair: { type: 'boolean' },
             'adopt-caller': { type: 'boolean' },
             skip: { type: 'string' },
@@ -380,12 +386,15 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const gateSourceChoice = wizard?.answers.gateSource ?? values['gate-source'];
 
       const dryRun = values['dry-run'] === true || wizard?.answers.action === 'dry-run';
+      const noCommit = values['no-commit'] === true || wizard?.answers.action === 'no-commit';
       const repair = values.repair === true;
       const adoptCaller = values['adopt-caller'] === true;
       // A dry run sends no request, so it must not require a credential —
-      // see ResolvePlatformOptions.lazyCredentials. Every other path here
-      // resolves one up front, exactly as before.
-      const platform = await resolve(cwd, dryRun ? { lazyCredentials: true } : {});
+      // see ResolvePlatformOptions.lazyCredentials. --no-commit contacts no host
+      // either, so it must not demand a credential up front any more than a dry
+      // run does — working offline is most of the reason it exists. Every other
+      // path here resolves one up front, exactly as before.
+      const platform = await resolve(cwd, dryRun || noCommit ? { lazyCredentials: true } : {});
       const profileChoice = wizard?.answers.profile ?? values.profile;
       const vendorChoice = wizard ? [...wizard.answers.vendors] : vendors;
       const rungChoice = wizard?.answers.rung ?? values.rung;
@@ -414,6 +423,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(profileChoice ? { profile: profileChoice } : {}),
         ...(vendorChoice ? { vendors: vendorChoice } : {}),
         ...(dryRun ? { dryRun: true } : {}),
+        ...(noCommit ? { noCommit: true } : {}),
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
         ...(rungChoice ? { rung: rungChoice } : {}),
@@ -496,6 +506,17 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
       for (const line of renderReport(summary, reportTheme)) log.info(line);
       log.info('');
+      // Said plainly, because the one thing an operator must not do after this
+      // is assume the repository is onboarded: the files are on disk, the host
+      // is untouched, and the branch a full run would have opened does not
+      // exist. The run that finishes the job is named rather than described.
+      if (report.noCommit === true) {
+        log.info(
+          '  not committed — the files are in your working tree. Review them, commit them, then ' +
+            'run redline init to apply the repository settings and open the pull request'
+        );
+        return 0;
+      }
       if (report.pendingAdmin.length > 0) {
         // On the already-onboarded path this run applied nothing, so the list
         // is what was recorded — not a finding this run made. Saying so is the

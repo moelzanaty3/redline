@@ -271,7 +271,7 @@ test('the default action is a dry run, not an apply', async () => {
   const answers = await runWizard(prompter, FACTS);
   assert.equal(answers.action, 'dry-run');
   const ready = asked.find((a) => a.title === 'Ready?');
-  assert.deepEqual(ready?.labels, ['Dry run', 'Apply']);
+  assert.deepEqual(ready?.labels, ['Dry run', 'Write the files only', 'Apply']);
 });
 
 // Shown, not hidden. An operator looking for Cursor and not finding it cannot
