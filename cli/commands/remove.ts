@@ -18,6 +18,7 @@ import { isPending } from '../platforms/types.ts';
 import type {
   AdminCapability,
   CapabilityOutcome,
+  GateMachinery,
   Host,
   Platform,
   PullRequestRef,
@@ -275,6 +276,9 @@ function planCommandFiles(
 function planGateMachinery(platform: Platform, cwd: string, actions: FileAction[]): void {
   const machinery = platform.readGateMachinery(cwd);
   if (!machinery.present) return;
+  // Planned before the caller below, so the two files are reported in the order
+  // they are read rather than the order they happen to be deleted in.
+  planVendoredGate(machinery, cwd, actions);
   const body = read(cwd, machinery.path);
   if (body === null) return;
   // YAML takes no marker block — a second `name:`/`on:` key stops the workflow
@@ -298,6 +302,43 @@ function planGateMachinery(platform: Platform, cwd: string, actions: FileAction[
     reason:
       'it carries nothing that attributes it to Redline, so it is this repository\'s own file ' +
       'sitting at a Redline-shaped path',
+  });
+}
+
+// The second file a `--gate-source local` repository carries: the gate itself,
+// vendored here rather than referenced from the organisation. Deleting the
+// caller and leaving this behind left a workflow nothing calls sitting in
+// .github/workflows/ after a removal that reported itself complete — and a
+// repository that later switched back to an organisation gate kept it forever,
+// because nothing afterwards ever looked at that path again.
+//
+// The path comes from the caller, which is what actually decides where the gate
+// runs from, and is accepted only when it is the one path Redline writes — see
+// LOCAL_GATE_REF. A caller is a file anybody can edit, and resolving an
+// arbitrary `./…` out of it would let a hand-edited workflow nominate any file
+// in the repository for deletion.
+function planVendoredGate(machinery: GateMachinery, cwd: string, actions: FileAction[]): void {
+  const path = machinery.vendored;
+  if (path === null) return;
+  const body = read(cwd, path);
+  // The caller names it and it is not there. Nothing to remove, and nothing
+  // worth saying: the removal is about to delete the caller that named it.
+  if (body === null) return;
+  if (MANAGED_BY_REDLINE.test(body)) {
+    actions.push({
+      kind: 'delete',
+      path,
+      directory: false,
+      reason: 'it is the gate this repository vendored, and carries the Redline ownership line',
+    });
+    return;
+  }
+  actions.push({
+    kind: 'kept',
+    path,
+    reason:
+      'the caller runs the gate from here, but this file carries nothing that attributes it to ' +
+      'Redline — so it is this repository\'s own workflow and is left where it is',
   });
 }
 

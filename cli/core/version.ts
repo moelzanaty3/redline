@@ -15,3 +15,10 @@ export function parseVersion(raw: unknown): string {
 const pkg: unknown = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 
 export const CLI_VERSION: string = parseVersion(pkg);
+
+// What package.json carries between releases: semantic-release stamps the real
+// version at publish time, so a CLI running from a checkout reports this. Any
+// artifact that pins the CLI has to recognise it, or a development run writes
+// `redlinegate@0.0.0-development` into a real repository's gate — a pin to a
+// version npm has never heard of, which fails every pull request it reaches.
+export const UNPUBLISHED_VERSION = '0.0.0-development';

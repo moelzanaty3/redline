@@ -39,6 +39,16 @@ on:
           which refuses a promotion the repository's recorded evidence does not support.
         type: string
         default: observe
+      stand-down:
+        description: >-
+          Comma-separated gate jobs another tool in the calling repository already covers:
+          `policy`, `dependencies`, `secrets`. A stood-down job is skipped and the
+          aggregate below reads a skip as a pass. Written by `redline init` from the tools
+          the repository DECLARED, never from detection alone — `dependencies` and
+          `secrets` are the two jobs no label can waive, so a wrong guess here is the one
+          that removes a security check nobody asked to remove. Empty runs every job.
+        type: string
+        default: ''
       exemption-enforcement:
         description: >-
           What a soft-fail label without a valid "## Redline exemption" block does.
@@ -111,6 +121,7 @@ jobs:
           fi
 
   policy:
+    if: ${{ !contains(format(',{0},', inputs.stand-down), ',policy,') }}
     # The deterministic tier: the rules a checker can decide, evaluated with no
     # model call. They cost nothing to run and they cannot hallucinate, which is
     # the point — an author cannot argue with a model about whether the word TODO
@@ -151,6 +162,7 @@ jobs:
             --diff-file /tmp/redline.diff --fail-on "$fail_on"
 
   dependency-review:
+    if: ${{ !contains(format(',{0},', inputs.stand-down), ',dependencies,') }}
     name: Dependency review
     runs-on: ubuntu-latest
     steps:
@@ -161,6 +173,7 @@ jobs:
           comment-summary-in-pr: on-failure
 
   secrets:
+    if: ${{ !contains(format(',{0},', inputs.stand-down), ',secrets,') }}
     name: Secret scan (diff)
     runs-on: ubuntu-latest
     steps:
@@ -215,10 +228,21 @@ jobs:
           # Security checks can never be downgraded by a label.
           HARD_JOBS='["dependency-review","secrets"]'
 
-          hard_failed=$(jq -r --argjson hard "$HARD_JOBS" \
-            'to_entries[] | select(.value.result != "success") | select(.key as $k | $hard | index($k)) | .key' <<<"$RESULTS")
-          soft_failed=$(jq -r --argjson hard "$HARD_JOBS" \
-            'to_entries[] | select(.value.result != "success") | select(.key as $k | $hard | index($k) | not) | .key' <<<"$RESULTS")
+          # `skipped` is a pass. None of these jobs has `needs`, so the only thing
+          # that skips one is its own stand-down guard above — a deliberate
+          # instruction from the calling repository, not a job that fell over.
+          # Without this the aggregate failed every repository that narrowed the
+          # gate, which is the opposite of what narrowing it asks for.
+          PASSED='["success","skipped"]'
+
+          # `.value.result as $r` first: inside `$passed | index(...)` the input
+          # is $passed, so referring to `.value.result` there indexes the array
+          # with a string and jq exits 5 — which `set -e` turns into a gate that
+          # fails every pull request.
+          hard_failed=$(jq -r --argjson hard "$HARD_JOBS" --argjson passed "$PASSED" \
+            'to_entries[] | .value.result as $r | select($passed | index($r) | not) | select(.key as $k | $hard | index($k)) | .key' <<<"$RESULTS")
+          soft_failed=$(jq -r --argjson hard "$HARD_JOBS" --argjson passed "$PASSED" \
+            'to_entries[] | .value.result as $r | select($passed | index($r) | not) | select(.key as $k | $hard | index($k) | not) | .key' <<<"$RESULTS")
 
           labelled=false
           for label in ${SOFT_FAIL_LABELS//,/ }; do

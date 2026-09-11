@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, existsSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,8 +69,8 @@ test('the menu can promote the gate to blocking', async () => {
 test('the detected profile is used and recorded', async () => {
   const cwd = repo();
   const report = await init(fakePlatform(), { cwd, root, now });
-  assert.equal(report.profile, 'web');
-  assert.equal(readConfig(cwd)?.profile, 'web');
+  assert.equal(report.profile, 'web-react');
+  assert.equal(readConfig(cwd)?.profile, 'web-react');
 });
 
 test('an explicit profile overrides detection', async () => {
@@ -110,6 +110,90 @@ test('denied capabilities become pendingAdmin and the run still completes', asyn
   assert.deepEqual(report.pendingAdmin, ['secret-scanning', 'push-protection']);
   assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['secret-scanning', 'push-protection']);
   assert.equal(report.pullRequest?.number, 1, 'the PR must still be opened');
+});
+
+test('only files written after install-time preflight are staged', async () => {
+  const platform = fakePlatform({
+    gateFilesOnApply: [],
+    gate: [{ capability: 'gate', status: 'denied', detail: 'reusable workflow is unavailable' }],
+  });
+  const cwd = repo();
+  const report = await init(platform, { cwd, root, now });
+
+  assert.equal(report.pullRequest?.number, 1);
+  assert.ok(!existsSync(join(cwd, '.github/workflows/redline.yml')));
+  assert.ok(!report.files.includes('.github/workflows/redline.yml'));
+  assert.ok(!platform.lastChange?.files.includes('.github/workflows/redline.yml'));
+  assert.deepEqual(report.pendingAdmin, ['gate']);
+});
+
+test('a live run lets its planning pass ask the host; a dry run does not', async () => {
+  const live = fakePlatform();
+  await init(live, { cwd: repo(), root, now });
+  assert.equal(live.gateOptions[0]?.preflight, true, 'the plan decides what is staged, so it must ask');
+
+  const dry = fakePlatform();
+  await init(dry, { cwd: repo(), root, now, dryRun: true });
+  assert.notEqual(dry.gateOptions[0]?.preflight, true, 'a dry run contacts no host and needs no credential');
+});
+
+test('the plan and the install are handed the same gate options', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, integrations: ['dependabot'] });
+
+  const [plan, install] = platform.gateOptions;
+  assert.equal(platform.gateOptions.length, 2);
+  // preflight is the one deliberate difference: it says whether the pass may
+  // ask the host, not what the caller workflow says.
+  assert.deepEqual({ ...plan, preflight: undefined }, { ...install, preflight: undefined });
+});
+
+test('a declared tool stands the gate job it covers down', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+  const report = await init(platform, { cwd, root, now, integrations: ['dependabot', 'sonarqube'] });
+
+  assert.deepEqual(platform.gateOptions.at(-1)?.standDown, ['dependencies', 'policy']);
+  assert.ok(
+    report.notes.some((note) => note.includes('dependencies job is stood down')),
+    'the report must say which job stopped running, and why'
+  );
+});
+
+test('a declared tool that covers nothing stands nothing down', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, integrations: ['renovate'] });
+
+  assert.equal(platform.gateOptions.at(-1)?.standDown, undefined);
+});
+
+test('a detected tool narrows the gate the same way a stated one does', async () => {
+  const platform = fakePlatform();
+  // The wizard hands its own findings back through --integrations, so a
+  // detected tool that narrowed less than a typed one would make the same
+  // repository behave differently depending on which entry point ran it.
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/dependabot.yml': 'version: 2\n',
+  });
+  const report = await init(platform, { cwd, root, now });
+
+  assert.deepEqual(platform.gateOptions.at(-1)?.standDown, ['dependencies']);
+  assert.ok(
+    report.notes.some((note) => note.includes('.github/dependabot.yml') && note.includes('stood down')),
+    'a stood-down security job must name the marker that proved the tool'
+  );
+});
+
+test('an empty integrations list puts every gate job back', async () => {
+  const platform = fakePlatform();
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/dependabot.yml': 'version: 2\n',
+  });
+  await init(platform, { cwd, root, now, integrations: [] });
+
+  assert.equal(platform.gateOptions.at(-1)?.standDown, undefined);
 });
 
 test('unsupported capabilities never become pendingAdmin', async () => {
@@ -1021,7 +1105,7 @@ test('detects every vendor whose markers are present at once', async () => {
 test('a repository with none of the markers gets the org default, every enabled vendor', async () => {
   const cwd = repo();
   await init(fakePlatform(), { cwd, root, now });
-  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'agents', 'claude']);
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'agents', 'codex', 'claude', 'cursor']);
 });
 
 test('an explicit vendor selection overrides detection', async () => {
@@ -1042,11 +1126,30 @@ test('a re-run preserves the recorded vendor selection rather than re-detecting'
   assert.deepEqual(readConfig(cwd)?.vendors, ['agents'], 'CLAUDE.md on disk must not re-trigger detection');
 });
 
-// A vendor the org manifest disables (cursor, in standards/manifest.json)
-// must never render even when it is what the repository detected, or typed.
+// A root whose org manifest has switched a vendor off.
+//
+// Every vendor ships enabled now, so the disabled one is built rather than
+// borrowed: what these tests pin is the ceiling itself — a vendor the
+// organisation disables never renders, however it was asked for — not which
+// vendor happens to be off in the shipped manifest this month.
+function rootWithDisabledVendor(vendor: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-org-'));
+  createdDirs.push(dir);
+  for (const name of ['standards', 'commands', 'templates', 'workflows']) {
+    cpSync(join(root, name), join(dir, name), { recursive: true });
+  }
+  const manifestPath = join(dir, 'standards/manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.vendors[vendor].enabled = false;
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  return dir;
+}
+
+// A vendor the org manifest disables must never render even when it is what
+// the repository detected, or typed.
 test('an org-disabled vendor is recorded but never rendered', async () => {
   const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', '.cursor/rules/team.mdc': 'ours\n' });
-  await init(fakePlatform(), { cwd, root, now });
+  await init(fakePlatform(), { cwd, root: rootWithDisabledVendor('cursor'), now });
   assert.deepEqual(readConfig(cwd)?.vendors, ['cursor']);
   assert.equal(existsSync(join(cwd, '.cursor/rules/redline-core.mdc')), false);
 });
@@ -1057,7 +1160,12 @@ test('an org-disabled vendor is recorded but never rendered', async () => {
 // commands then went stale in a tool the repository never opted into.
 test('an org-disabled vendor gets no command files either', async () => {
   const cwd = repo();
-  const report = await init(fakePlatform(), { cwd, root, now, vendors: ['copilot', 'cursor'] });
+  const report = await init(fakePlatform(), {
+    cwd,
+    root: rootWithDisabledVendor('cursor'),
+    now,
+    vendors: ['copilot', 'cursor'],
+  });
 
   assert.equal(existsSync(join(cwd, '.github/prompts/redline-init.prompt.md')), true);
   assert.equal(existsSync(join(cwd, '.cursor/commands/redline-init.md')), false);
@@ -1381,6 +1489,7 @@ test('init names the pipelines already in the repository and offers the opt-out'
       present: false,
       publishes: null,
       expected: 'redline-gate / gate',
+      vendored: null,
     },
   });
   const report = await init(platform, { cwd, root, now, dryRun: true });
@@ -1398,6 +1507,7 @@ test('a repository with nothing already wired is told nothing', async () => {
       present: false,
       publishes: null,
       expected: 'redline-gate / gate',
+      vendored: null,
     },
   });
   const report = await init(platform, { cwd: repo(), root, now, dryRun: true });
@@ -1622,4 +1732,212 @@ test('an explicit --speckit still wins over the detection', async () => {
 
   await init(fakePlatform(), { cwd, root, now, menu: { speckit: true } });
   assert.ok(!readFileSync(join(cwd, 'AGENTS.md'), 'utf8').includes('Context: spec-driven development'));
+});
+
+// --- gate source -------------------------------------------------------------
+
+test('a repository that asks for a local gate records it and tells the operator why it is weaker', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+
+  assert.equal(readConfig(cwd)?.gateSource, 'local');
+  assert.ok(
+    report.notes.some((note) => /head commit/.test(note) && /no label can waive/.test(note)),
+    report.notes.join('\n')
+  );
+});
+
+// The property does not stop being true after onboarding, and a warning shown
+// once at install time is not shown at the moment anybody acts on it.
+test('the local gate warning is repeated on every run, not only the one that chose it', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+  const second = await init(fakePlatform(), { cwd, root, now, repair: true });
+
+  assert.ok(second.notes.some((note) => /head commit/.test(note)));
+});
+
+test('an org gate says none of that', async () => {
+  const report = await init(fakePlatform(), { cwd: repo(), root, now });
+  assert.ok(!report.notes.some((note) => /head commit/.test(note)));
+});
+
+// `local` is the weaker control, and `org` on a repository whose org has no gate
+// loses it the gate entirely. Neither may happen because a run said nothing.
+test('a re-run that says nothing about the gate keeps the source already recorded', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+  await init(fakePlatform(), { cwd, root, now, repair: true });
+  assert.equal(readConfig(cwd)?.gateSource, 'local');
+});
+
+test('a local gate is recorded with the version that wrote it', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+  const config = readConfig(cwd);
+  // A development checkout stamps nothing on purpose — see renderVendoredGate.
+  assert.equal(config?.gateVersion, config?.cliVersion === '0.0.0-development' ? '' : config?.cliVersion);
+});
+
+test('an org gate records no vendored version to go stale', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now });
+  assert.equal(readConfig(cwd)?.gateVersion, '');
+});
+
+test('the gate source reaches both passes, so they plan the same paths', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, gateSource: 'local' });
+  assert.ok(platform.gateOptions.length >= 2);
+  for (const opts of platform.gateOptions) assert.equal(opts.gateSource, 'local');
+});
+
+// --- the fallback offer ------------------------------------------------------
+
+test('an organisation with no gate is offered the local one, and taking it switches the run', async () => {
+  const cwd = repo();
+  const platform = fakePlatform({ noOrgGate: true });
+  const asked: string[] = [];
+  await init(platform, {
+    cwd,
+    root,
+    now,
+    onGateFallback: async (detail) => {
+      asked.push(detail);
+      return true;
+    },
+  });
+
+  assert.deepEqual(asked, ['acme/.github publishes no Redline gate']);
+  assert.equal(readConfig(cwd)?.gateSource, 'local');
+  assert.equal(platform.gateOptions.at(-1)?.gateSource, 'local');
+});
+
+// The offer is made after the plan and before the first byte is written, so
+// declining has to leave the run exactly where refusing the gate always left it.
+test('declining the offer leaves the repository on the organisation gate', async () => {
+  const cwd = repo();
+  await init(fakePlatform({ noOrgGate: true }), {
+    cwd,
+    root,
+    now,
+    onGateFallback: async () => false,
+  });
+  assert.equal(readConfig(cwd)?.gateSource, 'org');
+});
+
+// Vendoring is a standing security decision. Nothing unattended chooses it.
+test('a run with nobody to ask is never quietly moved onto a local gate', async () => {
+  const cwd = repo();
+  await init(fakePlatform({ noOrgGate: true }), { cwd, root, now });
+  assert.equal(readConfig(cwd)?.gateSource, 'org');
+});
+
+test('a repository already on a local gate is not asked again', async () => {
+  const cwd = repo();
+  let asked = 0;
+  await init(fakePlatform({ noOrgGate: true }), {
+    cwd,
+    root,
+    now,
+    gateSource: 'local',
+    onGateFallback: async () => {
+      asked += 1;
+      return true;
+    },
+  });
+  assert.equal(asked, 0);
+});
+
+// The protection already exists and is simply off — /.github/workflows/ is the
+// first entry in SENSITIVE_PATHS. Saying so is the whole mitigation.
+test('a local gate with nothing owning the workflows directory says so', async () => {
+  const report = await init(fakePlatform(), { cwd: repo(), root, now, gateSource: 'local' });
+  assert.ok(report.notes.some((note) => /--with review-ownership/.test(note)), report.notes.join('\n'));
+});
+
+test('a local gate whose workflows already need an owner is not nagged about it', async () => {
+  const report = await init(fakePlatform(), {
+    cwd: repo(),
+    root,
+    now,
+    gateSource: 'local',
+    menu: { sensitivePathReviewers: true },
+  });
+  assert.ok(!report.notes.some((note) => /--with review-ownership/.test(note)));
+});
+
+// --- --no-commit -------------------------------------------------------------
+
+// There was nothing between `--dry-run`, which writes nothing at all, and a
+// full run, which commits to a branch and opens a pull request on the remote.
+// An operator who wanted to read what Redline produces before letting it near
+// their history had no way to ask, and the first they saw of the pull request
+// was the run trying to push one.
+test('--no-commit writes the files and touches neither the host nor git', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+  const report = await init(platform, { cwd, root, now, noCommit: true });
+
+  assert.equal(report.noCommit, true);
+  assert.ok(report.files.includes('AGENTS.md'));
+  assert.ok(existsSync(join(cwd, 'AGENTS.md')));
+  assert.deepEqual(platform.applied, ['installGate']);
+  assert.equal(report.pullRequest, null);
+});
+
+// The whole point of the mode: it must run with no credential and no network,
+// so the one live read the plan normally makes is not made either.
+test('--no-commit resolves the repository from the clone, not from the host', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, noCommit: true });
+  assert.ok(!platform.reads.includes('repoRef'));
+});
+
+test('--no-commit records the run without claiming work an administrator owes', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, noCommit: true });
+  const config = readConfig(cwd);
+  assert.equal(config?.profile, 'web-react');
+  assert.deepEqual(config?.pendingAdmin, []);
+});
+
+// Without the preflight nothing confirmed the organisation publishes the gate
+// the caller points at, and an operator who is about to commit that file has to
+// be told so rather than left to find out on their first pull request.
+test('--no-commit says the organisation gate reference went unchecked', async () => {
+  const report = await init(fakePlatform(), { cwd: repo(), root, now, noCommit: true });
+  assert.ok(
+    report.notes.some((note) => /nothing checked that it publishes/.test(note)),
+    report.notes.join('\n')
+  );
+});
+
+// A vendored gate references nothing outside the repository, so there is
+// nothing that could have been checked and nothing to warn about.
+test('a local gate has no unchecked reference to warn about', async () => {
+  const report = await init(fakePlatform(), {
+    cwd: repo(),
+    root,
+    now,
+    noCommit: true,
+    gateSource: 'local',
+  });
+  assert.ok(!report.notes.some((note) => /nothing checked that it publishes/.test(note)));
+});
+
+test('--no-commit still writes the gate files it would have committed', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, noCommit: true });
+  assert.ok(report.files.includes('.github/workflows/redline.yml'));
+  assert.ok(existsSync(join(cwd, '.github/workflows/redline.yml')));
+});
+
+// Distinct answers, and the report has to be able to give both: a dry run
+// wrote nothing, --no-commit wrote files nobody has committed.
+test('--no-commit is not a dry run and does not report as one', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), { cwd, root, now, noCommit: true });
+  assert.equal(report.dryRun, false);
+  assert.ok(existsSync(join(cwd, '.redline.json')));
 });

@@ -1,7 +1,10 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readConfig } from '../config/redline-json.ts';
+import { OWNING_TEAM } from '../commands/init.ts';
 import { surveyRepo } from '../detect/existing.ts';
+import { offerable as offerableSetup } from '../detect/setup.ts';
+import { resolveProfile } from '../render/profile.ts';
 import { proposeProfile } from '../detect/stack.ts';
 import { scanRepo } from '../detect/scan.ts';
 import { loadManifest } from '../render/manifest.ts';
@@ -70,6 +73,28 @@ export function gatherFacts(opts: GatherOptions): WizardFacts {
   const manifest = loadManifest(root);
   const proposal = proposeProfile(scanRepo(cwd));
   const recorded = readConfig(cwd);
+  const survey = surveyRepo(cwd);
+
+  // What could be installed here. The profile is not chosen yet — the menu asks
+  // for it after this — so the stacks come from what detection proposed, which
+  // is what decides CodeQL's language matrix. A profile chosen against the
+  // proposal only ever widens it, and CodeQL on one language too few is a worse
+  // failure than the file not being offered.
+  let stacks: string[] = [];
+  try {
+    stacks = resolveProfile(manifest, proposal.profile).stacks;
+  } catch {
+    stacks = [];
+  }
+  const evidenceFor = new Map(survey.tools.map((tool) => [tool.id, tool.evidence]));
+  const offerable = offerableSetup(cwd, opts.detectedHost ?? 'github', stacks).map(
+    ({ integration }) => ({
+      id: integration.id,
+      label: integration.label,
+      hint: integration.hint,
+      ...(evidenceFor.has(integration.id) ? { evidence: evidenceFor.get(integration.id)! } : {}),
+    })
+  );
 
   const orgVendors = Object.entries(manifest.vendors)
     .filter(([, vendor]) => vendor.enabled)
@@ -77,8 +102,11 @@ export function gatherFacts(opts: GatherOptions): WizardFacts {
 
   return {
     manifest,
-    survey: surveyRepo(cwd),
+    survey,
+    offerable,
     detectedProfile: proposal.profile,
+    defaultOwner: `@<org>/${OWNING_TEAM}`,
+    detectedConfidence: proposal.confidence,
     profileEvidence: proposal.evidence,
     detectedVendors: detectVendors(cwd, orgVendors),
     detectedHost: opts.detectedHost,
@@ -90,6 +118,9 @@ export function gatherFacts(opts: GatherOptions): WizardFacts {
             ...(recorded.profile !== undefined ? { profile: recorded.profile } : {}),
             ...(recorded.vendors !== undefined ? { vendors: recorded.vendors } : {}),
             ...(recorded.rung !== undefined ? { rung: recorded.rung } : {}),
+            // Empty means nobody has said, which must fall through to detection
+            // rather than record "this repository runs nothing".
+            ...(recorded.integrations.length > 0 ? { integrations: recorded.integrations } : {}),
           },
   };
 }

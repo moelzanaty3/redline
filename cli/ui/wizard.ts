@@ -1,6 +1,8 @@
 import type { Manifest } from '../render/manifest.ts';
-import type { RepoSurvey } from '../detect/existing.ts';
+import { RedlineError } from '../core/errors.ts';
+import { TOOL_PROBES, type RepoSurvey } from '../detect/existing.ts';
 import { RUNGS, type Rung } from '../enforce/ladder.ts';
+import type { GateSource } from '../platforms/types.ts';
 import type { Choice, Prompter } from './prompt.ts';
 
 // The questions `redline init` asks, and the order it asks them in.
@@ -26,6 +28,21 @@ export interface WizardFacts {
   readonly survey: RepoSurvey;
   // From proposeProfile(scanRepo(cwd)) — the profile init would have picked.
   readonly detectedProfile: string;
+  // Whether the repository said what it is (a manifest) or was guessed at from
+  // the files lying around. Only the first opens the menu already ticked.
+  readonly detectedConfidence: 'high' | 'low';
+  // What CODEOWNERS would be seeded with if nobody says otherwise. Shown as the
+  // placeholder so the default is visible before it is accepted.
+  readonly defaultOwner?: string;
+  // Controls this host and this checkout can actually be given, from
+  // cli/detect/setup.ts. Empty on Azure DevOps, and empty for anything the
+  // repository gives nothing to configure.
+  readonly offerable: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly hint: string;
+    readonly evidence?: string;
+  }[];
   readonly profileEvidence: readonly string[];
   // From detectVendors() — what the repository's own files suggest.
   readonly detectedVendors: readonly string[];
@@ -40,6 +57,7 @@ export interface WizardFacts {
     readonly profile?: string;
     readonly vendors?: readonly string[];
     readonly rung?: Rung;
+    readonly integrations?: readonly string[];
   } | null;
 }
 
@@ -53,8 +71,21 @@ export interface WizardAnswers {
   // Capability ids the operator kept. Anything in OPTIONAL_CAPABILITIES and not
   // in here becomes a `--skip`.
   readonly capabilities: readonly string[];
+  // The controls this repository already runs, confirmed or corrected by the
+  // operator. Recorded, so the correction is made once rather than every run.
+  readonly integrations: readonly string[];
+  // Ids the operator asked Redline to install this run. A subset of
+  // `integrations`, kept apart because only these cause a file to be written.
+  readonly setup: readonly string[];
+  // Who owns the paths seeded into CODEOWNERS. Empty means the caller's default
+  // stands — the wizard only asks when review-ownership was actually selected.
+  readonly reviewOwners: readonly string[];
   readonly rung: Rung;
-  readonly action: 'apply' | 'dry-run';
+  // Where the gate machinery lives. Asked only when the gate was kept, because
+  // a repository that deselected it has no gate for the question to be about.
+  // `org` when it was not asked, which is the answer that changes nothing.
+  readonly gateSource: GateSource;
+  readonly action: 'apply' | 'dry-run' | 'no-commit';
 }
 
 // Plain-English, at the moment of choosing. Every one of these was a term the
@@ -82,12 +113,24 @@ const STAND_DOWN_LABEL: Record<string, string> = {
   policy: 'static analysis',
 };
 
-function profileChoices(manifest: Manifest, detected: string): Choice<string>[] {
-  const ids = Object.keys(manifest.profiles).sort((a, b) => {
-    if (a === detected) return -1;
-    if (b === detected) return 1;
-    return a.localeCompare(b);
-  });
+/**
+ * The profile list, ordered by how much detection actually knows.
+ *
+ * A confident detection — the repository's own manifest naming its framework —
+ * is hoisted to the top and marked, because it is almost always the answer. A
+ * guess is not: hoisting it puts it on the first row with the cursor already on
+ * it, which reads as chosen no matter how carefully it is left unticked. So a
+ * guess sorts alphabetically with everything else and says what it is.
+ */
+function profileChoices(
+  manifest: Manifest,
+  detected: string,
+  confidence: 'high' | 'low'
+): Choice<string>[] {
+  // Alphabetical, always. Hoisting the detected profile to the first row put the
+  // cursor on it before anything was typed, which reads as chosen no matter how
+  // carefully it is left unticked.
+  const ids = Object.keys(manifest.profiles).sort((a, b) => a.localeCompare(b));
   return ids.map((id) => {
     // The stacks' own titles, not their ids. `JavaScript, React (web)` tells an
     // operator what they are choosing; `javascript, react` makes them guess at
@@ -98,7 +141,13 @@ function profileChoices(manifest: Manifest, detected: string): Choice<string>[] 
     return {
       value: id,
       label: id,
-      hint: stacks.join(', ') + (id === detected ? '   (detected)' : ''),
+      hint:
+        stacks.join(', ') +
+        (id === detected
+          ? confidence === 'high'
+            ? '   — looks like this repository, but pick it yourself'
+            : '   — a guess; nothing here names this framework'
+          : ''),
     };
   });
 }
@@ -135,6 +184,7 @@ function vendorChoices(manifest: Manifest): Choice<string>[] {
  */
 export async function runWizard(p: Prompter, facts: WizardFacts): Promise<WizardAnswers> {
   const { manifest, survey, recorded } = facts;
+  const defaultOwner = facts.defaultOwner ?? 'the platform team';
 
   p.intro('Redline');
 
@@ -144,17 +194,48 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
   //
   // `.redline.json` still records one string — resolveProfile takes the list
   // and sorts it — so nothing downstream had to learn a new shape.
+  // Detection never ticks a row. Which standards a repository is held to is the
+  // one answer here that changes what every future pull request is judged
+  // against, and a ticked row is consent — an operator pressing enter through
+  // the menu has agreed to whatever was ticked, whether or not they read it.
+  // Detection earns a label on the row and nothing more.
+  //
+  // What the repository already recorded is different: that is a decision a
+  // person made here before, and re-asking for it from scratch on every run
+  // would be its own kind of rude.
   const recordedProfiles = recorded?.profile?.split(',').map((s) => s.trim());
-  const profiles = await p.multiselect<string>(
+  let profiles = await p.multiselect<string>(
     'Which standards apply here?',
-    profileChoices(manifest, facts.detectedProfile),
-    recordedProfiles ?? [facts.detectedProfile]
+    profileChoices(manifest, facts.detectedProfile, facts.detectedConfidence),
+    recordedProfiles ?? []
   );
-  // Deselecting everything renders no rules at all, which is never what the
-  // operator meant by "none of these" — they meant they could not find theirs.
-  // Falling back to what was detected keeps the run useful and keeps the answer
-  // visible in the summary, where it can be changed.
-  const profile = profiles.length > 0 ? profiles.join(',') : facts.detectedProfile;
+
+  // And if nothing is chosen, ask once more rather than choose something.
+  // Falling back to the detected profile is how "I did not pick anything"
+  // quietly became "Redline picked for me", which is the whole complaint.
+  //
+  // Once, not until-they-comply: a loop here never ends against a caller that
+  // keeps answering nothing, and a prompt that cannot be escaped is worse than
+  // one that gives up and says how to pass the answer as a flag.
+  if (profiles.length === 0) {
+    p.note(
+      'Nothing selected — Redline needs at least one profile to know which rules apply here. ' +
+        `The checkout looks like ${facts.detectedProfile}; take that, or take another.`
+    );
+    profiles = await p.multiselect<string>(
+      'Which standards apply here?',
+      profileChoices(manifest, facts.detectedProfile, facts.detectedConfidence),
+      []
+    );
+  }
+  if (profiles.length === 0) {
+    throw new RedlineError(
+      'usage',
+      'no profile chosen, so there are no rules to render',
+      `pick one from the menu, or name it outright: redline init --profile ${facts.detectedProfile}`
+    );
+  }
+  const profile = profiles.join(',');
 
   const hostChoices: Choice<Host>[] = [
     {
@@ -225,13 +306,46 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     ['speckit']
   );
 
+  // What Redline should set up, not what it noticed. A question whose only
+  // outcome was a sentence in the report earned nothing: the operator read a
+  // list of tools, ticked the ones they had, and nothing happened differently.
+  //
+  // Only controls Redline can install with no account and no token appear here,
+  // and only on a host where they mean something — on Azure DevOps the list is
+  // empty and the question does not get asked at all. What the repository
+  // already runs is still detected, and still stands Redline's own gate jobs
+  // down; it just does not need a question to do it.
+  const already = new Set(
+    facts.recorded?.integrations?.length
+      ? facts.recorded.integrations
+      : survey.tools.map((tool) => tool.id)
+  );
+  const setupChoices: Choice<string>[] = facts.offerable.map((offer) => ({
+    value: offer.id,
+    label: offer.label,
+    ...(already.has(offer.id)
+      ? { disabled: `already here — ${offer.evidence ?? 'detected in this repository'}` }
+      : { hint: offer.hint }),
+  }));
+
+  const setup =
+    setupChoices.length > 0
+      ? await p.multiselect('What should Redline set up alongside its own checks?', setupChoices, [])
+      : [];
+
+  // The recorded list stays what the repository RUNS — detection plus anything
+  // stated with --integrations — and gains whatever was just installed, because
+  // after this run it does run it.
+  const integrations = [...new Set([...already, ...setup])];
+
   // A capability a detected tool already covers starts deselected and says
   // which tool. `standDown` is advisory: nothing here is decided for the
   // operator, only defaulted.
   const covered = new Map<string, string>();
-  for (const tool of survey.tools) {
-    if (tool.standsDown === null) continue;
-    covered.set(tool.standsDown, tool.label);
+  for (const id of integrations) {
+    const probe = TOOL_PROBES.find((candidate) => candidate.id === id);
+    if (probe === undefined || probe.standsDown === null) continue;
+    covered.set(probe.standsDown, probe.label);
   }
 
   const capabilityChoices: Choice<string>[] = Object.entries(CAPABILITY_HINTS).map(
@@ -243,11 +357,66 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     ['gate', 'merge-policy', 'labels']
   );
 
+  // Asked here, and asked blind: the wizard runs before the platform is
+  // resolved, so nothing yet knows whether this organisation publishes a gate.
+  // That is why it defaults to `org` and why the mid-run offer still exists —
+  // this question is the operator's preference, and the later one is the same
+  // question asked once the host has actually answered. An operator who already
+  // knows their organisation has nothing can say so here and never see it.
+  const gateSource = capabilities.includes('gate')
+    ? await p.select<GateSource>(
+        'Where should the merge gate live?',
+        [
+          {
+            value: 'org',
+            label: 'in the organisation',
+            hint: 'one shared workflow; a pull request cannot edit the gate that judges it',
+          },
+          {
+            value: 'local',
+            label: 'in this repository',
+            hint: 'no organisation setup needed — weaker: a PR can edit its own gate',
+          },
+        ],
+        'org'
+      )
+    : 'org';
+
+  // Asked only when the capability was taken. GitHub silently ignores an owner
+  // it cannot resolve, so a CODEOWNERS seeded with a team that does not exist
+  // reports as installed and enforces nothing — the one failure mode worth a
+  // question, and only for the operators who will actually get a file.
+  const reviewOwners = capabilities.includes('review-ownership')
+    ? (
+        await p.text('Who owns the paths Redline protects?', {
+          placeholder: `${defaultOwner} — the default, which may not exist here`,
+          hint: 'a team, a user or an email; several separated by commas. GitHub ignores an owner it cannot resolve',
+        })
+      )
+        .split(',')
+        .map((owner) => owner.trim())
+        .filter((owner) => owner !== '')
+    : [];
+
   if (covered.size > 0) {
     const named = [...covered]
       .map(([job, label]) => `${label} already covers ${STAND_DOWN_LABEL[job] ?? job}`)
       .join('; ');
-    p.note(`${named}. Redline adds its own on top rather than replacing them.`);
+    p.note(
+      `${named}. Those gate jobs are stood down rather than run a second time — ` +
+        'the rest of the gate still runs.'
+    );
+  } else {
+    // The other half of that question, and the half that was missing: what
+    // happens when the answer is "none of these". Redline turns on what the
+    // host itself provides, and is plain that it does not install anybody
+    // else's scanner — offering to would be a promise it cannot keep.
+    p.note(
+      'Nothing ticked — Redline will switch on the host controls itself: secret scanning, ' +
+        'push protection and dependency alerts. It does not install third-party scanners ' +
+        '(SonarQube, Snyk, Mend). Add one when you want it, then re-run ' +
+        '`redline init --integrations <id>` and the gate stops duplicating what it covers.'
+    );
   }
 
   const rung = await p.select<Rung>(
@@ -263,6 +432,11 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
         value: 'dry-run' as const,
         label: 'Dry run',
         hint: 'print the plan — writes nothing, contacts no host, needs no credential',
+      },
+      {
+        value: 'no-commit' as const,
+        label: 'Write the files only',
+        hint: 'writes into your working tree, uncommitted — no host changes, no pull request',
       },
       {
         value: 'apply' as const,
@@ -281,7 +455,11 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     speckit: contexts.includes('speckit'),
     tmf: contexts.includes('tmf'),
     capabilities,
+    integrations,
+    setup,
+    reviewOwners,
     rung,
+    gateSource,
     action,
   };
 }

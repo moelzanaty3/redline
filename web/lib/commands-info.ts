@@ -24,8 +24,8 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     usage: [
       "redline init                          # walk the menu; Dry run offered before Apply",
       "redline init --dry-run                # print the plan; writes nothing, contacts no host",
-      "redline init --profile web            # name the profile instead of detecting it",
-      "redline init --profile web,infra      # a React app with its own Terraform beside it",
+      "redline init --profile web-react      # name the profile instead of detecting it",
+      "redline init --profile web-react,infra  # a React app with its own Terraform beside it",
       "redline init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines",
       "redline init --vendors claude,copilot # render for these AI tools only",
       "redline init --blocking               # promote the gate from advisory to blocking",
@@ -221,7 +221,7 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     edit: "cli/sync/ — plan.ts decides who is behind, render.ts produces each target's artifacts, run.ts drives the estate. The host calls live in cli/platforms/github/push.ts.",
   },
   review: {
-    what: "Reviews a change against ONLY the rules that apply to the files it touches. Anyone can ask an assistant to review a diff; what this adds is the bound — a model handed the composed standard for a twelve-stack profile spends most of its attention on languages the diff never touches, and the findings get worse rather than better.",
+    what: "Reviews a change against ONLY the rules that apply to the files it touches. Anyone can ask an assistant to review a diff; what this adds is the bound — a model handed the composed standard for a sixteen-stack profile spends most of its attention on languages the diff never touches, and the findings get worse rather than better.",
     built: true,
     onboard:
       "Nothing to install. It reads the profile from the repository's .redline.json, or takes --profile. The embedded engine is the default and calls no model at all: it emits the bounded prompt for the assistant already running the command, which is the common case in Claude Code, Copilot or Cursor. --engine api makes the CLI call an endpoint itself.",

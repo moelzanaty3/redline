@@ -1,0 +1,943 @@
+/* Skills & agents catalogue. Loaded by /docs/skills and its detail pages only —
+   it is a large page with UI nothing else on the site uses, and the rest of the
+   docs should not pay for it.
+
+   Colour note: --faint is 3.8:1 on --card in dark and 3.2:1 in light. That is
+   under AA for anything at body size, so every string here a reader is meant to
+   actually read uses --muted (7.4:1 / 7.8:1). --faint survives only on the
+   decorative arrow, which is aria-hidden and carries no information. */
+
+.sk-explorer {
+  margin: 28px 0 8px;
+}
+
+/* ---------------- the SDLC rail ---------------- */
+
+/* The hero control: eight stages in delivery order, so the shape of the
+   lifecycle is legible before a single card is read. It scrolls rather than
+   wraps — a rail that reflows into three rows stops reading as a sequence.
+
+   Sticky, because the results below run to 83 cards and a filter you have to
+   scroll back to the top to change is a filter you change once. Only the rail
+   sticks: the whole control block is ~190px tall and would eat a quarter of a
+   phone viewport for the whole scroll. */
+.sk-rail {
+  position: sticky;
+  top: var(--nav-h, 62px);
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding: 10px 0 8px;
+  margin-bottom: 18px;
+  background: var(--bg);
+  scrollbar-width: thin;
+  /* The rail overflows at every width — nine stages need ~750px and the prose
+     column is 776px at its widest and shrinks from there — so the fade is not
+     a small-screen affordance, it is the affordance. A hard right edge reads
+     as the end of the list, which is how Operate came to look like the last
+     stage and Meta like nothing at all. Stages are sized to their content
+     rather than stretched, so where the rail does fit, the fade lands on the
+     empty tail instead of dimming a chip that is fully visible. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  /* Separates the rail from whatever passes under it. Without it a section
+     heading sliding beneath reads as bisected rather than as covered. On the
+     border box, so it stays put while the stages scroll past it. */
+  border-bottom: 1px solid var(--border);
+}
+
+.sk-stage {
+  flex: 0 0 auto;
+  min-width: 78px;
+  scroll-snap-align: start;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.sk-stage:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.sk-stage.on {
+  border-color: var(--red);
+  background: rgba(230, 0, 0, 0.07);
+  color: var(--text);
+}
+
+.sk-stage.meta {
+  border-style: dashed;
+}
+
+.sk-stage-n {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.sk-stage.on .sk-stage-n {
+  color: var(--red-soft);
+}
+
+.sk-stage-l {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.sk-stage-c {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sk-phase-note {
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border-left: 2px solid var(--red);
+  background: var(--bg-soft);
+  border-radius: 0 6px 6px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.sk-phase-note b {
+  color: var(--text);
+}
+
+.prose .sk-hint {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+/* ---------------- filters ---------------- */
+
+.sk-controls {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.sk-search {
+  width: 100%;
+  padding: 10px 13px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.sk-search::placeholder {
+  color: var(--muted);
+}
+
+.sk-search:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.sk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sk-chip {
+  min-height: 32px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.sk-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.sk-chip.on {
+  border-color: var(--red);
+  color: var(--text);
+  background: rgba(230, 0, 0, 0.09);
+}
+
+.sk-count {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sk-reset {
+  background: none;
+  border: none;
+  padding: 6px 2px;
+  color: var(--red-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.prose .sk-empty {
+  padding: 20px;
+  max-width: none;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.sk-empty a {
+  color: var(--red-soft);
+  text-decoration: underline;
+}
+
+/* ---------------- sections & cards ---------------- */
+
+.sk-section {
+  margin-bottom: 34px;
+  scroll-margin-top: 140px;
+}
+
+.prose .sk-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.prose .sk-section h2 span {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.prose .sk-section-blurb {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+.sk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
+  gap: 12px;
+}
+
+.sk-card {
+  position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+  padding: 15px 16px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.sk-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.sk-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+
+.sk-arrow {
+  margin-left: auto;
+  color: var(--faint);
+  transition: color 0.15s, transform 0.15s;
+}
+
+.sk-card:hover .sk-arrow {
+  color: var(--red-soft);
+  transform: translateX(2px);
+}
+
+/* Kind is the first thing on the card because it is the first decision: a
+   skill is nearly free, an agent takes the wheel. */
+.sk-kind {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid;
+}
+
+.sk-kind.skill {
+  color: var(--blue);
+  border-color: rgba(82, 168, 255, 0.4);
+  background: rgba(82, 168, 255, 0.08);
+}
+
+.sk-kind.agent {
+  color: var(--amber);
+  border-color: rgba(245, 185, 62, 0.4);
+  background: rgba(245, 185, 62, 0.08);
+}
+
+.sk-official {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  color: var(--green);
+  border: 1px solid rgba(69, 222, 131, 0.4);
+  background: rgba(69, 222, 131, 0.08);
+}
+
+/* Prefixed with .prose throughout this block: the docs shell styles bare
+   elements (.prose h3, .prose p) at specificity 0,1,1, so an unprefixed class
+   selector loses. .sk-title without this inherits a 26px top margin from
+   .prose h3 and pushes itself off the top of its own card. */
+.prose .sk-title {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* The stretched link: the title is the real anchor — so it is what a screen
+   reader announces and what the keyboard lands on — and this pseudo-element
+   gives it the whole card as a target. The copy button below lifts itself back
+   above it. */
+.sk-link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sk-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+}
+
+.sk-card:hover .sk-link {
+  color: var(--red-soft);
+}
+
+/* Outlining the stretched pseudo-element rings the whole card, so keyboard
+   focus lands somewhere visible rather than on two words of heading. */
+.sk-link:focus-visible {
+  outline: none;
+}
+
+.sk-link:focus-visible::after {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 3px;
+}
+
+.sk-pub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 9px;
+}
+
+.prose .sk-sum {
+  margin: 0 0 9px;
+  max-width: none;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.prose .sk-reach {
+  margin: 0 0 11px;
+  max-width: none;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-strong);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.prose .sk-reach b {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+  font-weight: 400;
+}
+
+.sk-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.sk-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* Phase chips are tinted like the rail, because they are the same vocabulary:
+   this is what tells you a card showing up under both Review and Secure is
+   doing so on purpose. */
+.sk-tag.phase {
+  color: var(--red-soft);
+  border-color: rgba(230, 0, 0, 0.28);
+  background: rgba(230, 0, 0, 0.06);
+}
+
+.sk-tag.phase.on {
+  border-color: var(--red);
+  background: rgba(230, 0, 0, 0.16);
+}
+
+.sk-install-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.sk-install-row code {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.sk-install-row .copy-btn {
+  flex: none;
+}
+
+/* The scope warning under the card's command. No z-index lift: unlike the copy
+   button there is nothing to click here, so it stays under the title's overlay
+   and a click navigates like the rest of the card. --muted, not --faint:
+   --faint is 3.8:1 and this is body text carrying a real caveat. */
+.prose .sk-card-scope {
+  max-width: none;
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.prose .sk-card-scope b {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ---------------- detail page ---------------- */
+
+/* Two columns, mirroring the registry's own layout: the procedure on the left,
+   the facts that do not change beside it. 208px is the narrowest the rail reads
+   at without its labels wrapping, and the docs content column is only ~776px —
+   any wider and the prose column stops being a prose column. */
+.sk-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 208px;
+  gap: 36px;
+  align-items: start;
+  margin-top: 4px;
+}
+
+.sk-detail-main {
+  min-width: 0;
+}
+
+.sk-block {
+  margin-bottom: 30px;
+}
+
+/* Section labels are small, spaced and ruled rather than headings, so the page
+   reads as a record about one thing instead of an article with chapters. */
+.prose .sk-block-h {
+  margin: 0 0 12px;
+  padding: 0 0 8px;
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sk-cmd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sk-cmd code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.sk-cmd-p {
+  color: var(--red-soft);
+  user-select: none;
+}
+
+.prose .sk-cmd-note {
+  margin: 10px 0 0;
+  max-width: none;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.sk-summary {
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.prose .sk-summary p {
+  margin: 0 0 10px;
+  max-width: none;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.prose .sk-summary ul {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.prose .sk-summary li {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.prose .sk-summary li:last-child {
+  margin-bottom: 0;
+}
+
+.sk-phase-list {
+  display: grid;
+  gap: 8px;
+}
+
+.sk-phase-row {
+  display: grid;
+  gap: 3px;
+  padding: 11px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--red);
+  border-radius: 0 8px 8px 0;
+}
+
+.sk-phase-row b {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.sk-phase-row > span {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.sk-phase-more {
+  justify-self: start;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red-soft);
+}
+
+/* ---------------- outbound links ---------------- */
+
+.sk-links {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sk-out {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.sk-out:hover {
+  border-color: var(--border-strong);
+}
+
+.sk-out b {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.sk-out span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------------- related ---------------- */
+
+.prose .sk-more-in {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.prose .sk-rel {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prose .sk-rel li {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.prose .sk-rel li:last-child {
+  border-bottom: none;
+}
+
+.sk-rel a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 4px;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.sk-rel a:hover {
+  background: var(--bg-soft);
+}
+
+.sk-rel-l {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sk-rel-l b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sk-rel a:hover .sk-rel-l b {
+  color: var(--red-soft);
+}
+
+.sk-rel-l > span {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.sk-rel-r {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.sk-rel-r code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------------- facts rail ---------------- */
+
+.sk-rail-side {
+  position: sticky;
+  top: calc(var(--nav-h, 62px) + 24px);
+  display: grid;
+  gap: 20px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+}
+
+.sk-fact h3 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The tick is a claim about provenance, not decoration, so it sits on the
+   heading it qualifies rather than floating near the value. */
+.sk-verified {
+  display: inline-flex;
+  color: var(--red-soft);
+}
+
+.sk-stars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.sk-stars b {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-fact > a {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.sk-fact > a:hover {
+  color: var(--red-soft);
+}
+
+.sk-fact p {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.sk-fact-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.sk-fact-row.wrap {
+  flex-wrap: wrap;
+}
+
+/* Phase chips double as links into a filtered index, which is the only route
+   from "this one is not quite right" to "what else is in this stage" that does
+   not go through the browser's back button. */
+a.sk-tag {
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+a.sk-tag:hover {
+  border-color: var(--red);
+  color: var(--red-soft);
+}
+
+a.sk-tag:focus-visible,
+.sk-out:focus-visible,
+.sk-rel a:focus-visible,
+.sk-phase-more:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+}
+
+/* ---------------- focus ---------------- */
+
+.sk-stage:focus-visible,
+.sk-chip:focus-visible,
+.sk-search:focus-visible,
+.sk-reset:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+}
+
+/* ---------------- light theme ---------------- */
+
+[data-theme="light"] .sk-stage,
+[data-theme="light"] .sk-card,
+[data-theme="light"] .sk-summary,
+[data-theme="light"] .sk-out {
+  background: #fff;
+}
+
+[data-theme="light"] .sk-stage.on {
+  background: rgba(230, 0, 0, 0.05);
+}
+
+[data-theme="light"] .sk-chip.on {
+  background: rgba(230, 0, 0, 0.06);
+}
+
+[data-theme="light"] .sk-install-row code {
+  background: var(--bg-soft);
+}
+
+[data-theme="light"] .sk-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+/* ---------------- motion ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-card,
+  .sk-arrow,
+  .sk-rail {
+    transition: none;
+    scroll-behavior: auto;
+  }
+
+  .sk-card:hover {
+    transform: none;
+  }
+
+  .sk-card:hover .sk-arrow {
+    transform: none;
+  }
+}
+
+/* ---------------- small screens ---------------- */
+
+/* The facts rail stops being a rail before the prose column gets too narrow to
+   read. 900px is where 1fr + 208px + 36px leaves under 500px for the text. */
+@media (max-width: 900px) {
+  .sk-detail {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .sk-rail-side {
+    position: static;
+    padding: 20px 0 0;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 18px 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sk-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Nav (62px) plus rail is permanent furniture on a phone, so the rail pays
+     for its place: 88px of an 844px viewport was a tenth of the screen spent
+     on a control the reader uses once. */
+  .sk-rail {
+    padding: 7px 0 6px;
+    margin-bottom: 14px;
+  }
+
+  .sk-stage {
+    min-width: 74px;
+    padding: 7px 9px;
+  }
+
+  /* Thumb-sized. 32px clears WCAG 2.5.8 at every width; a chip row this dense
+     earns the extra where the pointer is a finger. */
+  .sk-chip {
+    min-height: 40px;
+    padding: 8px 14px;
+  }
+
+  .sk-reset {
+    padding: 10px 2px;
+  }
+
+  .sk-install-row {
+    width: 100%;
+  }
+
+  /* Stacked, because name and repo side by side at 360px leaves ~120px each and
+     both truncate into uselessness. */
+  .sk-rel a {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}

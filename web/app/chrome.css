@@ -49,6 +49,10 @@
   color: var(--muted);
   padding: 7px 11px;
   border-radius: 8px;
+  /* The row has ~230px of slack at the 1001px breakpoint, but flex would spend
+     it by wrapping a label onto a second line inside a 62px bar rather than
+     letting the row overflow. Nowrap makes that failure impossible. */
+  white-space: nowrap;
   transition: color 0.15s, background 0.15s;
 }
 .site-nav .nav-links a:hover {

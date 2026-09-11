@@ -7,7 +7,31 @@ import { resolveProfile } from '../profile.ts';
 const manifest = loadManifest(fileURLToPath(new URL('../../../', import.meta.url)));
 
 test('resolves a plain profile in manifest order', () => {
-  assert.deepEqual(resolveProfile(manifest, 'web'), { profile: 'web', stacks: ['javascript', 'react'] });
+  assert.deepEqual(resolveProfile(manifest, 'web-react'), {
+    profile: 'web-react',
+    stacks: ['javascript', 'react'],
+  });
+});
+
+// `web` predates the split into one profile per framework. Repositories onboarded
+// before it still carry it in .redline.json, and resolving it has to keep meaning
+// exactly what it meant then — react — or their next render silently changes rules.
+test('the legacy web alias still resolves to react', () => {
+  assert.deepEqual(resolveProfile(manifest, 'web'), {
+    profile: 'web-react',
+    stacks: ['javascript', 'react'],
+  });
+});
+
+test('each framework profile carries javascript plus its own stack', () => {
+  for (const [name, stack] of [
+    ['web-angular', 'angular'],
+    ['web-vue', 'vue'],
+    ['web-svelte', 'svelte'],
+    ['web-vanilla', 'dom'],
+  ] as const) {
+    assert.deepEqual(resolveProfile(manifest, name).stacks, ['javascript', stack]);
+  }
 });
 
 test('resolves an alias to its target key', () => {
@@ -45,14 +69,23 @@ test('several profiles resolve to the union of their stacks', () => {
 // same two profiles in a different order must produce byte-identical artifacts,
 // or verify's artifacts-current finding flaps between their runs.
 test('the recorded name is sorted, so order of selection cannot matter', () => {
-  const one = resolveProfile(manifest, 'web,infra');
-  const other = resolveProfile(manifest, 'infra,web');
-  assert.equal(one.profile, 'infra,web');
+  const one = resolveProfile(manifest, 'web-react,infra');
+  const other = resolveProfile(manifest, 'infra,web-react');
+  assert.equal(one.profile, 'infra,web-react');
   assert.deepEqual(one, other);
 });
 
 test('a profile named twice is resolved once', () => {
   assert.deepEqual(resolveProfile(manifest, 'web,web'), resolveProfile(manifest, 'web'));
+});
+
+// The alias and its target are the same profile written two ways: a repository
+// that says both must not render react's rules twice.
+test('an alias and its target collapse to one profile', () => {
+  assert.deepEqual(resolveProfile(manifest, 'web,web-react'), {
+    profile: 'web-react',
+    stacks: ['javascript', 'react'],
+  });
 });
 
 test('a stack two profiles share is listed once', () => {

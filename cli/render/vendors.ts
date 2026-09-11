@@ -225,65 +225,14 @@ const cursor: VendorRenderer = (ctx) => {
   };
 };
 
-// Claude skills: per-stack rules that load only when the stack is in play.
+// OpenAI Codex reads AGENTS.md — the same file the `agents` vendor writes.
 //
-// The asymmetry this closes. Copilot receives .github/instructions/redline-*.md
-// with applyTo globs — conditional, per-stack loading. Claude receives
-// CLAUDE.md -> @AGENTS.md: the entire composed standard, every turn, for the life
-// of every session. On a twelve-stack profile that is most of a context window
-// spent on rules for languages the repository is not currently editing.
-//
-// Two constraints from the roadmap, both load-bearing:
-//
-//   - Rules stay authored in standards/. This is packaging, not authoring, and no
-//     Claude-shaped concept may leak backward into how a rule is written. Every
-//     body below is the stack's own markdown, unmodified.
-//   - Build it thin. The roadmap rates this the highest-exposure piece in the
-//     plan — per-file conditional instruction loading is exactly what a platform
-//     makes free — so there is no cleverness here to maintain or to abandon.
-//
-// A skill loads on its description, not on a glob, so the description names the
-// stack, its file extensions and its globs. That is the whole mechanism.
-const skillDescription = (title: string, globs: string[]): string => {
-  const extensions = [...new Set(globs.map((g) => g.slice(g.lastIndexOf('.'))).filter((e) => e.startsWith('.')))];
-  const suffix = extensions.length > 0 ? ` Covers ${extensions.join(', ')} files.` : '';
-  return (
-    `Redline engineering standards for ${title}. Use when writing, editing or reviewing ` +
-    `${title} code in this repository — before proposing a change, not after.${suffix}`
-  );
-};
+// It is a separate vendor id because an operator looking for Codex has to be
+// able to find it by name, and "it is covered by the one called agents" is not
+// something a menu can say. It is the SAME renderer because inventing a
+// Codex-specific path would put the rules somewhere nothing reads them: a file
+// only Redline believes in is worse than no file. Selecting both writes
+// AGENTS.md once, with identical content either way.
+const codex: VendorRenderer = (ctx) => agents(ctx);
 
-const skills: VendorRenderer = (ctx) => {
-  const files = new Map<string, RenderedFile>();
-
-  // Core always loads: it carries the output contract and the security floor,
-  // and it is not stack-scoped. Splitting it per stack would duplicate it twelve
-  // times and let a repository end up with none of it.
-  files.set(`.claude/skills/${PREFIX}core/SKILL.md`, {
-    localRules: true,
-    body:
-      `---\nname: ${PREFIX}core\ndescription: >-\n  Redline core engineering standards — the severity output contract, security,\n` +
-      `  type safety, error handling and scope discipline. Use when writing, editing or\n` +
-      `  reviewing any code in this repository.\n---\n\n` +
-      withLocal(ctx, `${header(ctx, ctx.stacks)}\n\n${read(ctx.root, ctx.manifest.core.source)}`),
-  });
-
-  for (const id of ctx.stacks) {
-    const stack = ctx.manifest.stacks[id]!;
-    files.set(`.claude/skills/${PREFIX}${id}/SKILL.md`, {
-      body:
-        `---\nname: ${PREFIX}${id}\ndescription: >-\n  ${skillDescription(stack.title, stack.globs)}\n---\n\n` +
-        `${header(ctx, [id])}\n\n${stackBody(ctx, id)}\n\n_Applies to: ${stack.globs.map((g) => `\`${g}\``).join(', ')}_`,
-    });
-  }
-
-  return {
-    files,
-    // A stack leaving the profile must take its skill with it, or a repository
-    // keeps loading rules for a language it no longer has. The directory shape
-    // means pruning matches on the directory name, not the file.
-    prune: [{ dir: '.claude/skills', matches: (f) => f.startsWith(PREFIX), directories: true }],
-  };
-};
-
-export const VENDORS: Record<string, VendorRenderer> = { copilot, agents, claude, cursor, skills };
+export const VENDORS: Record<string, VendorRenderer> = { copilot, agents, codex, claude, cursor };

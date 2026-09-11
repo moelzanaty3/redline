@@ -81,10 +81,35 @@ kbd {
   position: sticky;
   top: 0;
   z-index: 60;
-  background: rgba(10, 10, 10, 0.75);
+  background: rgba(10, 10, 10, 0.92);
   backdrop-filter: saturate(1.6) blur(12px);
   -webkit-backdrop-filter: saturate(1.6) blur(12px);
   border-bottom: 1px solid var(--border);
+}
+/* A hairline that fills as the page scrolls — the one affordance telling a
+   reader how far through a long single page they are. Sits on the header's
+   own bottom border rather than adding height, and the fill is a transform
+   (not width) so it costs no layout on scroll. */
+.scroll-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+}
+.scroll-progress-bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, var(--red-soft), #ff8a4d);
+  transition: transform 0.1s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-progress-bar {
+    transition: none;
+  }
 }
 .site-nav .inner {
   max-width: 1120px;
@@ -200,7 +225,7 @@ kbd {
 /* ================= hero ================= */
 .hero {
   position: relative;
-  padding: 62px 0 46px;
+  padding: 92px 0 84px;
   text-align: center;
   overflow: hidden;
 }
@@ -208,9 +233,11 @@ kbd {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Aimed at the copy column, not the middle: the hero is no longer a centred
+     stack, and a glow centred on the gutter lit the gap between the two halves. */
   background:
-    radial-gradient(ellipse 640px 300px at 50% -8%, rgba(230, 0, 0, 0.22), transparent 70%),
-    radial-gradient(ellipse 900px 420px at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%);
+    radial-gradient(ellipse 640px 300px at 34% -8%, rgba(230, 0, 0, 0.2), transparent 70%),
+    radial-gradient(ellipse 900px 420px at 40% 0%, rgba(255, 255, 255, 0.045), transparent 70%);
 }
 .hero-lines {
   position: absolute;
@@ -231,12 +258,6 @@ kbd {
   max-width: 880px;
   margin: 0 auto 18px;
   background: linear-gradient(180deg, #ffffff 55%, #9a9a9a);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.hero h1 .grad {
-  background: linear-gradient(90deg, #ff5b5b, var(--red) 45%, #ff8a4d);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -292,26 +313,243 @@ kbd {
   flex: none;
 }
 
-/* live proof rail — every number comes from the loaders in web/lib.
-   Sized up from 11.5px/--muted: this rail is not a caption, it is where the
-   page's evidence lives, and 11.5px monospace at 4.7:1 was legible in the
-   accessibility sense and genuinely tiring in the human one. The separators
-   keep --faint so the row still reads as a list rather than a sentence. */
+/* One quiet line under the command, not a bordered six-cell table. As a table
+   it outweighed the install command it sat beneath — the eye landed on the box
+   and never on the thing you are meant to type. */
 .hero-proof {
   position: relative;
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
-  gap: 4px 0;
-  margin: 0;
+  row-gap: 6px;
+  column-gap: 0;
+  width: auto;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
   font-family: var(--mono);
-  font-size: 12.5px;
-  color: var(--text);
+  font-size: 11.5px;
+  color: var(--muted);
 }
-.hero-proof span + span::before {
+.hero-proof li:not(:last-child)::after {
   content: "·";
   margin: 0 10px;
   color: var(--faint);
+}
+
+/* Every section the page links to by id. Without this an anchor jump puts the
+   heading under the 62px sticky header — today it clears only because .hm-sec
+   carries 64px of top padding, which is a coincidence, not a rule. */
+main section[id] {
+  scroll-margin-top: 80px;
+}
+
+/* ================= hero · split ================= */
+
+/* Asymmetric, and the copy is left-aligned rather than centred. Five centred
+   blocks stacked down the middle gave nothing on the page dominance, and the
+   only thing that could have earned it — an actual finding — was below the
+   fold behind a "see a finding" link. The finding moves up here and takes the
+   right half; the command keeps the left. */
+.hero-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: center;
+  gap: 52px;
+  text-align: left;
+}
+
+/* The h1 gradient goes with the layout. It was the page's one decorative move
+   and it ran the wrong way — white at the setup line, grey by the claim. Solid
+   text, with the accent spent on the single word the product is named after. */
+.hero-split h1 {
+  max-width: none;
+  margin: 0 0 18px;
+  /* Sized so "Redline holds the line." holds one line in this column. Above
+     ~50px it folds after "the", which puts a single orphan word on row three. */
+  font-size: clamp(36px, 3.6vw, 50px);
+  text-wrap: balance;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--text);
+  -webkit-text-fill-color: currentColor;
+}
+.hero-h1-a,
+.hero-h1-b {
+  display: block;
+}
+.hero-h1-a {
+  font-size: 0.68em;
+  letter-spacing: -0.035em;
+  color: var(--muted);
+}
+.hero-mark {
+  color: var(--red);
+}
+.hero-split .sub {
+  max-width: 48ch;
+  margin: 0 0 4px;
+  font-size: 16.5px;
+}
+.hero-split .hm-hero-cmd {
+  margin: 32px 0 18px;
+}
+
+/* ================= hero · the finding ================= */
+.hf {
+  margin: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.hf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.hf-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hf-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sev-blocker);
+}
+.hf-sev {
+  padding: 2px 8px;
+  border: 1px solid var(--sev-blocker);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--sev-blocker);
+}
+.hf-body {
+  padding: 16px 16px 14px;
+}
+/* The contract, typeset the way the CLI emits it: severity and id on their own
+   line, before a word of prose. That shape is the product. */
+.hf-prefix {
+  margin: 0 0 9px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.hf-prefix-sev {
+  color: var(--sev-blocker);
+  font-weight: 600;
+}
+.hf-prefix-id a {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border-strong);
+}
+.hf-prefix-id a:hover {
+  color: var(--red-soft);
+  border-bottom-color: currentColor;
+}
+.hf-prefix-id a:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* The payload is a filename, and without a box around it the semicolon and the
+   pipe read as punctuation in the sentence rather than as the attack. */
+.hf-prose code {
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 0.9em;
+  color: var(--text);
+}
+[data-theme="light"] .hf-prose code {
+  background: rgba(0, 0, 0, 0.06);
+}
+.hf-prose {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.hf-fix {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.hf-fix code {
+  color: var(--text);
+}
+.hf-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+/* min-width on a flex item, or the nowrap path refuses to shrink and runs out
+   of the card instead of ellipsing inside it. */
+.hf-foot code {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1000px) {
+  .hero-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 34px;
+  }
+  /* Still left-aligned. Recentring the copy here would put back the shape the
+     split exists to break, in the viewport where it read worst. */
+  .hero-split h1 {
+    font-size: clamp(34px, 6vw, 50px);
+  }
+}
+@media (max-width: 640px) {
+  /* The desktop padding buys presence on a 900px fold. On a phone the card
+     stacks under the copy, so the same padding just pushes the card further
+     out of sight. */
+  .hero {
+    padding: 60px 0 52px;
+  }
+  .hero-split {
+    gap: 26px;
+  }
+  .hero-split .sub {
+    font-size: 15.5px;
+  }
+  /* The seed path is longer than half a 390px card, so the two halves stack
+     rather than ellipsing the one that carries the filename. */
+  .hf-foot {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
 }
 
 /* ================= code window ================= */
@@ -599,6 +837,7 @@ kbd {
   color: #6f6f6f;
 }
 .jr-replay {
+  min-height: 32px;
   margin-left: auto;
   font-family: var(--mono);
   font-size: 11px;
@@ -606,7 +845,7 @@ kbd {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid #2a2a2a;
   border-radius: 6px;
-  padding: 4px 10px;
+  padding: 7px 12px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
@@ -1099,16 +1338,40 @@ kbd {
   color: var(--text);
   font-weight: 550;
 }
-.docs-sidebar li a .count {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
 .docs-sidebar ul.children {
   margin: 2px 0 6px 14px;
+}
+/* Marks the jump between the preview and the page you are actually on, so the
+   carried item does not read as the next one alphabetically. */
+.docs-sidebar .child-gap {
+  display: block;
+  padding: 2px 0 2px 15px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  user-select: none;
+}
+/* Aligned with the child links it reveals, and quiet enough that it reads as an
+   affordance on the list rather than another entry in it. */
+.docs-sidebar .child-toggle {
+  display: block;
+  margin: 0 0 8px 15px;
+  padding: 8px 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+.docs-sidebar .child-toggle:hover {
+  color: var(--red-soft);
+}
+.docs-sidebar .child-toggle:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 .docs-sidebar ul.children li a {
   font-size: 12.5px;
@@ -1338,19 +1601,46 @@ kbd {
 
 /* ================= copy button ================= */
 .copy-btn {
+  min-height: 32px;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 4px 10px;
+  padding: 7px 12px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
 .copy-btn:hover {
   color: var(--text);
   border-color: var(--border-strong);
+}
+/* Icon variant: square, borderless, and out of the way. Used where the command
+   itself is the content and a word-shaped button would compete with it. */
+.copy-btn.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border-color: transparent;
+  color: var(--faint);
+}
+.copy-btn.icon:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+.copy-btn.icon:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+}
+[data-theme="light"] .copy-btn.icon:hover {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .table-scroll {
@@ -1384,7 +1674,7 @@ kbd {
   color: #171717;
 }
 [data-theme="light"] .site-nav {
-  background: rgba(250, 250, 250, 0.8);
+  background: rgba(250, 250, 250, 0.93);
 }
 [data-theme="light"] .nav-cta,
 [data-theme="light"] .btn-white {
@@ -1399,6 +1689,14 @@ kbd {
   background: linear-gradient(180deg, #111 55%, #5c5c5c);
   -webkit-background-clip: text;
   background-clip: text;
+}
+[data-theme="light"] .hero-split h1 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+}
+[data-theme="light"] .hf-fix {
+  background: rgba(0, 0, 0, 0.04);
 }
 [data-theme="light"] .hero-lines {
   background-image: linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),

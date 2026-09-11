@@ -30,8 +30,15 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
-      <body>
+      <head>
+        {/* In <head>, not <body>: a script rendered among the body's children is
+            inert on a client render, and React 19 warns about it. Here it is part
+            of the streamed shell and runs before first paint, which is the whole
+            point — it exists to set the theme before anything is painted in the
+            wrong one. */}
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
+      <body>
         <SiteNav />
         {children}
         <SiteFooter />

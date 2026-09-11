@@ -40,6 +40,13 @@ export interface CapabilityOutcome {
   // same reason: an indeterminate read is not an answer.
   status: 'applied' | 'already' | 'denied' | 'unsupported' | 'unknown';
   detail: string;
+  // What a human would have to do to make this capability apply. Separate from
+  // `detail` because the two answer different questions and get read at
+  // different moments: `detail` is what happened, and belongs beside the
+  // capability; `hint` is the next action, and belongs in the list of work the
+  // run could not finish. Joined into one string they were read as neither —
+  // a wall of prose in a column too narrow for it.
+  hint?: string;
 }
 
 // Exactly `denied`. `unknown` must behave like `unsupported` here: neither
@@ -62,6 +69,13 @@ export const GATE_PIPELINES: readonly GatePipeline[] = ['github-actions', 'azure
 
 export function isGatePipeline(value: string): value is GatePipeline {
   return (GATE_PIPELINES as readonly string[]).includes(value);
+}
+
+export const GATE_SOURCES = ['org', 'local'] as const;
+export type GateSource = (typeof GATE_SOURCES)[number];
+
+export function isGateSource(value: string): value is GateSource {
+  return (GATE_SOURCES as readonly string[]).includes(value);
 }
 
 export interface GateOptions {
@@ -88,6 +102,43 @@ export interface GateOptions {
   // whether to block. Absent means `observe` — the rung that changes nothing,
   // which is what every caller written before the ladder existed meant.
   rung?: string;
+  // Gate jobs another tool in this repository already covers, stood down in the
+  // caller workflow rather than run a second time. Absent runs every job, which
+  // is what every caller written before detection narrowed anything meant.
+  //
+  // `dependencies` and `secrets` are the gate's two non-exemptible security
+  // jobs, so standing either one down is a security decision and never a
+  // detection guess: only a tool the operator DECLARED reaches this list.
+  standDown?: readonly string[];
+  // Whether a planning pass (`check`) may ask the host questions. A dry run
+  // must not — it contacts no host and needs no credential — but the planning
+  // pass inside a live run must, or it plans a file the real install then
+  // suppresses and the run stages a path nothing wrote.
+  preflight?: boolean;
+  // Where the gate's machinery comes from. Absent means `org`, which is what
+  // every caller written before the choice existed meant.
+  //
+  // `local` vendors the reusable workflow into this repository and points the
+  // caller at it. That is a WEAKER gate, not an equivalent one: a workflow
+  // triggered by `pull_request` runs from the pull request's own head commit,
+  // so a pull request that edits the vendored file changes the gate that is
+  // judging it — including standing down `dependencies` or `secrets`, which no
+  // label can waive. It exists because an organisation that has not yet agreed
+  // to a shared `.github` repository cannot adopt Redline at all otherwise, and
+  // a gate a repository actually runs beats a stronger one nobody installed.
+  gateSource?: GateSource;
+  // Write the gate's files and make no host request at all — no preflight read,
+  // no label creation. `redline init --no-commit`, which exists to put the
+  // artifacts in a working tree for review and is documented as contacting
+  // nothing, so a single read here would make that untrue.
+  //
+  // The cost is real and is reported rather than hidden: without the preflight
+  // an org-sourced caller is written without confirming the organisation
+  // publishes the workflow it references. That is acceptable only because the
+  // operator is about to read the diff — it is never acceptable on a run that
+  // commits and opens a pull request, which is why this is not reachable from
+  // one.
+  offline?: boolean;
 }
 
 export interface MergePolicy {
@@ -102,6 +153,13 @@ export interface MergePolicy {
   // reports, which is what verify compares against the reported checks.
   requiredChecks: string[];
   blocking: boolean;
+  // Write side. Branch patterns the policy governs, in the host's own syntax
+  // (GitHub: `~DEFAULT_BRANCH`, or `refs/heads/release/*`). Absent or empty
+  // means the default branch alone, which is what every repository onboarded
+  // before this got and must keep getting: widening what a branch ruleset
+  // covers is a change to an enforcement boundary, and it happens only when
+  // somebody asks for it by name.
+  branches?: readonly string[];
   // Read side only, and set only when the host can say something the boolean
   // cannot: why a gate that looks configured to block does not actually
   // block. `redline verify` prints it with the merge-policy finding, so an
@@ -157,6 +215,18 @@ export interface PullRequestRef {
 export interface InstallResult {
   files: string[];
   outcomes: CapabilityOutcome[];
+  // Set by a gate install that was refused for a reason vendoring the gate into
+  // this repository would actually solve — the organisation publishes no
+  // reusable workflow. Absent everywhere else, and deliberately NOT set when the
+  // host merely could not be read: offering to permanently downgrade a
+  // repository's gate because a token expired or GitHub returned a 500 answers
+  // a transient failure with a standing security decision.
+  //
+  // It exists because the wizard runs before the platform is resolved, so the
+  // only place that knows the organisation has no gate is the planning pass —
+  // which runs before a single byte is written, and is therefore still a safe
+  // moment to ask.
+  vendorableGate?: boolean;
 }
 
 export interface PolicyResult {
@@ -207,6 +277,15 @@ export interface GateMachinery {
   // requires something else is the policy having moved, which is a different
   // sentence to say to an operator.
   expected: string;
+  // Repository-relative path of a gate workflow this caller runs from inside
+  // the repository, when it does — `--gate-source local`. null on an org-sourced
+  // caller, which references a workflow in another repository entirely, and on
+  // every host with no such mode.
+  //
+  // Read out of the caller rather than guessed from a constant, because it is
+  // the caller that decides what runs: `remove` deletes what the repository
+  // actually points at, not what a run three versions ago would have written.
+  vendored: string | null;
 }
 
 export interface PlatformVerify {

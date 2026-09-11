@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DOCS_NAV, FLAT_DOCS, type DocLink } from "@/lib/docs-nav";
+
+// How many children a category shows before it offers to show the rest. The
+// catalogue sections run to dozens of entries, and an unbroken list that long
+// buries every category below it.
+const CHILD_PREVIEW = 10;
 
 // Every page the sidebar can reach, counted from the nav itself rather than
 // written down. A number in the summary is a promise about the thing behind
@@ -46,6 +51,8 @@ function activeLabel(pathname: string): string {
 export function DocsSidebar() {
   const pathname = usePathname();
   const disclosure = useRef<HTMLDetailsElement>(null);
+  const column = useRef<HTMLElement>(null);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
   // Below 1000px this whole nav is a <details> that ships closed: 30 links
   // stacked above the article pushed the <h1> 1,402px down a 390px screen —
@@ -82,6 +89,21 @@ export function DocsSidebar() {
     if (!window.matchMedia(DESKTOP).matches) node.open = false;
   }, [pathname]);
 
+  // The sidebar is its own scroll box, and the catalogue made it 185 links
+  // long: land on a skill page and the active link sits ~1,300px down an 800px
+  // box, so the one thing the sidebar exists to say — where you are — starts
+  // off screen. Only its own scrollTop is touched, never scrollIntoView, which
+  // would also scroll the window and move the article the reader came to read.
+  useEffect(() => {
+    const node = column.current;
+    if (node === null) return;
+    if (node.scrollHeight <= node.clientHeight) return;
+    const active = node.querySelector("a.active");
+    if (active === null) return;
+    const delta = active.getBoundingClientRect().top - node.getBoundingClientRect().top;
+    node.scrollTop += delta - node.clientHeight / 3;
+  }, [pathname]);
+
   const isActive = (href: string) => {
     if (href === "/docs") return pathname === "/docs";
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -92,26 +114,96 @@ export function DocsSidebar() {
   // you are.
   const isCurrent = (href: string) => pathname === href;
 
-  const renderChildren = (parent: DocLink) => {
+  const renderChildren = (parent: DocLink, groupActive: boolean) => {
     if (!parent.children?.length) return null;
-    // Expanded only inside its own category: 39 reference items unfurled at once
-    // is a wall, and the category index page already lists them as cards.
-    if (!isActive(parent.href)) return null;
+
+    // Expanded only inside its own category: 39 reference items unfurled at
+    // once is a wall, and the category index page already lists them as cards.
+    // A category that opts into a preview shows one to its immediate
+    // neighbours, so a sibling does not read as empty from the category next
+    // door — but not from across the sidebar, where it would just be clutter.
+    const inside = isActive(parent.href);
+    if (!inside && !(groupActive && parent.preview)) return null;
+
+    const all = parent.children;
+    const open = expanded.has(parent.href);
+
+    if (!inside) {
+      // Closed category: a taste of what is in there, and the category link
+      // above is the way to the rest. No toggle — it would compete with the
+      // link for the same job. Styled identically to an open category's
+      // children on purpose: the active parent above is already red, so the
+      // hierarchy is legible without a third text colour that would have to
+      // sit below the contrast floor to read as secondary.
+      return (
+        <ul className="children">
+          {all.slice(0, parent.preview).map((child) => (
+            <li key={child.href}>
+              <Link href={child.href}>{child.title}</Link>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    const activeIndex = all.findIndex((child) => isCurrent(child.href));
+
+    // The preview is the first ten. If the page you are on is further down it
+    // gets carried in after them, rather than unfurling the whole list: the
+    // sidebar still shows where you are, and a 59-item category still does not
+    // bury every category below it.
+    const preview = all.slice(0, CHILD_PREVIEW);
+    const carried = !open && activeIndex >= CHILD_PREVIEW;
+    if (carried) {
+      const activeChild = all[activeIndex];
+      if (activeChild) preview.push(activeChild);
+    }
+    const shown = open ? all : preview;
+
     return (
-      <ul className="children">
-        {parent.children.map((child) => (
-          <li key={child.href}>
-            <Link href={child.href} className={isCurrent(child.href) ? "active" : undefined}>
-              {child.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <>
+        <ul className="children">
+          {shown.map((child, i) => (
+            <li key={child.href}>
+              {/* The carried item is not the eleventh entry, so it does not get
+                  to look like one. */}
+              {carried && i === CHILD_PREVIEW && (
+                <span className="child-gap" aria-hidden="true">
+                  ···
+                </span>
+              )}
+              <Link
+                href={child.href}
+                className={isCurrent(child.href) ? "active" : undefined}
+              >
+                {child.title}
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {all.length > CHILD_PREVIEW && (
+          <button
+            type="button"
+            className="child-toggle"
+            aria-expanded={open}
+            onClick={() =>
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                if (next.has(parent.href)) next.delete(parent.href);
+                else next.add(parent.href);
+                return next;
+              })
+            }
+          >
+            {open ? "Show fewer" : `Show all ${parent.title.toLowerCase()}`}
+          </button>
+        )}
+      </>
     );
   };
 
   return (
-    <aside className="docs-sidebar">
+    <aside className="docs-sidebar" ref={column}>
       <details className="docs-nav" ref={disclosure}>
         <summary>
           <span className="dn-text">
@@ -121,25 +213,35 @@ export function DocsSidebar() {
           <span className="dn-count">{PAGE_COUNT} pages</span>
         </summary>
         <div className="dn-body">
-          {DOCS_NAV.map((section) => (
-            <div className="group" key={section.label}>
-              <div className="group-label">{section.label}</div>
-              <ul>
-                {section.links.map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className={isCurrent(link.href) ? "active" : isActive(link.href) ? "open" : undefined}
-                    >
-                      {link.title}
-                      {link.children?.length ? <span className="count">{link.children.length}</span> : null}
-                    </Link>
-                    {renderChildren(link)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {DOCS_NAV.map((section) => {
+            // Whether the reader is anywhere in this group. A preview is for
+            // the category next door, not for one three groups away.
+            const groupActive = section.links.some((link) => isActive(link.href));
+            return (
+              <div className="group" key={section.label}>
+                <div className="group-label">{section.label}</div>
+                <ul>
+                  {section.links.map((link) => (
+                    <li key={link.href}>
+                      <Link
+                        href={link.href}
+                        className={
+                          isCurrent(link.href)
+                            ? "active"
+                            : isActive(link.href)
+                              ? "open"
+                              : undefined
+                        }
+                      >
+                        {link.title}
+                      </Link>
+                      {renderChildren(link, groupActive)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       </details>
     </aside>

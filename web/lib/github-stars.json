@@ -1,0 +1,20 @@
+{
+  "fetchedAt": "2026-09-11",
+  "stars": {
+    "addyosmani/agent-skills": 93491,
+    "addyosmani/web-quality-skills": 2778,
+    "anthropics/skills": 175771,
+    "cloudflare/skills": 2815,
+    "dotnet/skills": 5407,
+    "expo/skills": 2515,
+    "mattpocock/skills": 259372,
+    "microsoft/playwright": 95961,
+    "obra/superpowers": 285068,
+    "openai/skills": 26891,
+    "prisma/skills": 57,
+    "supabase/agent-skills": 2593,
+    "trailofbits/skills": 7040,
+    "vercel-labs/agent-skills": 31056,
+    "vercel-labs/skills": 31377
+  }
+}

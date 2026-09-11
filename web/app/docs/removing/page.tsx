@@ -45,17 +45,14 @@ const STEPS: Step[] = [
 ];
 
 export default function Page() {
-  // Which vendors a default install actually rendered decides whether these two
-  // paths are on disk at all. standards/manifest.json ships cursor and skills
-  // disabled, and render() treats the org manifest as a ceiling, so listing them
-  // flatly as "delete them" sends most readers hunting for files that were never
-  // written. Read the flag rather than restate it: a vendor switched on later
-  // must not leave this page quietly wrong.
+  // Whether a default install actually rendered Cursor's files decides whether
+  // those paths are on disk at all, and render() treats the org manifest as a
+  // ceiling. Read the flag rather than restate it: a vendor switched off later
+  // must not leave this page quietly wrong in the other direction.
   const manifest = loadManifest();
   const off = (id: string): boolean => manifest.vendors[id]?.enabled !== true;
   const cursorOff = off("cursor");
-  const skillsOff = off("skills");
-  const anyOff = cursorOff || skillsOff;
+  const anyOff = cursorOff;
 
   return (
     <DocsPage
@@ -106,7 +103,7 @@ export default function Page() {
           <>
             On the manifest as it ships today that means{" "}
             <b>
-              {[cursorOff ? "Cursor" : null, skillsOff ? "Claude skills" : null]
+              {[cursorOff ? "Cursor" : null]
                 .filter((v) => v !== null)
                 .join(" and ")}{" "}
               rendered nothing
@@ -134,14 +131,6 @@ export default function Page() {
               <td>
                 Cursor rules, core plus one per stack.
                 {cursorOff ? <> <b>Only if the Cursor vendor was enabled</b> — it ships off, so a default install never wrote these.</> : null}
-              </td>
-            </tr>
-            <tr>
-              <td>.claude/skills/redline-*/</td>
-              <td>
-                Whole directories, each holding a <code>SKILL.md</code>. Delete the
-                directory, not just the file.
-                {skillsOff ? <> <b>Only if the skills vendor was enabled</b> — it ships off, so a default install never wrote these.</> : null}
               </td>
             </tr>
             <tr>

@@ -50,6 +50,9 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "prepack": "npm run build",
+    "stars": "node scripts/fetch-stars.mjs",
+    "publish:local": "node scripts/publish-local.mjs",
+    "publish:local:clean": "npm rm -g redlinegate",
     "test": "node --test 'cli/**/__tests__/*.test.ts' 'scripts/**/__tests__/*.test.mjs'",
     "typecheck": "tsc --noEmit"
   },

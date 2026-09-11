@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RedlineError } from '../../core/errors.ts';
 import type { Git } from '../../core/git.ts';
-import { CLI_VERSION } from '../../core/version.ts';
+import { CLI_VERSION, UNPUBLISHED_VERSION } from '../../core/version.ts';
 import type {
   AdminCapability,
   CapabilityOutcome,
@@ -89,7 +89,6 @@ const GATE_DEFINITION_FOLDER = '\\Redline';
 // semantic-release replaces package.json's version only on a published build,
 // so this is what an unpublished checkout reports. Pinning it into a gate
 // template would install a version the registry has never seen.
-const UNPUBLISHED_VERSION = '0.0.0-development';
 
 interface BuildDefinition {
   id: number;

@@ -39,7 +39,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | `scripts/validate.mjs` | Bundle self-check, run by this repo's CI | this repo |
 | `scripts/check-pins.mjs` | Re-resolves SHA-pinned actions against their upstream tag | this repo's CI |
 | `scripts/assign-rule-ids.mjs` | Assigns and verifies the stable `<stack>/<slug>` id on every rule | this repo |
-| `seeded/` | Recall corpus (12 stacks, 82 BLOCKER seeds) + precision corpus, scored by `scripts/score-seeds.mjs` | validation only, never merged |
+| `seeded/` | Recall corpus (16 stacks, 117 BLOCKER seeds) + precision corpus, scored by `scripts/score-seeds.mjs` | validation only, never merged |
 
 ## Language coverage vs org reality
 
@@ -73,7 +73,7 @@ path — a prompt in a pipeline is a hang with nobody there to answer it:
 
 ```sh
 npx redlinegate init --dry-run                 # the plan; writes nothing, contacts no host
-npx redlinegate init --profile web,infra       # a React app with its own Terraform beside it
+npx redlinegate init --profile web-react,infra # a React app with its own Terraform beside it
 npx redlinegate init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines
 ```
 

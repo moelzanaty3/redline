@@ -10,7 +10,7 @@ const manifest = loadManifest(ROOT);
 
 test('only the stacks whose globs match a changed file are in scope', () => {
   // The whole point over "ask an assistant to review my diff": a model handed
-  // twelve stacks spends most of its attention on languages the diff never touches.
+  // sixteen stacks spends most of its attention on languages the diff never touches.
   const scope = resolveScope(manifest, 'web', ['src/App.tsx']);
 
   assert.ok(scope.stacks.includes('react'));

@@ -73,6 +73,23 @@
 }
 
 /* ================= 1 · hero ================= */
+/* Everything below the fold fades up on scroll via .reveal; the hero is above
+   it, so it gets a one-time load-in instead — fast, staggered, no scroll
+   trigger needed since it's visible on first paint. */
+@keyframes hm-hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.hm-hero-in {
+  animation: hm-hero-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
 /* One command, presented as the call to action itself — there is nothing to
    install first, so there is no second row and no "once / per repo" ladder. */
 .hm-hero-cmd {
@@ -233,6 +250,25 @@
   border: 1px solid #262626;
   border-radius: 12px;
 }
+/* The panel chrome moves off the scrolling element and onto a wrapper, because
+   the fade below is a mask and a mask fades the border with the content. */
+.hm-code-box {
+  background: #0c0c0c;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  overflow: hidden;
+}
+/* Both of these overflow at every width — the diff by 23px, the seed excerpt by
+   234 — and the cut lands mid-token on the one line each panel exists to show.
+   They scroll; this is what says so. */
+.hm-diff,
+.hm-seed {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+}
 .hm-diff {
   padding: 16px 0;
   font-family: var(--mono);
@@ -315,6 +351,7 @@
   margin-right: 2px;
 }
 .hm-switch-b {
+  min-height: 36px;
   font-family: var(--sans);
   font-size: 12.5px;
   font-weight: 550;
@@ -322,7 +359,7 @@
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 5px 13px;
+  padding: 7px 14px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
@@ -394,6 +431,8 @@
 }
 .hm-steps > li {
   position: relative;
+  display: flex;
+  flex-direction: column;
   padding: 20px 22px 22px;
   background: var(--card);
   border: 1px solid var(--border);
@@ -425,7 +464,9 @@
   font-weight: 600;
 }
 .hm-step-cmd {
-  margin-top: 12px;
+  /* auto, so the one step that has a command still ends level with the two
+     that do not, instead of leaving them 90px of dead padding. */
+  margin-top: auto;
   padding: 8px 12px;
   font-family: var(--mono);
   font-size: 12.5px;
@@ -547,6 +588,20 @@
   max-width: 720px;
   font-size: 15px;
   color: var(--muted);
+}
+.hm-try-card > .hm-h2,
+.hm-try-lead {
+  text-align: center;
+}
+.hm-try-lead {
+  margin-left: auto;
+  margin-right: auto;
+}
+/* The command the section is named after. It was inline prose code with no way
+   to take it — the one place on the page that names the action and then does
+   not offer it. */
+.hm-try-cmd {
+  margin: 22px auto 30px;
 }
 .hm-try-list {
   list-style: none;
@@ -861,17 +916,26 @@
   padding: 88px 0;
   border-top: 1px solid var(--border);
 }
+/* Centred, like every other section header on the page. Left-aligned and
+   full-width it was the only one of eleven that was, and it left 560px of the
+   row empty beside a 68ch paragraph. */
 .hm-choices h2 {
   font-size: clamp(26px, 4vw, 38px);
   letter-spacing: -0.02em;
   margin-bottom: 14px;
+  text-align: center;
 }
 .hm-choices-lead {
   max-width: 68ch;
+  margin: 0 auto;
   color: var(--muted);
   font-size: 15.5px;
   line-height: 1.65;
+  text-align: center;
   text-wrap: pretty;
+}
+.hm-choices-foot {
+  text-align: center;
 }
 .hm-choices-lead code,
 .hm-choices-foot code {
@@ -880,51 +944,137 @@
   color: var(--text);
 }
 
-.hm-choices-grid {
+/* A vertical timeline rather than a card grid: it mirrors the copy above it
+   ("walks these one at a time") instead of fighting it, and a single column
+   with an internal wrap-grid per step means an uneven choice count (2 here,
+   3 there) never produces a stranded card or a slab of empty padding — the
+   failure mode the grid version had. */
+.hm-choices-steps {
+  position: relative;
+  margin-top: 48px;
+}
+.hm-step {
+  position: relative;
   display: grid;
-  /* auto-fit rather than a fixed count: three groups today, and a fourth would
-     reflow instead of overflowing the row. */
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-  margin-top: 36px;
+  grid-template-columns: 48px 1fr;
+  column-gap: 26px;
+  padding-bottom: 48px;
 }
-.hm-choice-group {
+.hm-step:last-child {
+  padding-bottom: 0;
+}
+.hm-step-marker {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+.hm-step-marker::after {
+  /* The connecting line lives on the marker, not the container, so it never
+     has to guess the container's total height. */
+  content: "";
+  position: absolute;
+  top: 48px;
+  bottom: -48px;
+  width: 1px;
+  background: var(--border);
+}
+.hm-step:last-child .hm-step-marker::after {
+  display: none;
+}
+.hm-step-node {
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--card);
-  padding: 22px 20px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+  transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.hm-choice-group h3 {
-  font-size: 16px;
-  letter-spacing: -0.01em;
+.hm-step-node svg {
+  width: 20px;
+  height: 20px;
+}
+.hm-step:hover .hm-step-node {
+  color: var(--red-soft);
+  border-color: var(--red-soft);
+  box-shadow: 0 0 0 5px rgba(255, 77, 77, 0.08);
+}
+.hm-step-body {
+  padding-top: 6px;
+}
+.hm-step-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-bottom: 6px;
+}
+.hm-step-body h3 {
+  font-size: 19px;
+  letter-spacing: -0.015em;
+  margin-bottom: 0;
+}
+/* One word, distinguishing the category the CLI resolves for you from the
+   ones it asks you to decide — the two red states below share the accent
+   already spent on the flag, at a fraction of its weight. */
+.hm-step-mode {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--faint);
+}
+.hm-step-mode-detected {
+  color: var(--red-soft);
+  border-color: rgba(230, 0, 0, 0.35);
+  background: rgba(230, 0, 0, 0.08);
 }
 .hm-choice-lead {
   color: var(--faint);
-  font-size: 13px;
-  line-height: 1.55;
-  margin-bottom: 18px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  max-width: 62ch;
   text-wrap: pretty;
 }
-.hm-choice-group ul {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.hm-step-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 20px;
 }
-.hm-choice-group li {
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+.hm-step-choice {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 16px 18px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
-.hm-choice-group li:first-child {
-  padding-top: 0;
-  border-top: 0;
+.hm-step-choice:hover {
+  border-color: var(--red-soft);
+  transform: translateY(-2px);
 }
 .hm-choice-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  /* Wraps rather than breaking at a breakpoint: the flag is nowrap and as long
+     as `--pipeline github-actions`, so whenever the card is narrow enough that
+     the two cannot share a line — a phone, or two steps side by side on a
+     tablet — the label is the one that loses, and "GitHub Actions" splits
+     across two lines beside it. Wrapping gives the label the full width and
+     puts the flag underneath. */
+  flex-wrap: wrap;
+  gap: 2px 12px;
   margin-bottom: 3px;
 }
 .hm-choice-head b {
@@ -945,7 +1095,7 @@
   color: var(--faint);
   margin-bottom: 8px;
 }
-.hm-choice-group li p {
+.hm-step-choice p {
   color: var(--muted);
   font-size: 13.5px;
   line-height: 1.6;
@@ -953,20 +1103,40 @@
 }
 
 .hm-choices-foot {
-  max-width: 72ch;
-  margin-top: 32px;
+  margin-top: 40px;
   color: var(--faint);
   font-size: 13.5px;
   line-height: 1.65;
   text-wrap: pretty;
+  text-align: center;
 }
 
 @media (max-width: 640px) {
   .hm-choices {
     padding: 60px 0;
   }
-  .hm-choice-head {
-    flex-direction: column;
-    gap: 2px;
+  /* Centred, this paragraph runs to eight lines on a phone and both edges go
+     ragged. The heading above it stays centred; the prose does not. */
+  .hm-try-lead,
+  .hm-choices-lead {
+    text-align: left;
+  }
+  .hm-step {
+    grid-template-columns: 36px 1fr;
+    column-gap: 16px;
+    padding-bottom: 36px;
+  }
+  .hm-step-marker::after {
+    top: 36px;
+    bottom: -36px;
+  }
+  .hm-step-node {
+    width: 36px;
+    height: 36px;
+  }
+  .hm-step-node svg {
+    width: 16px;
+    height: 16px;
   }
 }
+

@@ -5,6 +5,278 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
+## [0.0.3](https://github.com/moelzanaty3/redline/compare/v0.0.2...v0.0.3) (2026-09-11)
+
+### `redline init` — a gate for a repository whose organisation has not agreed to one yet
+
+Redline's merge gate lived in exactly one place: a reusable workflow published at
+`<org>/.github`. A repository whose organisation has no such repo could not install a gate
+at all — it got `denied gate`, a list of things for an administrator to do, and no way to
+proceed on its own. That is most repositories on their first day, and "get your org to
+create a shared `.github` repo first" is a long way to travel before seeing whether any of
+this is worth having.
+
+- **`redline init --gate-source local`** vendors the gate into the repository at
+  `.github/workflows/redline-gate.yml` and points the caller at it with
+  `uses: ./.github/workflows/redline-gate.yml`. It is the same file the organisation copy
+  is published from, with a header and the CLI version stamped in — not a second
+  implementation, and a test pins it to the byte so it cannot become one.
+- **The required check does not move.** A local reusable workflow still reports as
+  `<caller job id> / <called job id>`, and both job ids are unchanged, so the context stays
+  exactly `redline-gate / gate`. Rulesets, branch policy and `verify` need no change, and a
+  repository can move between the two sources with a re-run.
+- **The wizard offers it when the organisation has no gate.** The planning pass — which
+  runs before a single byte is written — now reports whether the refusal is one vendoring
+  would solve, and a run at a terminal is asked. A scripted run gets the denial it always
+  got: vendoring is a weaker control, and nothing unattended chooses it for an operator.
+  A refusal that is merely an unreadable host (a 401, a 500) is never offered the fallback
+  — answering a transient failure with a standing security decision is the wrong trade.
+- **`.redline.json` records `gateSource` and `gateVersion`.** Absent reads back as `org`,
+  which is what every repository onboarded before this has. An unrecognised value reads
+  back as `org` too: a hand edit must not be able to make `verify` stop asking whether the
+  organisation gate resolves.
+- **`redline verify` reports a stale vendored gate.** An org gate updates itself — one
+  merge reaches everything pointing at it — and a vendored one does not. `gate-vendored`
+  compares the stamp against the CLI running the check and names `redline init --repair`.
+  A missing file is drift; an unrecorded version is `unknown`, not stale.
+
+**A vendored gate is a weaker control, and Redline says so rather than implying the two are
+equivalent.** A workflow triggered by `pull_request` runs from the pull request's own head
+commit, so a pull request that edits the vendored file changes the gate judging it —
+including standing down the `dependencies` and `secrets` jobs, which are the gate's two
+non-exemptible checks and which no label can waive. `init` prints that on every local run,
+not only the one that chose it, and the vendored file repeats it in its own header. The
+mitigation already existed and was simply off: `/.github/workflows/` is the first entry in
+`SENSITIVE_PATHS`, so `--with review-ownership --review-owners <team>` requires an owner's
+approval on exactly that edit. Redline names the command rather than running it, because
+the owner it would otherwise guess is a team that may not exist — and a `CODEOWNERS` line
+naming a team that does not exist blocks every pull request in the repository, which is
+worse than the exposure it was meant to close.
+
+Two guards widened to match:
+
+- **`.github/workflows/redline-gate.yml` is now protected from being clobbered** the way
+  the caller has always been. It is YAML, so it can take no marker-block merge, and a
+  repository with an unrelated workflow already at that path would have had it destroyed.
+- **The attribution check recognises a local caller.** It required a trailing `@` — a
+  reusable-workflow ref — which a local `uses: ./...` cannot carry, so Redline read a
+  caller it had written itself as somebody else's workflow and refused to touch it.
+
+
+### `redline init` — the run that hung, and the one that writes nothing you did not ask for
+
+- **git no longer hangs on a prompt nobody can see.** A real onboarding sat on
+  "committing and opening the pull request" until it was killed: `git push` reached an ssh
+  wanting a passphrase, stdin is `ignore` so the answer could not be typed and stderr is
+  captured so the question could not be printed. The prompts are switched off rather than
+  hidden — `GIT_TERMINAL_PROMPT`, ssh `BatchMode` and a connect timeout — so git fails at
+  once and `push()` gets to print the error it always had, naming the branch the work is
+  committed on. An operator's own `GIT_SSH_COMMAND` still wins.
+- **`--no-commit` writes the files and stops.** There was nothing between `--dry-run`,
+  which writes nothing at all, and a full run, which changes repository settings, commits
+  to a branch and opens a pull request. It resolves the repository from the clone, skips
+  the preflight and the label writes, and so needs no credential and works offline. The
+  menu offers it as a third answer to `Ready?`. What it gives up is stated in the report:
+  without the preflight, an org-sourced caller is written without confirming the
+  organisation publishes the workflow it references.
+- **`remove` takes the vendored gate away with the caller that ran it.** It deleted the
+  caller and left `.github/workflows/redline-gate.yml` behind — a reusable workflow nothing
+  calls, in a repository just told Redline was gone. The path is read out of the caller,
+  and accepted only when it is the one path Redline writes: a caller is a file anybody can
+  edit, and resolving an arbitrary `./…` out of it would let a hand-edited workflow nominate
+  any file in the repository for deletion.
+- **A multi-select says it can be answered with nothing.** `0/2 selected` beside
+  `enter confirm` read as a form refusing to submit until something was ticked. It never
+  was. Only the word changed; escape is still the cancel key, because it is the only way
+  out of a wizard.
+- **The menu asks where the gate should live**, straight after `What should Redline
+  install?` and only when the gate was kept. It is asked blind — the wizard runs before the
+  platform is resolved — so the mid-run offer stays for anyone who picks `org` and turns out
+  not to have one.
+
+Two bugs this surfaced, both fixed:
+
+- **`verify` called the gate broken on repositories where it was working.** The machinery
+  parser required a trailing `@` on the gate reference, which a local `uses: ./…` cannot
+  carry, so every locally-sourced repository read back as a caller whose job id had been
+  edited away. That is the one direction this check must never fail in — it is the check
+  that tells a real outage from a slow run.
+- **The home page listed six wizard questions for a wizard that asks ten.** Every other
+  number on that page is derived from the repository and throws rather than degrade; the
+  question list was hand-written and drifted silently. It is parsed out of `cli/ui/wizard.ts`
+  at build time now, and a disagreement fails the build naming both sides.
+
+
+### Vendors — Cursor on, Codex named, skills gone
+
+- **Cursor is enabled.** It shipped disabled and rendered nothing; the renderer was complete
+  the whole time. Onboarded repositories now get `.cursor/rules/redline-*.mdc` — core always
+  applied, one file per stack scoped by globs.
+- **Codex is selectable by name.** It renders `AGENTS.md`, the same file the `agents` vendor
+  writes, because that is the file Codex actually reads. It is a separate id because an
+  operator looking for Codex has to find it in the menu, and "it is covered by the one called
+  agents" is not something a list of checkboxes can say. Selecting both writes the file once.
+- **The `skills` vendor is removed**, with its renderer, its adaptor page, its seed of
+  `.claude/skills/redline-*/`, and `metrics context` — the command that existed to measure
+  whether it paid for itself. It shipped disabled, so no onboarded repository rendered it and
+  nothing has to be cleaned up anywhere.
+
+Two things this surfaced, both fixed:
+
+- **Two vendors can now own one file, and the deselect path could not cope.** Rendering with
+  only `codex` selected queued `AGENTS.md` for stripping on behalf of the unselected `agents`
+  vendor — deleting the file that had just been written. A path another selected vendor plans
+  is no longer treated as deselected.
+- **Several tests pinned the org-manifest ceiling using `cursor` as the disabled example**,
+  which stopped being true the moment it was enabled. They now build a manifest with a vendor
+  switched off rather than borrowing whichever one happens to be off this month — the
+  invariant is about the ceiling, not about Cursor.
+
+### Standards — the web is more than React
+
+`web` meant React because React was the only web framework Redline carried. An Angular
+repo onboarding got the JavaScript rules and nothing that knows what a subscription is.
+
+- **Four new stack rule sets.** `angular` (RxJS teardown, change detection, the
+  `bypassSecurityTrust*` sink, guards mistaken for authorisation), `vue` (reactivity lost
+  on destructure, `v-html`, module-scope state shared across SSR requests), `svelte`
+  (`{@html}`, private env reaching the browser, universal `load` running twice) and `dom`
+  for framework-free browser code (`innerHTML`, `postMessage` origin checks, listeners and
+  observers that outlive their widget). Each ships with a seed corpus; the recall corpus is
+  now 16 stacks and 117 BLOCKER seeds.
+- **`web` is now five profiles:** `web-react`, `web-angular`, `web-vue`, `web-svelte` and
+  `web-vanilla`. Naming the framework is the whole point — a profile is how Redline avoids
+  installing two rule sets that contradict each other in one repo.
+- **`web` is kept as an alias of `web-react`.** A repository onboarded before this renders
+  the same rules it rendered before, with no edit to `.redline.json`. The one difference is
+  the generated marker line, which names the resolved profile: it now reads
+  `profile: web-react` where it read `profile: web`. Expect that line, and the version, to
+  be the whole diff of its next sync PR.
+- **Detection proposes the framework it can see:** `@angular/core` or `angular.json`,
+  `svelte`/`svelte.config.js`/`.svelte`, `vue`/`nuxt.config.ts`/`.vue`, each ahead of the
+  broader React rule so a Svelte repo that pulls React in transitively still lands on
+  `web-svelte`. `web-vanilla` is never proposed, only chosen: plain browser JavaScript and
+  a build script are indistinguishable from the outside, and guessing wrong installs DOM
+  rules on a repo with no DOM.
+
+### CLI — two new commands, and four decisions that were being made for you
+
+- **`redline explain <rule-id>`.** What a rule means, whether a checker or a reviewer
+  decided it, which files it is scoped to and which profiles receive it. Findings have
+  carried ids since 2.1 precisely so they could be looked up, and nothing looked them up.
+  `--list` prints the catalogue; `--json` for tooling. A mistyped id suggests the near
+  misses rather than reporting the rule as missing.
+- **`redline status`.** What is installed here, how hard it bites, what an administrator
+  still owes you, and whether the standards have moved on — one screen, no credential, no
+  host call. All of it was knowable; none of it was answerable without reading
+  `.redline.json` by hand.
+- **`--integrations <list>`, and a menu question to match.** Redline has always detected
+  what a repository already runs — SonarQube, Snyk, Mend, Dependabot, Renovate, gitleaks,
+  TruffleHog, CodeQL — and used it to avoid installing a second scanner beside the first.
+  That survey was *printed at* the operator, after the decision it should have informed,
+  with no way to correct it. It is now a question: what was detected arrives ticked, every
+  other probe is offered, and the answer is recorded — so a scanner wired through a shared
+  pipeline template, which no checkout can reveal, is stated once instead of every run.
+- **`--review-owners <list>`, and the bug it exists for.** The team seeded into CODEOWNERS
+  was the constant `platform-engineering`, in every organisation. GitHub silently ignores an
+  owner it cannot resolve, so every repository outside the one this was written for got a
+  CODEOWNERS that reported as installed and enforced nothing. Owners are now stated, and
+  taken by shape: `@person` is a user and is left alone, `@org/team` and an email address are
+  already complete, and only a bare word gets the organisation put in front of it. The menu
+  asks only when review-ownership was actually selected.
+- **`--branches <patterns>`.** Which branches the merge policy governs. The ruleset
+  hardcoded the default branch, so a `release/*` line was ungoverned. The default is
+  unchanged and deliberately not detected: widening what a branch ruleset covers is a change
+  to an enforcement boundary, and it happens when somebody names the branches.
+- **`--json` on `verify` and `status`.** A tool whose claim is auditability was readable only
+  by a human; anything wrapping it had to scrape prose for what it already knew.
+
+### CLI
+
+- **`redline init`'s menu no longer repeats its own question.** The redraw rewound one line
+  short of the frame it had drawn, so every keypress left the title line behind and a few
+  arrow presses filled the screen with copies of "Which standards apply here?".
+- **The menu was redrawn.** A block wordmark opens the run; the keys are printed under the
+  question rather than past the end of a twelve-row list, where they were below the fold
+  exactly when someone who had never seen the prompt needed them; a multi-select counts what
+  it has (`3/12 selected`) instead of asking you to count marks; and each option's
+  explanation moved to a full-width line under the list, so the text that says what a
+  profile *is* no longer gets truncated to fit beside the longest label. Red throughout,
+  because that is the product's colour and the menu was wearing someone else's.
+- **Long lists filter and scroll.** From nine options up, the menu grows a search field:
+  type to narrow it, `ctrl-a` to take everything still showing — filter to `web`, take all
+  five web profiles, leave the rest untouched. Selection is indexed against the whole list,
+  so a row ticked before a search is still ticked after it and still in the answer. Below
+  nine options the letters stay shortcuts instead (`j`/`k` move, `a` takes all), because a
+  short list is faster to read than to filter.
+- **The frame can no longer outgrow the terminal.** Options past the fold become a window
+  that follows the cursor and says what it is hiding (`↓ 9 more`). This is the same class of
+  bug as the repeated title: the redraw rewinds by the number of lines it drew, so a frame
+  taller than the screen scrolls it first and the rewind then erases rows that have already
+  moved. A short terminal drops the separators, then the key hints, before it will overflow.
+- **The menu no longer ticks its own guess.** Detection now grades its evidence: a manifest
+  naming the framework (`go.mod`, `angular.json`, `@angular/core` in dependencies) is the
+  repository saying what it is, and arrives preselected; a bare file extension is a guess,
+  and arrives offered but unticked. This is what made a Capacitor or Cordova web app open
+  with `mobile-ios` already chosen — it ships an `ios/App.xcodeproj`, and pressing enter
+  through the menu would have installed Swift rules on a codebase with no Swift in it. A
+  ticked row is consent; a guess does not get to collect it by default. What is already
+  recorded in `.redline.json` still wins over both.
+- **The red is the brand red.** `#e60000`, the value the site already calls `--red`, sent as
+  a 24-bit colour where the terminal supports it, the nearest 256-colour neighbour where it
+  does not, and the terminal's own red on sixteen colours — where the operator's theme
+  outranks ours anyway.
+- All of it degrades: a non-UTF-8 console loses the wordmark and gets `up/down` for the
+  arrows, `NO_COLOR` loses the chip, and a narrow terminal drops the wordmark rather than
+  wrapping it.
+
+### `redline init` — the run that lost its own pull request
+
+One onboarding of a repository in an organisation with no `.github` repo, and every item
+below is a defect it surfaced.
+
+- **The plan and the install disagreed, and the pull request paid for it.** `installGate`
+  runs twice — a planning pass, then the real one — and only the real one asked the host
+  whether the reusable workflow it was about to reference existed. So the plan listed
+  `.github/workflows/redline.yml`, the install refused to write it, and the file list came
+  from the plan: `git add` died on a pathspec matching no file, after every host mutation and
+  `.redline.json` had already succeeded. The work was done, on a branch, with no pull request
+  and an error that named a git command instead of a cause. The planning pass of a live run
+  now runs the same preflight the install does; a dry run still contacts nothing.
+- **`stagePaths` was the one mutating git call not wrapped.** Every other one converts git's
+  output into a stated failure; this one leaked `Command failed: git add --` and thirty paths.
+- **A tool that already covers a gate job now stands that job down.** This was a sentence in
+  the report — "narrowing the gate to match is not wired yet, so for now deselect it yourself
+  with `--skip gate`" — which took the entire gate away to silence one job of it. The caller
+  workflow carries a `stand-down` list, the reusable workflow guards the `policy`,
+  `dependency-review` and `secrets` jobs on it, and the aggregate reads a skipped job as a
+  pass. Detected tools and stated ones narrow it identically: the wizard hands its own
+  findings back through `--integrations`, so treating them differently would make one
+  repository behave two ways depending on which entry point ran it.
+- **The gate aggregate would have failed every repository that narrowed it.** The first jq
+  that treated `skipped` as a pass read `.value.result` from inside a pipe whose input was
+  the pass list, which exits 5 — and under `set -e` that is a gate that fails every pull
+  request. Caught before it shipped; the expression binds the result first.
+
+### `redline init` — output you can read
+
+- **A spinner.** Between the last menu answer and the first line of the report, `init`
+  renders a dozen files, makes six host calls and pushes a branch, and said nothing at all
+  while it did. Thirty seconds of silence reads as a hang, and the move after a hang is
+  Ctrl-C in the middle of a run that is writing to your repository. The line now names the
+  phase it is in. No TTY, no animation — a spinner in a build log is noise with no reader.
+- **The report is sections, not a column.** Files, repository settings, the pull request, and
+  what is left — each with a heading and a count, a fixed status column, and the pull request
+  URL somewhere it can be found rather than buried between two wrapped paragraphs about
+  repository properties.
+- **The fix is no longer inside the problem.** A capability outcome carries `detail` and
+  `hint` separately; they were being joined into one string, so the one part of the report
+  that asks the operator to do something was a clause halfway through a sentence in a narrow
+  column. Denials now collect at the end as a numbered list, each with the command to run.
+- **A capability this repository cannot have is not a capability it is missing.**
+  `unsupported` is grey, not red, and counted apart from a refusal — a fully onboarded
+  repository was reporting itself as two-sevenths done and looking broken doing it.
+
 ## [0.0.2](https://github.com/moelzanaty3/redline/compare/v0.0.1...v0.0.2) (2026-09-08)
 
 ### CLI — `redline init` asks before it writes

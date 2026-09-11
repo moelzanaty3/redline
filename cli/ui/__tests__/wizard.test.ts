@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findExistingPipeline } from '../facts.ts';
+import { isRedlineError } from '../../core/errors.ts';
 import { runWizard, type WizardFacts } from '../wizard.ts';
 import type { Choice, Prompter } from '../prompt.ts';
 
@@ -36,6 +37,11 @@ interface Asked {
   initial: unknown;
 }
 
+const PROFILE_QUESTION = 'Which standards apply here?';
+
+// Nothing is preselected any more, so every run through the menu has to answer
+// this one — that is the point of the change, and the doubles have to reflect it
+// rather than paper over it.
 function acceptDefaults(overrides: Record<string, unknown> = {}): {
   prompter: Prompter;
   asked: Asked[];
@@ -47,6 +53,7 @@ function acceptDefaults(overrides: Record<string, unknown> = {}): {
     intro: () => {},
     outro: () => {},
     note: (message) => notes.push(message),
+    task: () => ({ update: () => {}, done: () => {}, stop: () => {} }),
     async select<T>(title: string, choices: readonly Choice<T>[], initial?: T): Promise<T> {
       asked.push({
         title,
@@ -73,7 +80,14 @@ function acceptDefaults(overrides: Record<string, unknown> = {}): {
         initial,
       });
       if (title in overrides) return overrides[title] as T[];
+      if (title === PROFILE_QUESTION && initial.length === 0) {
+        return [choices[0]!.value];
+      }
       return [...initial];
+    },
+    async text(title: string, opts: { placeholder?: string; hint?: string } = {}): Promise<string> {
+      asked.push({ title, labels: [], hints: [], disabled: [], initial: opts.placeholder ?? '' });
+      return String(overrides[title] ?? '');
     },
     async confirm(_title, value = true) {
       return value;
@@ -101,6 +115,8 @@ const FACTS: WizardFacts = {
   } as unknown as WizardFacts['manifest'],
   survey: { tools: [], standDown: [] },
   detectedProfile: 'web',
+  detectedConfidence: 'high',
+  offerable: [],
   profileEvidence: ['react in dependencies'],
   detectedVendors: ['copilot'],
   detectedHost: 'github',
@@ -108,8 +124,134 @@ const FACTS: WizardFacts = {
   recorded: null,
 };
 
+// A ticked row is consent. Detection that merely guessed — an .xcodeproj in a
+// web repo, a stray .swift — must not collect that consent by pressing enter:
+// the run would install Swift rules on a codebase with no Swift in it.
+// Unticking a guess is not enough on its own. Hoisting it to the first row puts
+// the cursor on it before anything is typed, which reads as chosen — the exact
+// impression the unticking exists to avoid.
+test('a guessed profile is not hoisted above the rest', async () => {
+  const { prompter, asked } = acceptDefaults();
+  // `web` sorts after `service-node`, so being hoisted is the only way it
+  // reaches row one — which is what makes this assertion mean anything.
+  await runWizard(prompter, { ...FACTS, detectedProfile: 'web', detectedConfidence: 'low' });
+
+  const profiles = asked.find((q) => q.title === 'Which standards apply here?');
+  assert.equal(profiles?.labels[0], 'service-node');
+  assert.deepEqual([...(profiles?.labels ?? [])].sort(), profiles?.labels);
+  // It still says what it is, one row down.
+  const at = profiles?.labels.indexOf('web') ?? -1;
+  assert.match(String(profiles?.hints[at]), /a guess/);
+});
+
+// Even a confident detection stays in its alphabetical place and stays unticked.
+// It says what it thinks on the row and leaves the choosing to a person.
+test('a confident detection is labelled, never ordered first, never ticked', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, { ...FACTS, detectedProfile: 'web', detectedConfidence: 'high' });
+
+  const profiles = asked.find((q) => q.title === PROFILE_QUESTION);
+  assert.equal(profiles?.labels[0], 'service-node');
+  assert.deepEqual(profiles?.initial, []);
+  const at = profiles?.labels.indexOf('web') ?? -1;
+  assert.match(String(profiles?.hints[at]), /pick it yourself/);
+});
+
+// The answer is whatever was chosen, and only that. Detection does not get to
+// become the answer by being the last thing anyone mentioned.
+test('the recorded profile is the one that was chosen', async () => {
+  const { prompter } = acceptDefaults({ [PROFILE_QUESTION]: ['service-node'] });
+  const answers = await runWizard(prompter, {
+    ...FACTS,
+    detectedProfile: 'web',
+    detectedConfidence: 'high',
+  });
+  assert.equal(answers.profile, 'service-node');
+});
+
+test('a guessed profile leaves every row unticked', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, { ...FACTS, detectedProfile: 'mobile-ios', detectedConfidence: 'low' });
+  const profiles = asked.find((q) => q.title === 'Which standards apply here?');
+  assert.deepEqual(profiles?.initial, []);
+});
+
+const SETUP_QUESTION = 'What should Redline set up alongside its own checks?';
+
+// The old question asked what the repository already ran and did nothing with
+// the answer beyond printing a sentence. This one installs what is ticked, so
+// only controls that work with no account and no token are on it.
+test('what Redline can install is offered, and ticking nothing is the default', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, {
+    ...FACTS,
+    offerable: [
+      { id: 'dependabot', label: 'Dependabot version updates', hint: 'writes .github/dependabot.yml' },
+      { id: 'codeql', label: 'CodeQL', hint: 'writes .github/workflows/codeql.yml' },
+    ],
+  });
+
+  const question = asked.find((q) => q.title === SETUP_QUESTION);
+  assert.deepEqual(question?.labels, ['Dependabot version updates', 'CodeQL']);
+  assert.deepEqual(question?.initial, []);
+});
+
+// Offering to install something the repository already has is how you end up
+// with two of it, which is the duplication the whole survey exists to avoid.
+test('a control already running is shown as unavailable, with the evidence', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, {
+    ...FACTS,
+    offerable: [
+      {
+        id: 'dependabot',
+        label: 'Dependabot version updates',
+        hint: 'writes .github/dependabot.yml',
+        evidence: '.github/dependabot.yml',
+      },
+    ],
+    survey: {
+      tools: [
+        { id: 'dependabot', label: 'Dependabot', evidence: '.github/dependabot.yml', standsDown: 'dependencies' },
+      ],
+      standDown: ['dependencies'],
+    },
+  });
+
+  const question = asked.find((q) => q.title === SETUP_QUESTION);
+  assert.match(String(question?.disabled[0]), /already here/);
+});
+
+// On Azure DevOps none of these mean anything, so the menu does not spend a
+// question asking about them.
+test('nothing to offer means the question is never asked', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, { ...FACTS, offerable: [] });
+  assert.equal(
+    asked.some((q) => q.title === SETUP_QUESTION),
+    false
+  );
+});
+
+// What gets recorded is what the repository RUNS: what it already ran, plus
+// whatever was just installed — because after this run, it runs that too.
+test('an installed control joins what the repository is recorded as running', async () => {
+  const { prompter } = acceptDefaults({ [SETUP_QUESTION]: ['codeql'] });
+  const answers = await runWizard(prompter, {
+    ...FACTS,
+    offerable: [{ id: 'codeql', label: 'CodeQL', hint: 'writes a workflow' }],
+    survey: {
+      tools: [{ id: 'snyk', label: 'Snyk', evidence: '.snyk', standsDown: 'dependencies' }],
+      standDown: ['dependencies'],
+    },
+  });
+
+  assert.deepEqual([...answers.setup], ['codeql']);
+  assert.deepEqual([...answers.integrations].sort(), ['codeql', 'snyk']);
+});
+
 test('pressing enter through the menu takes every detected default', async () => {
-  const { prompter } = acceptDefaults();
+  const { prompter } = acceptDefaults({ [PROFILE_QUESTION]: ['web'] });
   const answers = await runWizard(prompter, FACTS);
 
   assert.equal(answers.profile, 'web');
@@ -129,7 +271,7 @@ test('the default action is a dry run, not an apply', async () => {
   const answers = await runWizard(prompter, FACTS);
   assert.equal(answers.action, 'dry-run');
   const ready = asked.find((a) => a.title === 'Ready?');
-  assert.deepEqual(ready?.labels, ['Dry run', 'Apply']);
+  assert.deepEqual(ready?.labels, ['Dry run', 'Write the files only', 'Apply']);
 });
 
 // Shown, not hidden. An operator looking for Cursor and not finding it cannot
@@ -149,9 +291,9 @@ test('a profile is described by what it renders, not by its stack ids', async ()
   const { prompter, asked } = acceptDefaults();
   await runWizard(prompter, FACTS);
   const profiles = asked.find((a) => a.title.startsWith('Which standards'));
-  assert.deepEqual(profiles?.labels, ['web', 'service-node']);
-  assert.equal(profiles?.hints[0], 'JavaScript, React (web)   (detected)');
-  assert.equal(profiles?.hints[1], 'JavaScript, Node.js (NestJS)');
+  assert.deepEqual(profiles?.labels, ['service-node', 'web']);
+  assert.equal(profiles?.hints[0], 'JavaScript, Node.js (NestJS)');
+  assert.match(String(profiles?.hints[1]), /^JavaScript, React \(web\)/);
 });
 
 // A repository is routinely more than one bundle. The recorded value stays a
@@ -162,12 +304,19 @@ test('several standards can be chosen, and the record is one sorted string', asy
   assert.equal(answers.profile, 'service-node,web');
 });
 
-// Rendering no rules at all is never what "none of these" meant — it meant the
-// operator could not find theirs.
-test('deselecting every standard falls back to what was detected', async () => {
-  const { prompter } = acceptDefaults({ 'Which standards apply here?': [] });
-  const answers = await runWizard(prompter, FACTS);
-  assert.equal(answers.profile, 'web');
+// Choosing nothing used to fall back to the detected profile, which is how "I
+// picked nothing" quietly became "Redline picked for me". It now asks again, and
+// then gives up rather than choose — with the flag that answers it outright.
+test('choosing nothing asks again, then refuses rather than choosing for you', async () => {
+  const { prompter, asked, notes } = acceptDefaults({ [PROFILE_QUESTION]: [] });
+  await assert.rejects(
+    runWizard(prompter, FACTS),
+    (err: unknown) =>
+      isRedlineError(err) && err.kind === 'usage' && /no profile chosen/.test(err.message)
+  );
+
+  assert.equal(asked.filter((q) => q.title === PROFILE_QUESTION).length, 2);
+  assert.match(notes.join(' '), /Nothing selected/);
 });
 
 test('a recorded multi-profile is preselected on a re-run', async () => {
@@ -228,7 +377,7 @@ test('review-ownership is offered but off by default', async () => {
 
 // Detection is advisory, and this repository's detection has been wrong on a
 // real repository. It must inform the operator, never decide for them.
-test('a tool the repository already runs is reported, not acted on', async () => {
+test('a tool the repository already runs stands the gate job it covers down', async () => {
   const { prompter, notes } = acceptDefaults();
   const answers = await runWizard(prompter, {
     ...FACTS,
@@ -242,7 +391,7 @@ test('a tool the repository already runs is reported, not acted on', async () =>
   assert.ok(answers.capabilities.includes('gate'));
   assert.equal(notes.length, 1);
   assert.match(notes[0]!, /SonarQube already covers static analysis/);
-  assert.match(notes[0]!, /adds its own on top rather than replacing/);
+  assert.match(notes[0]!, /stood down rather than run a second time/);
 });
 
 test('what .redline.json recorded outranks fresh detection on a re-run', async () => {
@@ -272,4 +421,45 @@ test('findExistingPipeline ignores a pipeline that is not pull-request shaped', 
 
 test('findExistingPipeline reports nothing for a repository with no pipelines', () => {
   assert.equal(findExistingPipeline(tmp()), null);
+});
+
+// --- gate source -------------------------------------------------------------
+
+const GATE_QUESTION = 'Where should the merge gate live?';
+
+test('pressing enter through the menu leaves the gate in the organisation', async () => {
+  const { prompter, asked } = acceptDefaults();
+  const answers = await runWizard(prompter, FACTS);
+
+  assert.equal(answers.gateSource, 'org');
+  assert.equal(asked.find((q) => q.title === GATE_QUESTION)?.initial, 'org');
+});
+
+test('the question says what each choice costs, not just what it is', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, FACTS);
+
+  const gate = asked.find((q) => q.title === GATE_QUESTION);
+  const local = gate?.labels.indexOf('in this repository') ?? -1;
+  assert.ok(local >= 0);
+  assert.match(String(gate?.hints[local]), /weaker/);
+  assert.match(String(gate?.hints[local]), /edit its own gate/);
+});
+
+test('choosing the local gate in the menu is carried out of the wizard', async () => {
+  const { prompter } = acceptDefaults({ [GATE_QUESTION]: 'local' });
+  const answers = await runWizard(prompter, FACTS);
+  assert.equal(answers.gateSource, 'local');
+});
+
+// A repository that deselected the gate has no gate for the question to be
+// about, and asking anyway is a question with no consequence either way.
+test('a repository that skips the gate is never asked where to put it', async () => {
+  const { prompter, asked } = acceptDefaults({
+    'What should Redline install?': ['merge-policy', 'labels'],
+  });
+  const answers = await runWizard(prompter, FACTS);
+
+  assert.equal(asked.find((q) => q.title === GATE_QUESTION), undefined);
+  assert.equal(answers.gateSource, 'org');
 });

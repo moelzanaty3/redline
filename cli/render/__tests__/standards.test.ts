@@ -1,6 +1,6 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +22,24 @@ test('defaults to the manifest-enabled vendors only', (t) => {
   assert.ok(r.managed.includes('AGENTS.md'));
   assert.ok(r.managed.includes('CLAUDE.md'));
   assert.ok(r.managed.includes('.github/copilot-instructions.md'));
-  assert.ok(!r.managed.some((p) => p.startsWith('.cursor/')));
+  assert.ok(r.managed.some((p) => p.startsWith('.cursor/')));
+});
+
+// Codex reads AGENTS.md, so it renders the same file the agents vendor does.
+// Selecting both must write it once and identically — two vendors racing over
+// one path would otherwise produce a diff that flips on every render.
+test('codex and agents render the same AGENTS.md, once', (t) => {
+  const both = render({ root, profile: 'web', out: tmp(t), vendors: ['agents', 'codex'] });
+  assert.equal(both.managed.filter((p) => p === 'AGENTS.md').length, 1);
+
+  const codexOnly = tmp(t);
+  render({ root, profile: 'web', out: codexOnly, vendors: ['codex'] });
+  const agentsOnly = tmp(t);
+  render({ root, profile: 'web', out: agentsOnly, vendors: ['agents'] });
+  assert.equal(
+    readFileSync(join(codexOnly, 'AGENTS.md'), 'utf8'),
+    readFileSync(join(agentsOnly, 'AGENTS.md'), 'utf8')
+  );
 });
 
 test('a second render of an unchanged tree writes nothing', (t) => {
@@ -71,7 +88,7 @@ test('content outside the markers is preserved across a re-render', (t) => {
 test('an unknown vendor is rejected by name', (t) => {
   assert.throws(
     () => render({ root, profile: 'web', out: tmp(t), vendors: ['copilot', 'nope'] }),
-    /unknown vendor "nope"\. Known: copilot, agents, claude, cursor/
+    /unknown vendor "nope"\. Known: copilot, agents, codex, claude, cursor/
   );
 });
 
@@ -178,15 +195,25 @@ test('a well-formed file still renders and is byte-stable across three runs', (t
 
 // --- Task 14: per-repository vendor selection --------------------------------
 
-// The org manifest is the ceiling at render time, not merely at selection
-// time: `standards/manifest.json` disables `cursor` today, so a caller asking
-// for it anyway — standing in for a stale .redline.json recorded before an
-// org-wide disablement — must still get nothing. A wrong implementation that
-// only filters at the CLI layer (cli/commands/init.ts) rather than inside
-// render() itself would let this through.
+// The org manifest is the ceiling at render time, not merely at selection time:
+// a caller asking for a vendor the organisation has switched off — standing in
+// for a stale .redline.json recorded before the disablement — must still get
+// nothing. An implementation that filtered only at the CLI layer
+// (cli/commands/init.ts) rather than inside render() would let this through.
+//
+// Every vendor ships enabled today, so the disabled one is built here rather
+// than borrowed from the shipped manifest: the invariant is about the ceiling,
+// not about which vendor happens to be off this month.
 test('a vendor the org manifest has disabled is dropped even when explicitly requested', (t) => {
+  const orgRoot = tmp(t);
+  cpSync(join(root, 'standards'), join(orgRoot, 'standards'), { recursive: true });
+  const manifestPath = join(orgRoot, 'standards/manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.vendors.cursor.enabled = false;
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
   const out = tmp(t);
-  const r = render({ root, profile: 'web', out, vendors: ['copilot', 'cursor'] });
+  const r = render({ root: orgRoot, profile: 'web', out, vendors: ['copilot', 'cursor'] });
   assert.ok(!r.managed.some((p) => p.startsWith('.cursor/')));
   assert.equal(existsSync(join(out, '.cursor/rules')), false);
 });
@@ -202,7 +229,7 @@ test('artifacts left over from a vendor no longer selected at all are pruned on 
   mkdirSync(join(out, '.cursor/rules'), { recursive: true });
   writeFileSync(join(out, '.cursor/rules/redline-core.mdc'), 'stale cursor content\n');
 
-  const r = render({ root, profile: 'web', out });
+  const r = render({ root, profile: 'web', out, vendors: ['copilot'] });
 
   assert.ok(r.removed.includes(join('.cursor/rules', 'redline-core.mdc')));
   assert.equal(existsSync(join(out, '.cursor/rules/redline-core.mdc')), false);

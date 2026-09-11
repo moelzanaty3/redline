@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MobileMenu } from "@/components/mobile-menu";
+import { ScrollProgress } from "@/components/scroll-progress";
 import { SearchButton } from "@/components/search-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { GITHUB_REPO, GITHUB_URL, NAV_LINKS } from "@/lib/site";
@@ -14,6 +15,7 @@ const CTA_LABEL = "Onboard a repo";
 export function SiteNav() {
   return (
     <header className="site-nav">
+      <ScrollProgress />
       <div className="inner">
         <Link className="logo" href="/">
           <span className="mark" aria-hidden="true" />

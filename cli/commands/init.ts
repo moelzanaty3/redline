@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError, RedlineError } from '../core/errors.ts';
-import { CLI_VERSION } from '../core/version.ts';
+import { CLI_VERSION, UNPUBLISHED_VERSION } from '../core/version.ts';
+import { VENDORED_GATE_PATH } from '../platforms/github/vendor.ts';
 import { canPromote, type Evidence, type Rung } from '../enforce/ladder.ts';
 import {
   CAPABILITY_KEYS,
@@ -22,7 +23,8 @@ import { resolveProfile } from '../render/profile.ts';
 import { render } from '../render/standards.ts';
 import { renderCommands, COMMAND_HOSTS } from '../render/commands.ts';
 import { CONTEXTS, detectSpecKit } from '../render/contexts.ts';
-import { surveyRepo } from '../detect/existing.ts';
+import { surveyRepo, TOOL_PROBES } from '../detect/existing.ts';
+import { applySetup, offerable } from '../detect/setup.ts';
 import { LOCAL_RULES_FILE } from '../render/vendors.ts';
 import { isPending } from '../platforms/types.ts';
 import type {
@@ -31,6 +33,7 @@ import type {
   GateMachinery,
   GateOptions,
   GatePipeline,
+  GateSource,
   OwnershipRule,
   Platform,
   PullRequestRef,
@@ -92,12 +95,30 @@ export const SENSITIVE_PATHS = [
   'Dockerfile',
 ] as const;
 
+// The team that owns the paths Redline seeds into CODEOWNERS.
+//
+// A default, never a fact. GitHub silently ignores an owner it cannot resolve —
+// no error on push, no warning in the UI — so a CODEOWNERS naming a team that
+// does not exist reports as installed and enforces nothing, which is the worst
+// of the three possible outcomes. This was hardcoded, which meant every
+// organisation but the one it was written for got exactly that. `--review-owners`
+// states the real owners; absent, the capability still defaults to this name and
+// the report says plainly that it is a guess.
 export const OWNING_TEAM = 'platform-engineering';
 
 // Accessibility rules only exist for the stacks that render a user interface,
 // so recording `accessibility: true` on a Terraform or Go repository files a
 // commitment against rules that will never be rendered there.
-const ACCESSIBILITY_STACKS = ['react', 'react-native', 'kotlin', 'swift'];
+const ACCESSIBILITY_STACKS = [
+  'react',
+  'react-native',
+  'angular',
+  'vue',
+  'svelte',
+  'dom',
+  'kotlin',
+  'swift',
+];
 
 // The 2.1 artifact that identifies a repository onboarded by the previous
 // generation. It is NOT in the removal list below: v3's GitHub adapter writes
@@ -121,8 +142,33 @@ const LEGACY_SCRIPT = /^redline-.*\.sh$/;
 // no Redline marker belongs to a human and is never deleted.
 const REDLINE_OWNED = /(?:managed|generated|installed) by redline|REDLINE:BEGIN/i;
 
-export function sensitivePathRules(org: string): OwnershipRule[] {
-  return SENSITIVE_PATHS.map((pattern) => ({ pattern, owners: [`@${org}/${OWNING_TEAM}`] }));
+/**
+ * Who owns the sensitive paths.
+ *
+ * `owners` are taken as written when given: a team (`@org/team`), a user
+ * (`@person`) and an email are all valid CODEOWNERS entries, and Redline is not
+ * the right place to decide which an organisation uses. A bare name is qualified
+ * with the org, because `@team` alone means a *user* to GitHub and would silently
+ * own nothing.
+ */
+export function sensitivePathRules(org: string, owners?: readonly string[]): OwnershipRule[] {
+  const resolved =
+    owners !== undefined && owners.length > 0
+      ? owners.map((owner) => qualifyOwner(org, owner))
+      : [`@${org}/${OWNING_TEAM}`];
+  return SENSITIVE_PATHS.map((pattern) => ({ pattern, owners: resolved }));
+}
+
+// CODEOWNERS distinguishes the three by shape, so this only ever adds what is
+// missing: `@name` is a USER and is left alone — qualifying it to `@org/name`
+// would turn a person into a team that does not exist — `@org/team` and an email
+// address are already complete, and only a bare word is ambiguous enough to need
+// the organisation putting in front of it.
+function qualifyOwner(org: string, owner: string): string {
+  const trimmed = owner.trim();
+  if (trimmed.startsWith('@')) return trimmed;
+  if (trimmed.includes('@')) return trimmed;
+  return trimmed.includes('/') ? `@${trimmed}` : `@${org}/${trimmed}`;
 }
 
 export const ONBOARD_BRANCH = 'redline/onboard';
@@ -221,6 +267,22 @@ export interface InitOptions {
   // Same precedence, same reason: a capability the caller did not name keeps
   // whatever `.redline.json` recorded for it.
   capabilities?: Partial<CapabilitySelections>;
+  // `--integrations <list>`. What this repository already runs, as stated rather
+  // than detected. Absent keeps whatever was recorded, and an empty recording
+  // falls back to detection — "nobody has said" and "the answer is nothing" are
+  // different, and only the second should silence the survey.
+  integrations?: string[];
+  // `--review-owners <list>`. Who owns the sensitive paths seeded into
+  // CODEOWNERS. Absent falls back to OWNING_TEAM, which is a guess — see there.
+  reviewOwners?: string[];
+  // `--setup <list>`. Controls Redline should install alongside its own checks
+  // — dependabot, renovate, codeql. Only what can be configured with no account
+  // and no token appears here; see cli/detect/setup.ts.
+  setup?: string[];
+  // `--branches <patterns>`. Which branches the merge policy governs. Absent is
+  // the default branch alone — see MergePolicy.branches for why that stays the
+  // default rather than becoming a detected one.
+  branches?: string[];
   dryRun?: boolean;
   // Bypasses the alreadyOnboarded short-circuit so every capability is
   // re-applied and pendingAdmin is recomputed from the fresh outcomes,
@@ -247,6 +309,31 @@ export interface InitOptions {
   // host's default. A repository on GitHub built by Azure Pipelines is the
   // case this exists for; see GatePipeline in cli/platforms/types.ts.
   pipeline?: GatePipeline;
+  // `--gate-source org|local`. Same precedence as the rung and the menu: absent
+  // keeps whatever the repository already recorded, so a re-run never moves a
+  // repository between gate sources by accident. Moving it is a security change
+  // in one direction — see GateSource — so it takes saying so.
+  gateSource?: GateSource;
+  // `--no-commit`. Write the artifacts into the working tree and stop: no host
+  // request, no branch, no commit, no push, no pull request.
+  //
+  // It exists because there was nothing between `--dry-run`, which writes
+  // nothing at all, and a full run, which commits to a branch and opens a pull
+  // request on the remote. An operator who wanted to look at what Redline
+  // produces before letting it near their history had no way to ask for that,
+  // and the first they saw of the pull request was the run trying to push one.
+  noCommit?: boolean;
+  // Asked when the planning pass finds the organisation publishes no reusable
+  // gate, and only then. Returning true vendors the gate into this repository
+  // for this run; returning false leaves the gate denied, exactly as before.
+  //
+  // It is a callback rather than a wizard answer because the wizard runs before
+  // the platform is resolved, so nothing knows the answer yet at that point —
+  // and asking every operator up front to choose a gate source is a question
+  // almost none of them can answer before seeing the denial. The callback fires
+  // after the plan and before the first byte is written, so saying yes costs
+  // nothing already done.
+  onGateFallback?: (detail: string) => Promise<boolean>;
   // Evidence for a promotion, read from collected telemetry by the caller. Absent
   // means none was supplied, which is not the same as evidence that failed — a
   // promotion asked for without it is refused and says so.
@@ -255,6 +342,13 @@ export interface InitOptions {
   // the rung it has already reached.
   marketFloor?: Rung;
   now?: () => Date;
+  // Called as the run moves between phases, so a caller with a terminal can say
+  // what is happening. Between the last wizard answer and the first line of the
+  // report this command renders a dozen files, makes six host calls and pushes a
+  // branch — up to half a minute of complete silence, which reads as a hang, and
+  // the move after a hang is Ctrl-C in the middle of a run that is writing to
+  // somebody's repository.
+  onStep?: (label: string) => void;
 }
 
 export interface InitReport {
@@ -274,6 +368,11 @@ export interface InitReport {
   migratedFrom: string | null;
   alreadyOnboarded: boolean;
   dryRun: boolean;
+  // The run wrote its files and stopped: no host setting was changed, nothing
+  // was committed. Distinct from `dryRun`, which wrote nothing at all — the
+  // report has to be able to say "these files are on disk and uncommitted",
+  // which is neither of the two answers it could give before.
+  noCommit?: boolean;
   // The menu this run resolved, and the host settings it would change. Both
   // exist so `--dry-run` can print a plan the operator can act on.
   menu: MenuSelections;
@@ -322,6 +421,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const repair = opts.repair === true;
   const manifest = loadManifest(root);
   const now = opts.now ?? (() => new Date());
+  const step = opts.onStep ?? ((): void => {});
 
   // Profile resolution happens before any host call or write: a bad --profile
   // flag must fail clean, with nothing on disk and nothing sent to the host.
@@ -355,6 +455,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // enforcement keeps what the repository already had: a re-run for an unrelated
   // reason silently promoting a repository is how a ladder loses the trust it
   // exists to build.
+  // Absent keeps what the repository recorded, for the same reason the rung
+  // does: `local` is the weaker control, and a re-run that said nothing about
+  // the gate must not be able to move a repository onto it — or, just as bad,
+  // silently move a deliberately-local repository back to an organisation gate
+  // that does not exist and lose it the gate entirely.
+  let gateSource: GateSource = opts.gateSource ?? existing?.gateSource ?? 'org';
+
   const currentRung: Rung = existing?.rung ?? 'observe';
   const rungNotes: string[] = [];
   let rung = currentRung;
@@ -395,7 +502,12 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   // A dry run must work offline and with an unscoped token: repoRef() is a
   // live GET, so the plan is built from what the local clone already knows.
-  const ref = dryRun ? platform.localRef(cwd) : await platform.repoRef(cwd);
+  // `--no-commit` is under the same rule and for the same reason — it is
+  // documented as contacting no host, and this read is a host contact whatever
+  // else the run goes on to skip.
+  const offline = dryRun || opts.noCommit === true;
+  step(offline ? 'reading the repository' : `reading ${platform.host}`);
+  const ref = offline ? platform.localRef(cwd) : await platform.repoRef(cwd);
   // detected <- what this repository already recorded <- what the caller
   // typed, the same precedence the menu resolves under. The org ceiling is
   // deliberately not applied to the RECORD: render() enforces it on every call
@@ -406,17 +518,62 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     .map(([k]) => k);
   const vendors = opts.vendors ?? existing?.vendors ?? detectVendors(cwd, orgVendors);
 
-  const gateOptions: GateOptions = {
+  // The same courtesy Spec Kit gets, generalised to the rest of the toolchain.
+  // A repository with a mature pipeline already runs a scanner for most of what
+  // the gate would add; installing a second one beside it is not defence in
+  // depth, it is two sets of findings and two exemption paths for one problem.
+  // What Redline still brings such a repository is the part nothing else does —
+  // the standards the AI reviews against, and a check that they were applied —
+  // so detection narrows the gate rather than cancelling the onboarding.
+  const survey = surveyRepo(cwd);
+
+  // Precedence, strongest first: what the caller stated this run, then what the
+  // repository recorded, then what detection found. Someone who corrected the
+  // survey once must not have to correct it again on every re-run.
+  const stated =
+    opts.integrations ?? (existing !== null && existing.integrations.length > 0 ? existing.integrations : null);
+  const integrations =
+    stated ?? survey.tools.map((tool) => tool.id);
+  const evidenceOf = new Map(survey.tools.map((tool) => [tool.id, tool.evidence]));
+
+  // Which of the gate's own jobs those tools make redundant. It is computed
+  // here, above the gate options, because the planning pass and the real
+  // install must build the SAME caller workflow: a stand-down list that
+  // appeared between them would make the two disagree about whether the file
+  // changed, which is the class of bug that plans a path nothing writes.
+  //
+  // Every tool on the list narrows the gate, whatever put it there. Detection
+  // deselects rather than duplicates — that is what cli/detect/existing.ts is
+  // for — and the wizard hands its own findings back through --integrations, so
+  // treating a detected tool as weaker than a typed one would make the same
+  // repository behave differently depending on which entry point ran it.
+  //
+  // `dependencies` and `secrets` are the two jobs no label can waive, so this
+  // is a security decision and never a silent one: every stand-down names the
+  // tool, the marker that proved it, and the flag that puts the job back.
+  const standDown = [
+    ...new Set(
+      integrations.flatMap((id) => {
+        const covers = TOOL_PROBES.find((probe) => probe.id === id)?.standsDown;
+        return covers === undefined || covers === null ? [] : [covers];
+      })
+    ),
+  ];
+
+  let gateOptions: GateOptions = {
     ...FLOOR_GATE,
     ...(opts.pipeline ? { pipeline: opts.pipeline } : {}),
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
     ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
     ...(capabilities.labels ? {} : { manageLabels: false }),
+    ...(standDown.length > 0 ? { standDown } : {}),
+    ...(gateSource === 'local' ? { gateSource } : {}),
+    ...(opts.noCommit === true ? { offline: true } : {}),
     // Written into the caller workflow, so the gate blocks or reports according
     // to the rung recorded here rather than needing a second source of truth.
     rung,
   };
-  const ownershipRules = sensitivePathRules(ref.org);
+  const ownershipRules = sensitivePathRules(ref.org, opts.reviewOwners);
 
   // The gate and ownership file diffs are computed in check mode FIRST, before
   // a single host setting is touched. Without it there was no way to know a
@@ -429,8 +586,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // Redline, and its message says nothing was written; planning after the
   // render made that untrue, leaving every vendor artifact and command file on
   // disk with no .redline.json, no branch and no pull request to carry them.
-  const gatePlan = capabilities.gate
-    ? await platform.installGate(ref, cwd, gateOptions, true)
+  // `preflight: !dryRun` is what makes this pass a real plan rather than an
+  // optimistic one: a live run may ask the host whether the reusable workflow
+  // exists, and must, because the answer decides which paths it will stage. A
+  // dry run may not — it contacts no host and needs no credential.
+  step('planning the change');
+  let gatePlan = capabilities.gate
+    ? await platform.installGate(ref, cwd, { ...gateOptions, preflight: !dryRun }, true)
     : { files: [], outcomes: [] };
 
   const ownershipPlan = menu.sensitivePathReviewers
@@ -441,6 +603,45 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // acting on any of it. Detection informs; it does not decide.
   const machinery = observeGateMachinery(platform, cwd);
   const notes: string[] = [...rungNotes];
+
+  // The organisation publishes no gate, and this run has written nothing yet.
+  // Offer the repository the one that fits in it, and re-plan so both passes
+  // agree on the paths — planning one gate source and installing another is
+  // exactly how a run stages a file nothing wrote.
+  if (gatePlan.vendorableGate === true && opts.onGateFallback !== undefined) {
+    const detail = `${ref.org}/.github publishes no Redline gate`;
+    if (await opts.onGateFallback(detail)) {
+      gateSource = 'local';
+      gateOptions = { ...gateOptions, gateSource };
+      gatePlan = await platform.installGate(ref, cwd, { ...gateOptions, preflight: !dryRun }, true);
+      notes.push(`${detail}, so the gate is vendored into this repository instead`);
+    }
+  }
+
+  // Said on every local run, not only the one that chose it here: a repository
+  // that recorded `local` three runs ago carries the same property and the same
+  // exposure, and a note that appears once at onboarding and never again is a
+  // note nobody reads at the moment it matters.
+  if (capabilities.gate && gateSource === 'local') {
+    notes.push(
+      `the gate is vendored at ${VENDORED_GATE_PATH} rather than referenced from ` +
+        `${ref.org}/.github. It runs from the pull request's own head commit, so a pull ` +
+        'request that edits it changes the gate judging it — including standing down the ' +
+        'dependency and secret jobs, which no label can waive. Move to --gate-source org ' +
+        'once the organisation publishes a gate'
+    );
+    // The protection already exists and is simply off: `/.github/workflows/` is
+    // the first entry in SENSITIVE_PATHS. Naming the command rather than
+    // turning it on, because the owner it would write is a guess — a CODEOWNERS
+    // line naming a team that does not exist blocks every pull request in the
+    // repository, which is worse than the exposure it was meant to close.
+    if (!menu.sensitivePathReviewers) {
+      notes.push(
+        'nothing requires review on .github/workflows/ here, so that edit needs no owner\'s ' +
+          'approval. Re-run with --with review-ownership --review-owners <team> to require one'
+      );
+    }
+  }
 
   // Detection, not a decision. `readGateMachinery` is local and free, and what
   // it gives that nothing else here has is the path this host runs its gate
@@ -514,29 +715,62 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     );
   }
 
-  // The same courtesy Spec Kit gets, generalised to the rest of the toolchain.
-  // A repository with a mature pipeline already runs a scanner for most of what
-  // the gate would add; installing a second one beside it is not defence in
-  // depth, it is two sets of findings and two exemption paths for one problem.
-  // What Redline still brings such a repository is the part nothing else does —
-  // the standards the AI reviews against, and a check that they were applied —
-  // so detection narrows the gate rather than cancelling the onboarding.
-  const survey = surveyRepo(cwd);
-  for (const tool of survey.tools) {
-    const covers = tool.standsDown;
+  for (const id of integrations) {
+    const probe = TOOL_PROBES.find((p) => p.id === id);
+    if (probe === undefined) continue;
+    const how = evidenceOf.get(id) ?? 'you said so — detection could not see it from the checkout';
+    const covers = probe.standsDown;
     notes.push(
       covers === null
-        ? `this repository already runs ${tool.label} (${tool.evidence}) — noted; Redline installs nothing that overlaps it`
-        : `this repository already runs ${tool.label} (${tool.evidence}), which covers what Redline's ` +
-          `own ${covers} check would report. Narrowing the gate to match is not wired yet, so for now ` +
-          `deselect it yourself with: redline init --skip gate`
+        ? `this repository already runs ${probe.label} (${how}) — noted; Redline installs nothing that overlaps it`
+        : `this repository already runs ${probe.label} (${how}), which covers what Redline's own ` +
+          `${covers} check would report, so the gate's ${covers} job is stood down here rather ` +
+          `than run a second time. To run it anyway, re-run with an --integrations list that ` +
+          `leaves ${id} out`
     );
+  }
+
+  // Detected, and then unticked. Worth saying: the next run will not re-detect
+  // it into the plan, and a reader of the report should know why it is absent.
+  for (const tool of survey.tools) {
+    if (!integrations.includes(tool.id)) {
+      notes.push(`${tool.label} was detected (${tool.evidence}) but recorded as not in use here`);
+    }
+  }
+
+  // Controls the operator asked for. Written here rather than by an adapter
+  // because they are plain repository files on any host that supports them, and
+  // they ride in the same pull request as everything else this run writes.
+  const wanted = new Set(opts.setup ?? []);
+  const chosen = offerable(cwd, platform.host, stacks).filter(({ integration }) =>
+    wanted.has(integration.id)
+  );
+  const setupResult = applySetup(cwd, chosen, dryRun);
+  for (const path of setupResult.skipped) {
+    // Never overwritten: a repository with its own renovate.json has a
+    // considered one, and replacing it with a generated default is the kind of
+    // help that costs a team a week of tuning.
+    notes.push(`${path} already exists and was left exactly as it is`);
+  }
+  for (const { integration } of chosen) {
+    if (integration.id === 'renovate' && setupResult.written.includes('renovate.json')) {
+      notes.push(
+        'renovate.json is written, but Renovate only runs once the Renovate app is installed on ' +
+          'the organisation — the file alone does nothing'
+      );
+    }
+    if (integration.id === 'codeql' && setupResult.written.includes('.github/workflows/codeql.yml')) {
+      notes.push(
+        'CodeQL is written; on a private repository it needs GitHub Advanced Security to run'
+      );
+    }
   }
 
   const contexts = CONTEXTS.filter((context) => menu[context.key]).map((context) => context.key);
 
   // Files next, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
+  step(dryRun ? 'rendering the standards (plan only)' : 'rendering the standards');
   const rendered = render({ root, profile, out: cwd, vendors, contexts, check: dryRun });
   // The ceiling render() applies internally, applied here too. renderCommands
   // cannot enforce it for itself: COMMAND_HOSTS carries hosts the vendor
@@ -566,6 +800,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ...commands.written,
     ...gatePlan.files,
     ...ownershipPlan.files,
+    ...setupResult.written,
   ];
   // A menu change moves no file of its own (the gate template already diffs
   // adrForLargeDiffs), but it is exactly what `redline init --blocking` on a
@@ -679,12 +914,12 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     };
   }
 
-  const files = [...changedFiles, CONFIG_FILE];
+  const plannedFiles = [...changedFiles, CONFIG_FILE];
 
   if (dryRun) {
     return {
       profile,
-      files,
+      files: plannedFiles,
       removals,
       // installGate's plan reports no outcome (it made no host call);
       // ensureReviewOwnership's are decided locally and worth printing.
@@ -703,16 +938,85 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     };
   }
 
+  step('installing the merge gate');
   const gate = capabilities.gate
     ? await platform.installGate(ref, cwd, gateOptions)
     : { files: [], outcomes: [] };
+
+  // Files written, nothing else attempted. Everything below this point either
+  // changes a setting on the host or puts a commit in the repository's history,
+  // and `--no-commit` exists precisely to reach neither.
+  //
+  // The config is written here rather than at the shared site below so this
+  // path records what it actually did: a repository whose settings were never
+  // applied must not carry a pendingAdmin list computed from outcomes that
+  // never happened, and must not read back as fully onboarded on the next run.
+  if (opts.noCommit === true) {
+    if (capabilities.gate && gateSource === 'org') {
+      notes.push(
+        `the caller workflow references ${ref.org}/.github and nothing checked that it publishes ` +
+          'the gate, because --no-commit contacts no host. Run redline verify after you commit, ' +
+          'or re-run without --no-commit, before relying on the check'
+      );
+    }
+    const written = [
+      ...rendered.written,
+      ...removals,
+      ...commands.written,
+      ...gate.files,
+      ...setupResult.written,
+      CONFIG_FILE,
+    ];
+    step('recording .redline.json');
+    writeConfig(cwd, {
+      standardsVersion: manifest.version,
+      cliVersion: CLI_VERSION,
+      host: platform.host,
+      profile,
+      vendors,
+      menu,
+      capabilities,
+      integrations,
+      // Nothing was applied, so nothing is owed to an administrator yet. The
+      // run that does apply them computes this from real outcomes.
+      pendingAdmin: existing?.pendingAdmin ?? [],
+      onboardedAt: existing?.onboardedAt ?? now().toISOString(),
+      lastRunAt: now().toISOString(),
+      localRules: existsSync(join(cwd, LOCAL_RULES_FILE)),
+      commandFiles: commands.contentIds,
+      rung,
+      gateSource,
+      gateVersion:
+        gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
+    });
+    return {
+      profile,
+      files: written,
+      removals,
+      outcomes: [],
+      pendingAdmin: existing?.pendingAdmin ?? [],
+      pullRequest: null,
+      pullRequestError: null,
+      migratedFrom,
+      alreadyOnboarded: false,
+      dryRun: false,
+      noCommit: true,
+      menu,
+      capabilities,
+      optedOut,
+      notes,
+      hostPlan,
+    };
+  }
 
   const ownership = menu.sensitivePathReviewers
     ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules)
     : { files: [], outcomes: [] };
 
+  step('applying the security floor');
   const security = await platform.enableSecurityFloor(ref);
 
+  step('applying the branch policy');
   const policy = capabilities.mergePolicy
     ? await platform.applyPolicy(ref, {
         requiredApprovals: 1,
@@ -725,8 +1029,23 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
         // MergePolicy — what verify reports back off the host.
         requiredChecks: [],
         blocking: menu.blockingGate,
+        ...(opts.branches && opts.branches.length > 0 ? { branches: opts.branches } : {}),
       })
     : { outcomes: [], policy: null };
+
+  // The check pass cannot perform host preflight reads, so an adapter may
+  // suppress a planned file during the real install. Stage only what the
+  // installers actually wrote; otherwise git add receives a path that does
+  // not exist.
+  const files = [
+    ...rendered.written,
+    ...removals,
+    ...commands.written,
+    ...gate.files,
+    ...ownership.files,
+    ...setupResult.written,
+    CONFIG_FILE,
+  ];
 
   // denied -> pendingAdmin work for an administrator; unsupported -> the
   // capability doesn't exist on this repository (e.g. Advanced Security is
@@ -734,6 +1053,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const outcomes = [...gate.outcomes, ...ownership.outcomes, ...security.outcomes, ...policy.outcomes];
   const pendingAdmin = outcomes.filter(isPending).map((o) => o.capability);
 
+  step('recording .redline.json');
   writeConfig(cwd, {
     standardsVersion: manifest.version,
     cliVersion: CLI_VERSION,
@@ -742,6 +1062,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     vendors,
     menu,
     capabilities,
+    integrations,
     pendingAdmin,
     // When the repository joined, not when it was last touched: overwriting
     // this on every run erased the only record of when the standard landed.
@@ -754,8 +1075,16 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     // a re-run for an unrelated reason silently promoting a repository is how a
     // ladder loses the trust it exists to build.
     rung,
+    gateSource,
+    // Only a vendored gate has a version to record, and only a published CLI
+    // stamps one: a development build leaves the reusable copy's own pin alone
+    // rather than writing a version npm has never heard of, so there is nothing
+    // for verify to compare and the field stays empty.
+    gateVersion:
+      gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
   });
 
+  step('committing and opening the pull request');
   let pullRequest: PullRequestRef | null = null;
   let pullRequestError: string | null = null;
   try {

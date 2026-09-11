@@ -16,9 +16,13 @@ test('loads the real manifest', () => {
   assert.equal(m.core.source, 'standards/core.md');
   assert.ok(m.stacks['react']);
   assert.deepEqual(m.stacks['react-native']?.extends, ['react']);
-  assert.deepEqual(m.profiles['web'], ['javascript', 'react']);
+  assert.deepEqual(m.profiles['web-react'], ['javascript', 'react']);
+  assert.deepEqual(m.profiles['web-angular'], ['javascript', 'angular']);
+  assert.equal(m.profileAliases['web'], 'web-react');
   assert.equal(m.profileAliases['mobile'], 'mobile-rn');
-  assert.equal(m.vendors['cursor']?.enabled, false);
+  assert.equal(m.vendors['cursor']?.enabled, true);
+  assert.equal(m.vendors['codex']?.enabled, true);
+  assert.equal(m.vendors['skills'], undefined);
 });
 
 test('a missing manifest is a host-independent usage failure', () => {

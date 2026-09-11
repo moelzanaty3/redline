@@ -1,6 +1,6 @@
 {
   "$comment": "Single source of truth for Redline. scripts/render.mjs turns this into vendor-specific artifacts. Never hand-edit generated output.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "core": {
     "title": "Redline Core Engineering Standards",
     "source": "standards/core.md"
@@ -26,6 +26,60 @@
         "app/**/*.ts",
         "packages/**/src/**/*.ts",
         "apps/**/src/**/*.ts"
+      ]
+    },
+    "angular": {
+      "title": "Angular",
+      "source": "standards/stacks/angular.md",
+      "globs": [
+        "**/*.component.ts",
+        "**/*.component.html",
+        "**/*.service.ts",
+        "**/*.directive.ts",
+        "**/*.pipe.ts",
+        "**/*.guard.ts",
+        "**/*.interceptor.ts",
+        "src/app/**",
+        "apps/**/src/app/**",
+        "packages/**/src/app/**"
+      ]
+    },
+    "vue": {
+      "title": "Vue",
+      "source": "standards/stacks/vue.md",
+      "globs": [
+        "**/*.vue",
+        "composables/**",
+        "pages/**",
+        "server/**/*.ts",
+        "src/**/*.ts",
+        "app/**/*.ts",
+        "apps/**/src/**/*.ts",
+        "packages/**/src/**/*.ts"
+      ]
+    },
+    "svelte": {
+      "title": "Svelte / SvelteKit",
+      "source": "standards/stacks/svelte.md",
+      "globs": [
+        "**/*.svelte",
+        "**/*.svelte.ts",
+        "**/*.svelte.js",
+        "src/routes/**",
+        "src/lib/**",
+        "apps/**/src/routes/**",
+        "apps/**/src/lib/**",
+        "packages/**/src/lib/**"
+      ]
+    },
+    "dom": {
+      "title": "Browser / DOM",
+      "source": "standards/stacks/dom.md",
+      "globs": [
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.ts",
+        "**/*.html"
       ]
     },
     "react-native": {
@@ -126,9 +180,25 @@
     "tooling": [
       "javascript"
     ],
-    "web": [
+    "web-react": [
       "javascript",
       "react"
+    ],
+    "web-angular": [
+      "javascript",
+      "angular"
+    ],
+    "web-vue": [
+      "javascript",
+      "vue"
+    ],
+    "web-svelte": [
+      "javascript",
+      "svelte"
+    ],
+    "web-vanilla": [
+      "javascript",
+      "dom"
     ],
     "mobile-rn": [
       "javascript",
@@ -174,6 +244,7 @@
   },
   "$aliasComment": "Legacy profile names accepted by sync-targets.txt for backwards compatibility.",
   "profileAliases": {
+    "web": "web-react",
     "mobile": "mobile-rn",
     "java": "service-java",
     "go": "service-go",
@@ -190,18 +261,18 @@
       "title": "AGENTS.md (OpenAI Codex, Copilot coding agent, Jules, Cursor agent, Devin)",
       "enabled": true
     },
+    "codex": {
+      "$comment": "Renders AGENTS.md, the same file the \"agents\" vendor writes — that is the file OpenAI Codex reads, and inventing a second Codex-specific path would render rules nothing looks for. Listed separately because an operator looking for Codex should find it by name; selecting either produces the same artifact, and selecting both writes it once.",
+      "title": "OpenAI Codex (AGENTS.md)",
+      "enabled": true
+    },
     "claude": {
       "title": "Claude Code / Claude in GitHub",
       "enabled": true
     },
     "cursor": {
       "title": "Cursor rules",
-      "enabled": false
-    },
-    "skills": {
-      "$comment": "Ships off. It renders the same rules as the claude vendor in a different shape, and a repository selecting both loads every stack twice. Select it INSTEAD of claude where per-stack loading is wanted: redline init --vendors skills,copilot,agents.",
-      "title": "Claude skills (per-stack, loaded on demand)",
-      "enabled": false
+      "enabled": true
     }
   },
   "$deterministicComment": "Rules a checker decides without a model. The classification lives HERE and not in the markdown deliberately: standards/*.md is what a reviewer reads, and removing a rule from it because a checker also covers it would narrow what the model considers. Every rule is classified by construction \u2014 listed here means deterministic, absent means judgement. Ids are permanent and are never rewritten by this list. scripts/validate.mjs fails the build if an id here has no implementation in cli/policy/checks.ts, which is the failure mode where a rule is silently enforced by nobody.",

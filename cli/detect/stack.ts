@@ -20,68 +20,116 @@ interface Signals {
   dep: (name: string) => boolean;
 }
 
+interface Match {
+  evidence: string[];
+  confidence: 'high' | 'low';
+}
+
 interface Rule {
   profile: string;
-  when: (s: Signals) => string[] | null;
+  when: (s: Signals) => Match | null;
 }
+
+// A manifest naming the framework is the repository telling you what it is. A
+// file extension is you guessing from what happens to be lying around, and the
+// guess is wrong often enough to matter: a Capacitor or Cordova web app ships an
+// `ios/App.xcodeproj`, and calling it an iOS app installs Swift rules on a
+// codebase with no Swift in it. Both still propose a profile; only the first
+// arrives in the menu already ticked.
+const sure = (...evidence: string[]): Match => ({ evidence, confidence: 'high' });
+const guess = (...evidence: string[]): Match => ({ evidence, confidence: 'low' });
 
 const RULES: Rule[] = [
   {
     profile: 'mobile-rn',
     when: (s) =>
       s.dep('react-native') || s.has('metro.config.js') || s.has('metro.config.cjs')
-        ? ['react-native dependency or metro config']
+        ? sure('react-native dependency or metro config')
         : null,
   },
   {
     profile: 'fullstack-node',
     when: (s) =>
       (s.dep('@nestjs/core') || s.has('nest-cli.json')) && (s.dep('react') || s.ext('.tsx'))
-        ? ['nest and react in one repository']
+        ? sure('nest and react in one repository')
         : null,
   },
   {
     profile: 'service-node',
-    when: (s) => (s.dep('@nestjs/core') || s.has('nest-cli.json') ? ['nest-cli.json'] : null),
+    when: (s) => (s.dep('@nestjs/core') || s.has('nest-cli.json') ? sure('nest-cli.json') : null),
   },
   {
     profile: 'mobile-android',
     when: (s) =>
       s.has('AndroidManifest.xml') && (s.ext('.kt') || s.has('build.gradle.kts'))
-        ? ['AndroidManifest.xml with kotlin sources']
+        ? sure('AndroidManifest.xml with kotlin sources')
         : null,
   },
   {
     profile: 'mobile-ios',
     when: (s) =>
-      s.has('Package.swift') || s.ext('.xcodeproj') || s.ext('.swift')
-        ? ['swift package or sources']
-        : null,
+      s.has('Package.swift')
+        ? sure('Package.swift')
+        : // An Xcode project or a stray .swift file is also what a hybrid web app
+          // looks like from the outside — propose it, do not assume it.
+          s.ext('.xcodeproj') || s.ext('.swift')
+          ? guess('xcode project or swift sources')
+          : null,
   },
   {
     profile: 'service-java',
     when: (s) =>
       s.has('pom.xml') || s.has('build.gradle') || s.has('build.gradle.kts')
-        ? ['maven or gradle build file']
+        ? sure('maven or gradle build file')
         : null,
   },
-  { profile: 'service-go', when: (s) => (s.has('go.mod') ? ['go.mod'] : null) },
+  { profile: 'service-go', when: (s) => (s.has('go.mod') ? sure('go.mod') : null) },
   {
     profile: 'service-python',
     when: (s) =>
       s.has('pyproject.toml') || s.has('requirements.txt') || s.has('setup.py')
-        ? ['python project file']
+        ? sure('python project file')
         : null,
   },
   {
     profile: 'service-dotnet',
-    when: (s) => (s.ext('.csproj') || s.ext('.sln') ? ['dotnet project file'] : null),
+    when: (s) => (s.ext('.csproj') || s.ext('.sln') ? sure('dotnet project file') : null),
   },
   {
-    profile: 'web',
-    when: (s) => (s.dep('react') || s.ext('.tsx') || s.ext('.jsx') ? ['react sources'] : null),
+    profile: 'web-angular',
+    when: (s) =>
+      s.dep('@angular/core') || s.has('angular.json')
+        ? sure('angular dependency or angular.json')
+        : null,
   },
-  { profile: 'infra', when: (s) => (s.ext('.tf') ? ['terraform sources'] : null) },
+  {
+    profile: 'web-svelte',
+    when: (s) =>
+      s.dep('svelte') || s.has('svelte.config.js')
+        ? sure('svelte dependency or config')
+        : s.ext('.svelte')
+          ? guess('svelte sources')
+          : null,
+  },
+  {
+    profile: 'web-vue',
+    when: (s) =>
+      s.dep('vue') || s.has('nuxt.config.ts')
+        ? sure('vue dependency or nuxt config')
+        : s.ext('.vue')
+          ? guess('vue sources')
+          : null,
+  },
+  {
+    profile: 'web-react',
+    when: (s) =>
+      s.dep('react')
+        ? sure('react dependency')
+        : s.ext('.tsx') || s.ext('.jsx')
+          ? guess('jsx sources')
+          : null,
+  },
+  { profile: 'infra', when: (s) => (s.ext('.tf') ? sure('terraform sources') : null) },
 ];
 
 export function proposeProfile(input: DetectInput): Proposal {
@@ -97,8 +145,10 @@ export function proposeProfile(input: DetectInput): Proposal {
   };
 
   for (const rule of RULES) {
-    const evidence = rule.when(signals);
-    if (evidence) return { profile: rule.profile, confidence: 'high', evidence };
+    const match = rule.when(signals);
+    if (match) {
+      return { profile: rule.profile, confidence: match.confidence, evidence: match.evidence };
+    }
   }
   return { profile: 'tooling', confidence: 'low', evidence: ['no recognised stack signal'] };
 }

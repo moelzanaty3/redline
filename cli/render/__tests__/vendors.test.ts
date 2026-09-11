@@ -85,7 +85,9 @@ test('web/components/journey.tsx mirrors these CLI constants verbatim', () => {
   const mergedVendors = Object.keys(VENDORS)
     .filter((name) => [...VENDORS[name]!(ctx(PROFILE)).files.values()].some((f) => f.merge === true))
     .sort();
-  assert.deepEqual(mergedVendors, ['agents', 'claude', 'copilot']);
+  // codex joins them by rendering AGENTS.md — the file Codex actually reads —
+  // through the same renderer as agents.
+  assert.deepEqual(mergedVendors, ['agents', 'claude', 'codex', 'copilot']);
 
   assert.equal(REQUIRED_CHECK, 'redline-gate / gate');
   assert.equal(ONBOARD_BRANCH, 'redline/onboard');

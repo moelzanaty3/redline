@@ -25,6 +25,9 @@ export interface FakePlatformOptions {
   security?: CapabilityOutcome[];
   policy?: CapabilityOutcome[];
   gateFiles?: string[];
+  // Models a real installer suppressing a planned file after a remote
+  // preflight, such as the GitHub reusable-gate check.
+  gateFilesOnApply?: string[];
   failPullRequest?: boolean;
   // What `readSecurityState` reports back off the host, which is not the same
   // thing as what `enableSecurityFloor` returned when it was applied: an
@@ -45,6 +48,11 @@ export interface FakePlatformOptions {
   // This models that refusal so `init`'s ordering can be tested: nothing may be
   // on disk by the time it fires.
   refuseGate?: string;
+  // Models an organisation that publishes no reusable gate: the planning pass
+  // reports the refusal as one vendoring would solve, exactly as the GitHub
+  // adapter does. Cleared as soon as a call arrives with gateSource 'local',
+  // because a vendored gate references no organisation to be missing.
+  noOrgGate?: boolean;
 }
 
 export interface FakePlatform extends Platform {
@@ -61,6 +69,10 @@ export interface FakePlatform extends Platform {
   // The change `openPullRequest` was handed. Labels are the only capability
   // that is exercised nowhere else, so nothing else could observe them.
   lastChange: Change | null;
+  // The options each `installGate` call was handed, planning pass first. The
+  // two must agree on everything that shapes the caller workflow, or the plan
+  // and the install disagree about which files changed.
+  gateOptions: GateOptions[];
 }
 
 /**
@@ -153,6 +165,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     reads,
     lastPolicy: ADVISORY,
     lastChange: null,
+    gateOptions: [],
     localRef(): RepoRef {
       return ref;
     },
@@ -163,17 +176,27 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     async installGate(
       _ref: RepoRef,
       cwd: string,
-      _opts: GateOptions,
+      gateOptions: GateOptions,
       check = false
     ): Promise<InstallResult> {
       (check ? planned : applied).push('installGate');
+      platform.gateOptions.push(gateOptions);
       if (opts.refuseGate !== undefined) throw new RedlineError('failed', opts.refuseGate);
-      const files = (opts.gateFiles ?? ['.github/workflows/redline.yml']).filter((rel) =>
+      const files = (
+        (check ? opts.gateFiles : opts.gateFilesOnApply) ??
+        opts.gateFiles ??
+        ['.github/workflows/redline.yml']
+      ).filter((rel) =>
         seed(cwd, rel, GATE_BODY, check)
       );
       const templatePath = HOST_FILES[ref.host].template;
       if (seed(cwd, templatePath, TEMPLATE_BODY, check)) files.push(templatePath);
-      return { files, outcomes: check ? [] : (opts.gate ?? [ok('labels')]) };
+      const vendorable = opts.noOrgGate === true && gateOptions.gateSource !== 'local';
+      return {
+        files,
+        outcomes: check ? [] : (opts.gate ?? [ok('labels')]),
+        ...(check && vendorable ? { vendorableGate: true } : {}),
+      };
     },
     async applyPolicy(_ref: RepoRef, policy: MergePolicy): Promise<PolicyResult> {
       applied.push('applyPolicy');
@@ -231,6 +254,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
           present: true,
           publishes: host.publishes,
           expected: host.publishes,
+          vendored: null,
         }
       );
     },
