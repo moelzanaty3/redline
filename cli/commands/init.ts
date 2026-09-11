@@ -638,7 +638,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     if (!menu.sensitivePathReviewers) {
       notes.push(
         'nothing requires review on .github/workflows/ here, so that edit needs no owner\'s ' +
-          'approval. Re-run with --with reviewOwnership --review-owners <team> to require one'
+          'approval. Re-run with --with review-ownership --review-owners <team> to require one'
       );
     }
   }

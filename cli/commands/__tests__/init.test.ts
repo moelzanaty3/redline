@@ -1853,7 +1853,7 @@ test('a repository already on a local gate is not asked again', async () => {
 // first entry in SENSITIVE_PATHS. Saying so is the whole mitigation.
 test('a local gate with nothing owning the workflows directory says so', async () => {
   const report = await init(fakePlatform(), { cwd: repo(), root, now, gateSource: 'local' });
-  assert.ok(report.notes.some((note) => /--with reviewOwnership/.test(note)), report.notes.join('\n'));
+  assert.ok(report.notes.some((note) => /--with review-ownership/.test(note)), report.notes.join('\n'));
 });
 
 test('a local gate whose workflows already need an owner is not nagged about it', async () => {
@@ -1864,7 +1864,7 @@ test('a local gate whose workflows already need an owner is not nagged about it'
     gateSource: 'local',
     menu: { sensitivePathReviewers: true },
   });
-  assert.ok(!report.notes.some((note) => /--with reviewOwnership/.test(note)));
+  assert.ok(!report.notes.some((note) => /--with review-ownership/.test(note)));
 });
 
 // --- --no-commit -------------------------------------------------------------

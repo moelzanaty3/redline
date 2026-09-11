@@ -47,7 +47,7 @@ including standing down the `dependencies` and `secrets` jobs, which are the gat
 non-exemptible checks and which no label can waive. `init` prints that on every local run,
 not only the one that chose it, and the vendored file repeats it in its own header. The
 mitigation already existed and was simply off: `/.github/workflows/` is the first entry in
-`SENSITIVE_PATHS`, so `--with reviewOwnership --review-owners <team>` requires an owner's
+`SENSITIVE_PATHS`, so `--with review-ownership --review-owners <team>` requires an owner's
 approval on exactly that edit. Redline names the command rather than running it, because
 the owner it would otherwise guess is a team that may not exist — and a `CODEOWNERS` line
 naming a team that does not exist blocks every pull request in the repository, which is
