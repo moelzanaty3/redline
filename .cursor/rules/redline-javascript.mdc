@@ -1,8 +1,8 @@
 ---
-applyTo: "**/*.js,**/*.jsx,**/*.mjs,**/*.cjs"
+description: Redline JavaScript rules
+globs: **/*.js,**/*.jsx,**/*.mjs,**/*.cjs
+alwaysApply: false
 ---
-
-<!-- Redline v0.0.3 · profile: tooling · stacks: javascript -->
 
 # JavaScript Review Rules
 

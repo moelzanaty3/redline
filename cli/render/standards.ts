@@ -122,6 +122,14 @@ export function render(opts: RenderOptions): RenderResult {
     }
   }
 
+  // A path another SELECTED vendor plans is not deselected, whatever an
+  // unselected renderer thinks. Two vendors can legitimately own one file —
+  // `codex` and `agents` both render AGENTS.md, because AGENTS.md is what Codex
+  // reads — and without this, selecting one of them queues the other's identical
+  // path for stripping and deletes the file that was just written.
+  const stillWritten = new Set(planned.keys());
+  const deselected = deselectedMergeFiles.filter((path) => !stillWritten.has(path));
+
   const written: string[] = [];
   const removed: string[] = [];
   const staleWritten: string[] = [];
@@ -144,7 +152,7 @@ export function render(opts: RenderOptions): RenderResult {
   // Deselected vendors' shared files: strip the block, deleting the file
   // outright when nothing else is left. Always a removal, never a write — a
   // deselect is not content Redline is choosing to keep.
-  for (const relPath of deselectedMergeFiles) {
+  for (const relPath of deselected) {
     const target = join(out, relPath);
     if (!existsSync(target)) continue;
     const current = readFileSync(target, 'utf8');

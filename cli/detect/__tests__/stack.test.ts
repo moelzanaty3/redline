@@ -43,12 +43,72 @@ test('nest without react is a node service', () => {
   assert.equal(p.profile, 'service-node');
 });
 
-test('tsx without a framework dependency is web', () => {
+test('tsx without a framework dependency is web-react', () => {
   const p = proposeProfile({
     paths: ['package.json', 'src/App.tsx'],
     packageJson: { dependencies: { react: '19.0.0' } },
   });
-  assert.equal(p.profile, 'web');
+  assert.equal(p.profile, 'web-react');
+});
+
+test('angular.json means web-angular', () => {
+  const p = proposeProfile({
+    paths: ['package.json', 'angular.json', 'src/app/app.component.ts'],
+    packageJson: { dependencies: { '@angular/core': '19.0.0' } },
+  });
+  assert.equal(p.profile, 'web-angular');
+  assert.equal(p.confidence, 'high');
+});
+
+// Angular projects are .ts-only, so nothing before the framework rules fires on
+// them: the proposal has to come from the dependency, not from a file extension.
+test('angular without angular.json still proposes web-angular', () => {
+  const p = proposeProfile({
+    paths: ['package.json', 'src/app/app.component.ts'],
+    packageJson: { dependencies: { '@angular/core': '19.0.0' } },
+  });
+  assert.equal(p.profile, 'web-angular');
+});
+
+test('vue sources mean web-vue', () => {
+  const p = proposeProfile({
+    paths: ['package.json', 'src/App.vue'],
+    packageJson: { dependencies: { vue: '3.5.0' } },
+  });
+  assert.equal(p.profile, 'web-vue');
+});
+
+test('nuxt.config.ts means web-vue', () => {
+  const p = proposeProfile({ paths: ['package.json', 'nuxt.config.ts', 'app.vue'] });
+  assert.equal(p.profile, 'web-vue');
+});
+
+test('svelte.config.js means web-svelte', () => {
+  const p = proposeProfile({
+    paths: ['package.json', 'svelte.config.js', 'src/routes/+page.svelte'],
+    packageJson: { devDependencies: { svelte: '5.0.0' } },
+  });
+  assert.equal(p.profile, 'web-svelte');
+});
+
+// A SvelteKit or Vue app pulls react in transitively often enough (a docs site,
+// a shared component library) that the framework rules have to win on their own
+// signal rather than lose to the broader react one underneath them.
+test('svelte beats react when both appear', () => {
+  const p = proposeProfile({
+    paths: ['package.json', 'src/routes/+page.svelte', 'docs/App.tsx'],
+    packageJson: { dependencies: { svelte: '5.0.0', react: '19.0.0' } },
+  });
+  assert.equal(p.profile, 'web-svelte');
+});
+
+// web-vanilla is never proposed: "plain browser JS" and "a build script" look
+// identical from the outside, and guessing wrong installs DOM rules on a repo
+// with no DOM. It is chosen in the menu or with --profile.
+test('plain js with no framework signal stays tooling', () => {
+  const p = proposeProfile({ paths: ['package.json', 'index.html', 'src/main.js'] });
+  assert.equal(p.profile, 'tooling');
+  assert.equal(p.confidence, 'low');
 });
 
 test('maven and java sources mean a java service', () => {
