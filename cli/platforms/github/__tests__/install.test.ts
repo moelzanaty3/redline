@@ -165,6 +165,31 @@ test('an advisory policy omits the required status check rule', async () => {
   assert.ok(rules.some((r) => r.type === 'pull_request'));
 });
 
+// Widening what a branch ruleset covers is a change to an enforcement boundary.
+// It happens when somebody names the branches and never because detection
+// guessed, so the default has to stay exactly what every repository onboarded
+// before the option existed already had.
+test('a policy with no branches named governs the default branch alone', async () => {
+  const client = fakeGitHubClient({ 'GET /repos/acme/web/rulesets': { status: 200, body: [] } });
+  await createGitHubInstall(client, gitFor).applyPolicy(ref, advisory);
+
+  const create = client.calls.find((c) => c.method === 'POST')!;
+  const conditions = (create.body as { conditions: { ref_name: { include: string[] } } }).conditions;
+  assert.deepEqual(conditions.ref_name.include, ['~DEFAULT_BRANCH']);
+});
+
+test('named branches are sent as the ruleset conditions, verbatim', async () => {
+  const client = fakeGitHubClient({ 'GET /repos/acme/web/rulesets': { status: 200, body: [] } });
+  await createGitHubInstall(client, gitFor).applyPolicy(ref, {
+    ...advisory,
+    branches: ['~DEFAULT_BRANCH', 'refs/heads/release/*'],
+  });
+
+  const create = client.calls.find((c) => c.method === 'POST')!;
+  const conditions = (create.body as { conditions: { ref_name: { include: string[] } } }).conditions;
+  assert.deepEqual(conditions.ref_name.include, ['~DEFAULT_BRANCH', 'refs/heads/release/*']);
+});
+
 test('a blocking policy requires exactly the reported check name', async () => {
   const client = fakeGitHubClient({ 'GET /repos/acme/web/rulesets': { status: 200, body: [] } });
   await createGitHubInstall(client, gitFor).applyPolicy(ref, { ...advisory, blocking: true });
@@ -255,6 +280,46 @@ test('installGate renders a non-default soft-fail-labels list into the caller wo
   const yml = readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8');
   assert.match(yml, /soft-fail-labels: needs-security-review/);
   assert.ok(!yml.includes('redline-exempt,redline-sync'), 'the template default must be replaced, not appended');
+});
+
+test('installGate renders the stood-down gate jobs into the caller workflow', async () => {
+  const cwd = tmp();
+  await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, {
+    ...gateOpts,
+    standDown: ['dependencies', 'policy'],
+  });
+  const yml = readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8');
+  assert.match(yml, /stand-down: 'dependencies,policy'/);
+});
+
+test('installGate leaves stand-down empty when nothing covers a gate job', async () => {
+  const cwd = tmp();
+  await createGitHubInstall(fakeGitHubClient(), gitFor).installGate(ref, cwd, gateOpts);
+  const yml = readFileSync(join(cwd, '.github/workflows/redline.yml'), 'utf8');
+  assert.match(yml, /stand-down: ''/);
+});
+
+// The planning pass of a LIVE run decides which paths that run will stage, so
+// it has to know what the real install will know. Assuming the reusable
+// workflow existed planned a file the install then suppressed, and `git add`
+// died on a pathspec matching nothing — losing the pull request for work that
+// had already succeeded.
+test('a check pass with preflight asks the host and plans no caller it cannot install', async () => {
+  const cwd = tmp();
+  const client = fakeGitHubClient({
+    'GET /repos/acme/.github/contents/.github/workflows/redline-gate.yml?ref=main': { status: 404 },
+    'GET /repos/acme/.github': { status: 404 },
+  });
+  const result = await createGitHubInstall(client, gitFor).installGate(
+    ref,
+    cwd,
+    { ...gateOpts, preflight: true },
+    true
+  );
+
+  assert.ok(!result.files.includes('.github/workflows/redline.yml'));
+  assert.ok(client.calls.length > 0, 'the planning pass of a live run may ask the host');
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false, 'a plan writes nothing');
 });
 
 test('installGate creates the three labels the gate depends on', async () => {

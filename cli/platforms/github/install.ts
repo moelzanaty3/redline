@@ -134,6 +134,13 @@ function parseCreatedPullRequest(body: unknown): PullRequestRef | null {
   return { number: body['number'], url: body['html_url'] };
 }
 
+// The two things an operator can do about a refused write, said once. Both are
+// deliberately imperative and name the command: a report that ends in "needs
+// repository admin" has described a state and asked for nothing.
+const ADMIN_HINT =
+  'ask a repository administrator to grant admin on this repository, then re-run: redline init --repair';
+const RETRY_HINT = 'the host refused this write — re-run redline init --repair once it is reachable';
+
 function outcome(
   capability: AdminCapability,
   status: number,
@@ -141,12 +148,12 @@ function outcome(
 ): CapabilityOutcome {
   if (isSuccess(status)) return { capability, status: 'applied', detail };
   if (status === 401 || status === 403) {
-    return { capability, status: 'denied', detail: `${detail} (needs repository admin)` };
+    return { capability, status: 'denied', detail: `${detail} (needs repository admin)`, hint: ADMIN_HINT };
   }
   if (status === 404 || status === 422) {
     return { capability, status: 'unsupported', detail: `${detail} (not available on this repository)` };
   }
-  return { capability, status: 'denied', detail: `${detail} (HTTP ${status})` };
+  return { capability, status: 'denied', detail: `${detail} (HTTP ${status})`, hint: RETRY_HINT };
 }
 
 // GitHub answers 404, not 403, on these admin write endpoints when a
@@ -159,7 +166,7 @@ function writeOutcome(
   detail: string
 ): CapabilityOutcome {
   if (status === 404) {
-    return { capability, status: 'denied', detail: `${detail} (needs repository admin)` };
+    return { capability, status: 'denied', detail: `${detail} (needs repository admin)`, hint: ADMIN_HINT };
   }
   return outcome(capability, status, detail);
 }
@@ -552,7 +559,12 @@ export function createGitHubInstall(
         target: 'branch',
         enforcement: 'active',
         bypass_actors: [],
-        conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
+        conditions: {
+          ref_name: {
+            include: policy.branches && policy.branches.length > 0 ? [...policy.branches] : ['~DEFAULT_BRANCH'],
+            exclude: [],
+          },
+        },
         rules: buildRules(policy),
       };
 
@@ -620,15 +632,25 @@ export function createGitHubInstall(
 
       refuseForeignCaller(cwd, opts);
 
-      // Does the workflow the caller is about to reference exist? Skipped on
-      // `check`, which is the dry-run path and must send no request — the
-      // wizard asks separately there, where a credential is available.
+      // Does the workflow the caller is about to reference exist? Asked on
+      // every pass that is allowed to contact the host — which is the real
+      // install, and the planning pass of a live run (`preflight`). Only a dry
+      // run skips it: that path must send no request and needs no credential.
+      //
+      // The planning pass has to ask, because it decides which paths the run
+      // will stage. Assuming `ok` there planned `.github/workflows/redline.yml`
+      // for an org with no `.github` repository, the real install suppressed it,
+      // and `git add` then died on a pathspec that matched no file — losing the
+      // pull request for work that had already succeeded.
       //
       // A failed preflight suppresses the CALLER ONLY. The pull request
       // template and the labels below are independently useful and break
       // nothing, so withholding them would punish the repository for an
       // org-level gap it did not create.
-      const preflight = check ? { ok: true as const } : await checkReusableGate(client, ref.org);
+      const preflight =
+        check && opts.preflight !== true
+          ? { ok: true as const }
+          : await checkReusableGate(client, ref.org);
       const caller = readFileSync(join(PACKAGE_ROOT, 'templates/redline.yml'), 'utf8')
         .replaceAll('<org>', ref.org)
         .replace(/adr-diff-threshold: \d+/, `adr-diff-threshold: ${opts.adrDiffThreshold}`)
@@ -637,7 +659,8 @@ export function createGitHubInstall(
           `fail-on-dependency-severity: ${opts.failOnDependencySeverity}`
         )
         .replace(/soft-fail-labels: .+/, `soft-fail-labels: ${opts.softFailLabels.join(',')}`)
-        .replace(/rung: \w[\w-]*/, `rung: ${opts.rung ?? 'observe'}`);
+        .replace(/rung: \w[\w-]*/, `rung: ${opts.rung ?? 'observe'}`)
+        .replace(/stand-down: .*/, `stand-down: '${(opts.standDown ?? []).join(',')}'`);
       if (preflight.ok && syncFile(cwd, '.github/workflows/redline.yml', caller, check)) {
         files.push('.github/workflows/redline.yml');
       }
@@ -691,7 +714,8 @@ export function createGitHubInstall(
               {
                 capability: 'gate',
                 status: 'denied',
-                detail: `${preflight.detail}. ${preflight.hint}`,
+                detail: preflight.detail,
+                hint: preflight.hint,
               },
         ],
       };

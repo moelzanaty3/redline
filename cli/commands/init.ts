@@ -22,7 +22,8 @@ import { resolveProfile } from '../render/profile.ts';
 import { render } from '../render/standards.ts';
 import { renderCommands, COMMAND_HOSTS } from '../render/commands.ts';
 import { CONTEXTS, detectSpecKit } from '../render/contexts.ts';
-import { surveyRepo } from '../detect/existing.ts';
+import { surveyRepo, TOOL_PROBES } from '../detect/existing.ts';
+import { applySetup, offerable } from '../detect/setup.ts';
 import { LOCAL_RULES_FILE } from '../render/vendors.ts';
 import { isPending } from '../platforms/types.ts';
 import type {
@@ -92,12 +93,30 @@ export const SENSITIVE_PATHS = [
   'Dockerfile',
 ] as const;
 
+// The team that owns the paths Redline seeds into CODEOWNERS.
+//
+// A default, never a fact. GitHub silently ignores an owner it cannot resolve —
+// no error on push, no warning in the UI — so a CODEOWNERS naming a team that
+// does not exist reports as installed and enforces nothing, which is the worst
+// of the three possible outcomes. This was hardcoded, which meant every
+// organisation but the one it was written for got exactly that. `--review-owners`
+// states the real owners; absent, the capability still defaults to this name and
+// the report says plainly that it is a guess.
 export const OWNING_TEAM = 'platform-engineering';
 
 // Accessibility rules only exist for the stacks that render a user interface,
 // so recording `accessibility: true` on a Terraform or Go repository files a
 // commitment against rules that will never be rendered there.
-const ACCESSIBILITY_STACKS = ['react', 'react-native', 'kotlin', 'swift'];
+const ACCESSIBILITY_STACKS = [
+  'react',
+  'react-native',
+  'angular',
+  'vue',
+  'svelte',
+  'dom',
+  'kotlin',
+  'swift',
+];
 
 // The 2.1 artifact that identifies a repository onboarded by the previous
 // generation. It is NOT in the removal list below: v3's GitHub adapter writes
@@ -121,8 +140,33 @@ const LEGACY_SCRIPT = /^redline-.*\.sh$/;
 // no Redline marker belongs to a human and is never deleted.
 const REDLINE_OWNED = /(?:managed|generated|installed) by redline|REDLINE:BEGIN/i;
 
-export function sensitivePathRules(org: string): OwnershipRule[] {
-  return SENSITIVE_PATHS.map((pattern) => ({ pattern, owners: [`@${org}/${OWNING_TEAM}`] }));
+/**
+ * Who owns the sensitive paths.
+ *
+ * `owners` are taken as written when given: a team (`@org/team`), a user
+ * (`@person`) and an email are all valid CODEOWNERS entries, and Redline is not
+ * the right place to decide which an organisation uses. A bare name is qualified
+ * with the org, because `@team` alone means a *user* to GitHub and would silently
+ * own nothing.
+ */
+export function sensitivePathRules(org: string, owners?: readonly string[]): OwnershipRule[] {
+  const resolved =
+    owners !== undefined && owners.length > 0
+      ? owners.map((owner) => qualifyOwner(org, owner))
+      : [`@${org}/${OWNING_TEAM}`];
+  return SENSITIVE_PATHS.map((pattern) => ({ pattern, owners: resolved }));
+}
+
+// CODEOWNERS distinguishes the three by shape, so this only ever adds what is
+// missing: `@name` is a USER and is left alone — qualifying it to `@org/name`
+// would turn a person into a team that does not exist — `@org/team` and an email
+// address are already complete, and only a bare word is ambiguous enough to need
+// the organisation putting in front of it.
+function qualifyOwner(org: string, owner: string): string {
+  const trimmed = owner.trim();
+  if (trimmed.startsWith('@')) return trimmed;
+  if (trimmed.includes('@')) return trimmed;
+  return trimmed.includes('/') ? `@${trimmed}` : `@${org}/${trimmed}`;
 }
 
 export const ONBOARD_BRANCH = 'redline/onboard';
@@ -221,6 +265,22 @@ export interface InitOptions {
   // Same precedence, same reason: a capability the caller did not name keeps
   // whatever `.redline.json` recorded for it.
   capabilities?: Partial<CapabilitySelections>;
+  // `--integrations <list>`. What this repository already runs, as stated rather
+  // than detected. Absent keeps whatever was recorded, and an empty recording
+  // falls back to detection — "nobody has said" and "the answer is nothing" are
+  // different, and only the second should silence the survey.
+  integrations?: string[];
+  // `--review-owners <list>`. Who owns the sensitive paths seeded into
+  // CODEOWNERS. Absent falls back to OWNING_TEAM, which is a guess — see there.
+  reviewOwners?: string[];
+  // `--setup <list>`. Controls Redline should install alongside its own checks
+  // — dependabot, renovate, codeql. Only what can be configured with no account
+  // and no token appears here; see cli/detect/setup.ts.
+  setup?: string[];
+  // `--branches <patterns>`. Which branches the merge policy governs. Absent is
+  // the default branch alone — see MergePolicy.branches for why that stays the
+  // default rather than becoming a detected one.
+  branches?: string[];
   dryRun?: boolean;
   // Bypasses the alreadyOnboarded short-circuit so every capability is
   // re-applied and pendingAdmin is recomputed from the fresh outcomes,
@@ -255,6 +315,13 @@ export interface InitOptions {
   // the rung it has already reached.
   marketFloor?: Rung;
   now?: () => Date;
+  // Called as the run moves between phases, so a caller with a terminal can say
+  // what is happening. Between the last wizard answer and the first line of the
+  // report this command renders a dozen files, makes six host calls and pushes a
+  // branch — up to half a minute of complete silence, which reads as a hang, and
+  // the move after a hang is Ctrl-C in the middle of a run that is writing to
+  // somebody's repository.
+  onStep?: (label: string) => void;
 }
 
 export interface InitReport {
@@ -322,6 +389,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const repair = opts.repair === true;
   const manifest = loadManifest(root);
   const now = opts.now ?? (() => new Date());
+  const step = opts.onStep ?? ((): void => {});
 
   // Profile resolution happens before any host call or write: a bad --profile
   // flag must fail clean, with nothing on disk and nothing sent to the host.
@@ -395,6 +463,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   // A dry run must work offline and with an unscoped token: repoRef() is a
   // live GET, so the plan is built from what the local clone already knows.
+  step(dryRun ? 'reading the repository' : `reading ${platform.host}`);
   const ref = dryRun ? platform.localRef(cwd) : await platform.repoRef(cwd);
   // detected <- what this repository already recorded <- what the caller
   // typed, the same precedence the menu resolves under. The org ceiling is
@@ -406,17 +475,60 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     .map(([k]) => k);
   const vendors = opts.vendors ?? existing?.vendors ?? detectVendors(cwd, orgVendors);
 
+  // The same courtesy Spec Kit gets, generalised to the rest of the toolchain.
+  // A repository with a mature pipeline already runs a scanner for most of what
+  // the gate would add; installing a second one beside it is not defence in
+  // depth, it is two sets of findings and two exemption paths for one problem.
+  // What Redline still brings such a repository is the part nothing else does —
+  // the standards the AI reviews against, and a check that they were applied —
+  // so detection narrows the gate rather than cancelling the onboarding.
+  const survey = surveyRepo(cwd);
+
+  // Precedence, strongest first: what the caller stated this run, then what the
+  // repository recorded, then what detection found. Someone who corrected the
+  // survey once must not have to correct it again on every re-run.
+  const stated =
+    opts.integrations ?? (existing !== null && existing.integrations.length > 0 ? existing.integrations : null);
+  const integrations =
+    stated ?? survey.tools.map((tool) => tool.id);
+  const evidenceOf = new Map(survey.tools.map((tool) => [tool.id, tool.evidence]));
+
+  // Which of the gate's own jobs those tools make redundant. It is computed
+  // here, above the gate options, because the planning pass and the real
+  // install must build the SAME caller workflow: a stand-down list that
+  // appeared between them would make the two disagree about whether the file
+  // changed, which is the class of bug that plans a path nothing writes.
+  //
+  // Every tool on the list narrows the gate, whatever put it there. Detection
+  // deselects rather than duplicates — that is what cli/detect/existing.ts is
+  // for — and the wizard hands its own findings back through --integrations, so
+  // treating a detected tool as weaker than a typed one would make the same
+  // repository behave differently depending on which entry point ran it.
+  //
+  // `dependencies` and `secrets` are the two jobs no label can waive, so this
+  // is a security decision and never a silent one: every stand-down names the
+  // tool, the marker that proved it, and the flag that puts the job back.
+  const standDown = [
+    ...new Set(
+      integrations.flatMap((id) => {
+        const covers = TOOL_PROBES.find((probe) => probe.id === id)?.standsDown;
+        return covers === undefined || covers === null ? [] : [covers];
+      })
+    ),
+  ];
+
   const gateOptions: GateOptions = {
     ...FLOOR_GATE,
     ...(opts.pipeline ? { pipeline: opts.pipeline } : {}),
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
     ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
     ...(capabilities.labels ? {} : { manageLabels: false }),
+    ...(standDown.length > 0 ? { standDown } : {}),
     // Written into the caller workflow, so the gate blocks or reports according
     // to the rung recorded here rather than needing a second source of truth.
     rung,
   };
-  const ownershipRules = sensitivePathRules(ref.org);
+  const ownershipRules = sensitivePathRules(ref.org, opts.reviewOwners);
 
   // The gate and ownership file diffs are computed in check mode FIRST, before
   // a single host setting is touched. Without it there was no way to know a
@@ -429,8 +541,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // Redline, and its message says nothing was written; planning after the
   // render made that untrue, leaving every vendor artifact and command file on
   // disk with no .redline.json, no branch and no pull request to carry them.
+  // `preflight: !dryRun` is what makes this pass a real plan rather than an
+  // optimistic one: a live run may ask the host whether the reusable workflow
+  // exists, and must, because the answer decides which paths it will stage. A
+  // dry run may not — it contacts no host and needs no credential.
+  step('planning the change');
   const gatePlan = capabilities.gate
-    ? await platform.installGate(ref, cwd, gateOptions, true)
+    ? await platform.installGate(ref, cwd, { ...gateOptions, preflight: !dryRun }, true)
     : { files: [], outcomes: [] };
 
   const ownershipPlan = menu.sensitivePathReviewers
@@ -514,29 +631,62 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     );
   }
 
-  // The same courtesy Spec Kit gets, generalised to the rest of the toolchain.
-  // A repository with a mature pipeline already runs a scanner for most of what
-  // the gate would add; installing a second one beside it is not defence in
-  // depth, it is two sets of findings and two exemption paths for one problem.
-  // What Redline still brings such a repository is the part nothing else does —
-  // the standards the AI reviews against, and a check that they were applied —
-  // so detection narrows the gate rather than cancelling the onboarding.
-  const survey = surveyRepo(cwd);
-  for (const tool of survey.tools) {
-    const covers = tool.standsDown;
+  for (const id of integrations) {
+    const probe = TOOL_PROBES.find((p) => p.id === id);
+    if (probe === undefined) continue;
+    const how = evidenceOf.get(id) ?? 'you said so — detection could not see it from the checkout';
+    const covers = probe.standsDown;
     notes.push(
       covers === null
-        ? `this repository already runs ${tool.label} (${tool.evidence}) — noted; Redline installs nothing that overlaps it`
-        : `this repository already runs ${tool.label} (${tool.evidence}), which covers what Redline's ` +
-          `own ${covers} check would report. Narrowing the gate to match is not wired yet, so for now ` +
-          `deselect it yourself with: redline init --skip gate`
+        ? `this repository already runs ${probe.label} (${how}) — noted; Redline installs nothing that overlaps it`
+        : `this repository already runs ${probe.label} (${how}), which covers what Redline's own ` +
+          `${covers} check would report, so the gate's ${covers} job is stood down here rather ` +
+          `than run a second time. To run it anyway, re-run with an --integrations list that ` +
+          `leaves ${id} out`
     );
+  }
+
+  // Detected, and then unticked. Worth saying: the next run will not re-detect
+  // it into the plan, and a reader of the report should know why it is absent.
+  for (const tool of survey.tools) {
+    if (!integrations.includes(tool.id)) {
+      notes.push(`${tool.label} was detected (${tool.evidence}) but recorded as not in use here`);
+    }
+  }
+
+  // Controls the operator asked for. Written here rather than by an adapter
+  // because they are plain repository files on any host that supports them, and
+  // they ride in the same pull request as everything else this run writes.
+  const wanted = new Set(opts.setup ?? []);
+  const chosen = offerable(cwd, platform.host, stacks).filter(({ integration }) =>
+    wanted.has(integration.id)
+  );
+  const setupResult = applySetup(cwd, chosen, dryRun);
+  for (const path of setupResult.skipped) {
+    // Never overwritten: a repository with its own renovate.json has a
+    // considered one, and replacing it with a generated default is the kind of
+    // help that costs a team a week of tuning.
+    notes.push(`${path} already exists and was left exactly as it is`);
+  }
+  for (const { integration } of chosen) {
+    if (integration.id === 'renovate' && setupResult.written.includes('renovate.json')) {
+      notes.push(
+        'renovate.json is written, but Renovate only runs once the Renovate app is installed on ' +
+          'the organisation — the file alone does nothing'
+      );
+    }
+    if (integration.id === 'codeql' && setupResult.written.includes('.github/workflows/codeql.yml')) {
+      notes.push(
+        'CodeQL is written; on a private repository it needs GitHub Advanced Security to run'
+      );
+    }
   }
 
   const contexts = CONTEXTS.filter((context) => menu[context.key]).map((context) => context.key);
 
   // Files next, host settings after: a denied host call must never cost the
   // file-level work that already succeeded.
+  step(dryRun ? 'rendering the standards (plan only)' : 'rendering the standards');
   const rendered = render({ root, profile, out: cwd, vendors, contexts, check: dryRun });
   // The ceiling render() applies internally, applied here too. renderCommands
   // cannot enforce it for itself: COMMAND_HOSTS carries hosts the vendor
@@ -566,6 +716,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ...commands.written,
     ...gatePlan.files,
     ...ownershipPlan.files,
+    ...setupResult.written,
   ];
   // A menu change moves no file of its own (the gate template already diffs
   // adrForLargeDiffs), but it is exactly what `redline init --blocking` on a
@@ -679,12 +830,12 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     };
   }
 
-  const files = [...changedFiles, CONFIG_FILE];
+  const plannedFiles = [...changedFiles, CONFIG_FILE];
 
   if (dryRun) {
     return {
       profile,
-      files,
+      files: plannedFiles,
       removals,
       // installGate's plan reports no outcome (it made no host call);
       // ensureReviewOwnership's are decided locally and worth printing.
@@ -703,6 +854,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     };
   }
 
+  step('installing the merge gate');
   const gate = capabilities.gate
     ? await platform.installGate(ref, cwd, gateOptions)
     : { files: [], outcomes: [] };
@@ -711,8 +863,10 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules)
     : { files: [], outcomes: [] };
 
+  step('applying the security floor');
   const security = await platform.enableSecurityFloor(ref);
 
+  step('applying the branch policy');
   const policy = capabilities.mergePolicy
     ? await platform.applyPolicy(ref, {
         requiredApprovals: 1,
@@ -725,8 +879,23 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
         // MergePolicy — what verify reports back off the host.
         requiredChecks: [],
         blocking: menu.blockingGate,
+        ...(opts.branches && opts.branches.length > 0 ? { branches: opts.branches } : {}),
       })
     : { outcomes: [], policy: null };
+
+  // The check pass cannot perform host preflight reads, so an adapter may
+  // suppress a planned file during the real install. Stage only what the
+  // installers actually wrote; otherwise git add receives a path that does
+  // not exist.
+  const files = [
+    ...rendered.written,
+    ...removals,
+    ...commands.written,
+    ...gate.files,
+    ...ownership.files,
+    ...setupResult.written,
+    CONFIG_FILE,
+  ];
 
   // denied -> pendingAdmin work for an administrator; unsupported -> the
   // capability doesn't exist on this repository (e.g. Advanced Security is
@@ -734,6 +903,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const outcomes = [...gate.outcomes, ...ownership.outcomes, ...security.outcomes, ...policy.outcomes];
   const pendingAdmin = outcomes.filter(isPending).map((o) => o.capability);
 
+  step('recording .redline.json');
   writeConfig(cwd, {
     standardsVersion: manifest.version,
     cliVersion: CLI_VERSION,
@@ -742,6 +912,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     vendors,
     menu,
     capabilities,
+    integrations,
     pendingAdmin,
     // When the repository joined, not when it was last touched: overwriting
     // this on every run erased the only record of when the standard landed.
@@ -756,6 +927,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     rung,
   });
 
+  step('committing and opening the pull request');
   let pullRequest: PullRequestRef | null = null;
   let pullRequestError: string | null = null;
   try {

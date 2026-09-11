@@ -1,6 +1,6 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, existsSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,8 +69,8 @@ test('the menu can promote the gate to blocking', async () => {
 test('the detected profile is used and recorded', async () => {
   const cwd = repo();
   const report = await init(fakePlatform(), { cwd, root, now });
-  assert.equal(report.profile, 'web');
-  assert.equal(readConfig(cwd)?.profile, 'web');
+  assert.equal(report.profile, 'web-react');
+  assert.equal(readConfig(cwd)?.profile, 'web-react');
 });
 
 test('an explicit profile overrides detection', async () => {
@@ -110,6 +110,90 @@ test('denied capabilities become pendingAdmin and the run still completes', asyn
   assert.deepEqual(report.pendingAdmin, ['secret-scanning', 'push-protection']);
   assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['secret-scanning', 'push-protection']);
   assert.equal(report.pullRequest?.number, 1, 'the PR must still be opened');
+});
+
+test('only files written after install-time preflight are staged', async () => {
+  const platform = fakePlatform({
+    gateFilesOnApply: [],
+    gate: [{ capability: 'gate', status: 'denied', detail: 'reusable workflow is unavailable' }],
+  });
+  const cwd = repo();
+  const report = await init(platform, { cwd, root, now });
+
+  assert.equal(report.pullRequest?.number, 1);
+  assert.ok(!existsSync(join(cwd, '.github/workflows/redline.yml')));
+  assert.ok(!report.files.includes('.github/workflows/redline.yml'));
+  assert.ok(!platform.lastChange?.files.includes('.github/workflows/redline.yml'));
+  assert.deepEqual(report.pendingAdmin, ['gate']);
+});
+
+test('a live run lets its planning pass ask the host; a dry run does not', async () => {
+  const live = fakePlatform();
+  await init(live, { cwd: repo(), root, now });
+  assert.equal(live.gateOptions[0]?.preflight, true, 'the plan decides what is staged, so it must ask');
+
+  const dry = fakePlatform();
+  await init(dry, { cwd: repo(), root, now, dryRun: true });
+  assert.notEqual(dry.gateOptions[0]?.preflight, true, 'a dry run contacts no host and needs no credential');
+});
+
+test('the plan and the install are handed the same gate options', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, integrations: ['dependabot'] });
+
+  const [plan, install] = platform.gateOptions;
+  assert.equal(platform.gateOptions.length, 2);
+  // preflight is the one deliberate difference: it says whether the pass may
+  // ask the host, not what the caller workflow says.
+  assert.deepEqual({ ...plan, preflight: undefined }, { ...install, preflight: undefined });
+});
+
+test('a declared tool stands the gate job it covers down', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+  const report = await init(platform, { cwd, root, now, integrations: ['dependabot', 'sonarqube'] });
+
+  assert.deepEqual(platform.gateOptions.at(-1)?.standDown, ['dependencies', 'policy']);
+  assert.ok(
+    report.notes.some((note) => note.includes('dependencies job is stood down')),
+    'the report must say which job stopped running, and why'
+  );
+});
+
+test('a declared tool that covers nothing stands nothing down', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now, integrations: ['renovate'] });
+
+  assert.equal(platform.gateOptions.at(-1)?.standDown, undefined);
+});
+
+test('a detected tool narrows the gate the same way a stated one does', async () => {
+  const platform = fakePlatform();
+  // The wizard hands its own findings back through --integrations, so a
+  // detected tool that narrowed less than a typed one would make the same
+  // repository behave differently depending on which entry point ran it.
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/dependabot.yml': 'version: 2\n',
+  });
+  const report = await init(platform, { cwd, root, now });
+
+  assert.deepEqual(platform.gateOptions.at(-1)?.standDown, ['dependencies']);
+  assert.ok(
+    report.notes.some((note) => note.includes('.github/dependabot.yml') && note.includes('stood down')),
+    'a stood-down security job must name the marker that proved the tool'
+  );
+});
+
+test('an empty integrations list puts every gate job back', async () => {
+  const platform = fakePlatform();
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/dependabot.yml': 'version: 2\n',
+  });
+  await init(platform, { cwd, root, now, integrations: [] });
+
+  assert.equal(platform.gateOptions.at(-1)?.standDown, undefined);
 });
 
 test('unsupported capabilities never become pendingAdmin', async () => {
@@ -1021,7 +1105,7 @@ test('detects every vendor whose markers are present at once', async () => {
 test('a repository with none of the markers gets the org default, every enabled vendor', async () => {
   const cwd = repo();
   await init(fakePlatform(), { cwd, root, now });
-  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'agents', 'claude']);
+  assert.deepEqual(readConfig(cwd)?.vendors, ['copilot', 'agents', 'codex', 'claude', 'cursor']);
 });
 
 test('an explicit vendor selection overrides detection', async () => {
@@ -1042,11 +1126,30 @@ test('a re-run preserves the recorded vendor selection rather than re-detecting'
   assert.deepEqual(readConfig(cwd)?.vendors, ['agents'], 'CLAUDE.md on disk must not re-trigger detection');
 });
 
-// A vendor the org manifest disables (cursor, in standards/manifest.json)
-// must never render even when it is what the repository detected, or typed.
+// A root whose org manifest has switched a vendor off.
+//
+// Every vendor ships enabled now, so the disabled one is built rather than
+// borrowed: what these tests pin is the ceiling itself — a vendor the
+// organisation disables never renders, however it was asked for — not which
+// vendor happens to be off in the shipped manifest this month.
+function rootWithDisabledVendor(vendor: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-org-'));
+  createdDirs.push(dir);
+  for (const name of ['standards', 'commands', 'templates', 'workflows']) {
+    cpSync(join(root, name), join(dir, name), { recursive: true });
+  }
+  const manifestPath = join(dir, 'standards/manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.vendors[vendor].enabled = false;
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  return dir;
+}
+
+// A vendor the org manifest disables must never render even when it is what
+// the repository detected, or typed.
 test('an org-disabled vendor is recorded but never rendered', async () => {
   const cwd = repo({ 'package.json': '{"dependencies":{"react":"19"}}', '.cursor/rules/team.mdc': 'ours\n' });
-  await init(fakePlatform(), { cwd, root, now });
+  await init(fakePlatform(), { cwd, root: rootWithDisabledVendor('cursor'), now });
   assert.deepEqual(readConfig(cwd)?.vendors, ['cursor']);
   assert.equal(existsSync(join(cwd, '.cursor/rules/redline-core.mdc')), false);
 });
@@ -1057,7 +1160,12 @@ test('an org-disabled vendor is recorded but never rendered', async () => {
 // commands then went stale in a tool the repository never opted into.
 test('an org-disabled vendor gets no command files either', async () => {
   const cwd = repo();
-  const report = await init(fakePlatform(), { cwd, root, now, vendors: ['copilot', 'cursor'] });
+  const report = await init(fakePlatform(), {
+    cwd,
+    root: rootWithDisabledVendor('cursor'),
+    now,
+    vendors: ['copilot', 'cursor'],
+  });
 
   assert.equal(existsSync(join(cwd, '.github/prompts/redline-init.prompt.md')), true);
   assert.equal(existsSync(join(cwd, '.cursor/commands/redline-init.md')), false);

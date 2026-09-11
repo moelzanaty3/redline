@@ -150,7 +150,19 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
     },
     stagePaths(paths) {
       if (paths.length === 0) return;
-      g('add', '--', ...paths);
+      try {
+        g('add', '--', ...paths);
+      } catch (error) {
+        // Reached when a caller listed a path nothing actually wrote, which
+        // git reports as `fatal: pathspec ... did not match any files`. The
+        // raw execFileSync message leaks the whole argv, so it is replaced
+        // with the failure and where the run left the operator.
+        throw new RedlineError(
+          'host',
+          `could not stage the Redline changes: ${gitFailure(error)}`,
+          'nothing was committed and no pull request was opened — the path above was listed but never written, so re-run and report it if it recurs'
+        );
+      }
     },
     hasStagedChanges() {
       try {

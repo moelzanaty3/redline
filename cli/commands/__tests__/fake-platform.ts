@@ -25,6 +25,9 @@ export interface FakePlatformOptions {
   security?: CapabilityOutcome[];
   policy?: CapabilityOutcome[];
   gateFiles?: string[];
+  // Models a real installer suppressing a planned file after a remote
+  // preflight, such as the GitHub reusable-gate check.
+  gateFilesOnApply?: string[];
   failPullRequest?: boolean;
   // What `readSecurityState` reports back off the host, which is not the same
   // thing as what `enableSecurityFloor` returned when it was applied: an
@@ -61,6 +64,10 @@ export interface FakePlatform extends Platform {
   // The change `openPullRequest` was handed. Labels are the only capability
   // that is exercised nowhere else, so nothing else could observe them.
   lastChange: Change | null;
+  // The options each `installGate` call was handed, planning pass first. The
+  // two must agree on everything that shapes the caller workflow, or the plan
+  // and the install disagree about which files changed.
+  gateOptions: GateOptions[];
 }
 
 /**
@@ -153,6 +160,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     reads,
     lastPolicy: ADVISORY,
     lastChange: null,
+    gateOptions: [],
     localRef(): RepoRef {
       return ref;
     },
@@ -163,12 +171,17 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     async installGate(
       _ref: RepoRef,
       cwd: string,
-      _opts: GateOptions,
+      gateOptions: GateOptions,
       check = false
     ): Promise<InstallResult> {
       (check ? planned : applied).push('installGate');
+      platform.gateOptions.push(gateOptions);
       if (opts.refuseGate !== undefined) throw new RedlineError('failed', opts.refuseGate);
-      const files = (opts.gateFiles ?? ['.github/workflows/redline.yml']).filter((rel) =>
+      const files = (
+        (check ? opts.gateFiles : opts.gateFilesOnApply) ??
+        opts.gateFiles ??
+        ['.github/workflows/redline.yml']
+      ).filter((rel) =>
         seed(cwd, rel, GATE_BODY, check)
       );
       const templatePath = HOST_FILES[ref.host].template;

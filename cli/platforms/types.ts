@@ -40,6 +40,13 @@ export interface CapabilityOutcome {
   // same reason: an indeterminate read is not an answer.
   status: 'applied' | 'already' | 'denied' | 'unsupported' | 'unknown';
   detail: string;
+  // What a human would have to do to make this capability apply. Separate from
+  // `detail` because the two answer different questions and get read at
+  // different moments: `detail` is what happened, and belongs beside the
+  // capability; `hint` is the next action, and belongs in the list of work the
+  // run could not finish. Joined into one string they were read as neither —
+  // a wall of prose in a column too narrow for it.
+  hint?: string;
 }
 
 // Exactly `denied`. `unknown` must behave like `unsupported` here: neither
@@ -88,6 +95,19 @@ export interface GateOptions {
   // whether to block. Absent means `observe` — the rung that changes nothing,
   // which is what every caller written before the ladder existed meant.
   rung?: string;
+  // Gate jobs another tool in this repository already covers, stood down in the
+  // caller workflow rather than run a second time. Absent runs every job, which
+  // is what every caller written before detection narrowed anything meant.
+  //
+  // `dependencies` and `secrets` are the gate's two non-exemptible security
+  // jobs, so standing either one down is a security decision and never a
+  // detection guess: only a tool the operator DECLARED reaches this list.
+  standDown?: readonly string[];
+  // Whether a planning pass (`check`) may ask the host questions. A dry run
+  // must not — it contacts no host and needs no credential — but the planning
+  // pass inside a live run must, or it plans a file the real install then
+  // suppresses and the run stages a path nothing wrote.
+  preflight?: boolean;
 }
 
 export interface MergePolicy {
@@ -102,6 +122,13 @@ export interface MergePolicy {
   // reports, which is what verify compares against the reported checks.
   requiredChecks: string[];
   blocking: boolean;
+  // Write side. Branch patterns the policy governs, in the host's own syntax
+  // (GitHub: `~DEFAULT_BRANCH`, or `refs/heads/release/*`). Absent or empty
+  // means the default branch alone, which is what every repository onboarded
+  // before this got and must keep getting: widening what a branch ruleset
+  // covers is a change to an enforcement boundary, and it happens only when
+  // somebody asks for it by name.
+  branches?: readonly string[];
   // Read side only, and set only when the host can say something the boolean
   // cannot: why a gate that looks configured to block does not actually
   // block. `redline verify` prints it with the merge-policy finding, so an
