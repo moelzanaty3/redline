@@ -5,7 +5,7 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
-## [Unreleased]
+## [0.0.3](https://github.com/moelzanaty3/redline/compare/v0.0.2...v0.0.3) (2026-09-11)
 
 ### `redline init` — a gate for a repository whose organisation has not agreed to one yet
 
@@ -62,7 +62,50 @@ Two guards widened to match:
   reusable-workflow ref — which a local `uses: ./...` cannot carry, so Redline read a
   caller it had written itself as somebody else's workflow and refused to touch it.
 
-## [0.0.3](https://github.com/moelzanaty3/redline/compare/v0.0.2...v0.0.3) (2026-09-11)
+
+### `redline init` — the run that hung, and the one that writes nothing you did not ask for
+
+- **git no longer hangs on a prompt nobody can see.** A real onboarding sat on
+  "committing and opening the pull request" until it was killed: `git push` reached an ssh
+  wanting a passphrase, stdin is `ignore` so the answer could not be typed and stderr is
+  captured so the question could not be printed. The prompts are switched off rather than
+  hidden — `GIT_TERMINAL_PROMPT`, ssh `BatchMode` and a connect timeout — so git fails at
+  once and `push()` gets to print the error it always had, naming the branch the work is
+  committed on. An operator's own `GIT_SSH_COMMAND` still wins.
+- **`--no-commit` writes the files and stops.** There was nothing between `--dry-run`,
+  which writes nothing at all, and a full run, which changes repository settings, commits
+  to a branch and opens a pull request. It resolves the repository from the clone, skips
+  the preflight and the label writes, and so needs no credential and works offline. The
+  menu offers it as a third answer to `Ready?`. What it gives up is stated in the report:
+  without the preflight, an org-sourced caller is written without confirming the
+  organisation publishes the workflow it references.
+- **`remove` takes the vendored gate away with the caller that ran it.** It deleted the
+  caller and left `.github/workflows/redline-gate.yml` behind — a reusable workflow nothing
+  calls, in a repository just told Redline was gone. The path is read out of the caller,
+  and accepted only when it is the one path Redline writes: a caller is a file anybody can
+  edit, and resolving an arbitrary `./…` out of it would let a hand-edited workflow nominate
+  any file in the repository for deletion.
+- **A multi-select says it can be answered with nothing.** `0/2 selected` beside
+  `enter confirm` read as a form refusing to submit until something was ticked. It never
+  was. Only the word changed; escape is still the cancel key, because it is the only way
+  out of a wizard.
+- **The menu asks where the gate should live**, straight after `What should Redline
+  install?` and only when the gate was kept. It is asked blind — the wizard runs before the
+  platform is resolved — so the mid-run offer stays for anyone who picks `org` and turns out
+  not to have one.
+
+Two bugs this surfaced, both fixed:
+
+- **`verify` called the gate broken on repositories where it was working.** The machinery
+  parser required a trailing `@` on the gate reference, which a local `uses: ./…` cannot
+  carry, so every locally-sourced repository read back as a caller whose job id had been
+  edited away. That is the one direction this check must never fail in — it is the check
+  that tells a real outage from a slow run.
+- **The home page listed six wizard questions for a wizard that asks ten.** Every other
+  number on that page is derived from the repository and throws rather than degrade; the
+  question list was hand-written and drifted silently. It is parsed out of `cli/ui/wizard.ts`
+  at build time now, and a disagreement fails the build naming both sides.
+
 
 ### Vendors — Cursor on, Codex named, skills gone
 
