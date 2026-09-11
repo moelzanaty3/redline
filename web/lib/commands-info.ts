@@ -1,4 +1,4 @@
-// The commands a person types in a repository they are standing in. All seven
+// The commands a person types in a repository they are standing in. All nine
 // are built; `built` stays on the type because the estate-level commands (metrics,
 // registry) are documented elsewhere and this shape is shared with them, and
 // because a command that is later specified ahead of its implementation should
@@ -252,5 +252,51 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     output:
       "One line per finding in the output contract, with the file and line. The CLI renders that line itself from the validated rule id and severity — a model that writes the prefix will eventually write a severity that does not exist or an id it invented, and every aggregate keyed on that line becomes fiction. A finding citing a rule the prompt did not carry is discarded with the reason said out loud. A changed file no stack covers is reported too, because that is a gap in the standard and reviewing it against core alone while saying nothing hides it. It always exits 0: a non-zero exit would invite someone to wire this into CI as a second gate, where it would enforce nothing while looking like it did.",
     edit: "cli/review/ — scope.ts resolves the applicable rules, prompt.ts builds the bounded prompt, schema.ts is the published findings contract, engines/ holds the two engines. Local findings are excluded from rule-tuning telemetry by construction and the report says so on every run: a local run has no thread to resolve and no reviewer to attribute, so counting it would compute acted-on rate partly from runs nobody can verify.",
+  },
+  status: {
+    what: "Answers \"what is Redline doing in this repository?\" from the checkout alone. What is installed, which rung the gate sits at, what an administrator still owes you, and whether the standards this CLI carries have moved on from the ones the repository was rendered against.",
+    built: true,
+    onboard:
+      "Nothing to install, and nothing to authorise. It reads .redline.json and the rendered artifacts in the working tree — it contacts no host and needs no credential, which is what makes it the right first command on a repository you have not seen before. On a repository that was never onboarded it says so and names the next command rather than failing at an API call it should not have attempted.",
+    usage: [
+      "redline status                        # what is installed here",
+      "redline status --json                 # the same, for a wrapper that has to act on it",
+    ],
+    flags: [
+      {
+        flag: "--json",
+        detail:
+          "The whole report as a stable object — onboarded, profile, stacks, host, rung, vendors, capabilities, integrations, pendingAdmin, standardsVersion against currentStandards, drifted, and the two timestamps. Shaped so a script can branch on `drifted` or on a non-empty `pendingAdmin` without parsing prose.",
+      },
+    ],
+    output:
+      "Three or four lines on a healthy repository, naming the profile, the rung and the standards version it was rendered from. Two things it will not do: it will not report a repository healthy on the strength of a check it could not run, and it will not claim a host setting it never read — everything here comes from the working tree, so a ruleset edited by hand in the GitHub UI is invisible to it by design. That is what `redline verify` is for, and status says so rather than implying it covered it.",
+    edit: "cli/commands/status.ts, reading cli/config/redline-json.ts for the recorded state and cli/render/manifest.ts for the standards version to compare against. The drift comparison is a version comparison, not a content diff: a repository that re-rendered from the same version is current even if a human has since edited an artifact, which is the case `redline verify` catches.",
+  },
+  explain: {
+    what: "Turns the bracketed rule id in a finding back into the rule, the file it is defined in, and the profiles that receive it. Every finding Redline posts cites an id; this is the command that makes that id mean something to the person who has to act on it.",
+    built: true,
+    onboard:
+      "Nothing to install. The rule catalogue is compiled from standards/ inside the CLI, so explain works in any directory — including one that has never been onboarded. It is the fastest route from a comment on a pull request to the line in standards/ a human would edit to change the rule.",
+    usage: [
+      "redline explain core/hardcoded-secrets    # what this rule is and where it came from",
+      "redline explain --list                    # every rule id in the standards, with severity",
+      "redline explain react/effect-derived-state --json",
+    ],
+    flags: [
+      {
+        flag: "--list",
+        detail:
+          "Every id in the standards with its severity, which is how you find the id you half-remember. It is also the check that a finding cited a real rule: an id that does not appear here was invented by the model, and the output contract treats it as untagged.",
+      },
+      {
+        flag: "--json",
+        detail:
+          "The rule (id, stack, severity, text, source file and line) plus the full profile list. The source line is what makes this actionable — it is the exact place in standards/ to edit, not a paraphrase of it.",
+      },
+    ],
+    output:
+      "Severity and id, the rule text, then four attributions: who decided it, the standards file and line it is defined at, which files it is scoped to, and every profile that receives it. An unknown id is an error that names `--list` rather than a guess at what you meant — a rule explained approximately is worse than one not explained, because the reader acts on it.",
+    edit: "cli/rules/catalogue.ts compiles the catalogue from standards/; the command surface is in cli/bin/redline.ts. Ids are permanent by design — reword a rule freely, but never edit its id, or every historical telemetry record for it orphans and its tuning history resets to nothing.",
   },
 };

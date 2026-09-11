@@ -44,13 +44,13 @@ export const SCRIPTS: RegistryEntry[] = [
 
 export const WORKFLOWS: RegistryEntry[] = [
   { slug: "redline-gate", title: "redline-gate.yml", file: "workflows/redline-gate.yml", description: "Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation. Active." },
-  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Would distribute standards and gate callers to onboarded repos as PRs. Inactive in Phase 1 (if: false) — automated standards distribution returns in Phase 3." },
+  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Distributes standards and gate callers to onboarded repos as PRs. Active — runs on a push to main touching standards/, cli/render/ or templates/, and on workflow_dispatch." },
   { slug: "redline-collect", title: "redline-collect.yml", file: "workflows/redline-collect.yml", description: "Nightly telemetry collection across the org. Lives in the redline-metrics repo." },
   { slug: "weekly-digest", title: "weekly-digest.yml", file: "workflows/weekly-digest.yml", description: "Monday Teams digest workflow. Lives in the redline-metrics repo." },
   { slug: "inbox", title: "inbox.yml", file: "workflows/inbox.yml", description: "Org-wide prioritised PR inbox on GitHub Pages. Lives in this (source) repo." },
   { slug: "dashboard", title: "dashboard.yml", file: "workflows/dashboard.yml", description: "Telemetry dashboard build and publish. Lives in the redline-metrics repo." },
   { slug: "seed-canary", title: "seed-canary.yml", file: "workflows/seed-canary.yml", description: "Weekly regression test against the seeded corpus. Lives in the redline-metrics repo." },
-  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Would re-verify onboarded repos still report the required check. Inactive in Phase 1 (if: false) — returns in Phase 3." },
+  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Re-verifies onboarded repos still report the required check, and opens one tracking issue on drift. Active — weekly, Tuesday 06:00 UTC, plus workflow_dispatch." },
 ];
 
 export const TEMPLATES: RegistryEntry[] = [
@@ -76,6 +76,8 @@ export const COMMANDS: RegistryEntry[] = [
   { slug: "policy", title: "redline policy", file: "cli/policy/checks.ts", description: "Evaluates the rules a checker can decide, with no model call — a ticket reference is present or it is not." },
   { slug: "exempt", title: "redline exempt", file: "cli/commands/exempt.ts", description: "Decides whether a pull request carries a valid exemption for a failing process check — a reason, a scope and an expiry, not a bare label." },
   { slug: "review", title: "redline review", file: "cli/commands/review.ts", description: "Reviews a change against only the rules that apply to the files it touches — locally, in either engine, before you push." },
+  { slug: "status", title: "redline status", file: "cli/commands/status.ts", description: "What is installed here, how hard it bites, what an administrator still owes you, and whether the standards have moved on — from the checkout alone, with no credential." },
+  { slug: "explain", title: "redline explain", file: "cli/rules/catalogue.ts", description: "What a rule means, who decided it, which files it is scoped to and which profiles receive it — the bracketed id in a finding, turned back into the line a human edits." },
 ];
 
 export const SEEDS: RegistryEntry[] = [

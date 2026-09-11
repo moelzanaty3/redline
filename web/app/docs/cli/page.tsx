@@ -15,14 +15,20 @@ export default function Page() {
       href="/docs/cli"
     >
       <p>
-        The surface is deliberately small — every capability that is not one of
-        these is a scheduled control-plane job, not something a person types.{" "}
         <code>redline init</code> and <code>redline verify</code> are what an
-        onboarded repository uses day to day; <code>redline review</code> reviews
-        a diff against only the rules its files touch; <code>redline policy</code>{" "}
-        and <code>redline exempt</code> are what the gate calls; and{" "}
-        <code>redline sync</code> runs from a checkout of this repository to open
-        a pull request on every registered repository whose standards are behind.
+        onboarded repository uses day to day; <code>redline status</code> answers
+        what is installed here without contacting a host or needing a credential;{" "}
+        <code>redline review</code> reviews a diff against only the rules its
+        files touch; <code>redline explain</code> turns the bracketed id in a
+        finding back into the rule and the line in <code>standards/</code> that
+        defines it; <code>redline policy</code> and <code>redline exempt</code>{" "}
+        are what the gate calls; <code>redline remove</code> takes Redline back
+        out as a pull request; and <code>redline sync</code> runs from a checkout
+        of this repository to open a pull request on every registered repository
+        whose standards are behind. Two more —{" "}
+        <code>redline registry</code> and <code>redline metrics</code> — act on
+        the estate rather than on a repository, and are documented under
+        Scripts and Telemetry.
       </p>
       <div className="doc-cards" style={{ marginTop: 24 }}>
         {COMMANDS.map((c) => (
