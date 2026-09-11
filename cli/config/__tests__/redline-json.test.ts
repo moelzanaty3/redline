@@ -20,6 +20,7 @@ const valid: RedlineConfig = {
     sensitivePathReviewers: true,
   },
   pendingAdmin: ['secret-scanning'],
+  integrations: ['sonarqube'],
   onboardedAt: '2026-09-01T00:00:00.000Z',
   lastRunAt: '2026-09-02T00:00:00.000Z',
   localRules: true,
@@ -27,6 +28,20 @@ const valid: RedlineConfig = {
   commandFiles: { '.claude/commands/redline-init.md': 'sha256:abc' },
   rung: 'observe' as const,
 };
+
+// Absent means "nobody has said", which must fall back to detection rather than
+// silence the survey. Those are different answers and the config cannot tell
+// them apart unless the empty case is preserved exactly.
+test('an absent integrations list reads back empty, not as "runs nothing"', () => {
+  const { integrations, ...withoutField } = valid;
+  const parsed = parseConfig(withoutField);
+  assert.deepEqual(parsed.integrations, []);
+});
+
+test('non-string entries in integrations are dropped rather than trusted', () => {
+  const parsed = parseConfig({ ...valid, integrations: ['sonarqube', 7, null, 'snyk'] });
+  assert.deepEqual(parsed.integrations, ['sonarqube', 'snyk']);
+});
 
 test('parses a valid config', () => {
   assert.deepEqual(parseConfig(structuredClone(valid)), valid);

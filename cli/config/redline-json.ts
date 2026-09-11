@@ -77,6 +77,14 @@ export interface RedlineConfig {
   // deliberately not work to do on its own: a settled repository is not given a
   // pull request just to gain a hash.
   commandFiles: Record<string, string>;
+  // The controls this repository already runs, as confirmed by whoever onboarded
+  // it — not as detected. Detection reads a checkout, so it cannot see a scanner
+  // wired through a shared pipeline template, and it believes a config file that
+  // nothing references. Both are wrong in a way only a human can correct, and
+  // the correction has to survive the next run or it has to be made every time.
+  // Empty for a repository onboarded before the field existed, which reads back
+  // as "ask detection", not as "runs nothing".
+  integrations: string[];
 }
 
 // What each menu key means when a repository has not recorded one. Lives here
@@ -126,6 +134,16 @@ export const MANDATORY_CAPABILITIES: Record<string, string> = {
 };
 
 export const OPTIONAL_CAPABILITIES = Object.keys(CAPABILITY_NAMES);
+
+/**
+ * The name an operator types, from the key the config stores.
+ *
+ * `mergePolicy` is an implementation detail of the JSON; `--skip merge-policy`
+ * is what the CLI accepts and what its output must therefore say back.
+ */
+export function capabilityName(key: string): string {
+  return Object.entries(CAPABILITY_NAMES).find(([, stored]) => stored === key)?.[0] ?? key;
+}
 
 // The gate install is what creates Redline's labels — GitHub pre-declares the
 // gate's soft-fail labels there, and Azure creates pull request labels on use —
@@ -285,6 +303,9 @@ export function parseConfig(raw: unknown): RedlineConfig {
     localRules: o['localRules'] === true,
     capabilities,
     commandFiles,
+    integrations: Array.isArray(o['integrations'])
+      ? o['integrations'].filter((id): id is string => typeof id === 'string')
+      : [],
   };
 }
 
