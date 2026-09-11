@@ -367,3 +367,35 @@ test('a finished task keeps its label and gains a tick', () => {
   assert.ok(line.includes(g.ok));
   assert.ok(line.includes('rendering the standards'));
 });
+
+// `0/2 selected` beside `enter confirm` reads as a form that will not submit
+// until something is picked. It always would — reduceList treats an empty
+// multi-select as a legitimate answer — so the word was the whole problem.
+test('a multi-select with nothing chosen offers to skip, not to confirm', () => {
+  const out = plainFrame({ multi: true, state: state(0) });
+  assert.match(out, /enter skip/);
+  assert.ok(!out.includes('enter confirm'));
+});
+
+test('ticking one thing turns the skip back into a confirm', () => {
+  const out = plainFrame({ multi: true, state: state(0, [0]) });
+  assert.match(out, /enter confirm/);
+  assert.ok(!out.includes('enter skip'));
+});
+
+// A single-select submits whatever the cursor is on, so it can never return
+// nothing and must never offer to.
+test('a single-select never offers to skip', () => {
+  const out = plainFrame({ multi: false, state: state(0) });
+  assert.match(out, /enter confirm/);
+  assert.ok(!out.includes('enter skip'));
+});
+
+// The key itself is untouched: escape still ends the run, which is the only way
+// out of a wizard and must not quietly become "skip this question".
+test('escape still cancels rather than skipping', () => {
+  assert.equal(readKey('\x1b'), 'cancel');
+  assert.deepEqual(reduceList(CHOICES, state(0), 'cancel', { multi: true, search: false }), {
+    kind: 'cancel',
+  });
+});

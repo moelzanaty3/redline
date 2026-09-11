@@ -497,11 +497,18 @@ export function frame(opts: FrameOptions): string {
   const arrows = unicode ? '↑↓' : 'up/down';
   const sep = unicode ? ' · ' : ' | ';
   const all = multi ? (opts.search === true ? 'ctrl-a all' : 'a all') : '';
+  // A multi-select with nothing ticked already submits an empty answer, and
+  // "none" is a real answer to most of these questions — install no extra
+  // tooling, render for no vendor. But `enter confirm` over `0/2 selected`
+  // reads as a form refusing to be submitted until something is picked, so
+  // operators sat on a question they had already answered correctly. The key
+  // does not change; only the word for what it does when nothing is chosen.
+  const submit = multi && state.selected.size === 0 ? 'enter skip' : 'enter confirm';
   const keys = [
     `${arrows} move`,
     ...(multi ? ['space select', all] : []),
     ...(opts.search === true ? ['type to filter'] : []),
-    'enter confirm',
+    submit,
   ].join(sep);
   const height = opts.height ?? 24;
   const compact = height < COMPACT_BELOW;
