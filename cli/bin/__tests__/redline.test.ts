@@ -205,7 +205,7 @@ test('init --dry-run prints the plan, writes nothing and exits 0', async () => {
   assert.equal(existsSync(join(cwd, '.redline.json')), false);
   assert.equal(existsSync(join(cwd, 'AGENTS.md')), false);
   assert.ok(lines.some((l) => l.includes('dry run')));
-  assert.ok(lines.some((l) => l.includes('would write')));
+  assert.ok(lines.some((l) => l.includes('to write')), lines.join('\n'));
 });
 
 test('a flagless re-run does not demote a repository that was onboarded with --blocking', async () => {
@@ -280,8 +280,11 @@ test('the dry-run plan prints a prune candidate as a removal, not as a write', a
 
   const { opts, lines } = deps(cwd);
   assert.equal(await run(['init', '--dry-run'], opts), 0);
-  assert.ok(lines.some((l) => l.includes('would remove') && l.includes(orphan)), lines.join('\n'));
-  assert.ok(!lines.some((l) => l.includes('would write') && l.includes(orphan)));
+  // A pruned file is marked `-` and counted under "to remove"; the same path
+  // marked `+` would tell the operator this run was about to create it.
+  assert.ok(lines.some((l) => l.includes('to remove')), lines.join('\n'));
+  assert.ok(lines.some((l) => l.includes(`- ${orphan}`)), lines.join('\n'));
+  assert.ok(!lines.some((l) => l.includes(`+ ${orphan}`)));
 });
 
 test('a no-op re-run marks the pending-admin list as recorded, not as this run\'s finding', async () => {
@@ -372,7 +375,7 @@ test('init --dry-run asks for a lazy client and never constructs one', async () 
   assert.equal(await run(['init', '--dry-run'], u.opts), 0, u.lines.join('\n'));
   assert.deepEqual(u.resolveOptions, [{ lazyCredentials: true }]);
   assert.equal(u.constructions(), 0, 'a preview must not resolve a credential at all');
-  assert.ok(u.lines.some((l) => l.includes('would write')), u.lines.join('\n'));
+  assert.ok(u.lines.some((l) => l.includes('to write')), u.lines.join('\n'));
   assert.ok(u.lines.some((l) => l.includes('dry run')));
 });
 

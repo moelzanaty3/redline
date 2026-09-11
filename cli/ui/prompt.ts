@@ -1,14 +1,18 @@
 import { emitKeypressEvents } from 'node:readline';
 import {
   answered,
+  colorDepth,
   colorEnabled,
   firstEnabled,
+  field,
   frame,
   glyphs,
   intro as introLine,
   note as noteLine,
   outro as outroLine,
   palette,
+  spinner as spinnerLine,
+  spinnerDone,
   readKey,
   reduceList,
   type Choice,
@@ -62,9 +66,35 @@ export interface Prompter {
     initial?: readonly T[]
   ): Promise<T[]>;
   confirm(title: string, initial?: boolean): Promise<boolean>;
+  /** One line of typed input. Returns '' when the operator takes the default. */
+  text(title: string, opts?: { placeholder?: string; hint?: string }): Promise<string>;
   note(message: string): void;
   outro(message: string): void;
+  /**
+   * A turning line for work that takes time.
+   *
+   * `redline init` renders a dozen files, makes six host calls and pushes a
+   * branch. Between the last question and the first line of the report that was
+   * ten to thirty seconds of nothing at all, which reads as a hang — and the
+   * operator's next move after a hang is Ctrl-C, in the middle of a run that is
+   * writing to their repository.
+   */
+  task(label: string): Task;
 }
+
+export interface Task {
+  /** What the run is doing now. Replaces the line in place. */
+  update(label: string): void;
+  /** Stop, leaving one finished line behind. */
+  done(label?: string): void;
+  /** Stop, leaving nothing behind — for a failure whose own error follows. */
+  stop(): void;
+}
+
+// Slow enough that the line is readable, fast enough to look alive. Also the
+// interval a non-TTY never pays: there, `task` writes one line and never
+// schedules anything.
+const SPIN_MS = 90;
 
 /**
  * True when a stepped, redrawing prompt can be shown.
@@ -87,13 +117,17 @@ export function isInteractive(
 }
 
 const DEFAULT_WIDTH = 80;
+const DEFAULT_HEIGHT = 24;
+// Below this a list is faster to read than to filter, and the letters are worth
+// more as shortcuts: `j`/`k` to move, `a` to take everything.
+const SEARCH_FROM = 9;
 
 export function createPrompter(opts: PrompterOptions = {}): Prompter {
   const input = opts.input ?? process.stdin;
   const output = opts.output ?? process.stdout;
   const env = opts.env ?? process.env;
 
-  const c: Palette = palette(colorEnabled(env, output.isTTY === true));
+  const c: Palette = palette(colorEnabled(env, output.isTTY === true), colorDepth(env));
   const g: Glyphs = glyphs(env);
 
   const write = (text: string): void => {
@@ -145,12 +179,17 @@ export function createPrompter(opts: PrompterOptions = {}): Prompter {
   // own output rather than asking the terminal is what makes this correct
   // without a cursor-position query — and is why frame() must never emit a
   // line wider than `columns`.
+  //
+  // Every draw ends with a newline, so the cursor sits on the blank line below
+  // the frame, not on its last row: the rewind has to clear that line too or it
+  // stops one short and leaves the frame's first line — the title — on screen,
+  // once per keypress.
   const erase = (lines: number): void => {
     if (lines === 0) return;
     write('\x1b[0G');
-    for (let i = 0; i < lines; i += 1) {
+    for (let i = 0; i <= lines; i += 1) {
       write('\x1b[2K');
-      if (i < lines - 1) write('\x1b[1A');
+      if (i < lines) write('\x1b[1A');
     }
   };
 
@@ -163,10 +202,15 @@ export function createPrompter(opts: PrompterOptions = {}): Prompter {
   ): Promise<T[]> {
     if (choices.length === 0) return [];
 
-    let state: ListState = { cursor: cursorAt, selected: preselected };
+    let state: ListState = { cursor: cursorAt, selected: preselected, query: '' };
     const width = output.columns ?? DEFAULT_WIDTH;
+    const height = output.rows ?? DEFAULT_HEIGHT;
+    // A search field costs a row and is worth one only where rows are not the
+    // scarce thing. On a terminal shorter than this the list itself needs every
+    // line it can get, and filtering a list you cannot see does not help.
+    const search = choices.length >= SEARCH_FROM && height >= 10;
     const render = (): string =>
-      frame({ title, choices, state, multi, palette: c, glyphs: g, width });
+      frame({ title, choices, state, multi, palette: c, glyphs: g, width, height, search });
 
     enterRaw();
     let drawn = render();
@@ -178,7 +222,7 @@ export function createPrompter(opts: PrompterOptions = {}): Prompter {
           const key = readKey(chunk.toString());
           if (key === null) return;
 
-          const result = reduceList(choices, state, key, multi);
+          const result = reduceList(choices, state, key, { multi, search });
           if (result.kind === 'cancel') {
             cleanup();
             reject(new Cancelled());
@@ -218,7 +262,7 @@ export function createPrompter(opts: PrompterOptions = {}): Prompter {
 
   return {
     intro(title) {
-      write(`${introLine(title, c, g)}\n`);
+      write(`${introLine(title, c, g, output.columns ?? DEFAULT_WIDTH)}\n`);
     },
 
     async select<T>(title: string, choices: readonly Choice<T>[], initial?: T): Promise<T> {
@@ -267,6 +311,121 @@ export function createPrompter(opts: PrompterOptions = {}): Prompter {
       );
       write(`${answered(title, picked === true ? 'Yes' : 'No', c, g)}\n`);
       return picked as boolean;
+    },
+
+    async text(title, opts = {}) {
+      const width = output.columns ?? DEFAULT_WIDTH;
+      const placeholder = opts.placeholder ?? '';
+      const hint = opts.hint ?? '';
+      let value = '';
+
+      const render = (): string =>
+        field({ title, value, placeholder, hint, palette: c, glyphs: g, width });
+
+      enterRaw();
+      let drawn = render();
+      write(`${drawn}\n`);
+
+      try {
+        const answer = await new Promise<string>((resolve, reject) => {
+          const onData = (chunk: Buffer | string): void => {
+            const key = readKey(chunk.toString());
+            if (key === null) return;
+
+            if (key === 'cancel') {
+              cleanup();
+              reject(new Cancelled());
+              return;
+            }
+            if (key === 'enter') {
+              cleanup();
+              resolve(value.trim());
+              return;
+            }
+            if (key === 'erase') value = value.slice(0, -1);
+            else if (typeof key === 'object') value += key.ch;
+            // A space is a space here, not a toggle: this is the one prompt where
+            // the list reducer's meaning for it would be wrong.
+            else if (key === 'space') value += ' ';
+            else return;
+
+            erase(drawn.split('\n').length);
+            drawn = render();
+            write(`${drawn}\n`);
+          };
+
+          const cleanup = (): void => {
+            input.off('data', onData);
+            erase(drawn.split('\n').length);
+            exitRaw();
+          };
+
+          input.on('data', onData);
+        });
+        write(`${answered(title, answer === '' ? placeholder : answer, c, g)}\n`);
+        return answer;
+      } catch (error) {
+        if (active) exitRaw();
+        throw error;
+      }
+    },
+
+    task(label) {
+      const width = output.columns ?? DEFAULT_WIDTH;
+      let current = label;
+
+      // No TTY, no animation: the frames would arrive as a column of near
+      // identical lines in a log file. The label still gets said once, because
+      // "what is it doing" is the question even a pipe wants answered.
+      if (output.isTTY !== true) {
+        write(`${spinnerDone(current, c, g, width)}\n`);
+        return {
+          update(next) {
+            current = next;
+            write(`${spinnerDone(next, c, g, width)}\n`);
+          },
+          done() {},
+          stop() {},
+        };
+      }
+
+      let tick = 0;
+      const draw = (): void => {
+        write(`\x1b[0G\x1b[2K${spinnerLine(current, tick, c, g, width)}`);
+      };
+      hideCursor();
+      draw();
+      // Unref'd: a timer this owns must never be the reason the process stays
+      // alive after the work it was describing has finished.
+      const timer = setInterval(() => {
+        tick += 1;
+        draw();
+      }, SPIN_MS);
+      timer.unref?.();
+
+      let running = true;
+      const halt = (): void => {
+        if (!running) return;
+        running = false;
+        clearInterval(timer);
+        write('\x1b[0G\x1b[2K');
+        showCursor();
+      };
+
+      return {
+        update(next) {
+          if (!running) return;
+          current = next;
+          draw();
+        },
+        done(final) {
+          if (!running) return;
+          const last = final ?? current;
+          halt();
+          write(`${spinnerDone(last, c, g, width)}\n`);
+        },
+        stop: halt,
+      };
     },
 
     note(message) {

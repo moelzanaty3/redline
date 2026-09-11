@@ -23,13 +23,18 @@ function repo(): string {
 }
 
 // Answers every question with its preselected default, which is what pressing
-// enter through the menu does.
+// enter through the menu does — except the profile, which no longer has one.
+// Detection never ticks a row, so a run through the menu has to say which
+// standards apply before anything else can happen.
+const PROFILE_QUESTION = 'Which standards apply here?';
+
 function defaults(overrides: Record<string, unknown> = {}): { prompter: Prompter; seen: string[] } {
   const seen: string[] = [];
   const prompter: Prompter = {
     intro: () => {},
     outro: () => {},
     note: () => {},
+    task: () => ({ update: () => {}, done: () => {}, stop: () => {} }),
     async select<T>(title: string, choices: readonly Choice<T>[], initial?: T): Promise<T> {
       seen.push(title);
       if (title in overrides) return overrides[title] as T;
@@ -37,9 +42,17 @@ function defaults(overrides: Record<string, unknown> = {}): { prompter: Prompter
         ? initial
         : choices[0]!.value;
     },
-    async multiselect<T>(title: string, _c: readonly Choice<T>[], initial: readonly T[] = []) {
+    async multiselect<T>(title: string, choices: readonly Choice<T>[], initial: readonly T[] = []) {
       seen.push(title);
-      return (title in overrides ? overrides[title] : [...initial]) as T[];
+      if (title in overrides) return overrides[title] as T[];
+      if (title === PROFILE_QUESTION && initial.length === 0) {
+        const react = choices.find((c) => c.value === ('web-react' as unknown as T));
+        return [(react ?? choices[0]!).value];
+      }
+      return [...initial] as T[];
+    },
+    async text(): Promise<string> {
+      return '';
     },
     async confirm(_t, v = true) {
       return v;
@@ -109,7 +122,8 @@ test('an applied run explains why the working tree looks untouched', async () =>
   const { opts, lines } = deps(repo(), prompter);
   await run(['init'], opts);
   const out = lines.join('\n');
-  assert.match(out, /pull request: /);
+  assert.match(out, /Pull request/);
+  assert.match(out, /https:\/\/example\/pr\/1/);
   assert.match(out, /committed on redline\/onboard and pushed, not in your working/);
   assert.match(out, /git status` here stays clean/);
 });
@@ -122,7 +136,7 @@ test('a deselected capability in the menu becomes a real skip', async () => {
   const { opts, lines } = deps(repo(), prompter);
   assert.equal(await run(['init'], opts), 0);
   assert.ok(
-    lines.some((l) => l.startsWith('opted out:') && l.includes('gate')),
+    lines.some((l) => l.trim().startsWith('opted out:') && l.includes('gate')),
     lines.join('\n')
   );
 });
@@ -134,10 +148,14 @@ test('Ctrl-C at a prompt exits 130 without printing an error', async () => {
     intro: () => {},
     outro: () => {},
     note: () => {},
+    task: () => ({ update: () => {}, done: () => {}, stop: () => {} }),
     async select<T>(): Promise<T> {
       throw new Cancelled();
     },
     async multiselect<T>(): Promise<T[]> {
+      throw new Cancelled();
+    },
+    async text(): Promise<string> {
       throw new Cancelled();
     },
     async confirm() {

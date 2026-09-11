@@ -12,9 +12,13 @@ import {
   type ResolvePlatformOptions,
 } from '../platforms/resolve.ts';
 import { init, ONBOARD_BRANCH } from '../commands/init.ts';
+import { explain, loadRules } from '../rules/catalogue.ts';
+import { formatStatus, status } from '../commands/status.ts';
 import { createGit } from '../core/git.ts';
 import { parseRemote } from '../platforms/detect.ts';
-import { Cancelled, createPrompter, isInteractive, type Prompter } from '../ui/prompt.ts';
+import { Cancelled, createPrompter, isInteractive, type Prompter, type Task } from '../ui/prompt.ts';
+import { renderReport } from '../ui/report.ts';
+import { colorDepth, colorEnabled, glyphs, palette } from '../ui/tty.ts';
 import { gatherFacts } from '../ui/facts.ts';
 import { runWizard, type Host as WizardHost, type WizardAnswers } from '../ui/wizard.ts';
 import {
@@ -80,6 +84,20 @@ const USAGE = [
   `      --rung <name>  the enforcement rung: ${RUNGS.join(', ')}. A promotion needs recorded`,
   '                  evidence and is refused without it; a demotion is always allowed. Omitting',
   '                  the flag keeps whatever the repository already recorded',
+  '      --branches <patterns>  which branches the merge policy governs, comma separated, in the',
+  '      host\'s own syntax (~DEFAULT_BRANCH, refs/heads/release/*). Default: the default branch',
+  '      alone. Widening this widens an enforcement boundary, so it is never detected for you.',
+  '      --review-owners <list>  who owns the paths seeded into CODEOWNERS — a team, a user or',
+  '      an email, several separated by commas. Defaults to the platform team, which may not',
+  '      exist in your organisation: GitHub ignores an owner it cannot resolve, so the file',
+  '      would install and enforce nothing.',
+  '      --setup <list>  controls to install alongside Redline: dependabot, renovate, codeql.',
+  '      Only what works with no account and no token is offered — writes .github/dependabot.yml,',
+  '      renovate.json, .github/workflows/codeql.yml. An existing file is never overwritten.',
+  '      --integrations <list>  comma-separated ids of controls this repository already runs',
+  '      (sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql). Overrides what',
+  '      detection found — it reads a checkout, so it cannot see a scanner wired through a',
+  '      shared pipeline template. Recorded, so the correction is made once.',
   '      --pipeline <name>  github-actions or azure-pipelines — what actually runs this',
   '                  repository\'s pull request checks. Asked separately from the host because',
   '                  the two come apart: a repository on GitHub can be built entirely by Azure',
@@ -99,7 +117,8 @@ const USAGE = [
   '      the security floor (secret scanning, push protection, dependency alerts) is the',
   '      organisation\'s minimum, not Redline\'s state — no flag here turns it off',
   '',
-  '  redline verify [--gate] [--repo <owner/name>]',
+  '  redline verify [--gate] [--repo <owner/name>] [--json]',
+  '      --json      the whole report as JSON, for a wrapper that has to act on it',
   '      check this repository still matches what .redline.json claims',
   '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
   '                  that genuinely needs a working tree reports ?? rather than passing',
@@ -113,6 +132,13 @@ const USAGE = [
   '  redline policy --diff-file <path>',
   '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER',
   '',
+  '  redline status [--json]',
+  '      what is installed here, how hard it bites, what an administrator still owes',
+  '      you and whether the standards have moved on. Reads the checkout only.',
+  '  redline explain <rule-id> [--json]',
+  '      what a rule means, who decided it, which files it is scoped to and which',
+  '      profiles receive it. The id is the bracketed part of a finding.',
+  '      --list      every rule id in the standards, with its severity',
   '  redline exempt --body-file <path> [--scope <check>]',
   '      decide whether a pull request carries a valid exemption for a failing process',
   '      check — a reason, an actor and an expiry, not a bare label. Exit 0 if it applies',
@@ -191,13 +217,30 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
   const runInitWizard = async (
     dir: string,
     packageRoot: string
-  ): Promise<{ answers: WizardAnswers } | null> => {
+  ): Promise<{ answers: WizardAnswers; prompter: Prompter } | null> => {
     const prompter = deps.prompter?.() ?? createPrompter();
     const answers = await runWizard(
       prompter,
       gatherFacts({ cwd: dir, root: packageRoot, detectedHost: detectHost() })
     );
-    return { answers };
+    // The prompter comes back with the answers because the work starts the
+    // moment the last question is answered, and the operator has to be able to
+    // see that it did. Building a second one here would mean a second set of
+    // signal handlers on the same terminal.
+    return { answers, prompter };
+  };
+
+  // Report colour is decided the same way the prompts decide it, and from the
+  // same env: NO_COLOR, FORCE_COLOR, a dumb terminal and a pipe all have to
+  // mean the same thing in both halves of one run. An injected sink is a test
+  // or a pipe, so it is never painted.
+  const reportTheme = {
+    palette: palette(
+      deps.sink === undefined && colorEnabled(process.env, process.stdout.isTTY === true),
+      colorDepth(process.env)
+    ),
+    glyphs: glyphs(process.env),
+    width: process.stdout.columns ?? 80,
   };
   const resolve =
     deps.resolvePlatform ??
@@ -240,6 +283,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             with: { type: 'string' },
             rung: { type: 'string' },
             pipeline: { type: 'string' },
+            integrations: { type: 'string' },
+            'review-owners': { type: 'string' },
+            setup: { type: 'string' },
+            branches: { type: 'string' },
           },
           allowPositionals: false,
         })
@@ -324,48 +371,79 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const profileChoice = wizard?.answers.profile ?? values.profile;
       const vendorChoice = wizard ? [...wizard.answers.vendors] : vendors;
       const rungChoice = wizard?.answers.rung ?? values.rung;
+      const setupChoice = wizard
+        ? [...wizard.answers.setup]
+        : values.setup?.split(',').map((id) => id.trim()).filter((id) => id !== '');
+      const branchChoice = values.branches?.split(',').map((b) => b.trim()).filter((b) => b !== '');
+      const ownerChoice = wizard
+        ? [...wizard.answers.reviewOwners]
+        : values['review-owners']?.split(',').map((o) => o.trim()).filter((o) => o !== '');
+      const integrationChoice = wizard
+        ? [...wizard.answers.integrations]
+        : values.integrations?.split(',').map((id) => id.trim()).filter((id) => id !== '');
 
+      // Only the wizard path spins: a scripted `redline init` in CI has nobody
+      // watching, and an animated line in a build log is noise with no reader.
+      const task: Task | null = wizard?.prompter.task('onboarding this repository') ?? null;
       const report = await init(platform, {
         cwd,
         root,
+        ...(task ? { onStep: (label: string) => task.update(label) } : {}),
         ...(profileChoice ? { profile: profileChoice } : {}),
         ...(vendorChoice ? { vendors: vendorChoice } : {}),
         ...(dryRun ? { dryRun: true } : {}),
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
         ...(rungChoice ? { rung: rungChoice } : {}),
+        ...(integrationChoice ? { integrations: integrationChoice } : {}),
+        ...(ownerChoice && ownerChoice.length > 0 ? { reviewOwners: ownerChoice } : {}),
+        ...(branchChoice && branchChoice.length > 0 ? { branches: branchChoice } : {}),
+        ...(setupChoice && setupChoice.length > 0 ? { setup: setupChoice } : {}),
         ...(pipelineChoice ? { pipeline: pipelineChoice } : {}),
         menu,
         capabilities: selection.capabilities,
-      });
+      }).finally(() => task?.stop());
 
-      log.info(`profile ${report.profile}`);
-      if (report.migratedFrom) log.info(`migrated from ${report.migratedFrom}`);
-      // Printed on every path, settled included: a report that falls silent
-      // about what was never attempted cannot be told from one where it broke.
-      if (report.optedOut.length > 0) log.info(`opted out: ${report.optedOut.join(', ')}`);
-      for (const note of report.notes) log.info(note);
+      const summary = {
+        profile: report.profile,
+        migratedFrom: report.migratedFrom,
+        optedOut: report.optedOut,
+        notes: report.notes,
+        files: report.files,
+        removals: report.removals,
+        outcomes: report.outcomes,
+        pullRequestUrl: report.pullRequest?.url ?? null,
+        pendingAdmin: report.pendingAdmin,
+        dryRun: report.dryRun,
+        hostPlan: report.hostPlan,
+      };
 
       if (report.dryRun) {
-        log.info('dry run — nothing was written, read or changed on the host');
         if (report.alreadyOnboarded) {
+          for (const line of renderReport({ ...summary, files: [], hostPlan: [] }, reportTheme)) {
+            log.info(line);
+          }
+          log.info('');
           log.info('already onboarded — no file would change (host settings were not read)');
           return 0;
         }
-        for (const file of report.files) {
-          log.info(`  would ${report.removals.includes(file) ? 'remove' : 'write '}  ${file}`);
-        }
-        for (const step of report.hostPlan) log.info(`  would apply   ${step}`);
-        for (const [key, value] of Object.entries(report.menu)) log.info(`  menu   ${key}: ${value}`);
+        for (const line of renderReport(summary, reportTheme)) log.info(line);
+        log.info('');
+        // The menu is the half of a dry run the file list cannot show: two of
+        // its answers move no file at all, and a preview that hid them would
+        // send an operator to `--blocking` to find out what `--blocking` did.
+        log.info(
+          `  menu: ${Object.entries(report.menu)
+            .map(([key, value]) => `${key}=${value}`)
+            .join(' ')}`
+        );
+        log.info('');
+        log.info('dry run — nothing was written, read or changed on the host');
         return 0;
       }
 
-      for (const file of report.files) {
-        log.info(`  ${report.removals.includes(file) ? 'remove' : 'write '}  ${file}`);
-      }
-      for (const outcome of report.outcomes) {
-        log.info(`  ${outcome.status.padEnd(11)} ${outcome.capability}  ${outcome.detail}`);
-      }
+      for (const line of renderReport(summary, reportTheme)) log.info(line);
+      log.info('');
       if (report.pendingAdmin.length > 0) {
         // On the already-onboarded path this run applied nothing, so the list
         // is what was recorded — not a finding this run made. Saying so is the
@@ -389,15 +467,17 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         return exitCodeFor('failed');
       }
       if (report.pullRequest) {
-        log.info(`pull request: ${report.pullRequest.url}`);
-        // Onboarding commits to its own branch and pushes it, so the operator's
-        // working tree is untouched and `git status` is clean. Without this,
-        // the run looks like it did nothing: the first real onboarding ended
-        // with the operator running `init` a second time and being told
-        // "already onboarded" by a repository they believed was not.
-        log.info('');
-        log.info(`the changes are committed on ${ONBOARD_BRANCH} and pushed, not in your working`);
-        log.info('tree — `git status` here stays clean. Review and merge the pull request above.');
+        // The URL itself is printed by the report's own Pull request section.
+        // What that section cannot say is why the working tree looks untouched:
+        // onboarding commits to its own branch and pushes it, so `git status`
+        // here stays clean. Without this the run looked like it did nothing —
+        // the first real onboarding ended with the operator running `init` a
+        // second time and being told "already onboarded" by a repository they
+        // believed was not.
+        log.info(
+          `  the changes are committed on ${ONBOARD_BRANCH} and pushed, not in your working tree —`
+        );
+        log.info('  `git status` here stays clean. Review and merge the pull request above.');
       } else if (report.alreadyOnboarded) {
         log.info(
           `already onboarded — nothing to change (recorded in .redline.json; ` +
@@ -474,7 +554,11 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const { values } = parseCliArgs(() =>
         parseArgs({
           args: rest,
-          options: { gate: { type: 'boolean', default: false }, repo: { type: 'string' } },
+          options: {
+            gate: { type: 'boolean', default: false },
+            repo: { type: 'string' },
+            json: { type: 'boolean', default: false },
+          },
           allowPositionals: false,
         })
       );
@@ -493,8 +577,12 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           root,
           standardsVersion: standardsVersion(root),
         });
-        log.info(`${values.repo} (${remoteRef.defaultBranch})`);
-        log.report(remoteReport.findings);
+        if (values.json === true) {
+          log.info(JSON.stringify({ repo: values.repo, ref: remoteRef.defaultBranch, ...remoteReport }, null, 2));
+        } else {
+          log.info(`${values.repo} (${remoteRef.defaultBranch})`);
+          log.report(remoteReport.findings);
+        }
         // Same mapping as the local path: one finding means the repository was
         // never onboarded, which is a different thing to tell an operator than
         // onboarded-and-drifted.
@@ -504,7 +592,11 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // resolve is passed unevaluated: verify() must be able to report "not
       // onboarded" without a host credential — see cli/commands/verify.ts.
       const report = await verify(() => resolve(cwd), { cwd, root, gate: values.gate === true });
-      log.report(report.findings);
+      // The findings are the same object either way. `--json` exists because a
+      // tool whose whole claim is auditability was unreadable by anything but a
+      // human, and a wrapper had to scrape prose to learn what it already knew.
+      if (values.json === true) log.info(JSON.stringify(report, null, 2));
+      else log.report(report.findings);
 
       // verify() short-circuits to exactly one finding when .redline.json is
       // missing or corrupt (see cli/commands/verify.ts), precisely so this
@@ -658,6 +750,75 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       }
 
       return report.ok ? 0 : exitCodeFor('failed');
+    }
+
+    if (command === 'status') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { json: { type: 'boolean', default: false } },
+          allowPositionals: false,
+        })
+      );
+
+      const report = status(cwd, root);
+      if (values.json === true) {
+        log.info(JSON.stringify(report, null, 2));
+      } else {
+        for (const line of formatStatus(report)) log.info(line);
+      }
+      // Not onboarded is an answer, not a failure: `status` is what somebody
+      // runs to find that out, and exiting non-zero would break the script that
+      // asked.
+      return 0;
+    }
+
+    if (command === 'explain') {
+      const { values, positionals } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { list: { type: 'boolean', default: false }, json: { type: 'boolean', default: false } },
+          allowPositionals: true,
+        })
+      );
+
+      const rules = loadRules(root);
+      if (values.list === true) {
+        for (const rule of rules.values()) {
+          log.info(`${rule.severity.padEnd(10)} ${rule.id}`);
+        }
+        log.info(`${rules.size} rule(s) across the core standard and every stack`);
+        return 0;
+      }
+
+      const id = positionals[0];
+      if (id === undefined) {
+        throw new RedlineError(
+          'usage',
+          'redline explain needs a rule id',
+          'the id is the part in brackets on a finding: redline explain core/hardcoded-secrets'
+        );
+      }
+
+      const found = explain(root, id);
+      if (values.json === true) {
+        log.info(JSON.stringify(found, null, 2));
+        return 0;
+      }
+
+      log.info(`${found.rule.severity} ${found.rule.id}`);
+      log.info('');
+      log.info(`  ${found.rule.text}`);
+      log.info('');
+      log.info(`  decided by   ${found.deterministic ? 'a checker, with no model call' : 'review judgement'}`);
+      log.info(`  defined in   ${found.rule.source}:${found.rule.line}`);
+      if (found.globs.length > 0) {
+        log.info(`  applies to   ${found.globs.join(', ')}`);
+      } else {
+        log.info('  applies to   every file — the core standard is not scoped by stack');
+      }
+      log.info(`  reaches      ${found.profiles.join(', ')}`);
+      return 0;
     }
 
     if (command === 'exempt') {
