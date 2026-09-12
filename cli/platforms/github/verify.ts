@@ -15,9 +15,22 @@ import { createHostShapeError, isNonNullObject } from '../shape.ts';
 
 const hostShapeError = createHostShapeError('GitHub');
 
+// `path` always starts /repos/<org>/<repo>, so the owner is on screen — but an
+// owner the reader does not recognise reads as a Redline bug rather than as the
+// answer it is. Every target is derived from `origin` alone, so a clone of
+// somebody else's repository, or a url.insteadOf rewrite, points the whole run
+// at their organisation; 403 on a read that needs admin is exactly how that
+// surfaces, because the public reads before it all succeed.
 function assertOk(status: number, path: string): void {
   if (status < 200 || status >= 300) {
-    throw new RedlineError('host', `GitHub returned HTTP ${status} reading ${path}`);
+    const owner = path.startsWith('/repos/') ? path.split('/').slice(2, 4).join('/') : null;
+    const hint =
+      owner !== null && (status === 401 || status === 403 || status === 404)
+        ? `Redline is reading ${owner}, which is what "git remote get-url origin" resolves to ` +
+          'here. If that is not the repository you meant, fix the remote; if it is, this read ' +
+          'needs repository admin — check the GH_TOKEN scopes or run: gh auth login'
+        : undefined;
+    throw new RedlineError('host', `GitHub returned HTTP ${status} reading ${path}`, hint);
   }
 }
 
