@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { hasToc, type Heading } from "@/lib/toc";
 
-export type Heading = { id: string; text: string; level: 2 | 3 };
+export type { Heading };
 
 // The width globals.css gives the rail its own column at. Restated here for the
 // one thing CSS cannot do — see the effect below.
@@ -74,8 +75,7 @@ export function DocsToc({ headings }: { headings: Heading[] }) {
     };
   }, [headings]);
 
-  // One heading is a title, not a table of contents.
-  if (headings.length < 2) return null;
+  if (!hasToc(headings)) return null;
 
   return (
     <nav className="docs-toc" aria-label="On this page">

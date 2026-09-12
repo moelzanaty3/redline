@@ -9,7 +9,7 @@
 }
 
 .sb-wrap {
-  max-width: 1120px;
+  max-width: var(--shell);
   margin: 0 auto;
   padding: 0 24px;
 }

@@ -29,6 +29,12 @@
   --sev-suggestion: #8f1919;
   --sans: var(--font-sans), -apple-system, "Segoe UI", sans-serif;
   --mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* One width for every shell on the site — the header, the marketing
+     container and the docs grid. They were 1120 / 1120 / 1224, so the header
+     sat 52px inside the docs sidebar at every width wide enough to notice. A
+     nav that does not line up with the page under it reads as a rendering bug
+     before it reads as a design. */
+  --shell: 1224px;
   color-scheme: dark;
 }
 
@@ -73,7 +79,7 @@ kbd {
 }
 
 .container {
-  max-width: 1120px;
+  max-width: var(--shell);
   margin: 0 auto;
   padding: 0 24px;
 }
@@ -114,7 +120,7 @@ kbd {
   }
 }
 .site-nav .inner {
-  max-width: 1120px;
+  max-width: var(--shell);
   margin: 0 auto;
   padding: 0 24px;
   height: 62px;
@@ -1288,8 +1294,18 @@ main section[id] {
 }
 
 /* ================= docs layout ================= */
+
+/* The article column is a query container, so a layout inside it can respond to
+   the width it was actually given. That width is not a function of the viewport:
+   the sidebar and the on-this-page rail each take a column or do not, and the
+   same 1024px viewport hands the article anywhere between 396px and 880px. */
+.docs-main > .prose {
+  container-type: inline-size;
+  container-name: prose;
+}
+
 .docs-shell {
-  max-width: 1224px;
+  max-width: var(--shell);
   margin: 0 auto;
   padding: 0 24px;
   display: grid;
@@ -2272,6 +2288,14 @@ main section[id] {
   .docs-main {
     grid-template-columns: minmax(0, 1fr) 196px;
     column-gap: 52px;
+  }
+  /* A page whose rail would be empty gets the column back rather than holding
+     248px of gutter open for nothing. The catalogue detail pages are the case
+     that made it visible: their own two-column layout was living in what was
+     left, at 388px of prose. */
+  .docs-main.no-toc {
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
   }
   .docs-main > * {
     grid-column: 1;
