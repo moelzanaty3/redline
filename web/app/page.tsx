@@ -9,7 +9,7 @@ import { SEED_FILE, SEED_RULE_ID, seedDiff, seedMarkerExcerpt } from "@/componen
 import { ValueCase } from "@/components/value-case";
 import { SeverityFloor } from "@/components/value-viz";
 import { loadManifest } from "@/lib/manifest";
-import { PACKAGE_NAME, installCommand, packageState } from "@/lib/package-version";
+import { installCommand, packageState } from "@/lib/package-version";
 import { findRule, getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
 import { GITHUB_REPO, GITHUB_URL } from "@/lib/site";
@@ -60,9 +60,13 @@ export default async function Home() {
   // One invocation, everywhere on the page. `npx` needs no prior install, so
   // there is nothing to say twice — and when the package is not installable the
   // command degrades to the one that does work rather than to a lie.
+  //
+  // This used to drop the version deliberately, to keep the hero short. A bare
+  // `npx redlinegate` is the one form that can serve a stale cached CLI, so the
+  // shortest line on the site was the one most likely to run last month's
+  // binary. installCommand's `@latest` is the whole fix.
   const state = await packageState();
-  const initCmd =
-    state.status === "published" ? `npx ${PACKAGE_NAME} init` : installCommand(state);
+  const initCmd = installCommand(state);
 
   const diff = seedDiff();
   const seedExcerpt = seedMarkerExcerpt();
