@@ -74,19 +74,42 @@ const untrackedTodo: DeterministicCheck = ({ added }) =>
 // The rule requires both. A suppression with an explanation but no ticket is
 // still a violation, and this decides that without a model: the presence of a
 // ticket reference on the line is a fact.
-const SUPPRESSIONS = [
-  '@ts-ignore',
-  '@ts-expect-error',
-  '# type: ignore',
-  '@SuppressWarnings',
-  'eslint-disable',
-  '// nolint',
-  '# noqa',
+// One entry per suppression dialect Redline ships stack rules for.
+//
+// Patterns rather than substrings, because whitespace is where the substring
+// list went wrong. It carried `// nolint` with a space, and golangci-lint only
+// honours `//nolint` written without one — so the single Go spelling the
+// checker looked for was the one spelling Go tooling ignores, and the rule
+// could not fire on a Go repository at all.
+//
+// The larger miss was dialects. Redline renders stack rules for Swift, Kotlin,
+// C# and Go, and this list held only the JavaScript, TypeScript, Python and
+// Java spellings. A `mobile-ios` or `service-dotnet` repository therefore
+// installed a BLOCKER rule that no line written in its own language could
+// trip — the rule reported clean because it was never able to report anything.
+// A Swift repository shipping a `.swiftlint.yml` is precisely the one this rule
+// exists for.
+//
+// `@Suppress(` and `@SuppressWarnings` are deliberately separate: Kotlin's
+// annotation is not a prefix of Java's, so one pattern cannot stand for both.
+const SUPPRESSIONS: RegExp[] = [
+  /@ts-ignore/, // TypeScript
+  /@ts-expect-error/, // TypeScript
+  /@ts-nocheck/, // TypeScript, whole file
+  /eslint-disable/, // ESLint
+  /#\s*type:\s*ignore/, // mypy
+  /#\s*noqa/, // flake8, ruff
+  /#\s*pylint:\s*disable/, // pylint
+  /@SuppressWarnings/, // Java
+  /@Suppress\s*\(/, // Kotlin
+  /swiftlint:disable/, // SwiftLint
+  /\/\/\s*nolint/, // golangci-lint — matches the canonical `//nolint` and the spaced form
+  /#\s*pragma\s+warning\s+disable/i, // C#
 ];
 
 const typeCheckerSuppression: DeterministicCheck = ({ added }) =>
   added
-    .filter((l) => SUPPRESSIONS.some((s) => l.text.includes(s)) && !TICKET.test(l.text))
+    .filter((l) => SUPPRESSIONS.some((s) => s.test(l.text)) && !TICKET.test(l.text))
     .map((l) =>
       finding(
         l,

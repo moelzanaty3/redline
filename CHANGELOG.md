@@ -5,6 +5,47 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
+## [0.0.4](https://github.com/moelzanaty3/redline/compare/v0.0.3...v0.0.4) (2026-09-12)
+
+### Standards — `core/type-checker-suppression` could not fire on four of the stacks it ships to
+
+The deterministic tier recognised suppression directives in four dialects: TypeScript, ESLint,
+Python and Java. Redline renders stack rules for sixteen. A Swift, Kotlin, C# or Go repository
+therefore installed this BLOCKER and no line written in its own language could ever trip it — and a
+rule that cannot fire reports exactly like a repository with nothing to find, which is the failure
+mode the deterministic tier exists to remove.
+
+Found onboarding a real Swift repository: `mobile-ios`, a committed `.swiftlint.yml`, and the only
+deterministic rule that could reach it was `core/untracked-todo`.
+
+- **Swift, Kotlin and C# are recognised** — `// swiftlint:disable`, `@Suppress(...)` and
+  `#pragma warning disable`. `@Suppress(` is matched separately from `@SuppressWarnings`, because
+  Kotlin's annotation is not a prefix of Java's and one pattern cannot stand for both.
+- **The Go directive is matched as Go writes it.** The list carried `// nolint` with a space.
+  golangci-lint only honours `//nolint` without one, so the single Go spelling the checker looked
+  for was the one spelling Go tooling ignores. Pinned by its own test.
+- **`@ts-nocheck` and `# pylint: disable` join the dialects already covered**, which were the two
+  remaining gaps in stacks the list already claimed.
+- **Matching is by pattern, not substring.** Whitespace is what broke the Go case, and a substring
+  list has no way to say "optional space" — so every dialect is a pattern and the spacing of a real
+  directive cannot silently miss again.
+
+No rule id moved and no rule changed meaning: the same rule now decides the part it could always
+decide, in the languages it is rendered into. `standards/core.md` names every dialect the checker
+recognises, so the text a reviewer reads and the checker that runs agree.
+
+### Docs
+
+- **A new Verification page.** Nine scenarios, run as steps, that take an onboarded repository from
+  "the gate is installed" to "I have watched it pass and watched it block". Every row is a real run
+  recorded against a real pull request rather than a description of what the workflow should do.
+- **Onboarding covers the whole sequence**, including what happens after the pull request merges:
+  the admin capabilities a non-admin run leaves in `pendingAdmin`, `--repair`, the CODEOWNERS owner
+  that has to resolve, and the approval trap a solo maintainer hits the first time the ruleset lands.
+- **The merge gate page says how to add a check of your own** — stand a Redline job down and run your
+  own beside it, or add a job to the gate and to the aggregate's `needs`, with the required-check
+  naming rule that makes the difference between a gate and a permanently pending one.
+
 ## [0.0.3](https://github.com/moelzanaty3/redline/compare/v0.0.2...v0.0.3) (2026-09-11)
 
 ### `redline init` — a gate for a repository whose organisation has not agreed to one yet

@@ -94,6 +94,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "onboard repo redline init verify profile security floor merge policy pending admin azure github",
       },
       {
+        title: "Verification",
+        href: "/docs/verification",
+        description: "Nine scenarios that prove the gate passes, blocks, and refuses to be waived — run once on a throwaway branch.",
+        keywords: "verification verify test gate scenarios prove drill checklist adr policy exemption stand-down rung block-blocker secret scan security floor throwaway branch runbook does the gate work",
+      },
+      {
         title: "What success looks like",
         href: "/docs/success",
         description: "Five checkpoints after onboarding — the command that proves each one, and the quiet failure that looks identical from the outside.",

@@ -51,13 +51,50 @@ test('a suppression with a ticket is allowed — the rule asks for both', () => 
   );
 });
 
+// One case per stack Redline renders rules for. A dialect missing from here is
+// a stack where this BLOCKER installs and can never fire, which reads in the
+// gate exactly like a repository that has no suppressions in it.
 test('every suppression dialect is covered, not just TypeScript', () => {
-  for (const s of ['# type: ignore', '@SuppressWarnings("unchecked")', 'eslint-disable-next-line', '# noqa']) {
+  const dialects = [
+    ['# type: ignore', 'src/a.py'],
+    ['# noqa', 'src/a.py'],
+    ['# pylint: disable=no-member', 'src/a.py'],
+    ['@SuppressWarnings("unchecked")', 'src/A.java'],
+    ['@Suppress("UNCHECKED_CAST")', 'src/A.kt'],
+    ['eslint-disable-next-line', 'src/a.js'],
+    ['// @ts-nocheck', 'src/a.ts'],
+    ['// swiftlint:disable force_cast', 'Sources/A.swift'],
+    ['#pragma warning disable CS0168', 'src/A.cs'],
+  ] as const;
+
+  for (const [s, file] of dialects) {
     assert.deepEqual(
-      ids(runChecks(ctx([line(`code ${s}`, 'src/a.py')]))),
+      ids(runChecks(ctx([line(`code ${s}`, file)]))),
       ['core/type-checker-suppression'],
       s
     );
+  }
+});
+
+// The spacing bug this list shipped with, pinned so it cannot come back.
+// golangci-lint only honours a directive written `//nolint` with no space; the
+// checker looked for `// nolint` with one, so the only Go form it recognised
+// was the form Go itself ignores.
+test('the Go directive is matched as golangci-lint actually writes it', () => {
+  assert.deepEqual(
+    ids(runChecks(ctx([line('x := unsafe() //nolint:errcheck', 'main.go')]))),
+    ['core/type-checker-suppression']
+  );
+});
+
+test('a suppression in any dialect is allowed once it carries a ticket', () => {
+  for (const s of [
+    '// swiftlint:disable force_cast — ENG-812',
+    '@Suppress("UNCHECKED_CAST") // ENG-812',
+    'x := unsafe() //nolint:errcheck // ENG-812',
+    '#pragma warning disable CS0168 // ENG-812',
+  ]) {
+    assert.deepEqual(ids(runChecks(ctx([line(s, 'src/a.kt')]))), [], s);
   }
 });
 
