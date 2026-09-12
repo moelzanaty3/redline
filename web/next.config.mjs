@@ -16,6 +16,18 @@ const nextConfig = {
   turbopack: {
     root: repoRoot,
   },
+  // /docs/installation was merged into /docs/onboarding: prerequisites, the
+  // once-per-org gate publish and the limitations list now sit on the page that
+  // documents the command they are prerequisites for. The old URL was the site's
+  // header CTA for its whole life, so it is in bookmarks and in anything that
+  // ever linked the docs.
+  redirects: async () => [
+    {
+      source: "/docs/installation",
+      destination: "/docs/onboarding",
+      permanent: true,
+    },
+  ],
 };
 
 export default nextConfig;

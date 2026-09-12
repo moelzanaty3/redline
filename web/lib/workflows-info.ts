@@ -47,7 +47,7 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     livesIn: "This (source) repo.",
     trigger: "push to main touching standards/**, cli/render/**, templates/** or the PR template, plus workflow_dispatch with dry-run and only <owner/name> inputs.",
     onboard:
-      "Nothing to install: it lives in this repository and would run here. It has never distributed anything, because its job carries if: false.",
+      "Nothing to install: it lives in this repository and runs here. It distributes to registered repositories only, so a repository that has never appeared in registry.json has never been a target.",
     steps: [
       "Verifies this repo's own rendered artifacts are current (scripts/render-self.mjs --check) before distributing anything — a sync of stale artifacts would propagate the staleness to every onboarded repo at once, as a pull request each team is asked to trust.",
       "Builds the CLI and runs `redline sync`, which reads registry.json, renders each target's artifacts against its own recorded profile and vendors, and opens or updates one pull request per repo that is behind.",
@@ -147,7 +147,7 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     livesIn: "This (source) repo.",
     trigger: "Weekly, Tuesday 06:00 UTC, plus workflow_dispatch with an only <owner/name> override.",
     onboard:
-      "It lives in this repository and is already here. It has never verified anything: its job carries if: false, and the script it called was deleted.",
+      "It lives in this repository and is already here. It verifies the repositories in registry.json, so an estate with an empty register produces no issue and nothing to read.",
     steps: [
       "Loops over registry.json (or one only <owner/name> override) calling `redline verify --repo` for each. The loop deliberately does not abort on a failure: a drifted repository exits non-zero by design, and stopping at the first one would leave the rest of the estate unverified every week.",
       "Opens or updates a single tracking issue naming every repo that drifted, with the failing checks quoted. One issue updated in place, never one per run — a new issue per run turns a standing problem into a backlog nobody reads.",

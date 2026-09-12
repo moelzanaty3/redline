@@ -16,7 +16,7 @@ export default async function Page() {
     <DocsPage
       crumb="Getting Started"
       title="What success looks like"
-      intro="You onboarded a repository. Now what should you actually see, when, and which command shows it to you? Five checkpoints, each with the command that proves it and the failure that looks identical from the outside."
+      intro="You onboarded a repository. Now what should you actually see, when, and which command shows it to you? Four checkpoints, each with the command that proves it and the failure that looks identical from the outside."
       href="/docs/success"
     >
       <p>
@@ -49,9 +49,9 @@ export default async function Page() {
         <p>
           <b>The quiet failure:</b> a non-empty <code>pendingAdmin</code> that
           nobody reads. The repository looks onboarded, the files are all there,
-          and the merge policy was never applied. Re-run with{" "}
-          <code>--repair</code> once an administrator has granted the rights —
-          a plain re-run cannot clear those entries on its own.
+          and the merge policy was never applied —{" "}
+          <Link href="/docs/onboarding#after-merge">clearing it</Link> is admin
+          work, not a matter of time.
         </p>
       </div>
 
@@ -75,11 +75,11 @@ export default async function Page() {
         <span className="ic">!</span>
         <p>
           <b>The quiet failure:</b> a required check whose name nothing ever
-          reports. Every pull request sits on &ldquo;Expected — waiting for
-          status&rdquo; forever, and it reads as a slow CI rather than a broken
-          gate. On the default advisory install nothing is required yet, so{" "}
-          <code>verify</code> can only surface the reported name for you to
-          eyeball; on a <code>--blocking</code> install it is a real assertion
+          reports — every pull request waits forever on a status that does not
+          exist (<Link href="/docs/troubleshooting#waiting-for-status">what to do
+          about it</Link>). On the default advisory install nothing is required
+          yet, so <code>verify</code> can only surface the reported name for you
+          to eyeball; on a <code>--blocking</code> install it is a real assertion
           and fails.
         </p>
       </div>
@@ -119,142 +119,37 @@ export default async function Page() {
       <h2>Checkpoint 4 — the estate answers whether any of it is being used</h2>
       <p>
         <b>When:</b> after a few weeks of merged pull requests.{" "}
-        <b>Who:</b> the platform team, not a repository owner — these commands
-        act on an organisation and are meaningless in a product repo. See{" "}
-        <Link href="/docs/who-runs-what">Who runs what</Link>.
+        <b>Who:</b> the platform team, not a repository owner — the commands
+        behind this one act on an organisation and are meaningless in a product
+        repo (<Link href="/docs/who-runs-what">Who runs what</Link>).
       </p>
-      <CodeWindow
-        title="terminal"
-        copyText={[
-          "redline registry --org acme --source acme/redline",
-          "redline metrics collect --org acme --days 30",
-          "redline metrics dashboard --org acme --data data --out dist",
-        ].join("\n")}
-      >
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">redline registry --org acme --source acme/redline</span>
-        {"\n"}
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">redline metrics collect --org acme --days 30</span>
-        {"\n"}
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">redline metrics dashboard --org acme --data data --out dist</span>
-      </CodeWindow>
       <p>
-        In production these are scheduled workflows, not things you type — the
-        CLI exists so a scheduled run is reproducible in a terminal when it looks
-        wrong. <code>registry</code> derives who is onboarded,{" "}
-        <code>collect</code> pulls review outcomes with a read-only token, and{" "}
-        <code>dashboard</code> builds a static page. The hero number is{" "}
-        <b>findings acted on</b>, and these are the tiles beside it:
+        The hero number is <b>findings acted on</b>, and beside it the dashboard
+        carries the <b>rule tuning queue</b> — the standard&apos;s own to-do
+        list, and the thing to work through before anyone writes a new rule.{" "}
+        <Link href="/docs/telemetry">Telemetry &amp; validation</Link> has the
+        tiles, what each one reads like when it is healthy, and the weekly canary
+        that proves the reviewer is still catching things.
       </p>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>Tile</th><th>Healthy</th><th>What it means when it is not</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><b>Findings acted on</b></td>
-              <td>rising, then steady</td>
-              <td>Low means review is running and being ignored. That is the failure the whole measurement plane exists to make visible, and it is a rule problem before it is a people problem.</td>
-            </tr>
-            <tr>
-              <td><b>PRs with findings</b></td>
-              <td>some, not all</td>
-              <td>Near 0% and the reviewer is not running, or the rules reach nothing this estate writes. Near 100% and it is flagging everything, which is the same as flagging nothing.</td>
-            </tr>
-            <tr>
-              <td><b>Ignored</b></td>
-              <td>falling</td>
-              <td>Findings left stale and outdated. Read it with the tuning queue below — one noisy rule usually explains most of it.</td>
-            </tr>
-            <tr>
-              <td><b>Gate exemptions</b></td>
-              <td>rare</td>
-              <td>A rising share of pull requests using a soft-fail label means the gate asks for something people cannot reasonably give. Security checks are never exemptible, so this only ever covers the checklist and ADR requirements.</td>
-            </tr>
-            <tr>
-              <td><b>Seed BLOCKER recall</b></td>
-              <td>100%</td>
-              <td>Anything less and the reviewer has silently stopped catching known defects. The dashboard raises a warning and says not to widen the rollout.</td>
-            </tr>
-            <tr>
-              <td><b>Enforcing</b></td>
-              <td>growing slowly</td>
-              <td>How much of the estate is on a blocking rung. Flat at zero forever means the evidence to promote has never been produced — see checkpoint 5.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p>
-        The page also carries the <b>rule tuning queue</b>: rules that fire often
-        and are rarely acted on, named individually. That list is the product.
-        Cut, narrow or downgrade what is on it before adding new rules.
-      </p>
-      <div className="callout info">
-        <span className="ic">ℹ</span>
+      <div className="callout warn">
+        <span className="ic">!</span>
         <p>
-          A dashboard built on week one is empty, and that is not a failure — it
-          is a sample size. Nothing here reports a number it could not compute:
-          a figure that is missing says why instead of defaulting to zero,
-          because a measurement plane that fills gaps with zeros reports a
-          stalled collector as a quiet week.
+          <b>The quiet failure:</b> a dashboard that looks calm because nothing
+          reached it. A figure Redline could not compute says why instead of
+          defaulting to zero — a measurement plane that fills gaps with zeros
+          reports a stalled collector as a quiet week.
         </p>
       </div>
-
-      <h2>Checkpoint 5 — the reviewer is still catching things</h2>
-      <p>
-        &ldquo;No findings&rdquo; and &ldquo;nothing to find&rdquo; are
-        indistinguishable from the outside, and a model upgrade can change which
-        one you are in without anyone touching a rule. The canary is what tells
-        them apart: it opens a pull request of known-bad code against a pilot
-        repository, scores what came back, and closes it.
-      </p>
-      <CodeWindow
-        title="terminal"
-        copyText="redline metrics score-seeds --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl"
-      >
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">
-          redline metrics score-seeds --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl
-        </span>
-      </CodeWindow>
-      <p>
-        Three numbers, because a review system fails in three ways:{" "}
-        <b>recall</b> (seeded defects flagged at the expected severity),{" "}
-        <b>precision</b> (comments on <code>seeded/clean/**</code>, which should
-        never happen) and <b>attribution</b> (findings that cited the correct rule
-        id). <code>--history</code> appends to a JSONL so recall has a trend
-        rather than a single reading. Run it weekly; the scheduled canary does
-        exactly this.
-      </p>
 
       <h2>The end state — earning the right to block</h2>
       <p>
         Success is not a blocking gate on day one. A repository climbs the{" "}
         <Link href="/docs/enforcement">enforcement ladder</Link> on recorded
-        evidence, and the thresholds are deliberately hard because a reviewer
-        that flags correct code cannot be given a veto:
-      </p>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>Rung</th><th>What it does</th><th>Evidence to get there</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>observe</code></td><td>Reports everything, blocks nothing.</td><td>None — where every repository starts.</td></tr>
-            <tr><td><code>warn</code></td><td>Findings show in the merge box rather than a log. Still blocks nothing.</td><td>5 pull requests, so the reviewer is demonstrably running.</td></tr>
-            <tr><td><code>block-blocker</code></td><td>A BLOCKER stops the merge.</td><td>100% seed recall, 0 false positives, 60% acted-on over 20 pull requests.</td></tr>
-            <tr><td><code>block-high</code></td><td>A BLOCKER or a HIGH stops the merge.</td><td>100% seed recall, 0 false positives, 80% acted-on over 50 pull requests.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p>
-        Promotion is refused without the evidence. <b>Demotion never is</b> — a
-        gate misfiring at 3am steps back immediately, without asking anyone,
-        because a ladder that made the safe direction hard would be switched off
-        entirely rather than stepped down.
+        evidence — seed recall, false positives and acted-on rate, the same
+        figures checkpoint 4 reads — and the thresholds are deliberately hard
+        because a reviewer that flags correct code cannot be given a veto.
+        Promotion is refused without the evidence and names the figure that is
+        short; demotion never needs any.
       </p>
       <div className="callout warn">
         <span className="ic">!</span>

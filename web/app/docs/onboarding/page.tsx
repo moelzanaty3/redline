@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
+import { PackageBadge } from "@/components/package-badge";
 import { loadManifest } from "@/lib/manifest";
+import { PACKAGE_NAME, packageState, standardsVersion } from "@/lib/package-version";
 
 export const metadata: Metadata = { title: "Onboard a repository" };
 
-export default function Page() {
+export default async function Page() {
   const manifest = loadManifest();
+  const state = await packageState();
   return (
     <DocsPage
       crumb="Onboard a repository"
@@ -17,7 +20,7 @@ export default function Page() {
     >
       <CodeWindow title="terminal" copyText="npx redlinegate init">
         <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate init</span>{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">profile</span>              web{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">profile</span>              web-react{"\n"}
         <span className="tk-dim">  write  AGENTS.md</span>{"\n"}
         <span className="tk-dim">  write  CLAUDE.md</span>{"\n"}
         <span className="tk-dim">  write  .github/copilot-instructions.md</span>{"\n"}
@@ -27,6 +30,32 @@ export default function Page() {
         <span className="tk-amber">⚠</span> <span className="tk-dim">partially onboarded</span> — an administrator must still enable: dependency-alerts{"\n"}
         <span className="tk-dim">pull request: https://github.com/acme/checkout-service/pull/42</span>
       </CodeWindow>
+
+      <h2 id="before">Before you start</h2>
+      <PackageBadge state={state} />
+      <ul>
+        <li>Node.js 22 or newer on the machine running the CLI.</li>
+        <li>
+          A git repository whose remote points at GitHub — including GitHub
+          Enterprise Server, if the hostname contains <code>github</code> — or
+          Azure DevOps. A self-hosted host on a hostname that carries neither is
+          not auto-detected.
+        </li>
+        <li>
+          Nothing to install: <code>npx {PACKAGE_NAME}</code> fetches the CLI on
+          demand. The npm package is <code>{PACKAGE_NAME}</code>; the command it
+          installs is <code>redline</code>.
+        </li>
+      </ul>
+      <p>
+        Two version lines run separately and neither is derived from the other.
+        The <b>package version</b> is the CLI on npm, computed by semantic-release
+        at publish time. The <b>standards version</b> is{" "}
+        <code>standards/manifest.json</code> → <code>version</code>, currently{" "}
+        <code>{standardsVersion()}</code>; every rendered artifact and every sync
+        pull request names it, so a repository can always say which standard its
+        files came from.
+      </p>
 
       <h2 id="sequence">The whole sequence</h2>
       <p>
@@ -101,17 +130,17 @@ export default function Page() {
           <tbody>
             <tr><td><code>--blocking</code></td><td>off</td><td>Promotes the gate from advisory to blocking.</td></tr>
             <tr><td><code>--profile &lt;name&gt;</code></td><td>detected</td><td>Overrides stack detection.</td></tr>
-            <tr><td><code>--vendors &lt;list&gt;</code></td><td>detected</td><td>Comma-separated vendor ids (<code>copilot,agents,claude,cursor</code>) to render for — overrides detection and any recorded selection; a vendor the org has not enabled never renders regardless.</td></tr>
+            <tr><td><code>--vendors &lt;list&gt;</code></td><td>detected</td><td>Comma-separated vendor ids (<code>copilot,agents,codex,claude,cursor</code>) to render for — overrides detection and any recorded selection; a vendor the org has not enabled never renders regardless.</td></tr>
             <tr><td><code>--dry-run</code></td><td>off</td><td>Prints the plan — files, repository settings, resolved menu — and exits; writes nothing, needs no credential.</td></tr>
-            <tr><td><code>--no-commit</code></td><td>off</td><td>Writes the files into your working tree and stops: no repository setting is changed, no branch is made, nothing is committed and no pull request is opened. Needs no credential and contacts no host, so it works offline — which also means an org-sourced caller is written without confirming the organisation publishes the gate it references. Review the diff, commit it, then run <code>redline init</code> to apply the settings and open the pull request.</td></tr>
-            <tr><td><code>--gate-source org|local</code></td><td><code>org</code></td><td>Where the gate machinery lives. <code>org</code> references the reusable workflow published at <code>&lt;org&gt;/.github</code>. <code>local</code> vendors a copy into this repository at <code>.github/workflows/redline-gate.yml</code>, for a repository whose organisation has no shared <code>.github</code> repo yet. Either way the required check stays <code>redline-gate / gate</code>, so a repository can move between them with a re-run. Omitting the flag keeps whatever the repository already recorded.</td></tr>
+            <tr><td><code>--no-commit</code></td><td>off</td><td>Writes the files into your working tree and stops — no setting changed, no branch, no pull request. Offline, so an org-sourced caller is written without confirming the organisation publishes the gate it references.</td></tr>
+            <tr><td><code>--gate-source org|local</code></td><td><code>org</code></td><td>Where the gate machinery lives — see <a href="#gate-source">below</a>. Omitting it keeps whatever the repository already recorded.</td></tr>
             <tr><td><code>--repair</code></td><td>off</td><td>Re-applies capabilities a plain re-run treats as already settled — the fix once an administrator grants rights a read can never confirm on its own.</td></tr>
             <tr><td><code>--no-a11y</code></td><td>on</td><td>Recorded in <code>.redline.json</code>; doesn&apos;t change what&apos;s rendered yet.</td></tr>
             <tr><td><code>--speckit</code> / <code>--no-speckit</code></td><td>on</td><td>Renders the spec-first context section into the standards artifacts. Dropped automatically, with a note in the report, where the repository already runs Spec Kit — that is a separate tool with its own installer, and Redline neither creates nor edits its files. <code>--no-speckit</code> on a later run removes a section already rendered.</td></tr>
             <tr><td><code>--tmf</code> / <code>--no-tmf</code></td><td>off</td><td>Renders the TM Forum context section — resource naming, <code>@type</code>/<code>@baseType</code>, offset/limit paging, the TMF error body. Ask for it only in a repository that actually implements TMF interfaces.</td></tr>
-            <tr><td><code>--with review-ownership</code></td><td>off</td><td>Seeds <code>.github/CODEOWNERS</code> and lets the ruleset require code-owner review. Off by default because the generated file names an owner Redline cannot prove exists, and requiring review from an unresolvable owner blocks every pull request in the repository.</td></tr>
-            <tr><td><code>--review-owners &lt;list&gt;</code></td><td><code>@&lt;org&gt;/platform-engineering</code></td><td>Who owns the paths seeded into <code>CODEOWNERS</code> — a team, a user or an email, comma-separated. <b>Set this.</b> See below: the default is a guess, and a wrong owner fails silently.</td></tr>
-            <tr><td><code>--rung &lt;name&gt;</code></td><td><code>observe</code></td><td><code>observe</code>, <code>warn</code>, <code>block-blocker</code>, <code>block-high</code>. A promotion the repository&apos;s recorded evidence does not support is refused; a demotion is always allowed.</td></tr>
+            <tr><td><code>--with review-ownership</code></td><td>off</td><td>Seeds <code>.github/CODEOWNERS</code> and lets the ruleset require code-owner review. Off by default — see <a href="#owners">Name an owner that exists</a>.</td></tr>
+            <tr><td><code>--review-owners &lt;list&gt;</code></td><td><code>@&lt;org&gt;/platform-engineering</code></td><td>Who owns the paths seeded into <code>CODEOWNERS</code> — a team, a user or an email, comma-separated. <b>Set this:</b> the default is a guess, and a wrong owner fails silently.</td></tr>
+            <tr><td><code>--rung &lt;name&gt;</code></td><td><code>observe</code></td><td><code>observe</code>, <code>warn</code>, <code>block-blocker</code>, <code>block-high</code> — the <Link href="/docs/enforcement">enforcement ladder</Link>.</td></tr>
             <tr><td><code>--skip &lt;list&gt;</code> / <code>--with &lt;list&gt;</code></td><td>—</td><td>Capabilities this repository does not want Redline to install, because it has its own. A deselected capability is not attempted, not written and not reported as missing. The security floor is refused by name rather than deselected.</td></tr>
             <tr><td><code>--integrations &lt;list&gt;</code></td><td>detected</td><td>Controls you already run (<code>sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql</code>). This is what writes <code>stand-down:</code> into the caller — from what you declared, never from detection alone, because detection reads a checkout and cannot see a scanner wired through a shared pipeline template.</td></tr>
             <tr><td><code>--setup &lt;list&gt;</code></td><td>off</td><td>Controls to install alongside Redline: <code>dependabot</code>, <code>renovate</code>, <code>codeql</code>. Only what works with no account and no token. An existing file is never overwritten.</td></tr>
@@ -162,6 +191,21 @@ export default function Page() {
         blast radius of the pull requests it judges — nobody raising a pull
         request can change the thing reviewing it.
       </p>
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          <b>On GitHub, publish it once before the first repository onboards.</b>{" "}
+          Copy <code>workflows/redline-gate.yml</code> into your organisation&apos;s{" "}
+          <code>.github</code> repository as{" "}
+          <code>.github/workflows/redline-gate.yml</code>, so{" "}
+          <code>uses: &lt;org&gt;/.github/.github/workflows/redline-gate.yml@main</code>{" "}
+          resolves for every repo that follows. The secret-scan action ships
+          pinned to a full commit SHA, and <code>scripts/check-pins.mjs</code>{" "}
+          keeps it honest. Azure DevOps needs no equivalent step:{" "}
+          <code>redline init</code> writes the whole pipeline template into the
+          repository as <code>.azuredevops/redline-gate.yml</code>.
+        </p>
+      </div>
       <p>
         Most organisations do not have that repository on day one, and
         &ldquo;go and get a shared <code>.github</code> repo created&rdquo; is a
@@ -229,26 +273,30 @@ export default function Page() {
       <h2>Verify</h2>
       <CodeWindow title="terminal" copyText="npx redlinegate verify">
         <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate verify</span>{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">onboarded</span>              profile web, standards v{manifest.version}{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">onboarded</span>              profile web-react, standards v{manifest.version}{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">capabilities</span>           every capability selected{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">merge-policy</span>           policy is advisory, config says advisory{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">gate-machinery</span>         .github/workflows/redline.yml publishes redline-gate / gate{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">check-name-reported</span>    no required check configured yet (advisory gate) — PR #42 reported: <span className="tk-blue">redline-gate / gate</span>{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">security-floor</span>         security floor enabled{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">artifacts-current</span>      rendered artifacts match standards v{manifest.version}{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">review-ownership</span>       no CODEOWNERS on this host{"\n"}
+        <span className="tk-green">ok</span>  <span className="tk-dim">commands-current</span>       slash commands match what this CLI renders{"\n"}
         <span className="tk-green">ok</span>  <span className="tk-dim">pull-request-template</span>  .github/pull_request_template.md — maintained inside REDLINE markers{"\n"}
         <span className="tk-red">FAIL</span> <span className="tk-dim">pending-admin</span>          partially onboarded — an administrator must still enable: dependency-alerts
       </CodeWindow>
       <p>
-        Eight checks: the repo is onboarded at all; the live merge policy
-        matches the menu; the machinery that would run the gate is actually in
-        place; the required check name has actually been reported on a real
-        pull request (skipped, not failed, on a repo with no PR yet — a fresh
-        repo isn&apos;t drifted, it&apos;s just new); the security floor is
-        still on; rendered artifacts aren&apos;t stale; the pull request
-        template the host would actually serve is intact; and nothing is
-        still waiting on an administrator. Run it on demand, or wire{" "}
-        <code>redline verify --gate</code> into CI — it&apos;s the same
-        checks, exiting non-zero on failure.
+        Eleven checks, each named after what it reads. Three are worth knowing
+        before you see them: <code>check-name-reported</code> is skipped rather
+        than failed on a repository with no pull request yet — a fresh repo is
+        not drifted, it is new; <code>review-ownership</code> resolves every
+        owner in <code>CODEOWNERS</code> against the host, which is what tells an
+        enforcing file from a decorative one; and <code>pending-admin</code> is
+        the one that stays red until a person acts. Run it on demand, or wire{" "}
+        <code>redline verify --gate</code> into CI — the same checks, exiting
+        non-zero on failure. <Link href="/docs/troubleshooting">Troubleshooting</Link>{" "}
+        has what <code>ok</code>, <code>FAIL</code> and <code>??</code> each
+        oblige you to do.
       </p>
       <div className="callout info">
         <span className="ic">ℹ</span>
@@ -322,11 +370,31 @@ export default function Page() {
         </table>
       </div>
       <p>
-        <code>3</code> is for total failure. A partial permission failure is
-        the normal path above and exits <code>0</code> with a{" "}
-        <code>pendingAdmin</code> report — that&apos;s what keeps{" "}
-        <code>redline init</code> from ever aborting part-way.
+        <code>3</code> is for total failure only. A partial permission failure is
+        the normal path above: exit <code>0</code>, with the refusals reported.
       </p>
+
+      <h2 id="limitations">Known limitations</h2>
+      <ul>
+        <li>
+          The gate installs advisory-only on both hosts. Promoting it is a
+          deliberate second step on the{" "}
+          <Link href="/docs/enforcement">enforcement ladder</Link>, after a soak
+          period.
+        </li>
+        <li>
+          <code>redline sync</code> runs from a checkout of the Redline source
+          repository, not from a product repo, and only reaches repositories in
+          the register — see{" "}
+          <Link href="/docs/distribution">Distribution &amp; drift</Link>. One
+          that is not in it picks up a standards change by re-running{" "}
+          <code>redline init</code>.
+        </li>
+        <li>
+          No offline single-file executable yet, which matters for air-gapped
+          Azure agents without npm registry access.
+        </li>
+      </ul>
     </DocsPage>
   );
 }

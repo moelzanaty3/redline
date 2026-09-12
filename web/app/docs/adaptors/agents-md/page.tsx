@@ -21,7 +21,7 @@ export default function Page() {
         <span className="tk-white">…repo-owned context (from templates/repo-context.md)…</span>{"\n"}
         {"\n"}
         <span className="tk-green">&lt;!-- REDLINE:BEGIN — generated. Do not edit inside this block. --&gt;</span>{"\n"}
-        <span className="tk-dim">&lt;!-- Redline v{version} · profile: web · stacks: javascript, react --&gt;</span>{"\n"}
+        <span className="tk-dim">&lt;!-- Redline v{version} · profile: web-react · stacks: javascript, react --&gt;</span>{"\n"}
         <span className="tk-white"># Redline — Core Engineering Standards</span>{"\n"}
         <span className="tk-white"># Stack rules — JavaScript · React</span>{"\n"}
         <span className="tk-green">&lt;!-- REDLINE:END --&gt;</span>

@@ -139,11 +139,7 @@ export default function Page() {
       <h2 id="green-but-nothing-checked">
         The gate is green, and I do not believe it
       </h2>
-      <p>
-        You are right to check. A gate that never runs and a gate that finds
-        nothing look identical from the outside — both are green ticks. Two
-        things produce a false green:
-      </p>
+      <p>You are right to check. Two things produce a false green:</p>
       <ul>
         <li>
           <b>A job that is not in the aggregate&apos;s <code>needs:</code>.</b> It
@@ -159,10 +155,9 @@ export default function Page() {
         </li>
       </ul>
       <p>
-        Do not reason about it. <Link href="/docs/verification">Verification</Link>{" "}
-        is nine scenarios on a throwaway branch that make the gate pass, block,
-        and refuse to be waived in front of you. It takes about twenty minutes,
-        mostly waiting.
+        Do not reason about it — run{" "}
+        <Link href="/docs/verification">the nine scenarios</Link> and watch the
+        gate pass, block, and refuse to be waived.
       </p>
 
       <h2 id="pending-admin">
@@ -170,16 +165,10 @@ export default function Page() {
         <code>denied</code>
       </h2>
       <p>
-        This is the normal path, not a failure. An engineer without repository
-        admin rights still gets everything file-level; the settings that need an
-        administrator come back <code>denied</code>, are recorded in{" "}
-        <code>.redline.json</code> under <code>pendingAdmin</code>, and{" "}
-        <code>verify</code> keeps saying <b>partially onboarded</b> until
-        somebody with the rights clears them.
-      </p>
-      <p>
-        The point is that it is <i>recorded</i> rather than silently skipped. To
-        clear it, have an administrator re-run with a token that has the rights:
+        This is the normal path, not a failure —{" "}
+        <Link href="/docs/onboarding">onboarding</Link> covers why a run without
+        admin rights still lands everything file-level. To clear it, have an
+        administrator re-run with a token that has the rights:
       </p>
       <CodeWindow title="terminal" copyText="npx redlinegate init --repair">
         <span className="tk-prompt">$</span>{" "}

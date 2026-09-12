@@ -38,7 +38,7 @@ export const NAV_LINKS: readonly NavLink[] = [
   { href: "/docs/skills", label: "Skills" },
   { href: "/docs/agents", label: "Agents" },
   { href: "/docs/adaptors/github-copilot", label: "Adaptors" },
-  { href: "/docs/installation", label: "Installation" },
+  { href: "/docs/onboarding", label: "Onboarding" },
 ];
 
 // Where a reader reports something. `/issues/new` rather than the list: the

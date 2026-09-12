@@ -10,7 +10,7 @@ export default function Page() {
     <DocsPage
       crumb="Maintaining Redline"
       title="Scripts"
-      intro="Maintainer tooling for this repository's own CI, telemetry and validation — not something an onboarded repo ever runs. If you're onboarding or checking a product repo, you want redline init and redline verify instead."
+      intro="Maintainer tooling for this repository's own CI, telemetry and validation. If you are onboarding or checking a product repo, you want redline init and redline verify instead."
       href="/docs/scripts"
     >
       <p>

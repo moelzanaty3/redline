@@ -82,16 +82,10 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "quickstart quick start get started first repo onboard dry run ten minutes try it",
       },
       {
-        title: "Installation",
-        href: "/docs/installation",
-        description: "Install the CLI, install the gate workflow into the org, onboard a repo.",
-        keywords: "install setup npx redlinegate npm package github azure devops gate workflow",
-      },
-      {
         title: "Onboard a repository",
         href: "/docs/onboarding",
         description: "One command per repo, on GitHub or Azure DevOps, then verify the gate is real.",
-        keywords: "onboard repo redline init verify profile security floor merge policy pending admin azure github",
+        keywords: "onboard repo install setup installation prerequisites node npx redlinegate npm package redline init verify profile security floor merge policy pending admin azure github reusable gate workflow limitations",
       },
       {
         title: "Verification",
@@ -108,8 +102,8 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "What success looks like",
         href: "/docs/success",
-        description: "Five checkpoints after onboarding — the command that proves each one, and the quiet failure that looks identical from the outside.",
-        keywords: "success working proof checkpoint what should i see after onboarding statistics dashboard metrics acted on rate seed recall tuning queue status verify explain score-seeds roi healthy numbers quiet failure waiting for status empty dashboard",
+        description: "Four checkpoints after onboarding — the command that proves each one, and the quiet failure that looks identical from the outside.",
+        keywords: "success working proof checkpoint what should i see after onboarding status verify explain pendingAdmin rule id healthy quiet failure waiting for status acted on rate enforcement ladder",
       },
       {
         title: "Adopting Redline",
@@ -192,8 +186,8 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Telemetry & validation",
         href: "/docs/telemetry",
-        description: "Acted-on findings, seeded corpus scoring, digest and inbox.",
-        keywords: "telemetry metrics digest teams inbox acted-on noise recall precision seeded corpus validation score",
+        description: "Acted-on findings, the dashboard tiles and what an unhealthy one means, seeded corpus scoring, digest and inbox.",
+        keywords: "telemetry metrics digest teams inbox acted-on noise recall precision attribution seeded corpus validation score dashboard tiles tuning queue registry collect score-seeds history canary estate",
       },
       {
         title: "Cost and value",

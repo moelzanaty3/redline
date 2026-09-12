@@ -14,11 +14,11 @@ export default function Page() {
       href="/docs"
     >
       <p>
-        AI assistants write more of your code every quarter. Redline makes sure
-        what merges still meets your bar: every pull request is reviewed against
-        a <b>versioned, vendor-neutral standard</b>, checked by a{" "}
-        <b>merge-readiness gate</b>, and measured by <b>telemetry that counts what was
-        acted on</b> — not what was merely flagged.
+        AI assistants write more of your code every quarter, and the review
+        capacity to check it did not grow with them. The bar a team agreed on is
+        now enforced — or not — by whatever tooling happens to be in front of the
+        diff, which is why Redline versions the standard rather than leaving it
+        to a prompt somebody wrote once.
       </p>
       <p>
         There are no servers, no SaaS and no per-seat fee beyond the AI licences

@@ -5,6 +5,34 @@ repo's rendered artifacts always name the version they came from.
 
 Record seed scores here. A standards change with no measurement is an opinion.
 
+## Unreleased
+
+### Docs — one owner per fact, and five claims that were no longer true
+
+An audit of all 31 documentation pages found the same fact taught in full on up to five of them, and
+hand-copied CLI output that had drifted from what the CLI prints. Repetition is how that drift
+happens: a fact written once is corrected once.
+
+- **Five stale claims, corrected against the source.** Onboarding said `redline verify` runs eight
+  checks; `cli/commands/verify.ts` emits eleven, and the sample quoted three messages the CLI never
+  prints. The Workflows page said `redline-sync.yml` and `verify-onboarding.yml` carry `if: false`
+  and cannot run — neither file does, and `lib/workflows-info.ts` said both "Active" and "never ran"
+  in the same record. The Cursor adaptor said the vendor ships disabled and that no re-sync command
+  exists; the manifest ships it enabled and `redline sync` has existed since 0.0.3. The custom-vendor
+  page said there is no push-based distribution. The Skills page linked `/docs/adaptors/skills`,
+  deleted with the skills vendor.
+- **Each fact has one page, and every other mention links to it.** `verify` statuses, `pendingAdmin`
+  and `--repair`, the enforcement ladder's thresholds, the severity table, the profile list, the
+  required-check name, the sync register. The Standards page had been re-teaching the output contract
+  and the profile mechanism in full; it now says what a standard is and links.
+- **Installation merged into Onboard a repository.** Prerequisites, the once-per-org gate publish and
+  the limitations list now sit on the page documenting the command they are prerequisites for.
+  `/docs/installation` redirects permanently; the header CTA, the site nav and the footer point at
+  the page that answers them.
+- **Telemetry gained the dashboard.** The tiles, what an unhealthy one means, the rule tuning queue
+  and the seed-score numbers moved off "What success looks like", which was addressing a repository
+  owner and a platform team on one page. Success keeps the four checkpoints a repository owner runs.
+
 ## [0.0.4](https://github.com/moelzanaty3/redline/compare/v0.0.3...v0.0.4) (2026-09-12)
 
 ### Standards — `core/type-checker-suppression` could not fire on four of the stacks it ships to
