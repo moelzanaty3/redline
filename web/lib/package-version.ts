@@ -23,9 +23,19 @@ export type PackageState =
 export const PACKAGE_NAME = "redlinegate";
 
 // The command a reader should run, given what is actually installable.
+//
+// `@latest`, not the resolved version, and not a bare name. A bare `npx
+// redlinegate` reuses whatever npx already has in its cache, so a reader who ran
+// it once gets that copy again months later and reports the CLI as broken when
+// it is merely old — which is exactly what happened. Pinning the resolved
+// version fixes the cache but goes stale the other way: the number is baked in
+// at build time, so a publish with no site deploy leaves every page quoting a
+// version npm no longer serves. `@latest` is the only one of the three that is
+// right on both counts. The badge beside these commands is where the version
+// gets named, and it is resolved per build.
 export function installCommand(state: PackageState, args = "init"): string {
   return state.status === "published"
-    ? `npx ${PACKAGE_NAME}@${state.version} ${args}`
+    ? `npx ${PACKAGE_NAME}@latest ${args}`
     : `npx ${PACKAGE_NAME} ${args}`;
 }
 
