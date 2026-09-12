@@ -1,6 +1,6 @@
 {
   "$comment": "Single source of truth for Redline. scripts/render.mjs turns this into vendor-specific artifacts. Never hand-edit generated output.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "core": {
     "title": "Redline Core Engineering Standards",
     "source": "standards/core.md"
@@ -13,7 +13,9 @@
         "**/*.js",
         "**/*.jsx",
         "**/*.mjs",
-        "**/*.cjs"
+        "**/*.cjs",
+        "**/*.vue",
+        "**/*.svelte"
       ]
     },
     "react": {

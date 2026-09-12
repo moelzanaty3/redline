@@ -47,3 +47,16 @@ final class SeededViolations {
         }
     }
 }
+
+extension SeededViolations {
+
+    // SEED 10 [BLOCKER] (core/type-checker-suppression) linter suppression with no explanation and no ticket
+    // swiftlint:disable force_cast
+    func coerce(_ value: Any) -> String {
+        return value as! String
+    }
+
+    // SEED 11 [HIGH] (core/untracked-todo) placeholder with no ticket reference
+    // TODO: decide whether the scanner should follow symlinks
+    func pending() {}
+}

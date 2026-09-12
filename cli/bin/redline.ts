@@ -24,6 +24,7 @@ import { runWizard, type Host as WizardHost, type WizardAnswers } from '../ui/wi
 import {
   capabilitySelection,
   OPTIONAL_CAPABILITIES,
+  readConfig,
   type MenuSelections,
 } from '../config/redline-json.ts';
 import { remove, REMOVE_BRANCH } from '../commands/remove.ts';
@@ -55,7 +56,7 @@ const USAGE = [
   '',
   '  redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]',
   '               [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]',
-  '               [--gate-source org|local] [--no-commit]',
+  '               [--gate-source org|local] [--docs-url <base>] [--no-commit]',
   '      onboard this repository: standards, security floor, merge gate (advisory), registration',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
   '      --no-commit write the files into the working tree and stop: no repository setting is',
@@ -94,6 +95,11 @@ const USAGE = [
   '                  workflow runs from the pull request\'s own head commit, so a pull request can',
   '                  edit the gate that is judging it — protect .github/workflows/ with CODEOWNERS.',
   '                  Omitting the flag keeps whatever the repository already recorded',
+  '      --docs-url <base>  where your organisation publishes its copy of the standard. Set it and',
+  '                  every finding carries the address of the rule it cites, as <base>/r/<rule-id>,',
+  '                  so a reviewer reaches the rule from the comment instead of searching for it.',
+  '                  Unset by default — there is no honest default, and a link that goes nowhere',
+  '                  costs the reader the click. Pass an empty string to clear one',
   `      --rung <name>  the enforcement rung: ${RUNGS.join(', ')}. A promotion needs recorded`,
   '                  evidence and is refused without it; a demotion is always allowed. Omitting',
   '                  the flag keeps whatever the repository already recorded',
@@ -298,6 +304,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             rung: { type: 'string' },
             pipeline: { type: 'string' },
             'gate-source': { type: 'string' },
+            'docs-url': { type: 'string' },
             integrations: { type: 'string' },
             'review-owners': { type: 'string' },
             setup: { type: 'string' },
@@ -432,6 +439,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(branchChoice && branchChoice.length > 0 ? { branches: branchChoice } : {}),
         ...(setupChoice && setupChoice.length > 0 ? { setup: setupChoice } : {}),
         ...(pipelineChoice ? { pipeline: pipelineChoice } : {}),
+        // Distinguished from absent rather than truthy-checked: `--docs-url ""`
+        // is how a repository clears a link it no longer wants, and a truthy
+        // check would silently keep the old one.
+        ...(values['docs-url'] !== undefined ? { docsUrl: values['docs-url'] } : {}),
         ...(gateSourceChoice ? { gateSource: gateSourceChoice } : {}),
         // Offered only at a terminal, and only when the planning pass finds the
         // organisation publishes no gate. A scripted run gets the denial it has
@@ -768,9 +779,13 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         return 0;
       }
 
+      // The repository's own link base, or '' when it has not set one. Read
+      // here rather than threaded through the review: `redline review` runs
+      // against the working tree, so the config beside it is the authority.
+      const reviewDocsUrl = readConfig(cwd)?.docsBaseUrl ?? '';
       for (const finding of report.findings) {
         log.info(`${finding.file}:${finding.line}`);
-        log.info(`  ${renderFinding(finding)}`);
+        log.info(`  ${renderFinding(finding, reviewDocsUrl)}`);
       }
       for (const { reason } of report.rejected) {
         log.warn(`discarded a finding from the model: ${reason}`);
@@ -807,9 +822,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
       const report = policy({ root, diffFile, ...(failOn ? { failOn } : {}) });
 
+      const policyDocsUrl = readConfig(cwd)?.docsBaseUrl ?? '';
       for (const finding of report.findings) {
         log.info(`${finding.file}:${finding.line}`);
-        log.info(`  ${formatFinding(finding)}`);
+        log.info(`  ${formatFinding(finding, policyDocsUrl)}`);
       }
       // Said on every run, including the clean one. A reviewer has to be able to
       // tell "checked and clean" from "not checked", and silence looks the same

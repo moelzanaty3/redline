@@ -1140,3 +1140,41 @@
   }
 }
 
+
+/* The story that opens the problem section. Set as one quiet block rather than
+   a card: it is an admission, and a bordered panel would style it as a boast. */
+.hm-prob-story {
+  /* Left, not centred: the two-column grid below starts at the container edge,
+     and a centred block above it reads as a different page element. */
+  max-width: 780px;
+  margin: 0 0 44px;
+  padding-left: 18px;
+  border-left: 2px solid var(--vc-line);
+}
+.hm-prob-story p {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.72;
+  color: var(--muted);
+}
+.hm-prob-story p:last-child {
+  margin-bottom: 0;
+}
+.hm-prob-story-lead b {
+  color: var(--text);
+}
+.hm-prob-story code {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--vc-ink);
+  overflow-wrap: anywhere;
+}
+.hm-prob-story a {
+  color: var(--vc-ink);
+}
+@media (max-width: 700px) {
+  .hm-prob-story {
+    padding-left: 14px;
+    margin-bottom: 32px;
+  }
+}

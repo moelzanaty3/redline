@@ -60,6 +60,12 @@ async function load() {
 console.log('cart owner', props.profile.msisdn, signingKey);
 
 load();
+
+// SEED 14 [HIGH] (javascript/var-in-new-code) function-scoped var in new code inside a single-file component
+var retries = 0
+
+// SEED 15 [HIGH] (javascript/unsafe-numeric-coercion) parseInt with no radix on a value from the query string
+const perPage = parseInt(route.query.perPage)
 </script>
 
 <template>

@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import { loadManifest } from "@/lib/manifest";
-import { getRules } from "@/lib/rules";
+import { findRule, getRules } from "@/lib/rules";
 import { Reveal } from "@/components/reveal";
+
+// The rule the section's opening story is about. Named here and resolved from
+// the catalogue for the same reason every other figure on this page is: a story
+// that cites a rule id must stop the build rather than print a stale one.
+const STORY_RULE_ID = "core/type-checker-suppression";
 
 type Row = {
   n: string;
@@ -31,6 +36,13 @@ export function ValueCase() {
   const enabledVendors = Object.keys(manifest.vendors).filter(
     (id) => manifest.vendors[id]?.enabled === true,
   );
+
+  const suppression = findRule(STORY_RULE_ID);
+  if (suppression === undefined) {
+    throw new Error(
+      `standards/ no longer defines "${STORY_RULE_ID}"; the home page tells its story`,
+    );
+  }
 
   const rows: Row[] = [
     {
@@ -95,6 +107,29 @@ export function ValueCase() {
             <p className="hm-lead">
               AI writes a lot of your code now, and it has never read your
               team&apos;s rules.
+            </p>
+          </div>
+          {/* The section used to open straight onto the grid, which states the
+              problem as a process complaint. This is the same problem with a
+              cost attached, and it is ours rather than a hypothetical — which
+              is the only version a sceptical reader has any reason to believe. */}
+          <div className="hm-prob-story">
+            <p className="hm-prob-story-lead">
+              <b>A rule that cannot fire reports clean.</b> Redline shipped{" "}
+              <code>{suppression.id}</code> as a {suppression.severity} to every
+              onboarded repository. Its checker knew four suppression dialects;
+              Redline ships rules for {stackCount} stacks. In a Swift, Kotlin, C#
+              or Go repository the rule was installed, was listed in the
+              standard, ran on every pull request — and no line written in that
+              repository&apos;s own language could trip it.
+            </p>
+            <p>
+              It was found by onboarding one repository by hand and watching the
+              gate, not by any dashboard, because a control that never fires and
+              a control with nothing to find produce the identical green tick.
+              The fix and the corpus that now proves it is in{" "}
+              <a href="/docs/changes">the changelog</a>. That is the failure
+              Redline is built to make visible — including in itself.
             </p>
           </div>
           <div className="hm-prob-grid">

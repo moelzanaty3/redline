@@ -107,6 +107,16 @@ export interface RedlineConfig {
   // is a drift measurement, and reporting either as stale would file work
   // nobody can do.
   gateVersion: string;
+  // Where this organisation's copy of the standard is published, so a finding
+  // can carry the address of the rule it cites: `<docsBaseUrl>/r/<rule-id>`.
+  //
+  // Empty by default, and empty prints no link. There is no honest default here
+  // — an organisation running Redline internally wants findings pointing at its
+  // own documentation, not at somebody else's — and a wrong link costs the
+  // reader the click before they discover it goes nowhere. Absent in configs
+  // written before the field existed, which is every repository onboarded so
+  // far: they keep printing findings exactly as they did.
+  docsBaseUrl: string;
 }
 
 // What each menu key means when a repository has not recorded one. Lives here
@@ -330,6 +340,11 @@ export function parseConfig(raw: unknown): RedlineConfig {
       : [],
     gateSource: o['gateSource'] === 'local' ? 'local' : 'org',
     gateVersion: typeof o['gateVersion'] === 'string' ? o['gateVersion'] : '',
+    // Anything that is not a string reads back as "no link", which is also what
+    // a string this file cannot make a URL of ends up as — ruleUrl refuses
+    // anything that is not http(s), so a hand edit cannot put an arbitrary
+    // scheme into a comment on someone else's pull request.
+    docsBaseUrl: typeof o['docsBaseUrl'] === 'string' ? o['docsBaseUrl'].trim() : '',
   };
 }
 
@@ -365,6 +380,8 @@ const EXPLAINER: readonly string[] = [
   'gateSource — org: the gate lives in the organisation .github repo. local: vendored into this',
   '  repository, which means a pull request can edit the gate judging it. `--gate-source`.',
   'gateVersion — the redlinegate version the vendored gate was written by. Empty when not vendored.',
+  'docsBaseUrl — where your copy of the standard is published. Set it and every finding carries',
+  '  the address of the rule it cites: <docsBaseUrl>/r/<rule-id>. Empty prints no link.',
   'commandFiles, standardsVersion, cliVersion, onboardedAt, lastRunAt — Redline\'s own bookkeeping.',
 ];
 

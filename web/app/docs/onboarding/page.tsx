@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 import { loadManifest } from "@/lib/manifest";
@@ -27,6 +28,61 @@ export default function Page() {
         <span className="tk-dim">pull request: https://github.com/acme/checkout-service/pull/42</span>
       </CodeWindow>
 
+      <h2 id="sequence">The whole sequence</h2>
+      <p>
+        <code>redline init</code> is one command, but onboarding is not one step.
+        Steps 4 and 5 are the ones most often skipped, and skipping them leaves a
+        repository that reports as onboarded and enforces nothing.
+      </p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Step</th><th>Who</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td><code>npx redlinegate init --dry-run</code> — read the plan. Writes nothing, needs no credential, contacts no host.</td>
+              <td>anyone</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td><code>npx redlinegate init</code> — files, whatever repository settings your token allows, and a pull request. Never a direct push.</td>
+              <td>anyone with push</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Review and merge that pull request. Until it merges, the gate exists only on its own branch.</td>
+              <td>a reviewer</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><code>npx redlinegate init --repair</code> with an <b>admin</b> token — applies everything the first run recorded in <code>pendingAdmin</code>, including the branch ruleset that makes the check required.</td>
+              <td>repo admin</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td><Link href="/docs/verification">Run the nine verification scenarios</Link> — watch the gate pass, block, and refuse to be waived.</td>
+              <td>anyone with push</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>Soak at <code>observe</code>, then promote: <code>redline init --rung warn</code>, later <code>block-blocker</code>. A promotion the recorded evidence does not support is refused.</td>
+              <td>the team</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="callout">
+        <p>
+          <b>Step 4 is not optional cleanup.</b> A non-admin run installs the
+          workflow and opens the pull request, so the gate <i>runs</i> — but
+          nothing marks its check required, and no ruleset requires an approval.
+          Every check can be clicked past. The repository looks onboarded on the
+          dashboard and a merge is still one button.
+        </p>
+      </div>
+
       <h2>What it installs — the floor, no opt-out</h2>
       <ul>
         <li><b>Rendered standards</b> for the detected profile, plus the review output contract — Copilot, AGENTS.md, CLAUDE.md, Cursor, whichever vendors the manifest enables.</li>
@@ -54,9 +110,50 @@ export default function Page() {
             <tr><td><code>--speckit</code> / <code>--no-speckit</code></td><td>on</td><td>Renders the spec-first context section into the standards artifacts. Dropped automatically, with a note in the report, where the repository already runs Spec Kit — that is a separate tool with its own installer, and Redline neither creates nor edits its files. <code>--no-speckit</code> on a later run removes a section already rendered.</td></tr>
             <tr><td><code>--tmf</code> / <code>--no-tmf</code></td><td>off</td><td>Renders the TM Forum context section — resource naming, <code>@type</code>/<code>@baseType</code>, offset/limit paging, the TMF error body. Ask for it only in a repository that actually implements TMF interfaces.</td></tr>
             <tr><td><code>--with review-ownership</code></td><td>off</td><td>Seeds <code>.github/CODEOWNERS</code> and lets the ruleset require code-owner review. Off by default because the generated file names an owner Redline cannot prove exists, and requiring review from an unresolvable owner blocks every pull request in the repository.</td></tr>
+            <tr><td><code>--review-owners &lt;list&gt;</code></td><td><code>@&lt;org&gt;/platform-engineering</code></td><td>Who owns the paths seeded into <code>CODEOWNERS</code> — a team, a user or an email, comma-separated. <b>Set this.</b> See below: the default is a guess, and a wrong owner fails silently.</td></tr>
+            <tr><td><code>--rung &lt;name&gt;</code></td><td><code>observe</code></td><td><code>observe</code>, <code>warn</code>, <code>block-blocker</code>, <code>block-high</code>. A promotion the repository&apos;s recorded evidence does not support is refused; a demotion is always allowed.</td></tr>
+            <tr><td><code>--skip &lt;list&gt;</code> / <code>--with &lt;list&gt;</code></td><td>—</td><td>Capabilities this repository does not want Redline to install, because it has its own. A deselected capability is not attempted, not written and not reported as missing. The security floor is refused by name rather than deselected.</td></tr>
+            <tr><td><code>--integrations &lt;list&gt;</code></td><td>detected</td><td>Controls you already run (<code>sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql</code>). This is what writes <code>stand-down:</code> into the caller — from what you declared, never from detection alone, because detection reads a checkout and cannot see a scanner wired through a shared pipeline template.</td></tr>
+            <tr><td><code>--setup &lt;list&gt;</code></td><td>off</td><td>Controls to install alongside Redline: <code>dependabot</code>, <code>renovate</code>, <code>codeql</code>. Only what works with no account and no token. An existing file is never overwritten.</td></tr>
+            <tr><td><code>--pipeline &lt;name&gt;</code></td><td>detected</td><td><code>github-actions</code> or <code>azure-pipelines</code> — what actually runs this repository&apos;s pull request checks. Asked separately from the host, because the two come apart: a repository on GitHub can be built entirely by Azure Pipelines, and installing an Actions workflow there gates nothing.</td></tr>
+            <tr><td><code>--branches &lt;patterns&gt;</code></td><td>default branch</td><td>Which branches the merge policy governs, in the host&apos;s own syntax. Widening this widens an enforcement boundary, so it is never detected for you.</td></tr>
+            <tr><td><code>--adopt-caller</code></td><td>off</td><td>Lets Redline take over gate machinery already at its path when what is there carries nothing attributing it to Redline — a 2.1 caller, in practice. Without it the run refuses rather than clobbering somebody&apos;s workflow.</td></tr>
           </tbody>
         </table>
       </div>
+
+      <h2 id="owners">Name an owner that exists</h2>
+      <p>
+        <code>--with review-ownership</code> is the mitigation for a{" "}
+        <a href="#gate-source">vendored gate</a>, and the single most common way
+        to install it wrong is to accept the default owner.
+      </p>
+      <p>
+        GitHub <b>ignores a <code>CODEOWNERS</code> owner it cannot resolve</b>,
+        and it does so without erroring: no failed push, no warning in the UI.
+        The file installs, the ruleset requires code-owner review, and the review
+        is required of nobody. That is worse than not installing it, because the
+        dashboard now says the control is on.
+      </p>
+      <ul>
+        <li>
+          <b>A team must be written <code>@org/team</code></b> and must actually
+          exist. A bare <code>@platform-engineering</code> is read as a{" "}
+          <i>user</i>, and a user that does not exist makes GitHub mark the whole
+          file erroneous — at which point <code>require_code_owner_review</code>{" "}
+          degrades to the silent no-op above.
+        </li>
+        <li>
+          <b>A repository under a personal account has no teams at all.</b>{" "}
+          <code>@you/platform-engineering</code> cannot exist there, so pass your
+          own handle: <code>--review-owners @you</code>.
+        </li>
+        <li>
+          <code>redline verify</code> reports <code>review-ownership</code>, which
+          resolves every owner in the file against the host. It is the check that
+          tells an enforcing <code>CODEOWNERS</code> from a decorative one.
+        </li>
+      </ul>
       <h2 id="gate-source">Where the gate lives</h2>
       <p>
         By default the caller workflow Redline writes references a reusable
@@ -167,6 +264,47 @@ export default function Page() {
           reported.
         </p>
       </div>
+
+      <h2 id="after-merge">After the pull request merges</h2>
+      <p>
+        Merging installs the files. It does not grant the permissions the first
+        run was refused, and a plain re-run will not retry them — a capability
+        already recorded as pending is treated as settled, which is exactly what{" "}
+        <code>--repair</code> exists to override.
+      </p>
+      <CodeWindow title="terminal" copyText="npx redlinegate init --repair">
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate init --repair</span>{"\n"}
+        <span className="tk-green">applied</span>     secret-scanning{"\n"}
+        <span className="tk-green">applied</span>     push-protection{"\n"}
+        <span className="tk-green">applied</span>     dependency-alerts{"\n"}
+        <span className="tk-green">applied</span>     merge-policy       branch ruleset — <span className="tk-blue">redline-gate / gate</span> required{"\n"}
+        <span className="tk-green">applied</span>     repo-property      redline=onboarded
+      </CodeWindow>
+      <p>
+        Run it with a token that has repository admin. Everything under{" "}
+        <code>pendingAdmin</code> in <code>.redline.json</code> is retried, and the
+        file is rewritten with what actually stuck.
+      </p>
+      <div className="callout">
+        <p>
+          <b>The approval trap.</b> The ruleset requires one approving review, and
+          GitHub does not let you approve your own pull request. On a repository
+          with one active maintainer, the ruleset you just applied will block your
+          next pull request with no way forward from inside the repository.
+        </p>
+        <p>
+          That is the policy working as designed — one human approval, always —
+          but decide it deliberately rather than discovering it. If you work
+          solo, add yourself as a bypass actor on the <code>Redline</code>{" "}
+          ruleset. It is a real weakening and it is visible in the ruleset, which
+          is the right place for it to be visible.
+        </p>
+      </div>
+      <p>
+        Then <Link href="/docs/verification">run the verification scenarios</Link>.
+        Everything up to this point proves the gate is <i>installed</i>; only a
+        pull request that the gate actually stopped proves it is a gate.
+      </p>
 
       <h2>Exit codes</h2>
       <div className="table-scroll">

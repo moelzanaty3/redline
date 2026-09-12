@@ -66,3 +66,31 @@ test('nothing close means no candidates rather than a stack full of them', () =>
     'core/hardcoded-secrets',
   ]);
 });
+
+test('a rule bullet wrapped over several lines is read as one sentence', () => {
+  const rules = loadRules(ROOT);
+
+  // This rule's text wraps in standards/core.md. Read a line at a time it ended
+  // "…including in test files," — a truncated clause, printed by `redline
+  // explain`, by the stack tables and by the rule's own page.
+  const secrets = rules.get('core/hardcoded-secrets');
+  assert.ok(secrets, 'core/hardcoded-secrets is in the catalogue');
+  assert.match(secrets.text, /fixtures, config samples, and comments\.$/);
+
+  // Nothing may swallow the bullet that follows it: a continuation is indented,
+  // and the next rule is not.
+  for (const rule of rules.values()) {
+    assert.ok(
+      !/`[a-z-]+\/[a-z-]+`\s+—/.test(rule.text),
+      `${rule.id} absorbed the rule after it: ${rule.text.slice(0, 90)}`
+    );
+  }
+
+  // And no rule still ends mid-clause.
+  for (const rule of rules.values()) {
+    assert.ok(
+      !/[,;:]$/.test(rule.text.trim()),
+      `${rule.id} ends mid-clause: …${rule.text.slice(-60)}`
+    );
+  }
+});

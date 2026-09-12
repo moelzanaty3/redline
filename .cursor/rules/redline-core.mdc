@@ -3,7 +3,7 @@ description: Redline core standards
 alwaysApply: true
 ---
 
-<!-- Redline v0.0.3 · profile: tooling · stacks: javascript -->
+<!-- Redline v0.0.4 · profile: tooling · stacks: javascript -->
 
 # Redline — Core Engineering Standards
 
@@ -87,8 +87,10 @@ Stop at the first three unless the diff is clean there.
 
 - `core/escape-hatch-types` — No escape-hatch types (`any`, `interface{}` in new Go code, `Object`, `dynamic`)
   where a concrete or generic type works.
-- `core/type-checker-suppression` — No type-checker suppression (`@ts-ignore`, `@ts-expect-error`, `# type: ignore`,
-  `@SuppressWarnings("unchecked")`) without an inline comment AND a ticket reference.
+- `core/type-checker-suppression` — No type-checker or linter suppression without an inline comment AND a ticket reference.
+  Recognised in whichever dialect the stack uses: `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`,
+  `# type: ignore`, `# noqa`, `# pylint: disable`, `@SuppressWarnings("unchecked")`, `@Suppress("UNCHECKED_CAST")`,
+  `// swiftlint:disable`, `//nolint`, `#pragma warning disable`.
 - `core/unsafe-assertion` — No unsafe assertions (`as unknown as X`, force casts) used to silence an error.
 - `core/prefer-discriminated-unions` — Discriminated unions / sealed types over optional-field grab-bags for variant state.
 - `core/unchecked-indexed-access` — Assume the strictest project setting is on (TS `strict` + `noUncheckedIndexedAccess`,

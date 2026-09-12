@@ -25,6 +25,27 @@ test('a TODO carrying a ticket is not flagged', () => {
   );
 });
 
+// The `i` flag this pattern shipped with made `[A-Z][A-Z0-9]+-\d+` match any
+// word followed by a dash and digits, so a TODO that merely mentioned an
+// encoding was read as tracked work. It failed open — the rule went quiet
+// rather than noisy, which is why it could sit here unnoticed.
+test('a hyphenated technical term is not a ticket reference', () => {
+  for (const text of [
+    '// TODO: convert the output to utf-8',
+    '// TODO: switch the digest to sha-256',
+    '// TODO: handle base-64 padding',
+    '// TODO: drop support for es-2015',
+  ]) {
+    assert.deepEqual(ids(runChecks(ctx([line(text)]))), ['core/untracked-todo'], text);
+  }
+});
+
+test('an upper-case tracker key is still a ticket reference', () => {
+  for (const text of ['// TODO: ENG-441 rework this', '// TODO see JIRA-7']) {
+    assert.deepEqual(ids(runChecks(ctx([line(text)]))), [], text);
+  }
+});
+
 test('FIXME, HACK and XXX count as TODOs, because they are', () => {
   for (const word of ['FIXME', 'HACK', 'XXX']) {
     assert.deepEqual(ids(runChecks(ctx([line(`// ${word}: later`)]))), ['core/untracked-todo'], word);
@@ -51,13 +72,50 @@ test('a suppression with a ticket is allowed — the rule asks for both', () => 
   );
 });
 
+// One case per stack Redline renders rules for. A dialect missing from here is
+// a stack where this BLOCKER installs and can never fire, which reads in the
+// gate exactly like a repository that has no suppressions in it.
 test('every suppression dialect is covered, not just TypeScript', () => {
-  for (const s of ['# type: ignore', '@SuppressWarnings("unchecked")', 'eslint-disable-next-line', '# noqa']) {
+  const dialects = [
+    ['# type: ignore', 'src/a.py'],
+    ['# noqa', 'src/a.py'],
+    ['# pylint: disable=no-member', 'src/a.py'],
+    ['@SuppressWarnings("unchecked")', 'src/A.java'],
+    ['@Suppress("UNCHECKED_CAST")', 'src/A.kt'],
+    ['eslint-disable-next-line', 'src/a.js'],
+    ['// @ts-nocheck', 'src/a.ts'],
+    ['// swiftlint:disable force_cast', 'Sources/A.swift'],
+    ['#pragma warning disable CS0168', 'src/A.cs'],
+  ] as const;
+
+  for (const [s, file] of dialects) {
     assert.deepEqual(
-      ids(runChecks(ctx([line(`code ${s}`, 'src/a.py')]))),
+      ids(runChecks(ctx([line(`code ${s}`, file)]))),
       ['core/type-checker-suppression'],
       s
     );
+  }
+});
+
+// The spacing bug this list shipped with, pinned so it cannot come back.
+// golangci-lint only honours a directive written `//nolint` with no space; the
+// checker looked for `// nolint` with one, so the only Go form it recognised
+// was the form Go itself ignores.
+test('the Go directive is matched as golangci-lint actually writes it', () => {
+  assert.deepEqual(
+    ids(runChecks(ctx([line('x := unsafe() //nolint:errcheck', 'main.go')]))),
+    ['core/type-checker-suppression']
+  );
+});
+
+test('a suppression in any dialect is allowed once it carries a ticket', () => {
+  for (const s of [
+    '// swiftlint:disable force_cast — ENG-812',
+    '@Suppress("UNCHECKED_CAST") // ENG-812',
+    'x := unsafe() //nolint:errcheck // ENG-812',
+    '#pragma warning disable CS0168 // ENG-812',
+  ]) {
+    assert.deepEqual(ids(runChecks(ctx([line(s, 'src/a.kt')]))), [], s);
   }
 });
 
@@ -65,6 +123,26 @@ test('every suppression dialect is covered, not just TypeScript', () => {
 
 test('var on an added line in a JS-like file is flagged', () => {
   assert.deepEqual(ids(runChecks(ctx([line('  var total = 0;')]))), ['javascript/var-in-new-code']);
+});
+
+// A single-file component keeps all of its JavaScript in the `.vue`/`.svelte`
+// file, and the `javascript` stack is rendered into the web-vue and web-svelte
+// profiles — so these rules ship to those repositories. They were scoped away
+// from the only file extension that could break them, and neither framework
+// stack carries a `var` or coercion rule to pick up the slack.
+test('single-file components are JavaScript for the purposes of these rules', () => {
+  for (const file of ['src/App.vue', 'src/lib/Counter.svelte']) {
+    assert.deepEqual(
+      ids(runChecks(ctx([line('  var total = 0;', file)]))),
+      ['javascript/var-in-new-code'],
+      file
+    );
+    assert.deepEqual(
+      ids(runChecks(ctx([line('const n = parseInt(raw);', file)]))),
+      ['javascript/unsafe-numeric-coercion'],
+      file
+    );
+  }
 });
 
 test('var is not flagged in a file the rule does not apply to', () => {
@@ -161,4 +239,23 @@ test('prose about var is not a var declaration', () => {
   assert.deepEqual(ids(runChecks(ctx([line('// avoid var declarations here')]))), []);
   assert.deepEqual(ids(runChecks(ctx([line(' * var is function-scoped')]))), []);
   assert.deepEqual(ids(runChecks(ctx([line('# var in a python comment', 'a.js')]))), []);
+});
+
+test('a finding carries the address of its rule when the repository publishes one', () => {
+  const finding = {
+    ruleId: 'core/untracked-todo',
+    severity: 'HIGH' as const,
+    file: 'a.ts',
+    line: 1,
+    problem: 'no ticket.',
+  };
+  // Default: exactly what it printed before the base URL existed. Every
+  // repository onboarded so far has no docsBaseUrl, and none of their output
+  // may change because this field was added.
+  assert.equal(formatFinding(finding), 'Redline/HIGH [core/untracked-todo]: no ticket.');
+  assert.equal(
+    formatFinding(finding, 'https://redline.example.com'),
+    'Redline/HIGH [core/untracked-todo]: no ticket.\n' +
+      '  → https://redline.example.com/r/core/untracked-todo'
+  );
 });

@@ -3,16 +3,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SEARCH_INDEX, type SearchEntry } from "@/lib/docs-nav";
+import type { RuleHit } from "@/lib/search-index";
 
 export function openCmdk() {
   window.dispatchEvent(new CustomEvent("redline:cmdk"));
 }
 
-export function Cmdk() {
+// A rule result is not a page result: it carries a severity, its id is the
+// thing being matched, and it lands on a row rather than at the top of an
+// article. Keeping them in one union lets one keyboard cursor walk both.
+type Hit =
+  | { kind: "page"; group: string; href: string; title: string; description: string }
+  | { kind: "rule"; group: string; href: string; rule: RuleHit };
+
+const RULE_GROUP = "Rules";
+
+// How many rules one query may contribute. A two-letter query matches most of
+// the catalogue, and 300 rows of rule would bury every page result under it.
+const RULE_LIMIT = 8;
+
+export function Cmdk({
+  rules = [],
+  body = {},
+}: {
+  rules?: RuleHit[];
+  body?: Record<string, string>;
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -40,22 +61,54 @@ export function Cmdk() {
     }
   }, [open]);
 
-  const results = useMemo(() => {
+  const results = useMemo<Hit[]>(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return SEARCH_INDEX;
+    const pages = (entries: SearchEntry[]): Hit[] =>
+      entries.map((e) => ({
+        kind: "page" as const,
+        group: e.group,
+        href: e.href,
+        title: e.title,
+        description: e.description,
+      }));
+
+    if (!q) return pages(SEARCH_INDEX);
     const terms = q.split(/\s+/);
-    return SEARCH_INDEX.filter((e) => {
-      const hay = `${e.title} ${e.description} ${e.keywords} ${e.group}`.toLowerCase();
+
+    // Rules first when the query looks like one. A reader who pasted a rule id
+    // wants the rule, not the nine pages that mention its stack.
+    const ruleHits: Hit[] = rules
+      .filter((r) => {
+        const hay = `${r.id} ${r.severity} ${r.text} ${r.stackTitle}`.toLowerCase();
+        return terms.every((t) => hay.includes(t));
+      })
+      // An exact id match outranks a rule that merely mentions the words.
+      .sort((a, b) => Number(b.id.toLowerCase().includes(q)) - Number(a.id.toLowerCase().includes(q)))
+      .slice(0, RULE_LIMIT)
+      .map((rule) => ({ kind: "rule" as const, group: RULE_GROUP, href: rule.href, rule }));
+
+    const pageHits = SEARCH_INDEX.filter((e) => {
+      // The page's own body is part of the haystack now, so a term that appears
+      // only in the prose — `pendingAdmin`, `swiftlint`, "waiting for status" —
+      // finds the page that explains it.
+      const hay = `${e.title} ${e.description} ${e.keywords} ${e.group} ${body[e.href] ?? ""}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
     });
-  }, [query]);
+
+    // Title matches ahead of body-only matches: a page named for the thing you
+    // typed is a better answer than one that mentions it in passing.
+    const titled = pageHits.filter((e) => `${e.title} ${e.description}`.toLowerCase().includes(q));
+    const rest = pageHits.filter((e) => !titled.includes(e));
+
+    return [...ruleHits, ...pages(titled), ...pages(rest)];
+  }, [query, rules, body]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, { entry: SearchEntry; index: number }[]>();
-    results.forEach((entry, index) => {
-      const list = map.get(entry.group) ?? [];
-      list.push({ entry, index });
-      map.set(entry.group, list);
+    const map = new Map<string, { hit: Hit; index: number }[]>();
+    results.forEach((hit, index) => {
+      const list = map.get(hit.group) ?? [];
+      list.push({ hit, index });
+      map.set(hit.group, list);
     });
     return [...map.entries()];
   }, [results]);
@@ -67,6 +120,12 @@ export function Cmdk() {
     },
     [router],
   );
+
+  // Keyboard selection has to stay on screen or the arrow keys are steering
+  // something the reader cannot see — the same failure the docs sidebar fixes.
+  useEffect(() => {
+    listRef.current?.querySelector(".cmdk-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   const onInputKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
@@ -94,7 +153,8 @@ export function Cmdk() {
           <input
             ref={inputRef}
             value={query}
-            placeholder="Search documentation…"
+            placeholder="Search docs and rule ids…"
+            aria-label="Search documentation and rule ids"
             onChange={(e) => {
               setQuery(e.target.value);
               setActive(0);
@@ -103,21 +163,35 @@ export function Cmdk() {
           />
           <kbd>ESC</kbd>
         </div>
-        <div className="cmdk-list">
+        <div className="cmdk-list" ref={listRef}>
           {results.length === 0 && <div className="cmdk-empty">No results for “{query}”</div>}
           {grouped.map(([group, items]) => (
             <div key={group}>
               <div className="cmdk-group">{group}</div>
-              {items.map(({ entry, index }) => (
+              {items.map(({ hit, index }) => (
                 <button
-                  key={entry.href + entry.title}
+                  key={`${hit.href}-${hit.kind === "rule" ? hit.rule.id : hit.title}`}
                   type="button"
                   className={`cmdk-item${index === active ? " active" : ""}`}
                   onMouseEnter={() => setActive(index)}
-                  onClick={() => go(entry.href)}
+                  onClick={() => go(hit.href)}
                 >
-                  <span className="t">{entry.title}</span>
-                  <span className="d">{entry.description}</span>
+                  {hit.kind === "rule" ? (
+                    <>
+                      <span className="t">
+                        <code className="cmdk-rule-id">{hit.rule.id}</code>
+                        <span className={`cmdk-sev sv-${hit.rule.severity.toLowerCase()}`}>
+                          {hit.rule.severity}
+                        </span>
+                      </span>
+                      <span className="d">{hit.rule.text}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="t">{hit.title}</span>
+                      <span className="d">{hit.description}</span>
+                    </>
+                  )}
                 </button>
               ))}
             </div>

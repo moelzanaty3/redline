@@ -68,7 +68,7 @@ export default async function Home() {
   const seedExcerpt = seedMarkerExcerpt();
 
   return (
-    <main>
+    <main id="content" tabIndex={-1}>
       {/* ============ 1 — hero ============ */}
       <section className="hero">
         <div className="hero-glow" aria-hidden="true" />
@@ -85,10 +85,17 @@ export default async function Home() {
                 <span className="hero-mark">Redline</span> holds the line.
               </span>
             </h1>
+            {/* The outcome, not the mechanism. This used to end on "so you can
+                measure which rules are worth keeping" — a second-order benefit
+                for someone who already trusts their review process. The reason
+                anyone installs this is the first-order one: more code is
+                merging than anyone is really reading. Measurement is a real
+                claim and keeps its own panel further down the page. */}
             <p className="sub hm-hero-in" style={{ animationDelay: "140ms" }}>
-              One versioned rule set every reviewer — human, AI, or local —
-              checks the same diff against, with <b>every finding tagged</b>, so
-              you can measure which rules are worth keeping.
+              Your team is merging more code than it is reading. Redline puts{" "}
+              <b>one versioned rule set</b> in front of every diff — checked by
+              the AI that wrote it, the reviewer, and the gate, all against the
+              same list.
             </p>
             <div className="hm-hero-cmd hm-hero-in" style={{ animationDelay: "220ms" }}>
               <code>
@@ -131,9 +138,6 @@ export default async function Home() {
 
       {/* ============ 3 — the problem ============ */}
       <ValueCase />
-
-      {/* ============ 3b — the choices behind that run ============ */}
-      <Choices />
 
       {/* ============ 4 — a finding ============ */}
       <section className="hm-sec hm-finding" id="finding">
@@ -314,6 +318,15 @@ export default async function Home() {
           </Reveal>
         </div>
       </section>
+
+      {/* ============ 6b — the choices behind that run ============ */}
+      {/* Moved down from position 4, where it was the heaviest section on the
+          page — 1.8 screens, measured — and the one that only matters to a
+          reader who has already decided. It spent the evaluator's attention on
+          the install prompt before they had a reason to install. Here it is the
+          last thing before "try it", which is exactly the question it answers:
+          what will this ask me, and what will it change. */}
+      <Choices />
 
       {/* ============ 7 — try it ============ */}
       <section className="hm-sec hm-try" id="try">

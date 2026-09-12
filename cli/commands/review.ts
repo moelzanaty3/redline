@@ -107,6 +107,11 @@ export async function review(engine: ReviewEngine, opts: ReviewOptions): Promise
   const known = loadRuleIds(opts.root, manifest, scope.stacks);
   const { findings, rejected } = parseReview(response.raw, known);
 
+  // Where this repository publishes the standard, so a rendered finding carries
+  // the address of the rule it cites. Absent config, and a repository that has
+  // not set one, both render exactly what they rendered before.
+  const docsBaseUrl = readConfig(opts.cwd)?.docsBaseUrl ?? '';
+
   return {
     scope,
     prompt: null,
@@ -114,7 +119,10 @@ export async function review(engine: ReviewEngine, opts: ReviewOptions): Promise
     findings,
     rejected,
     // Rendered by code. The comment contract is never free-typed by a model.
-    rendered: findings.map(renderFinding),
+    // The arrow is not decoration: `map(renderFinding)` hands map's index in as
+    // the second argument, which would put an array position where the docs
+    // base URL goes.
+    rendered: findings.map((finding) => renderFinding(finding, docsBaseUrl)),
     excludedFromTelemetry: true,
   };
 }

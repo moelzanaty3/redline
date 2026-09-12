@@ -7,6 +7,7 @@ import { loadManifest } from "@/lib/manifest";
 import { STANDARDS, findBySlug } from "@/lib/registry";
 import { bySeverityDesc, rulesForStack, type RuleEntry } from "@/lib/rules";
 import { STANDARDS_INFO } from "@/lib/standards-info";
+import { ruleAnchor } from "@/lib/search-index";
 import { LifecycleSteps } from "@/components/lifecycle-steps";
 import { CodeWindow } from "@/components/code-window";
 import { STANDARDS_EDIT, profilesIncluding, severityBreakdown } from "@/lib/lifecycle";
@@ -35,7 +36,10 @@ function RuleTable({ rules }: { rules: RuleEntry[] }) {
         </thead>
         <tbody>
           {ordered.map((r) => (
-            <tr key={r.id}>
+            /* The row is the anchor a ⌘K rule result lands on. Without it the
+               search knows the rule and can only offer the page that lists it,
+               which on a stack page is a table of eighty. */
+            <tr key={r.id} id={ruleAnchor(r.id)}>
               <td><code>{r.id}</code></td>
               <td>{r.severity}</td>
               <td>{r.text}</td>

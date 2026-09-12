@@ -6,7 +6,9 @@
   --border-strong: #333333;
   --text: #ededed;
   --muted: #a1a1a1;
-  --faint: #6f6f6f;
+  /* AA on --bg: #6f6f6f measured 3.94:1, which is under the 4.5 floor for the
+     breadcrumb and every other place this is used as text, not as a hairline. */
+  --faint: #8a8a8a;
   --red: #e60000;
   --red-soft: #ff4d4d;
   --green: #45de83;
@@ -1287,7 +1289,7 @@ main section[id] {
 
 /* ================= docs layout ================= */
 .docs-shell {
-  max-width: 1120px;
+  max-width: 1224px;
   margin: 0 auto;
   padding: 0 24px;
   display: grid;
@@ -1413,13 +1415,39 @@ main section[id] {
 .docs-main {
   padding: 44px 0 90px;
   min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.docs-main > * {
+  min-width: 0;
 }
 .docs-main .crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
   font-size: 12.5px;
   color: var(--faint);
   margin-bottom: 10px;
 }
-.docs-main .crumb b {
+/* The trail was styled as links and navigated nowhere — four red words on the
+   standards pages, none of them clickable. Now the ancestors are real links and
+   the current page is the only plain segment, which is the one part of a trail
+   that is not a way back out. */
+.docs-main .crumb a {
+  color: var(--faint);
+  text-decoration: none;
+  border-radius: 3px;
+}
+.docs-main .crumb a:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.docs-main .crumb .sep {
+  color: var(--border-strong);
+}
+.docs-main .crumb [aria-current="page"] {
   color: var(--red-soft);
   font-weight: 550;
 }
@@ -1656,7 +1684,9 @@ main section[id] {
   --border-strong: #cfcfcf;
   --text: #171717;
   --muted: #525252;
-  --faint: #8f8f8f;
+  /* #8f8f8f measured 3.10:1 on #fafafa — further under the floor than the dark
+     theme was. Darkened to the same standard. */
+  --faint: #6b6b6b;
   --red-soft: #d40000;
   --sev-blocker: #a30000;
   --sev-high: #e04f4f;
@@ -2146,4 +2176,444 @@ main section[id] {
   font-size: 14px;
   color: var(--muted);
   line-height: 1.6;
+}
+
+/* ================= reading measure, the rail, and the floor under both =======
+   Everything below was added after a design pass measured the running site.
+   Each block names the number it is fixing, because the number is the argument.
+   ========================================================================== */
+
+/* Prose ran to 90 characters a line — measured, at every desktop width, on a
+   776px column — 87 to 95 real characters, sampled across paragraphs rather
+   than estimated. The comfortable band is 45–75 and the ceiling is about 80,
+   so the docs were reading heavier than they were written. 60ch measures at
+   about 72; capping it is also what frees the gutter the rail now occupies.
+
+   The cap is on the running text, never on .prose itself. A table or a code
+   window inside a 60ch box cannot be wider than 60ch however it is styled, and
+   the rule reference is the page that suffers most from that — squeezing its
+   "Catches" column into a third of the width would have traded a reading
+   problem for an unreadable table. Those keep the whole column. */
+.docs-main > .prose > p,
+.docs-main > .prose > ul,
+.docs-main > .prose > ol,
+.docs-main > .prose > h2,
+.docs-main > .prose > h3,
+.docs-main > .prose > h4,
+.docs-main > .prose > blockquote,
+.docs-main > .prose > .callout,
+.docs-main > .intro {
+  max-width: 60ch;
+}
+
+/* On-this-page. Above the breakpoint the article and the rail are the two
+   columns of .docs-main; the rail is left to stretch, because a sticky box can
+   only travel inside its own grid area. */
+.docs-toc {
+  margin: 0 0 28px;
+}
+.docs-toc details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  cursor: pointer;
+  list-style: none;
+}
+.docs-toc details > summary::-webkit-details-marker {
+  display: none;
+}
+.docs-toc .toc-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.docs-toc .toc-count {
+  font-size: 12px;
+  color: var(--faint);
+}
+.docs-toc ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 2px;
+}
+.docs-toc li {
+  margin: 0;
+}
+.docs-toc li a {
+  display: block;
+  padding: 5px 0 5px 12px;
+  border-left: 2px solid var(--border);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+  text-decoration: none;
+}
+.docs-toc li.sub a {
+  padding-left: 24px;
+  font-size: 12.5px;
+}
+.docs-toc li a:hover {
+  color: var(--text);
+  border-left-color: var(--border-strong);
+}
+.docs-toc li a.active {
+  color: var(--red-soft);
+  border-left-color: var(--red-soft);
+}
+
+@media (min-width: 1101px) {
+  .docs-main {
+    grid-template-columns: minmax(0, 1fr) 196px;
+    column-gap: 52px;
+  }
+  .docs-main > * {
+    grid-column: 1;
+  }
+  /* The rail is the only thing in column two, and it is given every row the
+     article occupies. That span is what makes it sticky: a sticky box travels
+     inside its own grid area, so an area one row tall would scroll away with
+     the first section. Six covers crumb, title, intro, prose and pager, and a
+     spare row costs nothing when it is empty. */
+  .docs-main > .docs-toc {
+    grid-column: 2;
+    grid-row: 1 / span 6;
+  }
+  /* Forced open, and the summary is not a summary here — the same mechanism the
+     sidebar uses, and the reason both still work with scripting off. */
+  .docs-toc details > summary {
+    display: none;
+  }
+  .docs-toc details {
+    display: block;
+  }
+  .docs-toc details::details-content {
+    display: block;
+    content-visibility: visible;
+    block-size: auto;
+  }
+  .docs-toc {
+    position: sticky;
+    top: 92px;
+    align-self: start;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    margin: 44px 0 0;
+    padding-bottom: 24px;
+  }
+  .docs-toc ul {
+    margin-top: 0;
+  }
+  .docs-toc::before {
+    content: "On this page";
+    display: block;
+    margin-bottom: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+}
+
+/* A single inline token with no space in it — `/.github/workflows/` — pushed
+   /docs/verification to a scrollWidth of 418 in a 390 viewport, so the whole
+   page scrolled sideways on a phone. Inline code is the only text on these
+   pages that cannot break at a space, so it is the only text that needs told. */
+.prose code,
+.docs-toc li a,
+.crumb {
+  overflow-wrap: anywhere;
+}
+
+/* A code block that scrolls with no sign that it scrolls is a block that has
+   been silently truncated: on /docs/standards/javascript the rendered standard
+   ran 304px past its own right edge with nothing to say so, and the hero diff
+   cut its vulnerable line 23px short.
+   The technique is the one .jr-pre already uses here, and it is used because it
+   is honest — two layers scroll with the content and two do not, so an edge is
+   shaded only while there is still content past it, and a block that fits shows
+   nothing at all. An always-on fade would smudge the edge of every short table
+   on the site to hint at scrolling that is not there. */
+.prose .code-window pre,
+.table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a transparent;
+}
+.prose .code-window pre {
+  background:
+    linear-gradient(90deg, #0e0e0e 40%, rgba(14, 14, 14, 0)) 0 0 / 26px 100% no-repeat local,
+    linear-gradient(90deg, rgba(14, 14, 14, 0), #0e0e0e 60%) 100% 0 / 26px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(255, 255, 255, 0.1), transparent) 0 0 / 14px 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(255, 255, 255, 0.1), transparent) 100% 0 / 14px
+      100% no-repeat scroll;
+}
+.table-scroll {
+  background:
+    linear-gradient(90deg, var(--bg) 40%, rgba(0, 0, 0, 0)) 0 0 / 24px 100% no-repeat local,
+    linear-gradient(90deg, rgba(0, 0, 0, 0), var(--bg) 60%) 100% 0 / 24px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(128, 128, 128, 0.28), transparent) 0 0 / 12px 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(128, 128, 128, 0.28), transparent) 100% 0 / 12px
+      100% no-repeat scroll;
+}
+.prose .code-window pre::-webkit-scrollbar,
+.table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.prose .code-window pre::-webkit-scrollbar-track,
+.table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.prose .code-window pre::-webkit-scrollbar-thumb,
+.table-scroll::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 999px;
+}
+
+/* Skip link. First in the tab order, off screen until focused. */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 300;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 0.14s ease;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* One focus ring, everywhere. There was no global rule, so all but four
+   controls fell back to the engine default — a 1px near-black outline, which on
+   a #0a0a0a ground is a focus indicator you cannot see. */
+:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* Inside the search dialog the ring would double up with the active-row fill. */
+.cmdk-item:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Rule results in ⌘K. A rule is matched on its id, so the id is what the row
+   leads with, and the severity travels with it — the two facts the reader
+   arrived holding.
+   `sv-` and not `sev-`: the bare `.sev-blocker`/`.sev-high` classes further up
+   are the home page severity bar and set a background fill, which turned these
+   pills into solid blobs with the label invisible inside them. */
+.cmdk-rule-id {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.cmdk-sev {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+.cmdk-sev.sv-blocker {
+  color: var(--sev-blocker);
+}
+.cmdk-sev.sv-high {
+  color: var(--sev-high);
+}
+.cmdk-sev.sv-suggestion {
+  color: var(--faint);
+}
+
+/* A rule row landed on by a search result should say which row it is. */
+.prose tr:target td {
+  background: rgba(230, 0, 0, 0.1);
+}
+.prose h2:target,
+.prose h3:target {
+  scroll-margin-top: 96px;
+}
+.prose tr:target {
+  scroll-margin-top: 120px;
+}
+
+/* The skip link's target takes focus programmatically, never by tabbing to it,
+   so it must not draw a ring around the whole article when it does. */
+.docs-main:focus,
+main:focus {
+  outline: none;
+}
+
+/* ================= the canonical rule page (/r/<rule-id>) ================= */
+/* The other end of the link a finding prints. A reader arrives from a review
+   comment with one question about one rule, so the page is one rule: no
+   sidebar, no table, and the id at the top where the comment left them. */
+.rule-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 44px 24px 90px;
+}
+.rule-page .crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 22px;
+  font-size: 12.5px;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.rule-page .crumb a {
+  color: var(--faint);
+  text-decoration: none;
+}
+.rule-page .crumb a:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rule-page .crumb .sep {
+  color: var(--border-strong);
+}
+.rule-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.rule-head h1 {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.rule-sev {
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.rule-sev.sv-blocker {
+  color: var(--sev-blocker);
+}
+.rule-sev.sv-high {
+  color: var(--sev-high);
+}
+.rule-sev.sv-suggestion {
+  color: var(--faint);
+}
+.rule-text {
+  margin-bottom: 30px;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--text);
+  max-width: 58ch;
+}
+.rule-facts {
+  margin-bottom: 40px;
+  border-top: 1px solid var(--border);
+}
+.rule-facts > div {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rule-facts dt {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.rule-facts dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.rule-facts dd b {
+  color: var(--text);
+}
+.rule-facts code,
+.rule-page p code {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+[data-theme="light"] .rule-facts code,
+[data-theme="light"] .rule-page p code {
+  background: rgba(0, 0, 0, 0.06);
+}
+.rule-page h2 {
+  margin: 38px 0 12px;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.rule-page p {
+  margin-bottom: 14px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 62ch;
+}
+.rule-page a:not(.crumb a) {
+  color: var(--red-soft);
+}
+.rule-siblings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rule-siblings li {
+  display: grid;
+  grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.rule-siblings li span {
+  color: var(--muted);
+}
+.rule-siblings code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .rule-facts > div,
+  .rule-siblings li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
 }

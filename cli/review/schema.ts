@@ -1,4 +1,5 @@
 import { isSeverity, type Severity } from '../core/severity.ts';
+import { ruleReference } from '../rules/url.ts';
 
 // The published findings schema: model → CLI.
 //
@@ -109,8 +110,17 @@ export function parseReview(raw: string, knownRules: Set<string>): ParsedReview 
   return { findings, rejected };
 }
 
-/** The output contract. Rendered here and nowhere else. */
-export function renderFinding(finding: ReviewFinding): string {
+/**
+ * The output contract. Rendered here and nowhere else.
+ *
+ * The reference line comes from the same renderer the deterministic tier uses,
+ * so the two tiers cannot drift into two shapes for one fact — which is the
+ * whole reason a finding is worth counting whoever produced it.
+ */
+export function renderFinding(finding: ReviewFinding, docsBaseUrl = ''): string {
   const body = finding.fix ? `${finding.problem} ${finding.fix}` : finding.problem;
-  return `Redline/${finding.severity} [${finding.rule}]: ${body}`;
+  return (
+    `Redline/${finding.severity} [${finding.rule}]: ${body}` +
+    ruleReference(finding.rule, docsBaseUrl)
+  );
 }

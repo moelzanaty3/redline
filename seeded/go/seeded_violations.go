@@ -49,3 +49,12 @@ func Tally(values []string) map[string]int {
 	}
 	return counts
 }
+
+// SEED 9 [BLOCKER] (core/type-checker-suppression) linter suppression with no explanation and no ticket
+func writeAll(w http.ResponseWriter, b []byte) {
+	w.Write(b) //nolint:errcheck
+}
+
+// SEED 10 [HIGH] (core/untracked-todo) placeholder with no ticket reference
+// TODO: fall back to the secondary region when the primary is draining
+func failover() {}

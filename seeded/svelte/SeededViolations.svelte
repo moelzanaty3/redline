@@ -53,6 +53,12 @@
   function markSeen() {
     profile.seen = true;
   }
+
+  // SEED 11 [HIGH] (javascript/var-in-new-code) function-scoped var in new code inside a single-file component
+  var retries = 0;
+
+  // SEED 12 [HIGH] (javascript/unsafe-numeric-coercion) parseInt with no radix on a value from the URL
+  const perPage = parseInt($page.url.searchParams.get('perPage'));
 </script>
 
 <!-- SEED 9 [BLOCKER] (svelte/html-tag-sink) unsanitised user html injected into the page -->

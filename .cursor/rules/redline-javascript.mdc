@@ -1,6 +1,6 @@
 ---
 description: Redline JavaScript rules
-globs: **/*.js,**/*.jsx,**/*.mjs,**/*.cjs
+globs: **/*.js,**/*.jsx,**/*.mjs,**/*.cjs,**/*.vue,**/*.svelte
 alwaysApply: false
 ---
 

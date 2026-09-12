@@ -32,6 +32,7 @@ const config = {
   integrations: [],
   gateSource: 'org' as const,
   gateVersion: '',
+  docsBaseUrl: '',
 };
 
 const host = (over: Partial<RemoteVerifyHost> = {}): RemoteVerifyHost => ({

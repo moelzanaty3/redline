@@ -1,8 +1,8 @@
 ---
-applyTo: "**/*.js,**/*.jsx,**/*.mjs,**/*.cjs"
+applyTo: "**/*.js,**/*.jsx,**/*.mjs,**/*.cjs,**/*.vue,**/*.svelte"
 ---
 
-<!-- Redline v0.0.3 · profile: tooling · stacks: javascript -->
+<!-- Redline v0.0.4 · profile: tooling · stacks: javascript -->
 
 # JavaScript Review Rules
 

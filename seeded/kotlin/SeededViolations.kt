@@ -50,3 +50,7 @@ object SeededViolations {
 
 // SEED 10 [HIGH] (kotlin/data-class-var) data class with var properties breaks copy/equality semantics
 data class Account(var id: String, var balance: Int)
+
+// SEED 11 [BLOCKER] (core/type-checker-suppression) compiler warning suppressed with no explanation and no ticket
+@Suppress("UNCHECKED_CAST")
+fun <T> coerce(value: Any): T = value as T

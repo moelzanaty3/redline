@@ -39,7 +39,7 @@ jobs:
           # command line is visible in the process table.
           GH_TOKEN: ${{ secrets.REDLINE_ORG_READ_TOKEN }}
         run: |
-          npx --yes "redlinegate@0.0.2" metrics collect \
+          npx --yes "redlinegate@0.0.3" metrics collect \
             --org "${{ github.repository_owner }}" \
             --days "${{ inputs.days || '8' }}" \
             --out data

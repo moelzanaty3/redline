@@ -53,3 +53,9 @@ async function notify(userId) {
 }
 
 module.exports = { handler, merge };
+
+// SEED 9 [BLOCKER] (core/type-checker-suppression) linter suppression with no explanation and no ticket
+// eslint-disable-next-line no-unused-vars
+function coerce(value) {
+  return String(value);
+}

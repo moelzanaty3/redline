@@ -83,6 +83,94 @@ export default function Page() {
         config file claims — before it will call the check name confirmed.
       </p>
 
+      <h2 id="adding-a-check">Adding a check of your own</h2>
+      <p>
+        Three ways, in the order you should reach for them. The first two need no
+        change to Redline at all.
+      </p>
+
+      <h3>1. Run it beside the gate</h3>
+      <p>
+        A check that is yours alone — a licence scan, a bundle-size budget, a
+        migration linter — is an ordinary workflow in your repository. Nothing
+        about Redline stops you, and if you also want it to <i>block</i>, add its
+        check name to the branch ruleset alongside{" "}
+        <code>redline-gate / gate</code>. Redline&apos;s ruleset is applied by{" "}
+        <code>redline init</code>, so add yours as a second ruleset rather than
+        hand-editing the one named <code>Redline</code> — a hand edit is drift,
+        and <code>redline verify</code> will report it as exactly that.
+      </p>
+
+      <h3>2. Stand a Redline job down and run your own instead</h3>
+      <p>
+        Where you already run something that covers a gate job, tell the gate so
+        rather than running both. <code>redline init --integrations</code> records
+        the tools you have, and writes <code>stand-down:</code> into the caller
+        from what you <b>declared</b> — never from detection alone. A stood-down
+        job is skipped and the aggregate reads a skip as a pass.
+      </p>
+      <p>
+        <code>policy</code>, <code>dependencies</code> and <code>secrets</code>{" "}
+        are the three that can be stood down. The last two are the ones no label
+        can waive, so standing one of those down is the one edit here that removes
+        a security check — do it because another scanner genuinely covers it, and
+        never to get a red pull request green.
+      </p>
+
+      <h3>3. Add a job to the gate itself</h3>
+      <p>
+        For a check the whole organisation should get. Two rules, and the second
+        is the one people miss:
+      </p>
+      <ul>
+        <li>
+          <b>Do not rename any job id.</b> The required check name is built from
+          the caller job id and the called job id — <code>redline-gate</code> and{" "}
+          <code>gate</code>. Renaming either changes the required context, and
+          every pull request in every onboarded repository sits on
+          &ldquo;Expected — waiting for status&rdquo; forever.
+        </li>
+        <li>
+          <b>Add the new job to the aggregate&apos;s <code>needs:</code> list.</b>{" "}
+          A job that is not in <code>needs</code> still runs and still shows up
+          red on the pull request, but the <code>gate</code> job never waits for
+          it and never reads its result — so it blocks nothing. A check that
+          looks like it is enforcing and is not is worse than no check.
+        </li>
+      </ul>
+      <p>
+        A new job is a <b>process</b> check: it sits on the{" "}
+        <Link href="/docs/enforcement">ladder</Link> and a{" "}
+        <Link href="/docs/exemptions">recorded exemption</Link> can waive it. The
+        never-exemptible set is exactly dependency review and the secret scan, and
+        it is deliberately not a list you extend from a repository — a security
+        floor that each repository defines for itself is not a floor.
+      </p>
+      <div className="callout">
+        <p>
+          <b>Where you edit depends on where your gate lives.</b> With{" "}
+          <code>--gate-source org</code>, the job definitions are in{" "}
+          <code>&lt;org&gt;/.github</code> — one merge there reaches every
+          onboarded repository, which is the point of hosting it once.
+        </p>
+        <p>
+          With <code>--gate-source local</code> the gate is vendored into your
+          repository, and its header says{" "}
+          <i>&ldquo;Regenerate with <code>redline init --repair</code>; edits here
+          are overwritten.&rdquo;</i> That is not a warning about style — the next{" "}
+          <code>--repair</code>, which is also how you pick up a gate fix or clear
+          a pending admin capability, will silently delete your job. Put the check
+          in its own workflow (option 1), or contribute it to the Redline source
+          repository so every repository gets it and yours stops being a fork.
+        </p>
+      </div>
+      <p>
+        Whichever route you take, prove it did what you think:{" "}
+        <Link href="/docs/verification">Verification</Link> scenario 8 shows a
+        stood-down job reading as a pass, and scenarios 5 and 9 show the
+        difference between a check that blocks and one that only reports.
+      </p>
+
       <h2>Policy invariants</h2>
       <ul>
         <li>One human approval, always — automated review is advisory input, never the approver.</li>
