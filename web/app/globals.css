@@ -2413,7 +2413,10 @@ main section[id] {
 
 /* Rule results in ⌘K. A rule is matched on its id, so the id is what the row
    leads with, and the severity travels with it — the two facts the reader
-   arrived holding. */
+   arrived holding.
+   `sv-` and not `sev-`: the bare `.sev-blocker`/`.sev-high` classes further up
+   are the home page severity bar and set a background fill, which turned these
+   pills into solid blobs with the label invisible inside them. */
 .cmdk-rule-id {
   font-family: var(--mono);
   font-size: 12.5px;
@@ -2427,13 +2430,13 @@ main section[id] {
   letter-spacing: 0.06em;
   vertical-align: 1px;
 }
-.cmdk-sev.sev-blocker {
+.cmdk-sev.sv-blocker {
   color: var(--sev-blocker);
 }
-.cmdk-sev.sev-high {
+.cmdk-sev.sv-high {
   color: var(--sev-high);
 }
-.cmdk-sev.sev-suggestion {
+.cmdk-sev.sv-suggestion {
   color: var(--faint);
 }
 
@@ -2454,4 +2457,163 @@ main section[id] {
 .docs-main:focus,
 main:focus {
   outline: none;
+}
+
+/* ================= the canonical rule page (/r/<rule-id>) ================= */
+/* The other end of the link a finding prints. A reader arrives from a review
+   comment with one question about one rule, so the page is one rule: no
+   sidebar, no table, and the id at the top where the comment left them. */
+.rule-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 44px 24px 90px;
+}
+.rule-page .crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 22px;
+  font-size: 12.5px;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.rule-page .crumb a {
+  color: var(--faint);
+  text-decoration: none;
+}
+.rule-page .crumb a:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rule-page .crumb .sep {
+  color: var(--border-strong);
+}
+.rule-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.rule-head h1 {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.rule-sev {
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.rule-sev.sv-blocker {
+  color: var(--sev-blocker);
+}
+.rule-sev.sv-high {
+  color: var(--sev-high);
+}
+.rule-sev.sv-suggestion {
+  color: var(--faint);
+}
+.rule-text {
+  margin-bottom: 30px;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--text);
+  max-width: 58ch;
+}
+.rule-facts {
+  margin-bottom: 40px;
+  border-top: 1px solid var(--border);
+}
+.rule-facts > div {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rule-facts dt {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.rule-facts dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.rule-facts dd b {
+  color: var(--text);
+}
+.rule-facts code,
+.rule-page p code {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+[data-theme="light"] .rule-facts code,
+[data-theme="light"] .rule-page p code {
+  background: rgba(0, 0, 0, 0.06);
+}
+.rule-page h2 {
+  margin: 38px 0 12px;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.rule-page p {
+  margin-bottom: 14px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 62ch;
+}
+.rule-page a:not(.crumb a) {
+  color: var(--red-soft);
+}
+.rule-siblings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rule-siblings li {
+  display: grid;
+  grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.rule-siblings li span {
+  color: var(--muted);
+}
+.rule-siblings code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .rule-facts > div,
+  .rule-siblings li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
 }

@@ -314,6 +314,13 @@ export interface InitOptions {
   // repository between gate sources by accident. Moving it is a security change
   // in one direction — see GateSource — so it takes saying so.
   gateSource?: GateSource;
+  // `--docs-url <base>`. Where this organisation publishes its copy of the
+  // standard, so every finding can carry the address of the rule it cites.
+  // Same precedence as the rung and the menu: absent keeps whatever the
+  // repository recorded, so a re-run never silently drops a link somebody set.
+  // An empty string is how it is cleared, which is why this is distinguished
+  // from absent rather than falsy-checked.
+  docsUrl?: string;
   // `--no-commit`. Write the artifacts into the working tree and stop: no host
   // request, no branch, no commit, no push, no pull request.
   //
@@ -988,6 +995,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       gateSource,
       gateVersion:
         gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
+      docsBaseUrl: opts.docsUrl ?? existing?.docsBaseUrl ?? '',
     });
     return {
       profile,
@@ -1082,6 +1090,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     // for verify to compare and the field stays empty.
     gateVersion:
       gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
+    docsBaseUrl: opts.docsUrl ?? existing?.docsBaseUrl ?? '',
   });
 
   step('committing and opening the pull request');

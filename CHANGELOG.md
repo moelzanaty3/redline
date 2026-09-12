@@ -88,6 +88,59 @@ the half of the corpus that would have caught it if any of this were over-eager.
   own beside it, or add a job to the gate and to the aggregate's `needs`, with the required-check
   naming rule that makes the difference between a gate and a permanently pending one.
 
+### A finding can now say where its rule is documented
+
+The output contract has always put a permanent id on every finding, and that id was the most useful
+thing on the line and the least reachable: a reviewer had the exact name of the rule and no way to
+get to what it says without leaving the review and searching for it.
+
+- **`redline init --docs-url <base>`** records where your organisation publishes the standard, as
+  `docsBaseUrl` in `.redline.json`. Set it and every finding — deterministic tier and model review
+  alike, through one shared renderer — carries `→ <base>/r/<rule-id>` on the next line.
+- **Unset by default, and unset prints nothing.** There is no honest default: an organisation running
+  Redline internally wants findings pointing at its own copy of the standard, and a link to somebody
+  else's is worse than no link. Anything that is not `http(s)` is refused, because a finding is
+  rendered into a comment on somebody else's host.
+- **Every repository onboarded so far prints exactly what it printed before.** The field is absent
+  from their config, which reads back as no link.
+
+### The catalogue truncated ten rules mid-sentence
+
+Both rule parsers — the CLI's and the one CI, telemetry and seed scoring share — read a bullet's
+first line and stopped. Ten rules in `standards/` wrap, so ten rules were published as half a
+sentence: `core/hardcoded-secrets` ended at "including in test files,", and that is what
+`redline explain` printed and what every stack table rendered.
+
+It also imposed a rule nobody could see — the first line of a bullet had to be a complete sentence,
+or the catalogue published a fragment. That constraint is gone; both parsers now join the
+continuation lines, and the test that holds the two readers together asserts no rule ends mid-clause
+and none absorbs the bullet after it.
+
+### Docs — the rule page, and the page for when it is broken
+
+- **`/r/<rule-id>` is the canonical address of a rule** — 335 static pages, one per rule, carrying
+  its severity and what that obliges, whether a checker or a reviewer decides it, the globs it
+  applies to, the profiles it reaches, and where it is defined. It is what `--docs-url` points at,
+  and what a rule id typed into search now resolves to. Deliberately not a redirect into the stack
+  page: someone arriving from a review comment has one question about one rule, and a table of
+  eighty with one row tinted is the second question.
+- **A Troubleshooting page.** The failures that actually happen — a pull request stuck on
+  "Expected — waiting for status", a green gate that checked nothing, `partially onboarded`, an
+  exemption that did not exempt, a rule that never fires — each with the string it prints and the
+  command that resolves it. The material existed, scattered across five pages, none of which was
+  where a stuck reader lands.
+- **Search reads the documentation, not just its navigation.** The index was page titles,
+  descriptions and hand-written keywords, so `javascript/var-in-new-code` — the single most likely
+  thing a reader arrives with — returned nothing, as did `pendingAdmin`, `swiftlint` and
+  "Expected — waiting for status". It now carries every rule as its own result and a token index of
+  each page's prose and of the artifacts the reference pages render.
+- **The docs are navigable and reachable.** Every heading is anchored and listed in an on-this-page
+  rail (Verification had seventeen headings and no ids, so nobody could link to scenario 6); the
+  reading measure is capped at about 72 characters, down from 87–95; docs pages have a `main`
+  landmark and a skip link, replacing 46 presses of Tab; one global focus ring replaces an engine
+  default drawing 1px of near-black on a near-black ground; breadcrumbs are links; and `--faint`,
+  which failed AA in both themes, does not.
+
 ## [0.0.3](https://github.com/moelzanaty3/redline/compare/v0.0.2...v0.0.3) (2026-09-11)
 
 ### `redline init` — a gate for a repository whose organisation has not agreed to one yet

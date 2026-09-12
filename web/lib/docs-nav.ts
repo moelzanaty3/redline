@@ -100,6 +100,12 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "verification verify test gate scenarios prove drill checklist adr policy exemption stand-down rung block-blocker secret scan security floor throwaway branch runbook does the gate work",
       },
       {
+        title: "Troubleshooting",
+        href: "/docs/troubleshooting",
+        description: "Every failure that actually happens, the string it prints, and the command that resolves it.",
+        keywords: "troubleshooting troubleshoot problem broken error help stuck fix debug waiting for status expected never resolves check name required context partially onboarded pendingAdmin denied admin rights repair exemption ignored label not working checklist heading deleted rule not firing globs added lines stale artifacts drift no link docsBaseUrl docs-url ?? FAIL exit code 1 2 green but nothing checked false green needs aggregate remove uninstall",
+      },
+      {
         title: "What success looks like",
         href: "/docs/success",
         description: "Five checkpoints after onboarding — the command that proves each one, and the quiet failure that looks identical from the outside.",

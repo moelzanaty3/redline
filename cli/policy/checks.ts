@@ -1,5 +1,6 @@
 import type { Severity } from '../core/severity.ts';
 import type { AddedLine } from './diff.ts';
+import { ruleReference } from '../rules/url.ts';
 
 // The deterministic tier: rules a checker can decide, evaluated without a model.
 //
@@ -234,7 +235,16 @@ export function runChecks(ctx: CheckContext, only?: string[]): PolicyResult {
   return { findings, evaluated };
 }
 
-/** The output contract, rendered by code — never free-typed. */
-export function formatFinding(finding: PolicyFinding): string {
-  return `Redline/${finding.severity} [${finding.ruleId}]: ${finding.problem}`;
+/**
+ * The output contract, rendered by code — never free-typed.
+ *
+ * `docsBaseUrl` is the repository's own `.redline.json` value and is optional
+ * everywhere: a repository that has not set one prints exactly what it printed
+ * before, and one that has gets the address of the rule on the next line.
+ */
+export function formatFinding(finding: PolicyFinding, docsBaseUrl = ''): string {
+  return (
+    `Redline/${finding.severity} [${finding.ruleId}]: ${finding.problem}` +
+    ruleReference(finding.ruleId, docsBaseUrl)
+  );
 }

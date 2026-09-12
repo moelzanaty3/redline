@@ -240,3 +240,22 @@ test('prose about var is not a var declaration', () => {
   assert.deepEqual(ids(runChecks(ctx([line(' * var is function-scoped')]))), []);
   assert.deepEqual(ids(runChecks(ctx([line('# var in a python comment', 'a.js')]))), []);
 });
+
+test('a finding carries the address of its rule when the repository publishes one', () => {
+  const finding = {
+    ruleId: 'core/untracked-todo',
+    severity: 'HIGH' as const,
+    file: 'a.ts',
+    line: 1,
+    problem: 'no ticket.',
+  };
+  // Default: exactly what it printed before the base URL existed. Every
+  // repository onboarded so far has no docsBaseUrl, and none of their output
+  // may change because this field was added.
+  assert.equal(formatFinding(finding), 'Redline/HIGH [core/untracked-todo]: no ticket.');
+  assert.equal(
+    formatFinding(finding, 'https://redline.example.com'),
+    'Redline/HIGH [core/untracked-todo]: no ticket.\n' +
+      '  → https://redline.example.com/r/core/untracked-todo'
+  );
+});

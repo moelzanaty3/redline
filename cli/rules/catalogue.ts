@@ -60,9 +60,8 @@ export function loadRules(root: string, manifest: Manifest = loadManifest(root))
     let severity: Severity | null = null;
     let inFence = false;
 
-    readFileSync(join(root, relPath), 'utf8')
-      .split('\n')
-      .forEach((line, index) => {
+    const lines = readFileSync(join(root, relPath), 'utf8').split('\n');
+    lines.forEach((line, index) => {
         if (/^```/.test(line.trim())) inFence = !inFence;
         if (inFence) return;
 
@@ -79,13 +78,39 @@ export function loadRules(root: string, manifest: Manifest = loadManifest(root))
           id: id!,
           stack,
           severity,
-          text: text!.trim(),
+          text: wrapped(lines, index, text!),
           source: relPath,
           line: index + 1,
         });
       });
   }
   return rules;
+}
+
+// A rule bullet wrapped over several lines is one sentence, not one line.
+//
+// Reading the first line only truncated ten of the catalogue's rules mid-clause
+// — `core/hardcoded-secrets` ended at "including in test files," and that is
+// what `redline explain` printed, what the stack tables rendered, and what the
+// rule's own page showed. It also imposed a rule nobody could see: the first
+// line of a bullet had to be a complete sentence or the catalogue published
+// half of one.
+//
+// A continuation is an indented line that is not itself a list item. Everything
+// that ends a bullet — the next rule, a heading, a fence, a blank line — is
+// either unindented or fails that test, so nothing here can run past the end of
+// the item it started in. scripts/lib/rules.mjs carries the same function, and
+// cli/rules/__tests__/catalogue.test.ts asserts the two parsers agree.
+const CONTINUATION = /^\s{2,}(?![-*+]\s)(?!\d+\.\s)\S/;
+
+function wrapped(lines: readonly string[], index: number, first: string): string {
+  const parts = [first];
+  for (let n = index + 1; n < lines.length; n += 1) {
+    const next = lines[n];
+    if (next === undefined || !CONTINUATION.test(next)) break;
+    parts.push(next.trim());
+  }
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 export interface Explanation {

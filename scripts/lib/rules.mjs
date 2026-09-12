@@ -35,6 +35,29 @@ export const isReviewBot = (login = '') =>
  * Reads every rule out of the standards sources.
  * @returns {Map<string, {id, stack, severity, text, source, line}>}
  */
+// A rule bullet wrapped over several lines is one sentence, not one line.
+//
+// This read the first line only, which quietly truncated ten of the catalogue's
+// rules mid-clause — `core/hardcoded-secrets` ended at "including in test
+// files," and `redline explain` printed exactly that. It also imposed a rule
+// nobody could see: the first line of a bullet had to be a complete sentence,
+// or the catalogue would publish half of one. Both are gone now.
+//
+// A continuation is an indented line that is not itself a bullet and not blank.
+// The list item's own indentation ends it, as does a fence, a heading or the
+// next rule — all of which are unindented and therefore already excluded.
+const CONTINUATION = /^\s{2,}(?![-*+]\s)(?!\d+\.\s)\S/;
+
+function continuation(lines, index, first) {
+  const parts = [first];
+  for (let n = index + 1; n < lines.length; n += 1) {
+    const next = lines[n];
+    if (next === undefined || !CONTINUATION.test(next)) break;
+    parts.push(next.trim());
+  }
+  return parts.join(' ').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+}
+
 export function loadRules(root = ROOT) {
   const manifest = JSON.parse(readFileSync(join(root, 'standards/manifest.json'), 'utf8'));
   const sources = [
@@ -71,7 +94,7 @@ export function loadRules(root = ROOT) {
         id: rule[1],
         stack,
         severity,
-        text: rule[2].replace(/\*\*/g, '').trim(),
+        text: continuation(lines, i, rule[2]),
         source: relPath,
         line: i + 1,
       });

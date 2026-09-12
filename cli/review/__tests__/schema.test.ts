@@ -122,3 +122,22 @@ test('a model that pastes its own prefix cannot smuggle it through', () => {
   // The text is data. The prefix comes from the validated rule and severity.
   assert.match(renderFinding(result.findings[0]!), /^Redline\/BLOCKER \[react\/effect-derived-state\]:/);
 });
+
+test('a model finding carries the same rule address the deterministic tier does', () => {
+  const finding = {
+    rule: 'react/effect-derived-state',
+    severity: 'HIGH' as const,
+    file: 'a.tsx',
+    line: 3,
+    problem: 'derived state in an effect.',
+    fix: 'compute it during render.',
+  };
+  // One shape for one fact. Two tiers that rendered the reference differently
+  // would undo the reason a finding is countable whoever produced it.
+  assert.equal(
+    renderFinding(finding, 'https://redline.example.com'),
+    'Redline/HIGH [react/effect-derived-state]: derived state in an effect. compute it during render.\n' +
+      '  → https://redline.example.com/r/react/effect-derived-state'
+  );
+  assert.ok(!renderFinding(finding).includes('→'));
+});

@@ -49,7 +49,10 @@ export function ruleHits(): RuleHit[] {
     id: r.id,
     severity: r.severity,
     text: r.text,
-    href: `/docs/standards/${r.stack}#${ruleAnchor(r.id)}`,
+    // The canonical rule page, not the stack page's anchor. Someone who typed
+    // a rule id has one question about one rule; the table of eighty with one
+    // row tinted is the second question, and the rule page links to it.
+    href: `/r/${r.id}`,
     stackTitle: stackTitle.get(r.stack) ?? r.stack,
   }));
 }

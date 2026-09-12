@@ -139,9 +139,6 @@ export default async function Home() {
       {/* ============ 3 — the problem ============ */}
       <ValueCase />
 
-      {/* ============ 3b — the choices behind that run ============ */}
-      <Choices />
-
       {/* ============ 4 — a finding ============ */}
       <section className="hm-sec hm-finding" id="finding">
         <div className="container">
@@ -321,6 +318,15 @@ export default async function Home() {
           </Reveal>
         </div>
       </section>
+
+      {/* ============ 6b — the choices behind that run ============ */}
+      {/* Moved down from position 4, where it was the heaviest section on the
+          page — 1.8 screens, measured — and the one that only matters to a
+          reader who has already decided. It spent the evaluator's attention on
+          the install prompt before they had a reason to install. Here it is the
+          last thing before "try it", which is exactly the question it answers:
+          what will this ask me, and what will it change. */}
+      <Choices />
 
       {/* ============ 7 — try it ============ */}
       <section className="hm-sec hm-try" id="try">

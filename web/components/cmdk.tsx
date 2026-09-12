@@ -180,7 +180,7 @@ export function Cmdk({
                     <>
                       <span className="t">
                         <code className="cmdk-rule-id">{hit.rule.id}</code>
-                        <span className={`cmdk-sev sev-${hit.rule.severity.toLowerCase()}`}>
+                        <span className={`cmdk-sev sv-${hit.rule.severity.toLowerCase()}`}>
                           {hit.rule.severity}
                         </span>
                       </span>

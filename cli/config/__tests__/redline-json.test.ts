@@ -29,6 +29,7 @@ const valid: RedlineConfig = {
   rung: 'observe' as const,
   gateSource: 'org' as const,
   gateVersion: '',
+  docsBaseUrl: '',
 };
 
 // Absent means "nobody has said", which must fall back to detection rather than
