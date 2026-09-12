@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { adjacentDocs, DOCS_NAV } from "@/lib/docs-nav";
-import { DocsToc, type Heading } from "@/components/docs-toc";
+import { DocsToc } from "@/components/docs-toc";
+import { hasToc, type Heading } from "@/lib/toc";
 
 /** The readable text of a heading, whatever JSX it was written with. */
 function textOf(node: ReactNode): string {
@@ -144,7 +145,11 @@ export function DocsPage({
     // hash changes and the page scrolls, but focus stays in the header — so the
     // next Tab walks back into the navigation the reader just asked to leave,
     // which is the failure mode that makes skip links look decorative.
-    <main className="docs-main" id="content" tabIndex={-1}>
+    <main
+      className={hasToc(headings) ? "docs-main" : "docs-main no-toc"}
+      id="content"
+      tabIndex={-1}
+    >
       <Crumbs crumb={crumb} />
       <h1>{title}</h1>
       <p className="intro">{intro}</p>

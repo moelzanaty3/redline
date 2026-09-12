@@ -485,15 +485,16 @@
 /* ---------------- detail page ---------------- */
 
 /* Two columns, mirroring the registry's own layout: the procedure on the left,
-   the facts that do not change beside it. 208px is the narrowest the rail reads
-   at without its labels wrapping, and the docs content column is only ~776px —
-   any wider and the prose column stops being a prose column. */
+   the facts that do not change beside it. The rail was 208px because the page
+   was living in what the on-this-page gutter left over; with that column
+   released it gets the width its sentences actually need, and the prose column
+   still lands near 60ch. */
 .sk-detail {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 208px;
-  gap: 36px;
+  grid-template-columns: minmax(0, 1fr) 236px;
+  gap: 48px;
   align-items: start;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .sk-detail-main {
@@ -501,7 +502,7 @@
 }
 
 .sk-block {
-  margin-bottom: 30px;
+  margin-bottom: 38px;
 }
 
 /* Section labels are small, spaced and ruled rather than headings, so the page
@@ -523,7 +524,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -553,7 +554,7 @@
 }
 
 .sk-summary {
-  padding: 16px 18px;
+  padding: 20px 22px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -883,8 +884,16 @@ a.sk-tag:focus-visible,
 /* ---------------- small screens ---------------- */
 
 /* The facts rail stops being a rail before the prose column gets too narrow to
-   read. 900px is where 1fr + 208px + 36px leaves under 500px for the text. */
-@media (max-width: 900px) {
+   read: 236px of rail and a 48px gap leave under 500px for the text below 784px
+   of column.
+
+   A viewport media query cannot express that. What this layout gets is the docs
+   content column, and how wide that is depends on whether the sidebar is still a
+   column and whether the on-this-page rail is reserved — so the same viewport
+   width hands it anywhere between 396px and 880px. The old query guessed at a
+   viewport number and was wrong for the band just above the sidebar breakpoint,
+   where the column is at its narrowest and the rail stayed up regardless. */
+@container prose (max-width: 784px) {
   .sk-detail {
     grid-template-columns: 1fr;
     gap: 28px;
