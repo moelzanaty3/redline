@@ -25,19 +25,18 @@ export default function Page() {
       <div className="callout info">
         <span className="ic">ℹ</span>
         <p>
-          These are GitHub Actions workflows and are GitHub-only. The CLI
-          drives onboarding and verification identically on Azure DevOps, but
-          the org-wide telemetry pipeline below hasn&apos;t been
-          adapter-ised for it yet — see{" "}
+          GitHub Actions, so GitHub-only — the CLI onboards and verifies on
+          Azure DevOps, the scheduled plane does not yet reach it. See{" "}
           <Link href="/docs/telemetry">Telemetry &amp; validation</Link>.
         </p>
       </div>
       <p>
-        Two are wired up but disabled in Phase 1 —{" "}
-        <code>redline-sync.yml</code> and{" "}
-        <code>verify-onboarding.yml</code> both carry <code>if: false</code>{" "}
-        and cannot run even on their own trigger. Automated standards
-        distribution returns in Phase 3.
+        <code>redline-sync.yml</code> and <code>verify-onboarding.yml</code> are
+        live where a platform team has installed them and created the tokens they
+        name — <code>sync</code> is a real cross-repository write on a GitHub
+        estate, pull-request-only and scoped. See{" "}
+        <Link href="/docs/who-runs-what">Who runs what</Link> for which credential
+        each one holds.
       </p>
       <div className="doc-cards" style={{ marginTop: 24 }}>
         {WORKFLOWS.map((w) => (

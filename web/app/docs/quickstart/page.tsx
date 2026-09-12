@@ -90,10 +90,11 @@ export default async function Page() {
         <span className="tk-prompt">$</span> <span className="tk-white">{verify}</span>
       </CodeWindow>
       <p>
-        One line per check: <code>ok</code>, <code>FAIL</code>, or{" "}
-        <code>??</code> for something that could not be checked. Exit 0 clean, 1
-        on drift, 2 if the repository was never onboarded — three different
-        people act on those three answers.
+        One line per check, read back from the host rather than from your config:{" "}
+        <code>ok</code>, <code>FAIL</code>, or <code>??</code> for something that
+        could not be checked. A <code>??</code> is never a pass —{" "}
+        <Link href="/docs/troubleshooting">Troubleshooting</Link> has what each
+        answer obliges you to do.
       </p>
 
       <h2>4. Try it on your own change</h2>

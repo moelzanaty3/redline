@@ -9,7 +9,7 @@ export default function Page() {
     <DocsPage
       crumb="Adaptors"
       title="Add your own vendor"
-      intro="Redline is a standards system with adapters — only ~60 lines of the renderer are vendor-aware. Adding a vendor is one function."
+      intro="Redline is a standards system with adapters — only ~60 lines of the renderer are vendor-aware, and that is the whole surface a new vendor touches."
       href="/docs/adaptors/custom"
     >
       <h2>The contract</h2>
@@ -47,7 +47,7 @@ export default function Page() {
       <ol>
         <li>Add the vendor to <code>vendors</code> in <code>standards/manifest.json</code> with <code>enabled: true</code>.</li>
         <li>CI renders it for every profile on the next PR — the render-drift check keeps output honest.</li>
-        <li>Merge. Every repo that runs <code>redline init</code> next picks up the new artifacts as part of its pull request. There is no push-based distribution to already-onboarded repos yet — <code>redline verify</code> reports them as stale until they re-run <code>init</code>.</li>
+        <li>Merge. Registered repositories get the new artifacts as a sync pull request; anything not in the register picks them up on its next <code>redline init</code>, and <code>redline verify</code> reports it stale until then.</li>
       </ol>
 
       <h2>Measurement comes free</h2>

@@ -117,12 +117,6 @@ export default function Page() {
         raise the floor on what gets written, the gate to catch what still gets
         through.
       </p>
-      <p>
-        Redline can also render its own standards as skills, which is a
-        different thing from this page —{" "}
-        <Link href="/docs/adaptors/skills">Claude skills adaptor</Link> covers
-        that.
-      </p>
     </DocsPage>
   );
 }

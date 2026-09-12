@@ -74,9 +74,8 @@ export default function Page() {
       <ul>
         <li>
           The sync pull request carries its own{" "}
-          <Link href="/docs/exemptions">exemption</Link>, and it expires after 30
-          days — so <b>a sync pull request nobody merges starts failing its own
-          gate</b>.
+          <Link href="/docs/exemptions">exemption</Link>, which expires — so one
+          nobody merges eventually fails its own gate.
         </li>
         <li>
           The weekly drift sweep runs{" "}

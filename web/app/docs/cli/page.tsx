@@ -11,32 +11,18 @@ export default function Page() {
     <DocsPage
       crumb="CLI"
       title="CLI commands"
-      intro="The commands you run in a repository, and the two that act on the estate. Every one of them is built — each page below is written against what the command actually prints."
+      intro="One page per command, each written against what the command actually prints rather than against its help text."
       href="/docs/cli"
     >
       <p>
-        <code>redline init</code> and <code>redline verify</code> are what an
-        onboarded repository uses day to day; <code>redline status</code> answers
-        what is installed here without contacting a host or needing a credential;{" "}
-        <code>redline review</code> reviews a diff against only the rules its
-        files touch; <code>redline explain</code> turns the bracketed id in a
-        finding back into the rule and the line in <code>standards/</code> that
-        defines it; <code>redline policy</code> and <code>redline exempt</code>{" "}
-        are what the gate calls; <code>redline remove</code> takes Redline back
-        out as a pull request; and <code>redline sync</code> runs from a checkout
-        of this repository to open a pull request on every registered repository
-        whose standards are behind. The last two —{" "}
-        <code>redline registry</code> and <code>redline metrics</code> — act on
-        the estate rather than on a repository, and say so in their own{" "}
-        <code>--help</code>: running them where they do not belong is a wasted
-        afternoon, not an error message.
-      </p>
-      <p>
-        This list is every command <code>redline --help</code> prints. If you are
-        asking what any of it is <i>for</i>, start with{" "}
+        Every command <code>redline --help</code> prints. Most act on the
+        repository you are standing in; <code>sync</code>,{" "}
+        <code>registry</code> and <code>metrics</code> act on the estate instead,
+        and running them in a product repo is a wasted afternoon rather than an
+        error message. For what any of it is <i>for</i>, start with{" "}
         <Link href="/docs/success">What success looks like</Link>, which walks
-        the commands in the order you would actually reach for them; for who may
-        run what, under which credential, see{" "}
+        them in the order you would reach for them; for who may run what, under
+        which credential, see{" "}
         <Link href="/docs/who-runs-what">Who runs what</Link>.
       </p>
       <div className="doc-cards" style={{ marginTop: 24 }}>

@@ -51,11 +51,11 @@ export default function Page() {
       <h2>Two hosts, two gate contracts</h2>
       <p>
         Reusable GitHub workflows report a check-run name derived from two job
-        ids, and requiring the wrong string means every PR sits on “Expected —
-        waiting for status” forever — the classic silent failure. Azure has no
-        such derivation: Redline defines its own contract, so nothing is
-        derived from a job name and that failure mode doesn&apos;t exist on
-        that host.
+        ids, so requiring the wrong string{" "}
+        <Link href="/docs/troubleshooting#waiting-for-status">hangs every pull
+        request in the repository</Link>. Azure has no such derivation: Redline
+        defines its own contract, so nothing is derived from a job name and that
+        failure mode does not exist on that host.
       </p>
       <p>
         Azure Repos ignores a pipeline&apos;s YAML <code>pr:</code> trigger, so

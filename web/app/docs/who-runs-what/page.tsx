@@ -53,10 +53,8 @@ export default function Page() {
         </li>
         <li>
           <b>Without repo-admin rights it still works.</b> Whatever your token
-          cannot reach comes back <code>denied</code>, is recorded in{" "}
-          <code>.redline.json</code>, and <code>redline verify</code> reports{" "}
-          <b>partially onboarded</b> with the list an administrator still has to
-          enable. Nothing is silently skipped.
+          cannot reach is recorded rather than skipped — see{" "}
+          <Link href="/docs/onboarding">Onboard a repository</Link>.
         </li>
       </ul>
 

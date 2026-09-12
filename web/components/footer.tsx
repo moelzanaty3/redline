@@ -70,7 +70,7 @@ export function SiteFooter() {
             <h4>Documentation</h4>
             <ul>
               <li><Link href="/docs">Introduction</Link></li>
-              <li><Link href="/docs/installation">Installation</Link></li>
+              <li><Link href="/docs/quickstart">Quickstart</Link></li>
               <li><Link href="/docs/onboarding">Onboarding</Link></li>
               <li><Link href="/docs/output-contract">Output contract</Link></li>
               <li><Link href="/docs/telemetry">Telemetry</Link></li>
