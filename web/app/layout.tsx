@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Cmdk } from "@/components/cmdk";
 import { SiteFooter } from "@/components/footer";
 import { SiteNav } from "@/components/nav";
+import { pageText, ruleHits } from "@/lib/search-index";
 import "./globals.css";
 import "./chrome.css";
 import "./home.css";
@@ -39,10 +40,20 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
+        {/* First in the tab order and visible only once focused. Without it a
+            keyboard reader crossed the header and all 30 sidebar links before
+            reaching the article — 46 presses of Tab, on every page. */}
+        <a className="skip-link" href="#content">
+          Skip to content
+        </a>
         <SiteNav />
         {children}
         <SiteFooter />
-        <Cmdk />
+        {/* Both indexes are read off disk at build time, so they are assembled
+            here — in a server component — and handed down. The rule index is
+            what makes pasting `Redline/HIGH [javascript/var-in-new-code]` into
+            search resolve to the rule it names. */}
+        <Cmdk rules={ruleHits()} body={pageText()} />
       </body>
     </html>
   );

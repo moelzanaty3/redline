@@ -68,7 +68,7 @@ export default async function Home() {
   const seedExcerpt = seedMarkerExcerpt();
 
   return (
-    <main>
+    <main id="content" tabIndex={-1}>
       {/* ============ 1 — hero ============ */}
       <section className="hero">
         <div className="hero-glow" aria-hidden="true" />
@@ -85,10 +85,17 @@ export default async function Home() {
                 <span className="hero-mark">Redline</span> holds the line.
               </span>
             </h1>
+            {/* The outcome, not the mechanism. This used to end on "so you can
+                measure which rules are worth keeping" — a second-order benefit
+                for someone who already trusts their review process. The reason
+                anyone installs this is the first-order one: more code is
+                merging than anyone is really reading. Measurement is a real
+                claim and keeps its own panel further down the page. */}
             <p className="sub hm-hero-in" style={{ animationDelay: "140ms" }}>
-              One versioned rule set every reviewer — human, AI, or local —
-              checks the same diff against, with <b>every finding tagged</b>, so
-              you can measure which rules are worth keeping.
+              Your team is merging more code than it is reading. Redline puts{" "}
+              <b>one versioned rule set</b> in front of every diff — checked by
+              the AI that wrote it, the reviewer, and the gate, all against the
+              same list.
             </p>
             <div className="hm-hero-cmd hm-hero-in" style={{ animationDelay: "220ms" }}>
               <code>

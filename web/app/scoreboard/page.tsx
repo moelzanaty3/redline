@@ -58,7 +58,7 @@ export default function ScoreboardPage() {
   const release = latestRelease();
 
   return (
-    <main className="sb">
+    <main className="sb" id="content" tabIndex={-1}>
       <header className="sb-head">
         <div className="sb-wrap">
           <p className="sb-eyebrow">Public benchmark</p>
