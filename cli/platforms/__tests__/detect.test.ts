@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRemote } from '../detect.ts';
+import { parseRemote, redactRemote } from '../detect.ts';
 
 test('github https', () => {
   assert.deepEqual(parseRemote('https://github.com/acme/web.git'), {
@@ -76,4 +76,39 @@ test('an ssh remote with an explicit port is out of scope and throws cleanly', (
 
 test('a repository with no remote is a usage error', () => {
   assert.throws(() => parseRemote(''), /remote/i);
+});
+
+test('redactRemote strips inline credentials from an https remote', () => {
+  // What a CI checkout and a credential helper both write. The token must not
+  // reach an error message a reader is told to paste into an issue.
+  assert.equal(
+    redactRemote('https://x-access-token:ghp_AAAABBBBCCCCDDDD@github.com/acme/web.git'),
+    'https://<redacted>@github.com/acme/web.git'
+  );
+  assert.equal(
+    redactRemote('https://someone:s3cr3t@github.acme-corp.net/acme/web.git'),
+    'https://<redacted>@github.acme-corp.net/acme/web.git'
+  );
+});
+
+test('redactRemote leaves a remote carrying no secret exactly as it is', () => {
+  // ssh usernames are not secrets, and the ssh forms are not URLs — a parser
+  // that normalised them would break the very string the reader has to compare
+  // against their own `git remote -v`.
+  assert.equal(redactRemote('git@github.com:acme/web.git'), 'git@github.com:acme/web.git');
+  assert.equal(redactRemote('https://github.com/acme/web.git'), 'https://github.com/acme/web.git');
+  assert.equal(
+    redactRemote('git@ssh.dev.azure.com:v3/acme/platform/web'),
+    'git@ssh.dev.azure.com:v3/acme/platform/web'
+  );
+});
+
+test('an unrecognised remote is quoted back without its credentials', () => {
+  // The error names the string so the reader can see what was parsed. That is
+  // the one place a credentialed remote reaches a human by design, so it is the
+  // one place redaction has to be wired in rather than assumed.
+  assert.throws(
+    () => parseRemote('https://someone:s3cr3t@gitlab.com/acme/web.git'),
+    (error: Error) => error.message.includes('<redacted>') && !error.message.includes('s3cr3t')
+  );
 });

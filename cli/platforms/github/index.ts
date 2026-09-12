@@ -1,6 +1,6 @@
 import { RedlineError } from '../../core/errors.ts';
 import { createGit, type Git } from '../../core/git.ts';
-import { parseRemote } from '../detect.ts';
+import { parseRemote, redactRemote } from '../detect.ts';
 import { isNonNullObject } from '../shape.ts';
 import type { Platform, RepoRef } from '../types.ts';
 import type { GitHubClient } from './client.ts';
@@ -54,8 +54,8 @@ export function createGitHubPlatform(opts: GitHubPlatformOptions): Platform {
           repo.status === 404 ? 'host' : 'permission',
           `GitHub returned HTTP ${repo.status} reading ${path}`,
           `${identity.org}/${identity.repo} is what "git remote get-url origin" resolves to here ` +
-            `(${remoteUrl}). If that is not the repository you meant, fix the remote; ` +
-            'if it is, check the GH_TOKEN scopes or run: gh auth login'
+            `(${redactRemote(remoteUrl)}). If that is not the repository you meant, fix the ` +
+            'remote; if it is, check the GH_TOKEN scopes or run: gh auth login'
         );
       }
       if (repo.status < 200 || repo.status >= 300) {
