@@ -194,7 +194,7 @@ core standard apply wherever the file is typed.
 - `javascript/jsdoc-on-exports` — JSDoc types on exported functions in files that will not be converted to TS soon.
 - `javascript/array-at-negative-index` — `Array.prototype.at(-1)` over `arr[arr.length - 1]`.
 
-_Applies to: `**/*.js`, `**/*.jsx`, `**/*.mjs`, `**/*.cjs`_
+_Applies to: `**/*.js`, `**/*.jsx`, `**/*.mjs`, `**/*.cjs`, `**/*.vue`, `**/*.svelte`_
 
 ---
 

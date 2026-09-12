@@ -41,9 +41,32 @@ export type DeterministicCheck = (ctx: CheckContext) => PolicyFinding[];
 // A ticket reference: ABC-123, #123, or a URL to an issue tracker. Deliberately
 // broad — the rule asks for a reference, not for a particular tracker, and a
 // narrow pattern would fail a team whose tickets do not look like ours.
-const TICKET = /([A-Z][A-Z0-9]+-\d+|#\d+|https?:\/\/\S*(issue|ticket|jira|linear|browse)\S*)/i;
+//
+// Broad, but not case-blind. These were one pattern under a single `i` flag,
+// which made `[A-Z][A-Z0-9]+-\d+` match any word followed by a dash and digits
+// — so `utf-8`, `sha-256`, `base-64` and `es-2015` all read as ticket
+// references. A TODO that merely mentioned an encoding was recorded as tracked
+// work and the rule went quiet on it. It failed OPEN, which is the direction
+// that quietly costs findings rather than the one that costs trust, so it
+// could sit here indefinitely looking like a corpus with nothing to find.
+//
+// Every tracker that issues a key renders it upper case, so the key pattern is
+// the one that must not be case-insensitive. The URL still is: hosts and paths
+// are written either way.
+const TICKET_KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
+const ISSUE_NUMBER = /#\d+/;
+const TRACKER_URL = /https?:\/\/\S*(issue|ticket|jira|linear|browse)\S*/i;
 
-const JS_LIKE = /\.(js|jsx|mjs|cjs|ts|tsx|mts|cts)$/;
+const hasTicket = (text: string): boolean =>
+  TICKET_KEY.test(text) || ISSUE_NUMBER.test(text) || TRACKER_URL.test(text);
+
+// `.vue` and `.svelte` are here because a single-file component keeps all of
+// its JavaScript inside one, and the `javascript` stack is rendered into the
+// `web-vue` and `web-svelte` profiles — so these rules are shipped to those
+// repositories and were then scoped away from every file that could break
+// them. Neither stack carries its own `var` or numeric-coercion rule, so the
+// exclusion was not a delegation to a better-placed rule; it was a gap.
+const JS_LIKE = /\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte)$/;
 
 const finding = (
   line: AddedLine,
@@ -58,7 +81,7 @@ const finding = (
 // which is a fact about the text. The model is not asked about it at all.
 const untrackedTodo: DeterministicCheck = ({ added }) =>
   added
-    .filter((l) => /\b(TODO|FIXME|HACK|XXX)\b/.test(l.text) && !TICKET.test(l.text))
+    .filter((l) => /\b(TODO|FIXME|HACK|XXX)\b/.test(l.text) && !hasTicket(l.text))
     .map((l) =>
       finding(
         l,
@@ -74,6 +97,7 @@ const untrackedTodo: DeterministicCheck = ({ added }) =>
 // The rule requires both. A suppression with an explanation but no ticket is
 // still a violation, and this decides that without a model: the presence of a
 // ticket reference on the line is a fact.
+
 // One entry per suppression dialect Redline ships stack rules for.
 //
 // Patterns rather than substrings, because whitespace is where the substring
@@ -109,7 +133,7 @@ const SUPPRESSIONS: RegExp[] = [
 
 const typeCheckerSuppression: DeterministicCheck = ({ added }) =>
   added
-    .filter((l) => SUPPRESSIONS.some((s) => s.test(l.text)) && !TICKET.test(l.text))
+    .filter((l) => SUPPRESSIONS.some((s) => s.test(l.text)) && !hasTicket(l.text))
     .map((l) =>
       finding(
         l,

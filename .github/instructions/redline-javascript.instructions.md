@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.js,**/*.jsx,**/*.mjs,**/*.cjs"
+applyTo: "**/*.js,**/*.jsx,**/*.mjs,**/*.cjs,**/*.vue,**/*.svelte"
 ---
 
 <!-- Redline v0.0.4 · profile: tooling · stacks: javascript -->

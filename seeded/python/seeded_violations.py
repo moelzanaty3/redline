@@ -52,3 +52,8 @@ def audit(msisdn, amount):
 def withdraw(balance, amount):
     assert amount > 0, "amount must be positive"
     return balance - amount
+
+
+# SEED 11 [BLOCKER] (core/type-checker-suppression) type checker silenced with no explanation and no ticket
+def coerce(value):  # type: ignore
+    return str(value)

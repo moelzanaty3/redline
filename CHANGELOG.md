@@ -34,6 +34,48 @@ No rule id moved and no rule changed meaning: the same rule now decides the part
 decide, in the languages it is rendered into. `standards/core.md` names every dialect the checker
 recognises, so the text a reviewer reads and the checker that runs agree.
 
+### Standards — a ticket reference was matched case-insensitively, in every stack
+
+`core/untracked-todo` and `core/type-checker-suppression` both ask whether a line carries a ticket
+reference. The pattern for a tracker key, `[A-Z][A-Z0-9]+-\d+`, sat under an `i` flag together with
+the URL alternative — so it matched any word followed by a dash and digits. `utf-8`, `sha-256`,
+`base-64` and `es-2015` all read as ticket references, and a `TODO` that merely mentioned an
+encoding was recorded as tracked work.
+
+It failed **open**: the rule went quiet rather than noisy, which is why it produced no complaints
+and no findings for as long as it has existed. Every tracker that issues a key renders it upper
+case, so the key pattern is now case-sensitive and the tracker-URL pattern is not.
+
+### Standards — the JavaScript rules were scoped away from Vue and Svelte components
+
+The `javascript` stack is rendered into the `web-vue` and `web-svelte` profiles, so a Vue or Svelte
+repository is told these rules apply to it. Its globs were `**/*.js`, `**/*.jsx`, `**/*.mjs`,
+`**/*.cjs` — none of which is the file a single-file component keeps all of its JavaScript in. The
+deterministic checker excluded the same two extensions independently.
+
+Neither framework stack carries a `var`, radix or numeric-coercion rule of its own, so this was not
+a rule delegating to a better-placed one. It was a gap: in the two profiles, nothing checked the
+only files that could break the rules.
+
+`**/*.vue` and `**/*.svelte` join the `javascript` stack globs, and the checker's file test with
+them. Overlapping globs are already the design — `react` and `javascript` have both claimed
+`**/*.jsx` from the start.
+
+### Validation corpus — the deterministic tier had no seed coverage at all
+
+Seventeen seed directories, 335 catalogued rules, and running the deterministic checks over the
+whole corpus produced **one** finding. No seed anywhere contained a `TODO` without a ticket or a
+suppression directive in any dialect.
+
+That is the tier that runs in every gate, on every pull request, with no model call — and the corpus
+that exists to prove the rules catch what they claim could not have detected any of the three
+defects above. All three were found by hand, onboarding one repository.
+
+Seeds added across every language family that has a suppression dialect — Swift, Kotlin, C#, Go,
+Java, Python, JavaScript and TypeScript — plus `var` and radix seeds in the Vue and Svelte
+components, which the glob fix above is what makes reachable. `seeded/clean/` stays silent, which is
+the half of the corpus that would have caught it if any of this were over-eager.
+
 ### Docs
 
 - **A new Verification page.** Nine scenarios, run as steps, that take an onboarded repository from

@@ -52,7 +52,7 @@ test('agents emits one merged AGENTS.md with demoted stack headings', () => {
   const file = out.files.get('AGENTS.md');
   assert.equal(file?.merge, true);
   assert.ok(file!.body.includes('\n# Stack rules\n'));
-  assert.ok(file!.body.includes('_Applies to: `**/*.js`, `**/*.jsx`, `**/*.mjs`, `**/*.cjs`_'));
+  assert.ok(file!.body.includes('_Applies to: `**/*.js`, `**/*.jsx`, `**/*.mjs`, `**/*.cjs`, `**/*.vue`, `**/*.svelte`_'));
   assert.ok(file!.body.includes('## JavaScript Review Rules'));
 });
 

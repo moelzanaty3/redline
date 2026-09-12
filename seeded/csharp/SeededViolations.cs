@@ -74,3 +74,15 @@ public class AccountEntity
     public string Msisdn { get; set; } = "";
     public string Balance { get; set; } = "";
 }
+
+public static class Coercion
+{
+    // SEED 10 [BLOCKER] (core/type-checker-suppression) compiler warning suppressed with no explanation and no ticket
+#pragma warning disable CS0168
+    public static string Read(string raw)
+    {
+        Exception unused;
+        return raw;
+    }
+#pragma warning restore CS0168
+}

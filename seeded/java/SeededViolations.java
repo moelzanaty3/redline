@@ -58,3 +58,12 @@ public class SeededViolations {
 
     static class AccountEntity {}
 }
+
+class Coercion {
+
+    // SEED 9 [BLOCKER] (core/type-checker-suppression) compiler warning suppressed with no explanation and no ticket
+    @SuppressWarnings("unchecked")
+    static <T> T coerce(Object value) {
+        return (T) value;
+    }
+}

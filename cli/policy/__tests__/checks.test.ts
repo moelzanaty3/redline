@@ -25,6 +25,27 @@ test('a TODO carrying a ticket is not flagged', () => {
   );
 });
 
+// The `i` flag this pattern shipped with made `[A-Z][A-Z0-9]+-\d+` match any
+// word followed by a dash and digits, so a TODO that merely mentioned an
+// encoding was read as tracked work. It failed open — the rule went quiet
+// rather than noisy, which is why it could sit here unnoticed.
+test('a hyphenated technical term is not a ticket reference', () => {
+  for (const text of [
+    '// TODO: convert the output to utf-8',
+    '// TODO: switch the digest to sha-256',
+    '// TODO: handle base-64 padding',
+    '// TODO: drop support for es-2015',
+  ]) {
+    assert.deepEqual(ids(runChecks(ctx([line(text)]))), ['core/untracked-todo'], text);
+  }
+});
+
+test('an upper-case tracker key is still a ticket reference', () => {
+  for (const text of ['// TODO: ENG-441 rework this', '// TODO see JIRA-7']) {
+    assert.deepEqual(ids(runChecks(ctx([line(text)]))), [], text);
+  }
+});
+
 test('FIXME, HACK and XXX count as TODOs, because they are', () => {
   for (const word of ['FIXME', 'HACK', 'XXX']) {
     assert.deepEqual(ids(runChecks(ctx([line(`// ${word}: later`)]))), ['core/untracked-todo'], word);
@@ -102,6 +123,26 @@ test('a suppression in any dialect is allowed once it carries a ticket', () => {
 
 test('var on an added line in a JS-like file is flagged', () => {
   assert.deepEqual(ids(runChecks(ctx([line('  var total = 0;')]))), ['javascript/var-in-new-code']);
+});
+
+// A single-file component keeps all of its JavaScript in the `.vue`/`.svelte`
+// file, and the `javascript` stack is rendered into the web-vue and web-svelte
+// profiles — so these rules ship to those repositories. They were scoped away
+// from the only file extension that could break them, and neither framework
+// stack carries a `var` or coercion rule to pick up the slack.
+test('single-file components are JavaScript for the purposes of these rules', () => {
+  for (const file of ['src/App.vue', 'src/lib/Counter.svelte']) {
+    assert.deepEqual(
+      ids(runChecks(ctx([line('  var total = 0;', file)]))),
+      ['javascript/var-in-new-code'],
+      file
+    );
+    assert.deepEqual(
+      ids(runChecks(ctx([line('const n = parseInt(raw);', file)]))),
+      ['javascript/unsafe-numeric-coercion'],
+      file
+    );
+  }
 });
 
 test('var is not flagged in a file the rule does not apply to', () => {

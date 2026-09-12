@@ -62,3 +62,9 @@ export class SeededController {
     return { secrets: process.env };
   }
 }
+
+// SEED 10 [BLOCKER] (core/type-checker-suppression) type checker silenced with no explanation and no ticket
+// @ts-ignore
+export function coerce(value: unknown): string {
+  return value.toString();
+}
