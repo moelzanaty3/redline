@@ -44,7 +44,7 @@ import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
 import { standardsVersion } from '../commands/sync.ts';
 import { isGatePipeline, isGateSource } from '../platforms/types.ts';
-import type { Platform } from '../platforms/types.ts';
+import type { Platform, RepoRef } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
 import type { RemoteVerifyHost } from '../verify/remote.ts';
 import type { HostWithdrawal } from '../remove/host.ts';
@@ -233,14 +233,50 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
   };
 
+  // One host round-trip, before the first question rather than after the last.
+  //
+  // `init` reads the repository anyway — this is that same read, moved. What
+  // it buys is when the answer arrives: an unreachable repository used to be
+  // discovered after ten questions had been answered, and the answers were
+  // held in memory only, so the error took them with it. The reader's next
+  // move was to answer all ten again.
+  //
+  // Failure is a fact handed to the menu, not an abort. Two of the three
+  // things the menu can do contact no host at all, and someone evaluating
+  // Redline against a repository they have no token for is exactly who the
+  // credential-free preview exists for — see ResolvePlatformOptions.
+  const checkReachable = async (
+    dir: string
+  ): Promise<{ platform: Platform; ref: RepoRef | null; unreachable: string | null }> => {
+    const platform = await resolve(dir, { lazyCredentials: true });
+    try {
+      return { platform, ref: await platform.repoRef(dir), unreachable: null };
+    } catch (error) {
+      // Only the two kinds a preview can legitimately outrun. A usage error —
+      // no remote, a remote on a host Redline does not know — is not a
+      // reachability problem and is not survivable by choosing a dry run, so
+      // it keeps aborting the run rather than becoming a note nobody can act
+      // on from inside the menu.
+      if (!isRedlineError(error) || (error.kind !== 'host' && error.kind !== 'permission')) {
+        throw error;
+      }
+      return {
+        platform,
+        ref: null,
+        unreachable: error.hint === undefined ? error.message : `${error.message}\n${error.hint}`,
+      };
+    }
+  };
+
   const runInitWizard = async (
     dir: string,
-    packageRoot: string
+    packageRoot: string,
+    unreachable: string | null
   ): Promise<{ answers: WizardAnswers; prompter: Prompter } | null> => {
     const prompter = deps.prompter?.() ?? createPrompter();
     const answers = await runWizard(
       prompter,
-      gatherFacts({ cwd: dir, root: packageRoot, detectedHost: detectHost() })
+      gatherFacts({ cwd: dir, root: packageRoot, detectedHost: detectHost(), unreachable })
     );
     // The prompter comes back with the answers because the work starts the
     // moment the last question is answered, and the operator has to be able to
@@ -319,8 +355,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // all means the caller has already decided, and the menu would be in the
       // way; CI and pipes never see it (isInteractive), so the scripted path is
       // byte-identical to what it was before the menu existed.
-      const wizard =
-        rest.length === 0 && interactive() ? await runInitWizard(cwd, root) : null;
+      const checked = rest.length === 0 && interactive() ? await checkReachable(cwd) : null;
+      const wizard = checked ? await runInitWizard(cwd, root, checked.unreachable) : null;
 
       const names = (list: string | undefined): string[] =>
         list === undefined
@@ -401,7 +437,12 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // either, so it must not demand a credential up front any more than a dry
       // run does — working offline is most of the reason it exists. Every other
       // path here resolves one up front, exactly as before.
-      const platform = await resolve(cwd, dryRun || noCommit ? { lazyCredentials: true } : {});
+      // Reused when the reachability check already built one, so it costs
+      // no extra request: its client is lazy, which is what every wizard
+      // action needs — the two preview actions must not demand a credential,
+      // and `apply` resolves one on its first request as it always did.
+      const platform =
+        checked?.platform ?? (await resolve(cwd, dryRun || noCommit ? { lazyCredentials: true } : {}));
       const profileChoice = wizard?.answers.profile ?? values.profile;
       const vendorChoice = wizard ? [...wizard.answers.vendors] : vendors;
       const rungChoice = wizard?.answers.rung ?? values.rung;
@@ -431,6 +472,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(vendorChoice ? { vendors: vendorChoice } : {}),
         ...(dryRun ? { dryRun: true } : {}),
         ...(noCommit ? { noCommit: true } : {}),
+        ...(checked?.ref ? { ref: checked.ref } : {}),
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
         ...(rungChoice ? { rung: rungChoice } : {}),

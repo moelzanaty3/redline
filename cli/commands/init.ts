@@ -37,6 +37,7 @@ import type {
   OwnershipRule,
   Platform,
   PullRequestRef,
+  RepoRef,
 } from '../platforms/types.ts';
 
 // What a repository gets when it says nothing. Every default here has to be
@@ -330,6 +331,10 @@ export interface InitOptions {
   // produces before letting it near their history had no way to ask for that,
   // and the first they saw of the pull request was the run trying to push one.
   noCommit?: boolean;
+  // The repository, already read by a caller that had to read it anyway. Only
+  // the wizard's reachability check passes one; everything else leaves it absent and
+  // this command does the read itself, as it always has.
+  ref?: RepoRef;
   // Asked when the planning pass finds the organisation publishes no reusable
   // gate, and only then. Returning true vendors the gate into this repository
   // for this run; returning false leaves the gate denied, exactly as before.
@@ -514,7 +519,12 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // else the run goes on to skip.
   const offline = dryRun || opts.noCommit === true;
   step(offline ? 'reading the repository' : `reading ${platform.host}`);
-  const ref = offline ? platform.localRef(cwd) : await platform.repoRef(cwd);
+  // A caller that already read the repository hands the answer back rather
+  // than paying for it twice — the wizard's reachability check is the only
+  // one that does, and it read exactly this. An offline run still uses the local
+  // clone: --no-commit is documented as contacting no host, and a ref that
+  // arrived from one would make that untrue.
+  const ref = offline ? platform.localRef(cwd) : (opts.ref ?? (await platform.repoRef(cwd)));
   // detected <- what this repository already recorded <- what the caller
   // typed, the same precedence the menu resolves under. The org ceiling is
   // deliberately not applied to the RECORD: render() enforces it on every call

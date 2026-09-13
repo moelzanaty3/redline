@@ -1,7 +1,7 @@
 import { createGit, type Git } from '../core/git.ts';
 import { RedlineError } from '../core/errors.ts';
 import { parseRemote } from './detect.ts';
-import { createGitHubClient, type GitHubClient } from './github/client.ts';
+import { createGitHubClient, gitHubApiBaseUrl, type GitHubClient } from './github/client.ts';
 import { createGitHubPlatform } from './github/index.ts';
 import { createAzureClient, type AzureClient, type AzureRequestOptions } from './azure/client.ts';
 import { createAzurePlatform } from './azure/index.ts';
@@ -92,8 +92,13 @@ export async function resolvePlatform(cwd: string, deps: ResolveDeps = {}): Prom
   const identity = parseRemote(git.remoteUrl());
   const lazy = deps.lazyCredentials === true;
   if (identity.host === 'github') {
-    const make = deps.makeGitHubClient ?? ((): GitHubClient => createGitHubClient());
-    return createGitHubPlatform({ client: lazy ? lazyGitHubClient(make) : make(), gitFor });
+    const make =
+      deps.makeGitHubClient ?? ((): GitHubClient => createGitHubClient({ hostname: identity.hostname }));
+    return createGitHubPlatform({
+      client: lazy ? lazyGitHubClient(make) : make(),
+      gitFor,
+      apiBaseUrl: gitHubApiBaseUrl(process.env, identity.hostname),
+    });
   }
   const makeAzure = deps.makeAzureClient ?? ((org: string): AzureClient => createAzureClient(org));
   const make = (): AzureClient => makeAzure(identity.org);

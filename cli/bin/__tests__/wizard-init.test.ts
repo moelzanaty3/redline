@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { run } from '../redline.ts';
 import { fakePlatform } from '../../commands/__tests__/fake-platform.ts';
 import { Cancelled, type Choice, type Prompter } from '../../ui/prompt.ts';
+import { RedlineError } from '../../core/errors.ts';
+import type { Platform } from '../../platforms/types.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -179,4 +181,75 @@ test('--pipeline azure-pipelines is accepted on the scripted path', async () => 
   const { prompter } = defaults();
   const { opts } = deps(repo(), prompter, false);
   assert.equal(await run(['init', '--pipeline', 'azure-pipelines', '--dry-run'], opts), 0);
+});
+
+// The failure this exists to stop: ten questions answered, then a 404, and the
+// answers gone with it. The check has to happen before the first question and
+// its reason has to reach the menu.
+test('an unreachable repository is reported before the first question', async () => {
+  const order: string[] = [];
+  const platform = fakePlatform();
+  const unreachable: Platform = {
+    ...platform,
+    async repoRef(): Promise<never> {
+      order.push('repoRef');
+      throw new RedlineError(
+        'host',
+        'GitHub returned HTTP 404 reading /repos/acme/web',
+        'that account cannot see it'
+      );
+    },
+  };
+  const notes: string[] = [];
+  const { prompter, seen } = defaults();
+  const watched: Prompter = {
+    ...prompter,
+    note: (message: string) => notes.push(message),
+    async select<T>(title: string, choices: readonly Choice<T>[], initial?: T): Promise<T> {
+      order.push(`ask:${title}`);
+      return prompter.select(title, choices, initial);
+    },
+    async multiselect<T>(title: string, choices: readonly Choice<T>[], initial: readonly T[] = []) {
+      order.push(`ask:${title}`);
+      return prompter.multiselect(title, choices, initial);
+    },
+  };
+  const { opts } = deps(repo(), watched);
+  await run(['init'], { ...opts, resolvePlatform: async () => unreachable });
+
+  assert.equal(order[0], 'repoRef', `checked after asking: ${order.slice(0, 3).join(' | ')}`);
+  assert.ok(seen.length >= 6, 'the menu still runs');
+  assert.ok(
+    notes.some((n) => n.includes('404') && n.includes('that account cannot see it')),
+    `reason not shown: ${notes.join(' | ')}`
+  );
+});
+
+// The check reads what init would have read anyway, so it must hand the answer
+// on rather than make the same request twice.
+test('the reachability check and the run share one repository read', async () => {
+  const platform = fakePlatform();
+  const { prompter } = defaults({ 'Ready?': 'apply' });
+  const { opts } = deps(repo(), prompter);
+  assert.equal(await run(['init'], { ...opts, resolvePlatform: async () => platform }), 0);
+  assert.deepEqual(
+    platform.reads.filter((r) => r === 'repoRef'),
+    ['repoRef']
+  );
+});
+
+// A repository with no remote cannot be fixed by choosing a dry run, so it
+// must keep aborting rather than become a note inside a menu.
+test('a usage failure still aborts instead of opening the menu', async () => {
+  const platform = fakePlatform();
+  const broken: Platform = {
+    ...platform,
+    async repoRef(): Promise<never> {
+      throw new RedlineError('usage', 'this repository has no git remote');
+    },
+  };
+  const { prompter, seen } = defaults();
+  const { opts } = deps(repo(), prompter);
+  assert.equal(await run(['init'], { ...opts, resolvePlatform: async () => broken }), 2);
+  assert.deepEqual(seen, []);
 });

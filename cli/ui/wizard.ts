@@ -52,6 +52,12 @@ export interface WizardFacts {
   // Non-null when the repository has its own CI that a gate stage could join,
   // e.g. `cicd/pre-merge.yaml`. Drives the pipeline question's default.
   readonly existingPipeline: string | null;
+  // Why a full run cannot work here, when a check before the first question
+  // already found out — an unreachable repository, a credential that is for
+  // the wrong host, an account that cannot see it. `null` means reachable, or
+  // that nothing asked. Phrased as the reason a reader can act on, because it
+  // is shown to them verbatim.
+  readonly unreachable: string | null;
   // What `.redline.json` already recorded, when this is a re-run.
   readonly recorded: {
     readonly profile?: string;
@@ -187,6 +193,15 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
   const defaultOwner = facts.defaultOwner ?? 'the platform team';
 
   p.intro('Redline');
+
+  // Said BEFORE the first question, never after the last. This is the only
+  // thing in the menu the operator cannot answer their way out of, and ten
+  // questions answered against a repository Redline was never going to reach
+  // is ten questions wasted — the run used to get all the way to "Apply"
+  // before finding out, and the answers died with the error.
+  if (facts.unreachable !== null) {
+    p.note(`A full run cannot work here yet.\n${facts.unreachable}\n\nThe two preview options below still work — they contact no host.`);
+  }
 
   // Multi-select, because a repository is routinely more than one bundle: a
   // React application with its own Terraform beside it is `web,infra`, and a
@@ -441,7 +456,14 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
       {
         value: 'apply' as const,
         label: 'Apply',
-        hint: 'write the files and open a pull request on redline/onboard',
+        // Disabled rather than hidden, and with the reason on the row: the
+        // preflight already proved this would fail, and an operator who
+        // cannot see why Apply is missing cannot go and fix it. The two
+        // choices above contact no host, so they stay available — being
+        // unable to reach the host is exactly when a preview is worth most.
+        ...(facts.unreachable === null
+          ? { hint: 'write the files and open a pull request on redline/onboard' }
+          : { disabled: facts.unreachable }),
       },
     ],
     'dry-run'

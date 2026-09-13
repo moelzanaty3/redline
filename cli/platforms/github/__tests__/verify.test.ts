@@ -648,3 +648,85 @@ test('a local reference to anything but the path Redline writes is not reported'
 test('a caller that is not there reports no vendored gate either', () => {
   assert.equal(machineryFromBody(null).vendored, null);
 });
+
+// The failure that started this: two repositories, two different causes, one
+// status code. Enterprise remote against api.github.com, and a github.com
+// account that cannot see a private repository, both answer 404 — so the
+// error has to say which API asked and which account it asked as, or the
+// reader is left guessing between "fix the remote" and "switch account".
+test('a 404 names the api it asked and the account it asked as', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': { status: 404, body: { message: 'Not Found' } },
+    'GET /user': { status: 200, body: { login: 'someone-else' } },
+  });
+  const gitFor: (cwd: string) => ReturnType<typeof createGit> = (cwd) => {
+    const run: GitRunner = (args) =>
+      args[0] === 'remote' ? 'git@github.com:acme/web.git' : args[0] === 'rev-parse' ? 'true' : '';
+    return createGit(cwd, run);
+  };
+  await assert.rejects(
+    createGitHubPlatform({ client, gitFor, apiBaseUrl: 'https://api.github.com' }).repoRef('/anywhere'),
+    (err: unknown) => {
+      assert.ok(isRedlineError(err));
+      assert.equal(err.kind, 'host');
+      assert.match(err.hint ?? '', /https:\/\/api\.github\.com/);
+      assert.match(err.hint ?? '', /as someone-else/);
+      assert.match(err.hint ?? '', /gh auth switch --hostname github\.com/);
+      return true;
+    }
+  );
+});
+
+// The identity read is a courtesy, not a dependency: when it fails too, the
+// error the reader actually needs must still arrive.
+test('a 404 still reports when the account behind the token cannot be read', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web': { status: 404, body: { message: 'Not Found' } },
+    'GET /user': { status: 403, body: { message: 'Forbidden' } },
+  });
+  const gitFor: (cwd: string) => ReturnType<typeof createGit> = (cwd) => {
+    const run: GitRunner = (args) =>
+      args[0] === 'remote' ? 'git@github.com:acme/web.git' : args[0] === 'rev-parse' ? 'true' : '';
+    return createGit(cwd, run);
+  };
+  await assert.rejects(
+    createGitHubPlatform({ client, gitFor, apiBaseUrl: 'https://api.github.com' }).repoRef('/anywhere'),
+    (err: unknown) => {
+      assert.ok(isRedlineError(err));
+      assert.match(err.hint ?? '', /could not read the authenticated account/);
+      return true;
+    }
+  );
+});
+
+// An enterprise remote reaches its own instance, and the error says so —
+// "404 from api.github.com" and "404 from the enterprise API" are opposite
+// problems and used to be indistinguishable.
+test('an enterprise 404 names the enterprise api and its own hostname', async () => {
+  const client = fakeGitHubClient({
+    'GET /repos/platform/web': { status: 404, body: { message: 'Not Found' } },
+    'GET /user': { status: 200, body: { login: 'dev' } },
+  });
+  const gitFor: (cwd: string) => ReturnType<typeof createGit> = (cwd) => {
+    const run: GitRunner = (args) =>
+      args[0] === 'remote'
+        ? 'https://github.acme-corp.net/platform/web.git'
+        : args[0] === 'rev-parse'
+          ? 'true'
+          : '';
+    return createGit(cwd, run);
+  };
+  await assert.rejects(
+    createGitHubPlatform({
+      client,
+      gitFor,
+      apiBaseUrl: 'https://github.acme-corp.net/api/v3',
+    }).repoRef('/anywhere'),
+    (err: unknown) => {
+      assert.ok(isRedlineError(err));
+      assert.match(err.hint ?? '', /github\.acme-corp\.net\/api\/v3/);
+      assert.match(err.hint ?? '', /gh auth switch --hostname github\.acme-corp\.net/);
+      return true;
+    }
+  );
+});

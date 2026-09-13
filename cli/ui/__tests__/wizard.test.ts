@@ -120,6 +120,7 @@ const FACTS: WizardFacts = {
   profileEvidence: ['react in dependencies'],
   detectedVendors: ['copilot'],
   detectedHost: 'github',
+  unreachable: null,
   existingPipeline: null,
   recorded: null,
 };
@@ -462,4 +463,47 @@ test('a repository that skips the gate is never asked where to put it', async ()
 
   assert.equal(asked.find((q) => q.title === GATE_QUESTION), undefined);
   assert.equal(answers.gateSource, 'org');
+});
+
+// The whole point of checking before the menu rather than after it: the reason
+// has to be in front of the operator before they spend ten answers on a run
+// that cannot finish.
+test('an unreachable repository is said before the first question, not after the last', async () => {
+  const { prompter, asked, notes } = acceptDefaults();
+  await runWizard(prompter, {
+    ...FACTS,
+    unreachable: 'GitHub returned HTTP 404 reading /repos/acme/web',
+  });
+  assert.ok(
+    notes.some((n) => n.includes('GitHub returned HTTP 404 reading /repos/acme/web')),
+    'the reason is shown verbatim'
+  );
+  assert.ok(asked.length > 0, 'the menu still runs — the preview actions need no host');
+});
+
+// Disabled rather than hidden: an operator who cannot see why Apply is missing
+// has nothing to go and fix.
+test('an unreachable repository disables Apply with the reason on the row', async () => {
+  const { prompter, asked } = acceptDefaults();
+  await runWizard(prompter, { ...FACTS, unreachable: 'that account cannot see it' });
+  const ready = asked.find((a) => a.title === 'Ready?');
+  assert.ok(ready);
+  const apply = ready.labels.indexOf('Apply');
+  assert.notEqual(apply, -1, 'Apply is still listed');
+  assert.equal(ready.disabled[apply], 'that account cannot see it');
+  assert.equal(ready.disabled[ready.labels.indexOf('Dry run')], undefined);
+  assert.equal(ready.disabled[ready.labels.indexOf('Write the files only')], undefined);
+});
+
+test('a reachable repository says nothing and leaves Apply selectable', async () => {
+  const { prompter, asked, notes } = acceptDefaults();
+  const answers = await runWizard(prompter, { ...FACTS, unreachable: null });
+  assert.equal(
+    notes.some((n) => n.includes('A full run cannot work here')),
+    false
+  );
+  const ready = asked.find((a) => a.title === 'Ready?');
+  assert.ok(ready);
+  assert.equal(ready.disabled[ready.labels.indexOf('Apply')], undefined);
+  assert.equal(answers.action, 'dry-run');
 });
