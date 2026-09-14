@@ -66,6 +66,9 @@ export interface GatherOptions {
   // credential. `null` is a legitimate answer and the reason the host question
   // is asked rather than assumed.
   readonly detectedHost: Host | null;
+  // Why a full run cannot work, from a reachability check the caller ran
+  // before the menu opened. `null` when it succeeded or was not run.
+  readonly unreachable?: string | null;
 }
 
 export function gatherFacts(opts: GatherOptions): WizardFacts {
@@ -110,6 +113,7 @@ export function gatherFacts(opts: GatherOptions): WizardFacts {
     profileEvidence: proposal.evidence,
     detectedVendors: detectVendors(cwd, orgVendors),
     detectedHost: opts.detectedHost,
+    unreachable: opts.unreachable ?? null,
     existingPipeline: findExistingPipeline(cwd),
     recorded:
       recorded === null

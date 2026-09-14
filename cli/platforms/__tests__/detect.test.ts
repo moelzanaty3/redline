@@ -5,6 +5,7 @@ import { parseRemote, redactRemote } from '../detect.ts';
 test('github https', () => {
   assert.deepEqual(parseRemote('https://github.com/acme/web.git'), {
     host: 'github',
+    hostname: 'github.com',
     org: 'acme',
     repo: 'web',
   });
@@ -13,6 +14,7 @@ test('github https', () => {
 test('github ssh', () => {
   assert.deepEqual(parseRemote('git@github.com:acme/web.git'), {
     host: 'github',
+    hostname: 'github.com',
     org: 'acme',
     repo: 'web',
   });
@@ -25,6 +27,7 @@ test('github https without the .git suffix', () => {
 test('github enterprise host is recognised when the hostname contains "github"', () => {
   assert.deepEqual(parseRemote('https://github.acme-corp.net/platform/web.git'), {
     host: 'github',
+    hostname: 'github.acme-corp.net',
     org: 'platform',
     repo: 'web',
   });
@@ -37,6 +40,7 @@ test('a self-hosted GHES on a hostname without "github" is not auto-detected', (
 test('azure devops https carries a project', () => {
   assert.deepEqual(parseRemote('https://dev.azure.com/acme/Payments/_git/web'), {
     host: 'azure',
+    hostname: 'dev.azure.com',
     org: 'acme',
     project: 'Payments',
     repo: 'web',
@@ -46,6 +50,7 @@ test('azure devops https carries a project', () => {
 test('azure devops ssh', () => {
   assert.deepEqual(parseRemote('git@ssh.dev.azure.com:v3/acme/Payments/web'), {
     host: 'azure',
+    hostname: 'dev.azure.com',
     org: 'acme',
     project: 'Payments',
     repo: 'web',
@@ -55,6 +60,7 @@ test('azure devops ssh', () => {
 test('legacy visualstudio.com host', () => {
   assert.deepEqual(parseRemote('https://acme.visualstudio.com/Payments/_git/web'), {
     host: 'azure',
+    hostname: 'acme.visualstudio.com',
     org: 'acme',
     project: 'Payments',
     repo: 'web',

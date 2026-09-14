@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGitHubClient, resolveGitHubToken } from '../client.ts';
+import { createGitHubClient, gitHubApiBaseUrl, resolveGitHubToken } from '../client.ts';
 import type { FetchLike } from '../../http.ts';
+import { isRedlineError } from '../../../core/errors.ts';
 
 test('token precedence is GH_TOKEN, GITHUB_TOKEN, then gh auth token', () => {
   assert.equal(resolveGitHubToken({ GH_TOKEN: 'a', GITHUB_TOKEN: 'b' }, () => 'c'), 'a');
@@ -70,4 +71,80 @@ test('GITHUB_API_URL overrides the base url for enterprise', async () => {
   });
   await client.rest('GET', '/repos/acme/web');
   assert.equal(seen[0], 'https://github.acme-corp.net/api/v3/repos/acme/web');
+});
+
+test('an enterprise remote addresses its own instance without any configuration', async () => {
+  const seen: string[] = [];
+  const fetch: FetchLike = async (input) => {
+    seen.push(String(input));
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const client = createGitHubClient({
+    token: 'tok',
+    fetch,
+    sleep: async () => {},
+    hostname: 'github.acme-corp.net',
+    env: {},
+  });
+  await client.rest('GET', '/repos/acme/web');
+  assert.equal(seen[0], 'https://github.acme-corp.net/api/v3/repos/acme/web');
+});
+
+test('the api base comes from the remote hostname, and GITHUB_API_URL still wins', () => {
+  assert.equal(gitHubApiBaseUrl({}, 'github.com'), 'https://api.github.com');
+  assert.equal(gitHubApiBaseUrl({}, undefined), 'https://api.github.com');
+  assert.equal(gitHubApiBaseUrl({}, 'github.acme-corp.net'), 'https://github.acme-corp.net/api/v3');
+  assert.equal(
+    gitHubApiBaseUrl({ GITHUB_API_URL: 'https://ghe.example/api/v3' }, 'github.acme-corp.net'),
+    'https://ghe.example/api/v3'
+  );
+});
+
+test('graphql keeps working against an instance derived from the remote', async () => {
+  const seen: string[] = [];
+  const fetch: FetchLike = async (input) => {
+    seen.push(String(input));
+    return new Response(JSON.stringify({ data: { viewer: { login: 'x' } } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  const client = createGitHubClient({
+    token: 'tok',
+    fetch,
+    sleep: async () => {},
+    hostname: 'github.acme-corp.net',
+    env: {},
+  });
+  await client.graphql('query{viewer{login}}', {});
+  assert.equal(seen[0], 'https://github.acme-corp.net/api/graphql');
+});
+
+test('the token is asked for by hostname, so a multi-host login sends the right one', () => {
+  const asked: (string | undefined)[] = [];
+  const read = (hostname?: string): string => {
+    asked.push(hostname);
+    return hostname === 'github.acme-corp.net' ? 'enterprise-token' : 'dot-com-token';
+  };
+  assert.equal(resolveGitHubToken({}, read, 'github.acme-corp.net'), 'enterprise-token');
+  assert.deepEqual(asked, ['github.acme-corp.net']);
+});
+
+test('a missing enterprise credential names the host to log into', () => {
+  assert.throws(
+    () =>
+      resolveGitHubToken(
+        {},
+        () => {
+          throw new Error('no token for that host');
+        },
+        'github.acme-corp.net'
+      ),
+    (error: unknown) => {
+      assert.ok(isRedlineError(error));
+      assert.match(error.message, /github\.acme-corp\.net/);
+      assert.match(error.hint ?? '', /gh auth login --hostname github\.acme-corp\.net/);
+      return true;
+    }
+  );
 });

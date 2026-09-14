@@ -3,6 +3,11 @@ import type { Host } from './types.ts';
 
 export interface RemoteIdentity {
   host: Host;
+  // The hostname the remote actually points at, which is NOT derivable from
+  // `host`: every GitHub Enterprise Server instance reports host 'github' and
+  // serves a different origin. Adapters need it to address the right API and
+  // to ask the right credential store for a token.
+  hostname: string;
   org: string;
   project?: string;
   repo: string;
@@ -21,6 +26,7 @@ export function redactRemote(url: string): string {
   return url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, '$1<redacted>@');
 }
 
+const AZURE_HOSTNAME = 'dev.azure.com';
 const AZURE_HTTPS = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+?)(?:\.git)?$/;
 const AZURE_SSH = /^git@ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?$/;
 const AZURE_LEGACY = /^https?:\/\/([^.]+)\.visualstudio\.com\/([^/]+)\/_git\/([^/]+?)(?:\.git)?$/;
@@ -51,13 +57,16 @@ export function parseRemote(url: string): RemoteIdentity {
 
   for (const pattern of [AZURE_HTTPS, AZURE_SSH, AZURE_LEGACY]) {
     const m = pattern.exec(trimmed);
-    if (m) return { host: 'azure', org: m[1]!, project: m[2]!, repo: m[3]! };
+    if (m) {
+      const hostname = pattern === AZURE_LEGACY ? `${m[1]!}.visualstudio.com` : AZURE_HOSTNAME;
+      return { host: 'azure', hostname, org: m[1]!, project: m[2]!, repo: m[3]! };
+    }
   }
 
   for (const pattern of [GENERIC_SSH, GENERIC_HTTPS]) {
     const m = pattern.exec(trimmed);
     if (m && m[1]!.toLowerCase().includes('github')) {
-      return { host: 'github', org: m[2]!, repo: m[3]! };
+      return { host: 'github', hostname: m[1]!.toLowerCase(), org: m[2]!, repo: m[3]! };
     }
   }
 
