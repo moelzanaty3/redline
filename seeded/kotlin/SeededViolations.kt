@@ -14,7 +14,7 @@ import kotlinx.coroutines.runBlocking
 object SeededViolations {
 
     // SEED 1 [BLOCKER] (core/hardcoded-secrets) hardcoded credential
-    private const val API_KEY = "sk_live_51HxT2mAcmeCorp8f3kPq"
+    private const val API_KEY = "acme-live-7Fq2Rd9Km4Tz6Hb3Vy8Wn"
 
     // SEED 2 [BLOCKER] (kotlin/context-leak) Activity Context held by a singleton — leaks the whole view tree
     var context: Context? = null

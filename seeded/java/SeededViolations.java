@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SeededViolations {
 
     // SEED 1 [BLOCKER] (core/hardcoded-secrets) hardcoded secret
-    private static final String API_KEY = "sk_live_51HxT2mAcmeCorp8f3kPq";
+    private static final String API_KEY = "acme-live-7Fq2Rd9Km4Tz6Hb3Vy8Wn";
 
     // SEED 2 [BLOCKER] (java/field-injection) field injection instead of constructor injection
     @Autowired

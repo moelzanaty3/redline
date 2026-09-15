@@ -170,6 +170,8 @@ test('every proposable profile exists in the manifest', () => {
       paths: ['package.json', 'a.tsx'],
       packageJson: { dependencies: { react: '1', '@nestjs/core': '1' } },
     },
+    { paths: ['package.json'], packageJson: { dependencies: { next: '1' } } },
+    { paths: ['package.json'], packageJson: { dependencies: { express: '1' } } },
   ];
   for (const input of inputs) {
     const { profile } = proposeProfile(input);
@@ -178,3 +180,65 @@ test('every proposable profile exists in the manifest', () => {
 });
 
 type DetectInputList = Parameters<typeof proposeProfile>[0][];
+
+// Every Next.js repository also depends on react, so rule order is the whole
+// mechanism here: the general rule would otherwise win and a Next codebase
+// would be reviewed with nothing covering server actions or the client
+// boundary.
+test('next wins over react, by its dependency or its config file', () => {
+  for (const input of [
+    { paths: ['package.json', 'app/page.tsx'], packageJson: { dependencies: { next: '15', react: '19' } } },
+    { paths: ['next.config.ts', 'app/page.tsx'], packageJson: { dependencies: { react: '19' } } },
+    { paths: ['next.config.mjs'], packageJson: { dependencies: { react: '19' } } },
+  ]) {
+    const { profile, confidence } = proposeProfile(input);
+    assert.equal(profile, 'web-next');
+    assert.equal(confidence, 'high');
+  }
+});
+
+test('a react app with no next stays web-react', () => {
+  assert.equal(
+    proposeProfile({
+      paths: ['package.json', 'src/App.tsx'],
+      packageJson: { dependencies: { react: '19' } },
+    }).profile,
+    'web-react'
+  );
+});
+
+test('an express service is proposed from its dependency', () => {
+  assert.equal(
+    proposeProfile({
+      paths: ['package.json', 'src/routes/orders.ts'],
+      packageJson: { dependencies: { express: '5' } },
+    }).profile,
+    'service-express'
+  );
+});
+
+// `dep` reads devDependencies, and express sits there in a great many
+// front-end repositories as a dev server or a mock API. Relabelling those as
+// backends would install server rules on a codebase with no server in it.
+test('express as a dev dependency never outranks the front-end framework', () => {
+  for (const [deps, expected] of [
+    [{ dependencies: { react: '19' }, devDependencies: { express: '4' } }, 'web-react'],
+    [{ dependencies: { next: '15', react: '19' }, devDependencies: { express: '4' } }, 'web-next'],
+    [{ dependencies: { vue: '3' }, devDependencies: { express: '4' } }, 'web-vue'],
+  ] as const) {
+    assert.equal(proposeProfile({ paths: ['package.json'], packageJson: deps }).profile, expected);
+  }
+});
+
+// NestJS runs on Express and Nest repositories list it directly. The Express
+// rules say in their own scope section that they do not apply to a Nest
+// service, so detection must not send them there.
+test('a nest service that also depends on express stays service-node', () => {
+  assert.equal(
+    proposeProfile({
+      paths: ['package.json', 'nest-cli.json'],
+      packageJson: { dependencies: { '@nestjs/core': '10', express: '4' } },
+    }).profile,
+    'service-node'
+  );
+});

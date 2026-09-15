@@ -43,6 +43,13 @@ higher than that rule carries in the standard.
 6. **Close the PR. Never merge it.** These files contain live-looking credentials and
    deliberately broken code.
 
+**Writing a new seed: make the fake credential look hardcoded, not branded.** A literal
+shaped like a real provider's token (`sk_live_…`, `ghp_…`, `AKIA…`) is matched by GitHub's
+secret scanners, and push protection then rejects the whole branch — the corpus cannot be
+pushed at all. Use an obviously invented shape, as the existing seeds do. The rule under
+test is `core/hardcoded-secrets`, which is about the literal being in the file; nothing
+about it requires the literal to imitate a named vendor.
+
 Once a pilot is stable, stop doing this by hand: set `CANARY_TARGETS` on the metrics repo
 and `workflows/seed-canary.yml` runs the whole cycle weekly — open, wait for the review to
 settle, score, append to `data/seed-scores.jsonl`, close, and fail the run on a

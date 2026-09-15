@@ -120,6 +120,20 @@ const RULES: Rule[] = [
           ? guess('vue sources')
           : null,
   },
+  // Before web-react, and it has to stay there: every Next.js repository also
+  // depends on react, so the more general rule would win on ordering alone and
+  // a Next codebase would be reviewed with no rule covering server actions,
+  // the client boundary, or NEXT_PUBLIC_.
+  {
+    profile: 'web-next',
+    when: (s) =>
+      s.dep('next') ||
+      s.has('next.config.js') ||
+      s.has('next.config.ts') ||
+      s.has('next.config.mjs')
+        ? sure('next dependency or next.config')
+        : null,
+  },
   {
     profile: 'web-react',
     when: (s) =>
@@ -128,6 +142,18 @@ const RULES: Rule[] = [
         : s.ext('.tsx') || s.ext('.jsx')
           ? guess('jsx sources')
           : null,
+  },
+  // Last among the frameworks, and below every web rule, because `dep` reads
+  // devDependencies too and `express` lives there in a great many front-end
+  // repositories — a dev server, a mock API, a Storybook middleware. Checked
+  // before the web rules it would relabel React applications as backends on
+  // the strength of a dependency nobody ships. It sits below service-node for
+  // a second reason: NestJS runs on Express and Nest repositories list it
+  // directly, and the Express rules say in their own scope section that they
+  // do not apply to a Nest service.
+  {
+    profile: 'service-express',
+    when: (s) => (s.dep('express') ? sure('express dependency') : null),
   },
   { profile: 'infra', when: (s) => (s.ext('.tf') ? sure('terraform sources') : null) },
 ];

@@ -7,7 +7,7 @@ import UIKit
 final class SeededViolations {
 
     // SEED 1 [BLOCKER] (core/hardcoded-secrets) hardcoded credential
-    private let apiKey = "sk_live_51HxT2mAcmeCorp8f3kPq"
+    private let apiKey = "acme-live-7Fq2Rd9Km4Tz6Hb3Vy8Wn"
 
     private var handlers: [() -> Void] = []
     private let label = UILabel()

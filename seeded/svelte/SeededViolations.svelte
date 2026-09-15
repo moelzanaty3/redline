@@ -19,7 +19,7 @@
   import { BILLING_API_SECRET } from '$env/static/private';
 
   // SEED 3 [BLOCKER] (core/hardcoded-secrets) fallback token committed in source
-  const FALLBACK_TOKEN = 'ghp_acmeSeed0000000000000000000000000000';
+  const FALLBACK_TOKEN = 'fbk-live-Rn2Kd9Wm4Tz6Hb3Vy7Q';
 
   let { profile } = $props();
   let orders = $state([]);
