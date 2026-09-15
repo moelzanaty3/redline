@@ -4,13 +4,15 @@ import { RedlineError } from '../../core/errors.ts';
 import type {
   CapabilityOutcome,
   GateMachinery,
+  GatePipeline,
   MergePolicy,
   PlatformVerify,
   RepoRef,
   SecurityResult,
 } from '../types.ts';
 import type { GitHubClient } from './client.ts';
-import { REQUIRED_CHECK, RULESET_NAME } from './install.ts';
+import { AZURE_PIPELINE_PATH, REQUIRED_CHECK, RULESET_NAME } from './install.ts';
+import { LOCAL_HOOK_PATH, localAgentMachinery, localAgentMachineryFromBody } from '../local-agent.ts';
 import { createHostShapeError, isNonNullObject } from '../shape.ts';
 
 const hostShapeError = createHostShapeError('GitHub');
@@ -316,6 +318,71 @@ export function machineryFromBody(body: string | null): GateMachinery {
   };
 }
 
+// Azure Pipelines spells its pull request trigger `pr:`, not Actions' `on:`
+// with a `pull_request` member, so the Actions reader above does not apply
+// here — it would find no `on:` key and report every correctly-triggered
+// pipeline as dead. `pr: none` is the documented way to switch the trigger
+// off, and an empty block is equally inert.
+export function azureTriggersOnPullRequest(body: string): boolean {
+  const all = lines(body);
+  for (let i = 0; i < all.length; i += 1) {
+    const line = all[i] ?? '';
+    if (skippable(line) || indentOf(line) !== 0 || keyName(line) !== 'pr') continue;
+    const inline = KEY.exec(line)?.[4]?.trim() ?? '';
+    if (inline !== '') return inline !== 'none';
+    for (const rest of all.slice(i + 1)) {
+      if (skippable(rest)) continue;
+      // Indented content under `pr:` is a branch filter, which is a trigger.
+      return indentOf(rest) > 0;
+    }
+    return false;
+  }
+  return false;
+}
+
+// The same read for a repository on GitHub whose checks are Azure Pipelines.
+//
+// CONTRACT with platforms/azure/gate-template-github.yml: it posts no status,
+// because on a GitHub-hosted repository the build result IS the check and the
+// Azure Repos statuses API addresses a pull request that does not exist. The
+// name GitHub shows therefore comes from the pipeline DEFINITION in Azure
+// DevOps, which is not in this file and cannot be read out of the checkout —
+// hence `externallyNamed`, and hence `publishes` staying null rather than
+// asserting a name nothing here knows.
+//
+// What IS checkable locally is the half that lives in the file: the `pr:`
+// trigger. Without it the pipeline never runs on a pull request at all, which
+// is the same outage a removed `on: pull_request` is on the Actions side, and
+// it is reported through the existing null-publishes branch.
+export function azureMachineryFromBody(body: string | null): GateMachinery {
+  const base = { path: AZURE_PIPELINE_PATH, expected: 'its Azure Pipelines check' };
+  if (body === null) return { ...base, present: false, publishes: null, vendored: null };
+  return {
+    ...base,
+    present: true,
+    publishes: null,
+    // Never vendored: this path installs one standalone pipeline definition and
+    // references no reusable workflow, so there is no second file to point at.
+    vendored: null,
+    externallyNamed: azureTriggersOnPullRequest(body),
+  };
+}
+
+// Which file IS the gate here, and how to read it. Both depend on the pipeline
+// and both were previously hardcoded to the Actions caller, which is what made
+// a GitHub-hosted repository built by Azure Pipelines verify as broken.
+export function gateMachineryPath(pipeline?: GatePipeline): string {
+  if (pipeline === 'azure-pipelines') return AZURE_PIPELINE_PATH;
+  if (pipeline === 'local-agent') return LOCAL_HOOK_PATH;
+  return CALLER_WORKFLOW;
+}
+
+export function gateMachineryFor(body: string | null, pipeline?: GatePipeline): GateMachinery {
+  if (pipeline === 'azure-pipelines') return azureMachineryFromBody(body);
+  if (pipeline === 'local-agent') return localAgentMachineryFromBody(body);
+  return machineryFromBody(body);
+}
+
 export function createGitHubVerify(client: GitHubClient): PlatformVerify {
   const repoPath = (ref: RepoRef): string => `/repos/${ref.org}/${ref.repo}`;
 
@@ -360,9 +427,15 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       };
     },
 
-    readGateMachinery(cwd: string): GateMachinery {
-      const abs = join(cwd, CALLER_WORKFLOW);
-      if (!existsSync(abs)) return machineryFromBody(null);
+    readGateMachinery(cwd: string, pipeline?: GatePipeline): GateMachinery {
+      // A hook is judged on this clone, not on its bytes: whether it is
+      // executable and whether git is looking at the directory holding it are
+      // the two ways it silently does not run, and neither is in the file.
+      if (pipeline === 'local-agent') return localAgentMachinery(cwd);
+
+      const path = gateMachineryPath(pipeline);
+      const abs = join(cwd, path);
+      if (!existsSync(abs)) return gateMachineryFor(null, pipeline);
       // A local read that cannot be completed — a directory at the path, a
       // file the process cannot open — is a finding about this repository, not
       // an internal defect. Unguarded it escaped verify() as "redline failed
@@ -374,11 +447,11 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
       } catch (error) {
         throw new RedlineError(
           'failed',
-          `cannot read ${CALLER_WORKFLOW}: ${error instanceof Error ? error.message : String(error)}`,
+          `cannot read ${path}: ${error instanceof Error ? error.message : String(error)}`,
           'restore it from redline init, or make it readable'
         );
       }
-      return machineryFromBody(body);
+      return gateMachineryFor(body, pipeline);
     },
 
     async readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]> {

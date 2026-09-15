@@ -1,6 +1,6 @@
 import { isRedlineError } from '../core/errors.ts';
 import type { RedlineConfig } from '../config/redline-json.ts';
-import type { GateMachinery, MergePolicy, RepoRef, SecurityResult } from '../platforms/types.ts';
+import type { GateMachinery, GatePipeline, MergePolicy, RepoRef, SecurityResult } from '../platforms/types.ts';
 import type { VerifyFinding, VerifyReport } from '../commands/verify.ts';
 import { renderForTarget, managedPaths } from '../sync/render.ts';
 
@@ -14,7 +14,7 @@ export interface RemoteVerifyHost {
   resolveRef(repo: string): Promise<RepoRef>;
   readRemoteConfig(ref: RepoRef): Promise<{ config: RedlineConfig | null }>;
   readRemoteFile(ref: RepoRef, path: string): Promise<{ content: string } | null>;
-  machineryFromBody(body: string | null): GateMachinery;
+  machineryFromBody(body: string | null, pipeline?: GatePipeline): GateMachinery;
   readPolicy(ref: RepoRef): Promise<MergePolicy | null>;
   readSecurityState(ref: RepoRef): Promise<SecurityResult>;
   latestPullRequestNumber(ref: RepoRef): Promise<number | null>;
@@ -32,9 +32,11 @@ export interface RemoteVerifyOptions {
   cliVersion: string;
 }
 
-export const CALLER_WORKFLOW = '.github/workflows/redline.yml';
-
 import { VENDORED_GATE_PATH, stampedVersion } from '../platforms/github/vendor.ts';
+// Which file is the gate is a function of the pipeline and is decided in one
+// place. This module used to keep its own copy of the Actions path, which is
+// how it came to read a file the repository does not have.
+import { gateMachineryPath } from '../platforms/github/verify.ts';
 export { VENDORED_GATE_PATH } from '../platforms/github/vendor.ts';
 
 // Verify a repository without a checkout.
@@ -106,23 +108,46 @@ export async function verifyRemote(
   }
 
   // --- gate machinery --------------------------------------------------------
-  const callerFile = await host.readRemoteFile(ref, CALLER_WORKFLOW);
-  const machinery = host.machineryFromBody(callerFile?.content ?? null);
+  // Which file to ask the host for depends on what runs this repository's
+  // checks. Asking for the Actions caller unconditionally reported every
+  // GitHub-hosted repository built by Azure Pipelines as having no gate — and
+  // on the scheduled fleet re-verification that is an onboarding-drift issue
+  // opened against a repository that is not drifting.
+  const gatePath = gateMachineryPath(config.pipeline);
+  const callerFile = await host.readRemoteFile(ref, gatePath);
+  const machinery = host.machineryFromBody(callerFile?.content ?? null, config.pipeline);
   const gateOwned = config.capabilities.gate;
+  // See GateMachinery.externallyNamed: the check's name lives in Azure DevOps,
+  // so presence and the pull request trigger are the whole of what a read of
+  // the repository can decide.
+  const machineryHealthy =
+    machinery.externallyNamed === true
+      ? machinery.present
+      : machinery.present && machinery.publishes === machinery.expected;
   add(
     'gate-machinery',
-    !gateOwned || (machinery.present && machinery.publishes === machinery.expected),
+    !gateOwned || machineryHealthy,
     !gateOwned
       ? machinery.present
         ? `off by choice, and ${machinery.path} is still present and still publishing ${machinery.publishes ?? 'nothing'}`
         : 'off by choice — this repository publishes the gate its own way'
       : !machinery.present
-        ? `${machinery.path} is missing — nothing here can publish ${machinery.expected}`
-        : machinery.publishes === null
-          ? `${machinery.path} is present but no longer publishes a check name — its job id or pull_request trigger was edited`
-          : machinery.publishes !== machinery.expected
-            ? `${machinery.path} publishes ${machinery.publishes}, but the policy requires ${machinery.expected}`
-            : `publishes ${machinery.publishes}`
+        ? config.pipeline === 'local-agent'
+          ? `${machinery.path} is missing — nothing reviews a push in any clone of this repository`
+          : `${machinery.path} is missing — nothing here can publish ${machinery.expected}`
+        : config.pipeline === 'local-agent'
+          ? // Whether git is pointed at the hook is a property of each clone, so
+            // an API read cannot decide it for anyone. Saying more than "the
+            // file is here and ours" would be a guess about somebody's laptop.
+            `${machinery.path} is present; whether it runs is per-clone, and only a checkout can say`
+          : machinery.externallyNamed === true
+          ? `${machinery.path} runs on pull requests; its check is named by the Azure DevOps ` +
+            'pipeline definition, which is not readable from this repository'
+          : machinery.publishes === null
+            ? `${machinery.path} is present but no longer publishes a check name — its job id or pull_request trigger was edited`
+            : machinery.publishes !== machinery.expected
+              ? `${machinery.path} publishes ${machinery.publishes}, but the policy requires ${machinery.expected}`
+              : `publishes ${machinery.publishes}`
   );
 
   // --- vendored gate ---------------------------------------------------------

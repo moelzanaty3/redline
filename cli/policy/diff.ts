@@ -1,5 +1,20 @@
 import { BEGIN_PREFIX, END } from '../render/markers.ts';
 
+// The line every wholly-generated Redline artifact carries in a format that has
+// somewhere to put one — YAML, shell, and the rendered command prompts.
+// Anchored at the start of the trimmed body so a sentence merely mentioning the
+// phrase is not one.
+const OWNERSHIP_LINE = /^(?:#|<!--|\/\/)?\s*Managed by Redline\b/;
+
+// The artifacts with nowhere to put that line: the per-stack instruction files
+// and the Cursor rules open with frontmatter a tool parses, so a comment above
+// it would break them. They are recognised the way `redline remove` recognises
+// the same files — by the `redline-` prefix on the name, in the directory a
+// vendor renders into. A prefix rather than a fixed list of paths: the list
+// goes stale the moment a vendor is added, and the prefix is what is actually
+// true of every one of them.
+const REDLINE_ARTIFACT = /(?:^|\/)redline[-.][^/]*$/;
+
 // A unified diff, reduced to the only thing a deterministic check may look at:
 // the lines this change ADDED, with their file and line number.
 //
@@ -37,7 +52,10 @@ export function parseDiff(diff: string): AddedLine[] {
       // A deletion has no destination path, so nothing after it is an addition
       // until the next file header.
       file = header[2] ? null : (header[1] ?? null);
-      generated = false;
+      // A file Redline renders whole is generated from its first line, with no
+      // marker to open the state — unlike the shared files below, where the
+      // block is bounded and the repository owns everything outside it.
+      generated = file !== null && REDLINE_ARTIFACT.test(file);
       continue;
     }
     const hunk = HUNK.exec(raw);
@@ -64,6 +82,24 @@ export function parseDiff(diff: string): AddedLine[] {
     // it was.
     const body = raw.startsWith('+') || raw.startsWith(' ') ? raw.slice(1).trimStart() : null;
     if (body !== null && body.startsWith(BEGIN_PREFIX)) generated = true;
+
+    // The other half of the same problem. The markers above bound Redline's
+    // output inside a file the repository also owns; these files are Redline's
+    // output WHOLE — the per-stack instruction files, the Cursor rules, the
+    // rendered commands — and carry no marker to bound, so nothing here
+    // recognised them. The rendered rule text necessarily spells out every
+    // construct the checks hunt for, so `redline init`'s own pull request
+    // opened with findings against files Redline had just written: a BLOCKER on
+    // `core/type-checker-suppression` from the rule that forbids suppressions,
+    // and a HIGH on `core/untracked-todo` from the rule that forbids untracked
+    // TODOs.
+    //
+    // Recognised by the ownership line rather than by path, for the same reason
+    // `remove` does: a list of paths goes stale the moment a vendor is added,
+    // and the line is the thing that is actually true of every file Redline
+    // wrote. Once set it holds for the rest of the file — there is no closing
+    // marker, because the whole file is generated.
+    if (body !== null && OWNERSHIP_LINE.test(body)) generated = true;
 
     if (raw.startsWith('+')) {
       if (!generated) added.push({ file, line, text: raw.slice(1) });

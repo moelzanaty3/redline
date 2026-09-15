@@ -63,9 +63,23 @@ export function isPending(outcome: CapabilityOutcome): boolean {
 // can live on GitHub and be built entirely by Azure Pipelines, and deriving one
 // from the other is what installed a GitHub Actions workflow into a repository
 // that runs none.
-export type GatePipeline = 'github-actions' | 'azure-pipelines';
+//
+// `local-agent` is the third of those, and the only one that runs nothing on a
+// host: the deterministic rules run from a pre-push hook on the engineer's own
+// machine, and the half that needs a model is handed to whichever assistant
+// they already have. It is a gate — it refuses a push — but it publishes no
+// check anywhere, which is why nothing may require one from it.
+//
+// Distinct from having no gate at all. That answer sets `capabilities.gate` to
+// false and leaves this field inert; this one is a gate that happens to run
+// somewhere a branch ruleset cannot see.
+export type GatePipeline = 'github-actions' | 'azure-pipelines' | 'local-agent';
 
-export const GATE_PIPELINES: readonly GatePipeline[] = ['github-actions', 'azure-pipelines'];
+export const GATE_PIPELINES: readonly GatePipeline[] = [
+  'github-actions',
+  'azure-pipelines',
+  'local-agent',
+];
 
 export function isGatePipeline(value: string): value is GatePipeline {
   return (GATE_PIPELINES as readonly string[]).includes(value);
@@ -286,6 +300,17 @@ export interface GateMachinery {
   // the caller that decides what runs: `remove` deletes what the repository
   // actually points at, not what a run three versions ago would have written.
   vendored: string | null;
+  // Whether the check's name is decided outside this repository. True for one
+  // combination only: a GitHub-hosted repository built by Azure Pipelines, where
+  // the check GitHub reads is published by the Azure Pipelines GitHub App under
+  // the pipeline DEFINITION's name — a name that lives in Azure DevOps and is
+  // not in the file, so `publishes` is honestly null rather than guessed.
+  //
+  // It exists because `publishes: null` otherwise means "this file lost the
+  // contract that produces a name", and telling an operator to re-run init over
+  // a file that is perfectly correct sends them after a fiction. Absent is
+  // false: every other host names its own check.
+  externallyNamed?: boolean;
 }
 
 export interface PlatformVerify {
@@ -293,7 +318,13 @@ export interface PlatformVerify {
   // Local only: no host call, no credential, same as Platform.localRef. It
   // reads the file `installGate` wrote, so it is sync and cannot fail the run
   // the way a host read can.
-  readGateMachinery(cwd: string): GateMachinery;
+  //
+  // `pipeline` is what the repository recorded at onboarding, because which
+  // file to read depends on it: a GitHub-hosted repository built by Azure
+  // Pipelines has a pipeline definition and no Actions workflow, and reading
+  // the Actions path there reported a healthy gate missing. Absent means this
+  // host's default, which is what every caller predating the question meant.
+  readGateMachinery(cwd: string, pipeline?: GatePipeline): GateMachinery;
   readReportedCheckNames(ref: RepoRef, pr: number): Promise<string[]>;
   readSecurityState(ref: RepoRef): Promise<SecurityResult>;
   // Whether the owners in CODEOWNERS actually resolve on the host. `null` means

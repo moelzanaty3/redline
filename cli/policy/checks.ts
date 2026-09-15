@@ -132,9 +132,26 @@ const SUPPRESSIONS: RegExp[] = [
   /#\s*pragma\s+warning\s+disable/i, // C#
 ];
 
+// A suppression only suppresses in a file a checker reads. No type-checker or
+// linter reads Markdown, so `@ts-ignore` in a `.md` file is prose ABOUT a
+// suppression, not one.
+//
+// Redline found this against itself. `redline init` renders the standard into
+// `.github/instructions/redline-react.instructions.md`, and the text of
+// `react/exhaustive-deps-disabled` necessarily spells out the thing it bans —
+// so the onboarding pull request, whose whole diff is Redline's own artifacts,
+// was reported as a BLOCKER by Redline's own policy check. The rule cannot
+// state what it forbids without tripping itself.
+//
+// `.mdc` is Cursor's rules file, which is Markdown with frontmatter and carries
+// the same rendered text.
+const PROSE = /\.(md|mdx|mdc|markdown|rst|txt|adoc)$/i;
+
 const typeCheckerSuppression: DeterministicCheck = ({ added }) =>
   added
-    .filter((l) => SUPPRESSIONS.some((s) => s.test(l.text)) && !hasTicket(l.text))
+    .filter(
+      (l) => !PROSE.test(l.file) && SUPPRESSIONS.some((s) => s.test(l.text)) && !hasTicket(l.text)
+    )
     .map((l) =>
       finding(
         l,

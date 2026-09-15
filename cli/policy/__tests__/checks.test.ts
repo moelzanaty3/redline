@@ -65,8 +65,37 @@ test('a suppression with no ticket is a BLOCKER', () => {
   assert.equal(result.findings[0]?.severity, 'BLOCKER');
 });
 
-test('a suppression with a ticket is allowed — the rule asks for both', () => {
+// Redline found this against itself: the rendered text of
+// `react/exhaustive-deps-disabled` has to spell out the thing it bans, so the
+// onboarding pull request — whose entire diff is Redline's own artifacts — was
+// reported as a BLOCKER by Redline's own policy check. No type-checker reads
+// Markdown; a suppression quoted in prose is documentation, not a suppression.
+test('a suppression quoted in prose is not a suppression', () => {
+  for (const file of [
+    '.github/instructions/redline-react.instructions.md',
+    'AGENTS.md',
+    '.cursor/rules/redline.mdc',
+    'docs/lint-policy.rst',
+  ]) {
+    assert.deepEqual(
+      ids(runChecks(ctx([line('- `eslint-disable react-hooks/exhaustive-deps` — hides bugs.', file)]))),
+      [],
+      file
+    );
+  }
+});
+
+// The exclusion is by file type, not by content: a real suppression in a real
+// source file must still be a BLOCKER, or the fix has traded a false positive
+// for a false negative.
+test('excluding prose does not excuse a suppression in source', () => {
   assert.deepEqual(
+    ids(runChecks(ctx([line('// eslint-disable-next-line react-hooks/exhaustive-deps', 'src/x.tsx')]))),
+    ['core/type-checker-suppression']
+  );
+});
+
+test('a suppression with a ticket is allowed — the rule asks for both', () => {  assert.deepEqual(
     ids(runChecks(ctx([line('// @ts-expect-error upstream types are wrong, ENG-441')]))),
     []
   );

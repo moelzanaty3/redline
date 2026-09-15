@@ -68,6 +68,49 @@ test('capabilities are reported by the name an operator types', () => {
   assert.doesNotMatch(out, /mergePolicy/);
 });
 
+// What runs the checks decides which file has to exist and which check name a
+// ruleset has to require. A status that names the host but not the pipeline
+// sends an operator to .github/workflows on a repository gated by Azure.
+test('what runs the checks is reported, not just where the code lives', () => {
+  const out = formatStatus(status(repo({ ...CONFIG, pipeline: 'azure-pipelines' }), ROOT)).join('\n');
+  assert.match(out, /checks {2,}Azure Pipelines/);
+});
+
+// Nothing publishes a check here, so naming a pipeline or a rung would describe
+// machinery that does not exist — and "the check is always green" would read as
+// reassurance about a check that is absent. They stay recorded, just inert.
+test('a repository with no gate is told so, not given a rung for a check that does not run', () => {
+  const noGate = { ...CONFIG, capabilities: { ...CONFIG.capabilities, gate: false } };
+  const out = formatStatus(status(repo(noGate), ROOT)).join('\n');
+  assert.match(out, /checks {2,}none/);
+  assert.doesNotMatch(out, /rung/);
+  assert.doesNotMatch(out, /block-blocker/);
+});
+
+// A pre-push hook publishes nothing, so an operator reading "checks GitHub
+// Actions" here would go looking for a workflow and a check name that do not
+// exist. It is a gate, so the rung still has a subject.
+test('a gate that runs on this machine says so, and keeps its rung', () => {
+  const out = formatStatus(status(repo({ ...CONFIG, pipeline: 'local-agent' }), ROOT)).join('\n');
+  assert.match(out, /checks {2,}an agent on this machine/);
+  assert.match(out, /rung/);
+});
+
+// The ladder is the same, but there is no check to be green and no merge to
+// stop — it refuses a push. Reusing the CI sentence sent the reader looking for
+// a check that does not exist.
+test('the rung on a local gate is described in pushes, not in checks and merges', () => {
+  const observing = { ...CONFIG, pipeline: 'local-agent' as const, rung: 'observe' as const };
+  const local = formatStatus(status(repo(observing), ROOT)).join('\n');
+  assert.match(local, /rung {2,}observe — .*push is never blocked/);
+  assert.doesNotMatch(local, /always green/);
+
+  const blocking = { ...CONFIG, pipeline: 'local-agent' as const, rung: 'block-high' as const };
+  const out = formatStatus(status(repo(blocking), ROOT)).join('\n');
+  assert.match(out, /refuse the push/);
+  assert.doesNotMatch(out, /stop the merge/);
+});
+
 test('standards behind the CLI are reported as drift, not as breakage', () => {
   const report = status(repo(CONFIG), ROOT);
   assert.equal(report.drifted, true);

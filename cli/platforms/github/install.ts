@@ -25,6 +25,7 @@ import {
   renderVendoredGate,
 } from './vendor.ts';
 import { CLI_VERSION, UNPUBLISHED_VERSION } from '../../core/version.ts';
+import { installLocalAgentGate } from '../local-agent.ts';
 import { isNonNullObject, isSuccess } from '../shape.ts';
 import { BEGIN_PREFIX, END, findBlock, wrapBlock } from '../../render/markers.ts';
 import { TEMPLATE_DIRS as PULL_REQUEST_TEMPLATE_DIRS } from '../pull-request-templates.ts';
@@ -64,7 +65,12 @@ function installAzurePipelineGate(
       /FAIL_ON_DEPENDENCY_SEVERITY: \w+/,
       `FAIL_ON_DEPENDENCY_SEVERITY: ${opts.failOnDependencySeverity}`
     )
-    .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`);
+    .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`)
+    // Without this the wizard's "the gate's secrets job is stood down here"
+    // was a statement about a file that still ran TruffleHog on every pull
+    // request — and as a non-waivable check, a finding the declared scanner
+    // allowlists then blocked the pull request with no way to waive it.
+    .replace(/REDLINE_STAND_DOWN: .*/, `REDLINE_STAND_DOWN: '${(opts.standDown ?? []).join(',')}'`);
 
   if (syncFile(cwd, AZURE_PIPELINE_PATH, template, check)) files.push(AZURE_PIPELINE_PATH);
 
@@ -667,6 +673,13 @@ export function createGitHubInstall(
       // request while Redline reported the gate applied.
       if (opts.pipeline === 'azure-pipelines') {
         return installAzurePipelineGate(cwd, opts, check);
+      }
+
+      // No pull request check at all: the gate is a pre-push hook on the
+      // engineer's machine. Nothing is installed on the host, so this returns
+      // before any credential is needed.
+      if (opts.pipeline === 'local-agent') {
+        return installLocalAgentGate(cwd, opts, check);
       }
 
       refuseForeignCaller(cwd, opts);

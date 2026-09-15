@@ -4,7 +4,9 @@ import { RedlineError } from '../core/errors.ts';
 import {
   ADMIN_CAPABILITIES,
   HOSTS,
+  isGatePipeline,
   type AdminCapability,
+  type GatePipeline,
   type GateSource,
   type Host,
 } from '../platforms/types.ts';
@@ -49,6 +51,18 @@ export interface RedlineConfig {
   standardsVersion: string;
   cliVersion: string;
   host: Host;
+  // What actually runs this repository's pull request checks. Recorded because
+  // it decides which file IS the gate here, and nothing else can recover it: a
+  // GitHub-hosted repository built by Azure Pipelines gets a pipeline
+  // definition, and a `verify` that could not read this back looked for an
+  // Actions workflow that was correctly never written, then reported the gate
+  // missing on a repository whose gate was fine.
+  //
+  // Absent reads back as `github-actions`, and so does anything unrecognised.
+  // That is this host's default and exactly what every repository onboarded
+  // before the field existed has — so an upgrade changes no answer. It is
+  // inert on Azure DevOps, where there is only ever a pipeline definition.
+  pipeline: GatePipeline;
   profile: string;
   vendors: string[];
   menu: MenuSelections;
@@ -325,6 +339,12 @@ export function parseConfig(raw: unknown): RedlineConfig {
     standardsVersion: str('standardsVersion'),
     cliVersion: str('cliVersion'),
     host: host as Host,
+    // Anything unrecognised reads back as the host default rather than failing
+    // the parse, for the same reason an unknown menu key does: a hand edit or
+    // an older CLI must not invalidate the config of every repository at once.
+    pipeline: typeof o['pipeline'] === 'string' && isGatePipeline(o['pipeline'])
+      ? o['pipeline']
+      : 'github-actions',
     profile: str('profile'),
     vendors: vendors as string[],
     menu,
@@ -380,6 +400,8 @@ const EXPLAINER: readonly string[] = [
   'gateSource — org: the gate lives in the organisation .github repo. local: vendored into this',
   '  repository, which means a pull request can edit the gate judging it. `--gate-source`.',
   'gateVersion — the redlinegate version the vendored gate was written by. Empty when not vendored.',
+  'pipeline — what runs the pull request checks: github-actions or azure-pipelines. It decides which',
+  '  file is the gate here, so verify reads it back rather than assuming. `--pipeline`.',
   'docsBaseUrl — where your copy of the standard is published. Set it and every finding carries',
   '  the address of the rule it cites: <docsBaseUrl>/r/<rule-id>. Empty prints no link.',
   'commandFiles, standardsVersion, cliVersion, onboardedAt, lastRunAt — Redline\'s own bookkeeping.',

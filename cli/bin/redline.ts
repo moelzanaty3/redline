@@ -43,7 +43,7 @@ import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
 import { standardsVersion } from '../commands/sync.ts';
-import { isGatePipeline, isGateSource } from '../platforms/types.ts';
+import { GATE_PIPELINES, isGatePipeline, isGateSource } from '../platforms/types.ts';
 import type { Platform, RepoRef } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
 import type { RemoteVerifyHost } from '../verify/remote.ts';
@@ -117,10 +117,12 @@ const USAGE = [
   '      (sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql). Overrides what',
   '      detection found — it reads a checkout, so it cannot see a scanner wired through a',
   '      shared pipeline template. Recorded, so the correction is made once.',
-  '      --pipeline <name>  github-actions or azure-pipelines — what actually runs this',
+  `      --pipeline <name>  ${GATE_PIPELINES.join(' | ')} — what actually runs this`,
   '                  repository\'s pull request checks. Asked separately from the host because',
   '                  the two come apart: a repository on GitHub can be built entirely by Azure',
-  '                  Pipelines, and installing an Actions workflow there gates nothing',
+  '                  Pipelines, and installing an Actions workflow there gates nothing.',
+  '                  local-agent installs no CI at all: the gate is a pre-push hook on the',
+  '                  engineer\'s machine, so it publishes no check and no ruleset can require one',
   '      --adopt-caller  let Redline take over the gate machinery file (.github/workflows/redline.yml,',
   '                  .azuredevops/redline-gate.yml) when what is already there carries nothing that',
   '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
@@ -413,7 +415,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values.pipeline !== undefined && !isGatePipeline(values.pipeline)) {
         throw new RedlineError(
           'usage',
-          `--pipeline must be github-actions or azure-pipelines, not "${values.pipeline}"`,
+          `--pipeline must be one of ${GATE_PIPELINES.join(', ')}, not "${values.pipeline}"`,
           'a repository on GitHub whose pull request checks are Azure Pipelines wants azure-pipelines'
         );
       }
@@ -564,6 +566,16 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // is untouched, and the branch a full run would have opened does not
       // exist. The run that finishes the job is named rather than described.
       if (report.noCommit === true) {
+        // Determined work, not a claim about settings this path never touched:
+        // the gate installer really did run, so a pipeline definition nobody has
+        // registered is known about now and is the operator's to act on. Printed
+        // before the "not committed" line so the last thing on screen is still
+        // the run that finishes the job.
+        if (report.pendingAdmin.length > 0) {
+          log.warn(
+            `an administrator must still enable: ${report.pendingAdmin.join(', ')}`
+          );
+        }
         log.info(
           '  not committed — the files are in your working tree. Review them, commit them, then ' +
             'run redline init to apply the repository settings and open the pull request'

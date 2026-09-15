@@ -12,6 +12,7 @@ const config = {
   standardsVersion: '0.0.1',
   cliVersion: '0.0.1',
   host: 'github' as const,
+  pipeline: 'github-actions' as const,
   profile: 'web',
   vendors: ['agents'],
   menu: {

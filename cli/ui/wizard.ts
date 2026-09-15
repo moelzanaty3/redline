@@ -2,7 +2,7 @@ import type { Manifest } from '../render/manifest.ts';
 import { RedlineError } from '../core/errors.ts';
 import { TOOL_PROBES, type RepoSurvey } from '../detect/existing.ts';
 import { RUNGS, type Rung } from '../enforce/ladder.ts';
-import type { GateSource } from '../platforms/types.ts';
+import type { GatePipeline, GateSource } from '../platforms/types.ts';
 import type { Choice, Prompter } from './prompt.ts';
 
 // The questions `redline init` asks, and the order it asks them in.
@@ -21,7 +21,12 @@ import type { Choice, Prompter } from './prompt.ts';
 // filling the same struct — never a second way of onboarding.
 
 export type Host = 'github' | 'azure';
-export type Pipeline = 'github-actions' | 'azure-pipelines';
+
+// An alias, never a second list. This was its own union, so adding a pipeline
+// to the platform type left the wizard unable to offer it — the same "two
+// records of one fact" that put an Actions workflow into a repository built by
+// Azure Pipelines, one layer up.
+export type Pipeline = GatePipeline;
 
 export interface WizardFacts {
   readonly manifest: Manifest;
@@ -277,7 +282,18 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
   // VFUK repository is on github.com and built by Azure Pipelines. Deriving the
   // pipeline from the host is what put a GitHub Actions caller into a repo
   // whose real gate is `cicd/pre-merge.yaml`.
-  const pipelineChoices: Choice<Pipeline>[] = [
+  //
+  // `none` is the third honest answer, and it is asked here rather than left to
+  // the capability list below because this is the question an operator with no
+  // CI is actually answering. It deselects the gate; it is not a third pipeline
+  // — `capabilities.gate` is the one record of whether a gate exists, and a
+  // second one that could disagree with it is how the gate goes missing.
+  // `local-agent` and `none` are both answers from a repository with no CI, and
+  // they are not the same answer. One installs a gate that runs somewhere a
+  // branch ruleset cannot see; the other installs no gate at all. Keeping them
+  // distinct is what lets `capabilities.gate` stay the single record of whether
+  // a gate exists while `pipeline` stays the single record of what runs it.
+  const pipelineChoices: Choice<Pipeline | 'none'>[] = [
     {
       value: 'github-actions',
       label: 'GitHub Actions',
@@ -291,12 +307,27 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
           ? 'a stage in an Azure pipeline definition'
           : `a stage added to ${facts.existingPipeline}   (detected)`,
     },
+    {
+      value: 'local-agent',
+      label: 'An agent on this machine — no CI',
+      hint: 'a pre-push hook: deterministic rules block the push, your own assistant reviews the rest',
+    },
+    {
+      value: 'none',
+      label: 'Nothing — no pull request check here',
+      hint: 'no gate is installed; the standards and /redline-review still render for your assistants',
+    },
   ];
-  const pipeline = await p.select<Pipeline>(
+  const pipelineAnswer = await p.select<Pipeline | 'none'>(
     'What runs your pull request checks?',
     pipelineChoices,
     facts.existingPipeline !== null ? 'azure-pipelines' : 'github-actions'
   );
+  const gateWanted = pipelineAnswer !== 'none';
+  // Recorded as this host's default when there is no gate for it to describe.
+  // The field decides which file IS the gate, and with no gate there is no file
+  // — so the value that changes nothing is the honest one to store.
+  const pipeline: Pipeline = gateWanted ? pipelineAnswer : 'github-actions';
 
   const vendors = await p.multiselect(
     'Which assistants should read the standards?',
@@ -363,13 +394,16 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     covered.set(probe.standsDown, probe.label);
   }
 
-  const capabilityChoices: Choice<string>[] = Object.entries(CAPABILITY_HINTS).map(
-    ([id, hint]) => ({ value: id, label: id, hint })
-  );
+  // With no pull request check there is nothing for a gate to be, so it is not
+  // offered rather than offered and contradicted: an operator who answered
+  // "nothing" and then ticked `gate` would have said both things at once.
+  const capabilityChoices: Choice<string>[] = Object.entries(CAPABILITY_HINTS)
+    .filter(([id]) => gateWanted || id !== 'gate')
+    .map(([id, hint]) => ({ value: id, label: id, hint }));
   const capabilities = await p.multiselect(
     'What should Redline install?',
     capabilityChoices,
-    ['gate', 'merge-policy', 'labels']
+    gateWanted ? ['gate', 'merge-policy', 'labels'] : ['merge-policy', 'labels']
   );
 
   // Asked here, and asked blind: the wizard runs before the platform is
@@ -378,8 +412,12 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
   // this question is the operator's preference, and the later one is the same
   // question asked once the host has actually answered. An operator who already
   // knows their organisation has nothing can say so here and never see it.
-  const gateSource = capabilities.includes('gate')
-    ? await p.select<GateSource>(
+  // Not asked for a local agent gate: there is no reusable workflow to source,
+  // only a hook this repository carries. Answering `org` there would record a
+  // preference that decides nothing.
+  const gateSource =
+    capabilities.includes('gate') && pipeline !== 'local-agent'
+      ? await p.select<GateSource>(
         'Where should the merge gate live?',
         [
           {
@@ -434,11 +472,17 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     );
   }
 
-  const rung = await p.select<Rung>(
-    'How hard should the check bite?',
-    RUNGS.map((value) => ({ value, label: value, hint: RUNG_HINTS[value] })),
-    recorded?.rung ?? 'observe'
-  );
+  // Asked only when there is a check to bite. The ladder governs how hard the
+  // gate reports, so with no gate the question has no subject — and `observe`
+  // is the rung that changes nothing, which is what a repository with no gate
+  // is already at.
+  const rung = gateWanted
+    ? await p.select<Rung>(
+        'How hard should the check bite?',
+        RUNGS.map((value) => ({ value, label: value, hint: RUNG_HINTS[value] })),
+        recorded?.rung ?? 'observe'
+      )
+    : (recorded?.rung ?? 'observe');
 
   const action = await p.select(
     'Ready?',

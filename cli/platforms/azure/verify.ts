@@ -4,12 +4,14 @@ import { RedlineError } from '../../core/errors.ts';
 import type {
   CapabilityOutcome,
   GateMachinery,
+  GatePipeline,
   MergePolicy,
   PlatformVerify,
   PolicySetting,
   RepoRef,
   SecurityResult,
 } from '../types.ts';
+import { localAgentMachinery } from '../local-agent.ts';
 import type { AzureClient } from './client.ts';
 import {
   AZURE_BUILD_POLICY_DISPLAY_NAME,
@@ -247,7 +249,11 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
       };
     },
 
-    readGateMachinery(cwd: string): GateMachinery {
+    readGateMachinery(cwd: string, pipeline?: GatePipeline): GateMachinery {
+      // A pre-push hook is the gate here, and it is judged on this clone rather
+      // than on its bytes. Host-independent: it touches neither host.
+      if (pipeline === 'local-agent') return localAgentMachinery(cwd);
+
       const abs = join(cwd, GATE_PIPELINE);
       const base = { path: GATE_PIPELINE, expected: AZURE_STATUS_CONTEXT };
       if (!existsSync(abs)) return { ...base, present: false, publishes: null, vendored: null };

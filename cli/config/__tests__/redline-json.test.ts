@@ -9,6 +9,7 @@ const valid: RedlineConfig = {
   standardsVersion: '0.0.1',
   cliVersion: '0.0.1',
   host: 'github',
+  pipeline: 'github-actions',
   profile: 'web',
   vendors: ['copilot', 'agents', 'claude'],
   menu: {
@@ -216,4 +217,32 @@ test('an unrecognised gate source reads back as org, not as local', () => {
 
 test('a non-string gate version reads back as no version rather than as a value', () => {
   assert.equal(parseConfig({ ...valid, gateVersion: 3 }).gateVersion, '');
+});
+
+// The pipeline was asked for at onboarding and then thrown away, so nothing
+// downstream could tell an Actions repository from an Azure Pipelines one.
+// Recording it is only useful if it survives the round trip.
+test('a recorded pipeline survives the round trip', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-config-'));
+  try {
+    writeConfig(dir, { ...valid, pipeline: 'azure-pipelines' });
+    assert.equal(readConfig(dir)?.pipeline, 'azure-pipelines');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Every repository onboarded before the field existed runs Actions — that is
+// the only gate the CLI could install at the time — so absent reads back as
+// `github-actions` rather than failing the parse on an old file.
+test('a config written before pipelines existed reads back as github-actions', () => {
+  const { pipeline, ...older } = valid;
+  assert.equal(parseConfig(JSON.parse(JSON.stringify(older))).pipeline, 'github-actions');
+});
+
+// A hand edit must not be able to point verify at a file the CLI never wrote.
+test('an unrecognised pipeline reads back as github-actions', () => {
+  for (const bad of ['azure', 'AZURE-PIPELINES', '', 0, null, true]) {
+    assert.equal(parseConfig({ ...valid, pipeline: bad }).pipeline, 'github-actions', String(bad));
+  }
 });

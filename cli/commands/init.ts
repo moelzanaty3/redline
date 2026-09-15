@@ -179,9 +179,19 @@ export const ONBOARD_BRANCH = 'redline/onboard';
 // `installGate` no longer runs first to meet an unreadable one. Everything it
 // feeds here is advisory output, so a path that cannot be read costs the notes
 // and never the run.
-function observeGateMachinery(platform: Platform, cwd: string): GateMachinery | null {
+function observeGateMachinery(
+  platform: Platform,
+  cwd: string,
+  pipeline: GatePipeline
+): GateMachinery | null {
   try {
-    return platform.readGateMachinery(cwd);
+    // The recorded pipeline decides which directory the gate lives in, and
+    // every note below is about that directory. Without it a GitHub-hosted
+    // repository built by Azure Pipelines was told what else sits in
+    // .github/workflows/ — a directory its gate is not in and its checks do
+    // not run from — and invited to `--skip gate` in favour of a workflow that
+    // is not a merge gate at all.
+    return platform.readGateMachinery(cwd, pipeline);
   } catch {
     return null;
   }
@@ -474,6 +484,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // that does not exist and lose it the gate entirely.
   let gateSource: GateSource = opts.gateSource ?? existing?.gateSource ?? 'org';
 
+  // Same precedence as the gate source, and for a sharper version of the same
+  // reason: nothing about a checkout re-derives this, so a re-run that said
+  // nothing about the pipeline used to fall back to the host default and write
+  // an Actions caller into a repository whose checks are Azure Pipelines —
+  // undoing the correct install of the run before it. Inert on Azure DevOps.
+  const pipeline: GatePipeline = opts.pipeline ?? existing?.pipeline ?? 'github-actions';
+
   const currentRung: Rung = existing?.rung ?? 'observe';
   const rungNotes: string[] = [];
   let rung = currentRung;
@@ -509,6 +526,53 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       'the merge gate is deselected, so nothing in this repository publishes the check a blocking ' +
         'policy would require — every pull request would be blocked',
       'either keep the gate, or add --skip merge-policy so this repository keeps its own branch policy'
+    );
+  }
+
+  // The same deadlock, reached from the other side and missed by the guard
+  // above because the gate here is present and correct. On a GitHub-hosted
+  // repository built by Azure Pipelines the check GitHub sees is published by
+  // the Azure Pipelines app under the pipeline DEFINITION's name, which lives
+  // in Azure DevOps. A blocking ruleset names `REQUIRED_CHECK` — the Actions
+  // gate's name — so it would require a check nothing in this repository can
+  // ever publish, and every pull request would hang exactly as above.
+  //
+  // Refused rather than half-applied: the advisory policy is the working
+  // configuration here, and the blocking one is only reachable by requiring
+  // the pipeline's own check name on the host, which is a name this run cannot
+  // read out of the checkout.
+  if (
+    platform.host === 'github' &&
+    pipeline === 'azure-pipelines' &&
+    capabilities.mergePolicy &&
+    menu.blockingGate
+  ) {
+    throw new RedlineError(
+      'usage',
+      'this repository is built by Azure Pipelines, so its check is named by the pipeline ' +
+        'definition in Azure DevOps — a blocking Redline policy would require a check name ' +
+        'nothing here publishes, and every pull request would be blocked',
+      'keep the policy advisory, and require the pipeline\'s own check on the branch ruleset by ' +
+        'hand — redline verify prints the names it reported on the last pull request'
+    );
+  }
+
+  // The third route to the same deadlock, and the most obvious one once it is
+  // written down: a gate that runs on somebody's laptop reports to no host at
+  // all. There is no build, no app and no status API call, so no check name
+  // exists for a ruleset to require, on either host. Every pull request would
+  // wait for a check that cannot arrive.
+  //
+  // This is the trade the local option makes rather than a defect in it: the
+  // feedback is immediate and costs no CI, and in exchange nothing on the host
+  // can be made to depend on the result.
+  if (pipeline === 'local-agent' && capabilities.mergePolicy && menu.blockingGate) {
+    throw new RedlineError(
+      'usage',
+      'the gate runs on this machine as a pre-push hook, so it publishes no check to the host — a ' +
+        'blocking policy would require one that can never arrive, and every pull request would be ' +
+        'blocked',
+      'keep the policy advisory, or choose a pipeline gate if a merge has to depend on the result'
     );
   }
 
@@ -579,7 +643,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   let gateOptions: GateOptions = {
     ...FLOOR_GATE,
-    ...(opts.pipeline ? { pipeline: opts.pipeline } : {}),
+    ...(pipeline !== 'github-actions' ? { pipeline } : {}),
     ...(menu.adrForLargeDiffs ? {} : { adrDiffThreshold: Number.MAX_SAFE_INTEGER }),
     ...(opts.adoptCaller === true ? { adoptCaller: true } : {}),
     ...(capabilities.labels ? {} : { manageLabels: false }),
@@ -618,7 +682,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
 
   // Everything this run observed and thinks the operator should know, without
   // acting on any of it. Detection informs; it does not decide.
-  const machinery = observeGateMachinery(platform, cwd);
+  const machinery = observeGateMachinery(platform, cwd, pipeline);
   const notes: string[] = [...rungNotes];
 
   // The organisation publishes no gate, and this run has written nothing yet.
@@ -844,6 +908,15 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     existing !== null &&
     CAPABILITY_KEYS.some((key) => existing.capabilities[key] !== capabilities[key]);
 
+  // And once more for the pipeline. Each pipeline writes a gate file of its
+  // own, so switching usually shows up in `changedFiles` — but not where the
+  // target file is already on disk with the right content, which is exactly
+  // the state a repository is in after a hand edit to .redline.json or a run
+  // that wrote the files and stopped. Swallowing it there would leave the
+  // record naming one pipeline while the repository is gated by the other,
+  // and `verify` reads the record.
+  const pipelineChanged = existing !== null && existing.pipeline !== pipeline;
+
   // "Zero host calls on a settled repository" means zero host *mutations*.
   // Reading is how the run finds out whether the repository is settled at all:
   // without it, an operator who loosened the ruleset by hand got "already
@@ -868,9 +941,16 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     changedFiles.length === 0 &&
     !menuChanged &&
     !vendorsChanged &&
-    !capabilitiesChanged;
+    !capabilitiesChanged &&
+    !pipelineChanged;
   let settledOnHost = true;
-  if (existing !== null && settledOnFiles && !dryRun && !repair) {
+  // `offline`, not `!dryRun`: --no-commit is documented as contacting no host and
+  // is held to it everywhere else (see the ref read above, which says so in as
+  // many words). This site was the exception, so a --no-commit re-run on a
+  // settled repository issued GET /rulesets — and on a repository whose token
+  // cannot list rulesets it exited 4 after writing the files, from a command
+  // whose whole promise is that it works offline.
+  if (existing !== null && settledOnFiles && !offline && !repair) {
     // Not read at all when the repository manages its own merge policy: what
     // is on the host then is a human's, and comparing Redline's menu against
     // it would report the repository's own deliberate configuration as drift.
@@ -969,13 +1049,29 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // applied must not carry a pendingAdmin list computed from outcomes that
   // never happened, and must not read back as fully onboarded on the next run.
   if (opts.noCommit === true) {
-    if (capabilities.gate && gateSource === 'org') {
+    // Only the Actions caller references a workflow in another repository. An
+    // Azure pipeline definition is standalone and a pre-push hook contacts
+    // nothing at all, so on those the note describes a file the run did not
+    // write and sends the operator to check a reference that does not exist.
+    if (capabilities.gate && gateSource === 'org' && pipeline === 'github-actions') {
       notes.push(
         `the caller workflow references ${ref.org}/.github and nothing checked that it publishes ` +
           'the gate, because --no-commit contacts no host. Run redline verify after you commit, ' +
           'or re-run without --no-commit, before relying on the check'
       );
     }
+    // No host setting was applied, so this path records nothing about the ones
+    // it never attempted. `installGate` is the exception: it genuinely ran, it
+    // wrote files, and what it reports `denied` is not a refused host write but
+    // standing work a later run cannot rediscover — a GitHub-hosted repository
+    // built by Azure Pipelines gets a pipeline definition nobody has registered
+    // yet. Dropping that made `.redline.json` say `pendingAdmin: []` and
+    // `verify` say "nothing awaiting an administrator" about a gate that runs
+    // on nothing. Offline forces preflight ok, so the Actions path still
+    // reports no gate outcome here and adds nothing.
+    const noCommitPending = [
+      ...new Set([...(existing?.pendingAdmin ?? []), ...gate.outcomes.filter(isPending).map((o) => o.capability)]),
+    ];
     const written = [
       ...rendered.written,
       ...removals,
@@ -989,14 +1085,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       standardsVersion: manifest.version,
       cliVersion: CLI_VERSION,
       host: platform.host,
+      pipeline,
       profile,
       vendors,
       menu,
       capabilities,
       integrations,
-      // Nothing was applied, so nothing is owed to an administrator yet. The
-      // run that does apply them computes this from real outcomes.
-      pendingAdmin: existing?.pendingAdmin ?? [],
+      pendingAdmin: noCommitPending,
       onboardedAt: existing?.onboardedAt ?? now().toISOString(),
       lastRunAt: now().toISOString(),
       localRules: existsSync(join(cwd, LOCAL_RULES_FILE)),
@@ -1011,8 +1106,8 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       profile,
       files: written,
       removals,
-      outcomes: [],
-      pendingAdmin: existing?.pendingAdmin ?? [],
+      outcomes: gate.outcomes.filter(isPending),
+      pendingAdmin: noCommitPending,
       pullRequest: null,
       pullRequestError: null,
       migratedFrom,
@@ -1076,6 +1171,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     standardsVersion: manifest.version,
     cliVersion: CLI_VERSION,
     host: platform.host,
+    pipeline,
     profile,
     vendors,
     menu,

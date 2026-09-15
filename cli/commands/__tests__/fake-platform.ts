@@ -2,11 +2,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { RedlineError } from '../../core/errors.ts';
 import { isPending } from '../../platforms/types.ts';
+import { AZURE_PIPELINE_PATH } from '../../platforms/github/install.ts';
+import { LOCAL_HOOK_PATH } from '../../platforms/local-agent.ts';
 import type {
   CapabilityOutcome,
   Change,
   GateMachinery,
   GateOptions,
+  GatePipeline,
   Host,
   InstallResult,
   MergePolicy,
@@ -246,15 +249,37 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
     // in `reads`, for the same reason `localRef` is not. `reads` is what pins
     // "a dry run works offline and with an unscoped token"; putting a
     // filesystem read in it would make that assertion mean something else.
-    readGateMachinery(): GateMachinery {
+    readGateMachinery(cwd: string, pipeline?: GatePipeline): GateMachinery {
       const host = HOST_FILES[ref.host];
+      // CONTRACT with github/verify.ts gateMachineryPath: a GitHub-hosted
+      // repository built by Azure Pipelines has a pipeline definition and no
+      // Actions workflow, and its check is named in Azure DevOps. A double that
+      // answered the Actions path whatever it was asked let every caller that
+      // forgets to pass the pipeline pass its tests.
+      const azure = ref.host === 'github' && pipeline === 'azure-pipelines';
+      // The local agent gate is a pre-push hook and is identical on both hosts,
+      // because it touches neither. Same reasoning as the Azure case above: a
+      // double that answered a CI path here would let a caller that forgets the
+      // pipeline verify a repository whose gate is a hook against a workflow
+      // that was never written.
+      const local = pipeline === 'local-agent';
+      const path = local ? LOCAL_HOOK_PATH : azure ? AZURE_PIPELINE_PATH : host.gate;
+      // Both real adapters answer this from the checkout — it reads the file
+      // `installGate` wrote. A double that always said `present` hid every
+      // branch that asks whether the gate is there yet, which is the branch
+      // `init` uses to offer the opt-out on a repository already wired.
       return (
         opts.gateMachinery ?? {
-          path: host.gate,
-          present: true,
-          publishes: host.publishes,
-          expected: host.publishes,
+          path,
+          present: existsSync(join(cwd, path)),
+          publishes: azure || local ? null : host.publishes,
+          expected: local
+            ? 'the pre-push hook on this machine'
+            : azure
+              ? 'its Azure Pipelines check'
+              : host.publishes,
           vendored: null,
+          ...(azure || local ? { externallyNamed: true } : {}),
         }
       );
     },

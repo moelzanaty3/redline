@@ -1,7 +1,7 @@
 import { RedlineError } from '../core/errors.ts';
 import type { Host, RepoRef } from '../platforms/types.ts';
 import { createGitHubClient, type GitHubClient } from '../platforms/github/client.ts';
-import { createGitHubVerify, machineryFromBody } from '../platforms/github/verify.ts';
+import { createGitHubVerify, gateMachineryFor } from '../platforms/github/verify.ts';
 import { readRemoteConfig, readRemoteFile } from '../platforms/github/remote.ts';
 import type { RemoteVerifyHost } from './remote.ts';
 
@@ -27,7 +27,7 @@ export function createRemoteVerifyHost(clients: { github?: GitHubClient } = {}):
     resolveRef: (repo) => resolveRemoteRef(github, repo),
     readRemoteConfig: (ref) => (only(ref), readRemoteConfig(github, ref)),
     readRemoteFile: (ref, path) => (only(ref), readRemoteFile(github, ref, path)),
-    machineryFromBody,
+    machineryFromBody: gateMachineryFor,
     readPolicy: (ref) => (only(ref), githubVerify.readPolicy(ref)),
     readSecurityState: (ref) => (only(ref), githubVerify.readSecurityState(ref)),
     latestPullRequestNumber: (ref) => (only(ref), githubVerify.latestPullRequestNumber(ref)),
