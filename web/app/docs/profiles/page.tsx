@@ -5,6 +5,7 @@ export const metadata: Metadata = { title: "Profiles & stacks" };
 
 const PROFILES: ReadonlyArray<readonly [string, string]> = [
   ["web-react", "javascript · react"],
+  ["web-next", "javascript · react · nextjs (App Router)"],
   ["web-angular", "javascript · angular"],
   ["web-vue", "javascript · vue"],
   ["web-svelte", "javascript · svelte / sveltekit"],
@@ -15,6 +16,7 @@ const PROFILES: ReadonlyArray<readonly [string, string]> = [
   ["service-java", "microservices · java (Spring Boot)"],
   ["service-go", "microservices · go"],
   ["service-node", "javascript · microservices · nodejs (NestJS)"],
+  ["service-express", "javascript · microservices · express"],
   ["service-python", "microservices · python"],
   ["service-dotnet", "microservices · csharp"],
   ["fullstack-node", "javascript · react · microservices · nodejs"],
@@ -27,7 +29,7 @@ export default function Page() {
     <DocsPage
       crumb="Core Concepts"
       title="Profiles & stacks"
-      intro="Sixteen stack rule sets, composed into profiles. A repo installs exactly one profile — that is the entire disambiguation mechanism."
+      intro="Eighteen stack rule sets, composed into profiles. A repo installs exactly one profile — that is the entire disambiguation mechanism."
       href="/docs/profiles"
     >
       <h2>Why profiles, not glob negation</h2>
@@ -73,6 +75,18 @@ export default function Page() {
         <code>.redline.json</code> is still clearer for whoever reads it next.
       </p>
       <p>
+        <code>web-next</code> and <code>service-express</code> are both cases
+        where a broader profile would otherwise claim the repo. Every Next.js
+        repo also depends on React, and detection tries <code>web-next</code>
+        first so a Next codebase is not reviewed with nothing covering Server
+        Actions, the client boundary or <code>NEXT_PUBLIC_</code>. Express runs
+        the other way: it is a dev dependency in a great many front-end repos,
+        so it is tried <em>last</em>, below every web framework — a React app
+        with an express dev server is a React app. A NestJS service that lists
+        express directly stays <code>service-node</code>, because the Express
+        rules say in their own scope section that they do not apply to Nest.
+      </p>
+      <p>
         <code>web-vanilla</code> is never proposed by detection, only chosen.
         Plain browser JavaScript and a build script are indistinguishable from
         the outside, and guessing wrong installs DOM rules on a repo with no DOM.
@@ -87,7 +101,7 @@ export default function Page() {
         TypeScript 86 · Python 47 · JavaScript 32 · HCL 24 · C# 22 · Kotlin 14
         · Swift 9 · Go 6 — all covered, including plain JavaScript. On the web
         side the framework is what decides the rules, not the language, which is
-        why there are five web profiles and one <code>javascript</code> stack
+        why there are six web profiles and one <code>javascript</code> stack
         underneath all of them.
         Shell, Dockerfile and Gherkin are intentionally uncovered: linters
         serve better than LLM review there.

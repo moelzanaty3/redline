@@ -8,7 +8,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, mergeMap, of } from 'rxjs';
 
 // SEED 1 [BLOCKER] (core/hardcoded-secrets) api key committed in source
-const PARTNER_API_KEY = 'pk_live_51H8xQ2acme_prod_partner_key';
+const PARTNER_API_KEY = 'ptnr-live-51H8xQ2Kd9Wm4Tz6Hb';
 
 @Component({
   selector: 'app-seeded-violations',

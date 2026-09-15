@@ -2,7 +2,7 @@
 applyTo: "**/*.js,**/*.jsx,**/*.mjs,**/*.cjs,**/*.vue,**/*.svelte"
 ---
 
-<!-- Redline v0.0.4 · profile: tooling · stacks: javascript -->
+<!-- Redline v0.1.0 · profile: tooling · stacks: javascript -->
 
 # JavaScript Review Rules
 

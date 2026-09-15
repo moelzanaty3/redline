@@ -7,6 +7,40 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### Standards 0.1.0 — Next.js and Express stacks
+
+Two frameworks the standards had no rules for, and one boundary each that nothing else in the
+catalogue covers. Go and NestJS were already carried — `standards/stacks/go.md` and the `nodejs`
+stack, titled "Node.js (NestJS)" — and are untouched.
+
+- **`nextjs` (Next.js, App Router), extending `react`.** The framework's defining hazard is that the
+  server/client boundary is invisible in the source, so most of the rule set is that boundary seen
+  from different angles: a Server Action is a public POST endpoint and re-checks authorisation in its
+  own body whatever called it; `NEXT_PUBLIC_` inlines a literal into the bundle at build time and
+  cannot be rotated afterwards; a server-only module imported beneath `'use client'` ships its source
+  to the browser; per-user data rendered into a cached segment serves the first visitor's data to the
+  second; `middleware.ts` runs on a matcher and is a redirect for humans, never the enforcement point.
+  Written for the App Router, with a Pages Router note only where the two disagree about whether
+  something is a bug. New profile `web-next` = `javascript · react · nextjs`.
+- **`express` (Express 5).** Where Express 4 differs in a way that changes the verdict the rule says
+  so — an `async` handler's rejection is the main one: Express 4 does not forward it, so the response
+  is never written and the connection leaks. Also the four-argument error middleware whose absence
+  hands out stack traces on every box where `NODE_ENV` is not `production`, `cors({ origin: '*' })`
+  with `credentials: true`, traversal into `sendFile`, and an unbounded body limit. New profile
+  `service-express` = `javascript · microservices · express`. Explicitly not for NestJS, which runs on
+  Express but validates and handles errors its own way.
+- **Detection order is the whole mechanism, in both directions.** `web-next` is tried *before*
+  `web-react`, because every Next.js repo also depends on React and the general rule would win on
+  ordering alone. `service-express` is tried *last*, below every web framework, because `dep` reads
+  devDependencies and `express` sits there in a great many front-end repos as a dev server or mock
+  API — a React app with an express dev server is a React app. A Nest service listing express
+  directly stays `service-node`.
+- **Seed corpora.** `seeded/nextjs/` (18 seeds across a page/action file and a route handler) and
+  `seeded/express/` (16 seeds). `scripts/validate.mjs` rejected two of these on first run for citing
+  a severity above the rule's own — the corpus and the standard cannot disagree.
+
+Seed score: not yet measured. Run `scripts/score-seeds.mjs` against both corpora before release.
+
 ### Docs — one owner per fact, and five claims that were no longer true
 
 An audit of all 31 documentation pages found the same fact taught in full on up to five of them, and

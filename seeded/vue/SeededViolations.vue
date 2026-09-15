@@ -8,7 +8,7 @@ import { reactive, ref, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 
 // SEED 1 [BLOCKER] (core/hardcoded-secrets) service token committed in source
-const SERVICE_TOKEN = 'sk_live_acme_billing_9f31c0ea';
+const SERVICE_TOKEN = 'bill-live-9f31c0eaXq7Rn2Kd';
 
 // SEED 2 [BLOCKER] (vue/public-env-secret) server secret read through a client-inlined env var
 const signingKey = import.meta.env.VITE_PAYMENT_SIGNING_KEY;

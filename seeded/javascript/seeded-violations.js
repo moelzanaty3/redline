@@ -6,7 +6,7 @@
 const { exec } = require('child_process');
 
 // SEED 1 [BLOCKER] (core/hardcoded-secrets) hardcoded credential
-const SLACK_WEBHOOK = 'https://hooks.slack.com/services/T000/B000/XXXXsecretXXXX';
+const SLACK_WEBHOOK = 'https://hooks.acme-chat.internal/services/T0A1B2C3/B4D5E6F7/Zx9Qr2Kd7Wm4Tz6Hb3Vy8Wn1';
 
 // SEED 2 [BLOCKER] (javascript/prototype-pollution) prototype pollution: recursive merge over external input
 function merge(target, source) {
