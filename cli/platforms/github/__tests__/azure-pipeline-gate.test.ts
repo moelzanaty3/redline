@@ -36,6 +36,7 @@ const OPTS: GateOptions = {
 // workflow to resolve and no Azure Repos policy to attach, and a request here
 // would make the whole path need a credential it has no use for.
 const refusingClient: GitHubClient = {
+  webBaseUrl: 'https://github.com',
   async rest(_method: string, path: string) {
     throw new Error(`no host call expected, got ${path}`);
   },

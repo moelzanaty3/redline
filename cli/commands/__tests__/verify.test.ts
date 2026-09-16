@@ -1290,3 +1290,47 @@ test('a missing local hook is not described as failing to publish anything', asy
   assert.doesNotMatch(finding?.detail ?? '', /publish/);
   assert.match(finding?.detail ?? '', /nothing reviews a push/);
 });
+
+// "disabled: secret-scanning, push-protection, dependency-alerts" names three
+// settings and no way to reach them. The operator's next move is a search
+// through a settings tree they may never have opened, on a repository they may
+// not have admin on — so the line carries the address of the page.
+test('a disabled capability carries the address of the page that turns it on', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    security: [
+      { capability: 'secret-scanning', status: 'applied', detail: '' },
+      { capability: 'push-protection', status: 'denied', detail: 'off' },
+    ],
+    settingsUrl: 'https://github.com/acme/widget/settings/security_analysis',
+  });
+  const report = await verify(() => platform, { cwd, root });
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.ok, false);
+  assert.match(floor?.detail ?? '', /turn them on at https:\/\/github\.com\/acme\/widget\/settings/);
+});
+
+// A link beside "security floor enabled" is noise on every passing run.
+test('a passing floor carries no link', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({ settingsUrl: 'https://github.com/acme/widget/settings/security_analysis' });
+  const report = await verify(() => platform, { cwd, root });
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.ok, true);
+  assert.doesNotMatch(floor?.detail ?? '', /turn them on/);
+});
+
+// The fix for an unreadable capability is a credential, not a setting — the
+// page the link points at is one the token could not read either.
+test('an unobserved capability carries no link', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    security: [
+      { capability: 'secret-scanning', status: 'applied', detail: 'on' },
+      { capability: 'push-protection', status: 'unknown', detail: 'not visible to this token' },
+    ],
+    settingsUrl: 'https://github.com/acme/widget/settings/security_analysis',
+  });
+  const report = await verify(() => platform, { cwd, root });
+  assert.doesNotMatch(find(report, 'security-floor')?.detail ?? '', /turn them on/);
+});

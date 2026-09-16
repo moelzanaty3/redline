@@ -46,6 +46,7 @@ export function fakeGitHubClient(
   const cursor: Record<string, number> = {};
   return {
     calls,
+    webBaseUrl: 'https://github.com',
     async rest<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>> {
       calls.push({ method, path, body });
       const key = `${method} ${path}`;

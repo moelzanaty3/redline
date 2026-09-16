@@ -536,6 +536,9 @@ export function createGitHubVerify(client: GitHubClient): PlatformVerify {
         alerts.status === 403 ? 'unknown' : alerts.status === 404 ? 'denied' : 'applied';
 
       return {
+        // One page carries all three on GitHub, so one link answers the whole
+        // finding rather than sending the reader on three separate hunts.
+        settingsUrl: `${client.webBaseUrl}/${ref.org}/${ref.repo}/settings/security_analysis`,
         outcomes: [
           {
             capability: 'secret-scanning',

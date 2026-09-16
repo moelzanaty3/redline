@@ -211,10 +211,12 @@ the bypass, and how to get back out.
 
 | Question | Command | Quiet failure it rules out |
 | --- | --- | --- |
+| Can this machine run it? | `redline doctor` | Node 18 running the tool anyway on npm's `EBADENGINE` *warning*, failing later from inside a dependency with a message that names neither Node nor Redline |
 | What is installed here? | `redline status` | A non-empty `pendingAdmin` nobody read — the files landed, the merge policy never applied. Fix with `--repair` once an admin grants the rights |
 | Does the host agree? | `redline verify` | A required check whose name nothing reports: every PR stuck on "Expected — waiting for status" forever |
 | What does this finding mean? | `redline explain <id>` | An id `explain --list` does not know was invented by the model, and every aggregate keyed on it is fiction |
 | Would this diff pass? | `redline review` | — run it before you push, against only the rules your files touch |
+| No assistant in this terminal? | `redline review --print-prompt \| pbcopy` | Paste into any model you have. Prompt on stdout, everything else on stderr, so the pipe carries the prompt alone |
 | Who is onboarded? | `redline registry` | A register nobody derived, so `sync` reaches a stale list |
 | Is review being acted on? | `redline metrics dashboard` | Review running and being ignored. The hero number is **findings acted on**; the rule tuning queue names the rules responsible |
 | Does it still catch defects? | `redline metrics score-seeds` | "No findings" and "nothing to find" are indistinguishable without it. Recall below 100% means do not widen the rollout |

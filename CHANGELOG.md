@@ -204,6 +204,75 @@ And one found by following the new guide's own instructions:
   and against a token that cannot list rulesets it exited non-zero *after* writing the files. The
   one command whose whole promise is that it works offline was the one that did not.
 
+### CLI — seven places the tool knew something and did not say it
+
+Seven changes with one shape in common: in each, Redline already held the fact the operator
+needed and printed something else, or nothing. None of them is a crash. All of them cost
+somebody an hour.
+
+- **`redline doctor`.** npm's `engines` field only warns. `npx redlinegate init` on a repository
+  pinned to Node 18 printed `EBADENGINE` and then ran the tool anyway, so the first real symptom
+  was a failure from inside a dependency, raised partway through a command that may already have
+  written files, with a message naming neither Node nor Redline. Every command now refuses below
+  Node 22 and names three ways to run one command under a newer runtime — `volta run`, `fnm exec`,
+  `nvm exec` — without touching a pin the repository set deliberately. `doctor` itself is exempt
+  from that guard, because refusing to run the diagnostic on the machine that needs diagnosing is
+  the exact failure the guard exists to prevent. It checks the runtime, git, the remote, the
+  credential and `.redline.json`, contacts no host, and prints the fix under every line that is not
+  `ok`. Three bugs in it were found by running it rather than by testing it: the no-remote branch
+  was unreachable, because `remoteUrl()` returns the empty string rather than throwing, so a
+  repository with no remote was reported as one on an unknown host with the fix for the wrong
+  problem; the unknown-host branch forwarded `parseRemote`'s message, which embeds the URL it was
+  given, and a remote can carry a credential in its userinfo — into output written to be pasted
+  into a ticket; and a `.redline.json` that failed validation took the whole command down with an
+  uncaught throw, which is the one command somebody runs *because* something here is wrong.
+
+- **`redline policy` says how much it could not decide.** Four rules in a catalogue of three
+  hundred and seventy-six can be evaluated without a model. A clean run therefore read as "the
+  standards found nothing" when it meant "the four checkable rules found nothing", and a repository
+  full of real violations passing silently is how this tool gets mistaken for a broken one. Every
+  run now ends with the ratio and points at `redline review` for the rest.
+
+- **`redline review --print-prompt`.** The embedded engine already produced the prompt; the scope
+  line was printed beside it, so the output could not be piped. The log now goes to stderr and the
+  prompt alone to stdout, which makes `redline review --print-prompt | pbcopy` copy the prompt and
+  nothing else. Anyone with a browser tab and a model can run the review half of Redline — no API
+  key, no endpoint, no configuration. Combined with `--engine api` it is a usage error rather than
+  a silently ignored flag: the api engine calls a model itself and has no prompt to hand over.
+
+- **`security-floor` carries the address of the page that fixes it.** `disabled: secret-scanning,
+  push-protection, dependency-alerts` named three settings and no way to reach them, leaving the
+  reader to search a settings tree they may never have opened. The finding now ends with the
+  settings URL for the host it is talking about. Not on a passing run, where a link is noise on
+  every line, and not for a capability that is merely unreadable — the fix there is a credential
+  with the scope to see it, and the page would have been unreadable to that token too.
+
+- **The advice after `--no-commit` is branch-aware.** "Review them, commit them, then run redline
+  init" is correct on a feature branch and a trap on the default one: a protected default rejects
+  the commit at push time, which is after the operator has followed the instruction and now has a
+  commit to unpick. On the default branch it says to branch first, and names the command. The
+  branch is a local read with a safe fallback, so this costs no host call.
+
+- **The way back out is named at the moment it is wanted.** `redline remove` has existed all along,
+  but the run that has just changed somebody's repository is the first time anyone wonders how to
+  undo it — by which point the help output is two commands behind them. A completed apply now
+  points at closing the pull request first, and `redline remove --dry-run` second.
+
+- **The menu says what it is before the first question.** Onboarding asks up to eleven questions
+  and the reader had no idea how many were coming or what would happen at the end. A short
+  orientation now precedes them. Deliberately no `[n of N]` counter: four of the questions are
+  conditional, so a denominator would be a lie, and "8 of 11" on the final question reads as a
+  fault rather than as progress.
+
+- **The pre-push hook says when `npx` is the reason it is slow.** The hook resolves the CLI through
+  `npx` when nothing is installed globally, which adds seconds to every push. It now times its own
+  run and, past five seconds, suggests the global install — once, on stderr, with the pinned
+  version. Writing that suggestion exposed a real defect: the hook template was rendered with
+  `String.prototype.replace`, which substitutes the first occurrence only, so the second
+  `redlinegate@REDLINE_CLI_VERSION` would have shipped unresolved and handed the engineer a command
+  that fails, at the exact moment they were being asked to trust the tool's advice about its own
+  speed.
+
 ### CLI — three found by running the commands rather than the tests
 
 The Azure Pipelines work above was proven by unit tests and by a fixture shaped like the repository

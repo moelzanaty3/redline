@@ -43,6 +43,8 @@ import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
 import { standardsVersion } from '../commands/sync.ts';
+import { doctor } from '../commands/doctor.ts';
+import { nodeSupport, unsupportedNodeHint, unsupportedNodeMessage } from '../core/runtime.ts';
 import { GATE_PIPELINES, isGatePipeline, isGateSource } from '../platforms/types.ts';
 import type { Platform, RepoRef } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
@@ -144,14 +146,23 @@ const USAGE = [
   '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
   '                  that genuinely needs a working tree reports ?? rather than passing',
   '',
-  '  redline review [--staged] [--diff-file <path>] [--base <ref>] [--engine <name>]',
+  '  redline review [--staged] [--diff-file <path>] [--base <ref>] [--engine <name>] [--print-prompt]',
   '      review this change against ONLY the rules that apply to the files it touches',
   '      --engine embedded  emit the bounded prompt for the assistant running this (default)',
   '      --engine api       call a configured endpoint — local or hosted — and parse the result',
+  '      --print-prompt     write the prompt to stdout and nothing else, for any assistant you',
+  '                  already have — a browser tab counts. Everything else goes to stderr, so',
+  '                  `redline review --print-prompt | pbcopy` copies the prompt alone',
   '      local findings are never sent to the telemetry that tunes rules',
   '',
   '  redline policy --diff-file <path>',
   '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER',
+  '',
+  '  redline doctor [--json]',
+  '      can this machine run Redline against this repository? Node version, git, the',
+  '      remote, a credential and whether .redline.json is here — with the fix for each',
+  '      thing that is wrong. Contacts no host, needs no credential, and is the one',
+  '      command that still runs on a Node too old for the rest',
   '',
   '  redline status [--json]',
   '      what is installed here, how hard it bites, what an administrator still owes',
@@ -209,6 +220,9 @@ export interface RunDeps {
   // Injected so the metrics dispatch can be asserted without executing a runner
   // that talks to GitHub.
   loadRunner?: (path: string) => Promise<unknown>;
+  // Injected so the Node guard can be asserted on both sides of the boundary
+  // without the test suite depending on the runtime it happens to run under.
+  nodeVersion?: string;
   // Whether a stepped menu can be shown. Injected so the existing command tests
   // — which run with no TTY but must keep asserting the flag path — cannot be
   // silently answered by a prompt nobody is there to fill in.
@@ -314,7 +328,57 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     return command === undefined ? exitCodeFor('usage') : 0;
   }
 
+  // Before anything else, and after --version/--help so a broken runtime can
+  // still be identified. npm's engines field only warns, so without this the
+  // first symptom of Node 18 is a parse error inside a dependency, raised
+  // partway through a command that may already have written files.
+  //
+  // `doctor` is exempt: it exists to say this out loud, in a list, with the
+  // three ways out. Refusing to run the diagnostic on the machine that needs
+  // diagnosing is the failure mode this whole guard is here to avoid.
+  if (command !== 'doctor') {
+    const support = nodeSupport(deps.nodeVersion ?? process.version);
+    if (!support.ok) {
+      log.error(unsupportedNodeMessage(deps.nodeVersion ?? process.version));
+      log.info(unsupportedNodeHint(command));
+      log.info('');
+      log.info('`redline doctor` runs on any Node and reports the rest of what it finds.');
+      return exitCodeFor('usage');
+    }
+  }
+
   try {
+    if (command === 'doctor') {
+      const { values } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { json: { type: 'boolean', default: false } },
+          allowPositionals: false,
+        })
+      );
+
+      const report = doctor({ cwd, ...(deps.nodeVersion === undefined ? {} : { nodeVersion: deps.nodeVersion }) });
+      if (values.json === true) {
+        log.info(JSON.stringify(report, null, 2));
+      } else {
+        // The same three-column shape `verify` prints, deliberately: these two
+        // are read back to back when something is wrong, and a second layout
+        // for the same kind of answer is one more thing to parse by eye.
+        const marker = { ok: 'ok  ', warn: 'warn', fail: 'FAIL' } as const;
+        for (const check of report.checks) {
+          log.info(`${marker[check.status]}  ${check.name.padEnd(22)} ${check.detail}`);
+          if (check.fix !== undefined) {
+            for (const line of check.fix.split('\n')) log.info(`        ${line}`);
+          }
+        }
+      }
+      // A warning is not a failure. `credential` warns on a machine that has
+      // deliberately not logged in, and the preview commands are the ones that
+      // machine is meant to be running — exiting non-zero there would fail a
+      // CI step that is working exactly as intended.
+      return report.ok ? 0 : exitCodeFor('failed');
+    }
+
     if (command === 'init') {
       const { values } = parseCliArgs(() =>
         parseArgs({
@@ -576,9 +640,22 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             `an administrator must still enable: ${report.pendingAdmin.join(', ')}`
           );
         }
+        // Branch-aware, because the generic version of this advice is a trap.
+        // "Commit them, then run redline init" is correct on a feature branch
+        // and wrong on the default one: a protected default branch rejects the
+        // commit at push time, which is after the operator has followed the
+        // instruction and has a commit to unpick. The branch is a local read
+        // with a safe fallback, so this costs no host call.
+        const here = createGit(cwd);
+        const branch = here.currentBranch();
+        const onDefault = branch !== 'HEAD' && branch === here.defaultBranch();
         log.info(
-          '  not committed — the files are in your working tree. Review them, commit them, then ' +
-            'run redline init to apply the repository settings and open the pull request'
+          onDefault
+            ? `  not committed — the files are in your working tree, and you are on ${branch}, the ` +
+              'default branch. Branch first (git checkout -b redline/standards), commit there, then ' +
+              'run redline init to apply the repository settings and open the pull request'
+            : '  not committed — the files are in your working tree. Review them, commit them, then ' +
+              'run redline init to apply the repository settings and open the pull request'
         );
         return 0;
       }
@@ -616,6 +693,16 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           `  the changes are committed on ${ONBOARD_BRANCH} and pushed, not in your working tree —`
         );
         log.info('  `git status` here stays clean. Review and merge the pull request above.');
+        // The exit, named at the moment somebody might want it. `redline
+        // remove` has existed all along, and the run that has just changed
+        // their repository is the first time anyone wonders how to undo it —
+        // by which point the help output is two commands behind them. Closing
+        // the pull request is the cheaper answer while it is still open, so it
+        // goes first.
+        log.info(
+          '  Changed your mind? Close the pull request, or run `redline remove --dry-run` to see ' +
+            'what taking Redline back out would do.'
+        );
       } else if (report.alreadyOnboarded) {
         log.info(
           `already onboarded — nothing to change (recorded in .redline.json; ` +
@@ -762,6 +849,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             base: { type: 'string' },
             profile: { type: 'string' },
             engine: { type: 'string', default: 'embedded' },
+            'print-prompt': { type: 'boolean', default: false },
             provider: { type: 'string', default: 'openai' },
             model: { type: 'string' },
             'base-url': { type: 'string' },
@@ -769,6 +857,21 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           allowPositionals: false,
         })
       );
+
+      // --print-prompt is the embedded engine with the log turned off. The
+      // prompt was always reachable, but it came out wrapped in the scope line
+      // and any uncovered-file warning, so copying it meant copying those too
+      // and hoping the model ignored them. Anyone whose model is a browser tab
+      // rather than an API key needs `redline review --print-prompt | pbcopy`
+      // to put exactly the prompt on the clipboard and nothing else.
+      const printPrompt = values['print-prompt'] === true;
+      if (printPrompt && values.engine !== 'embedded') {
+        throw new RedlineError(
+          'usage',
+          '--print-prompt has nothing to print with --engine api',
+          'the api engine calls a model itself; --print-prompt hands you the prompt to paste'
+        );
+      }
 
       let engine = embedded;
       if (values.engine === 'api') {
@@ -810,6 +913,22 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             ? { kind: 'staged' }
             : { kind: 'worktree' },
       });
+
+      if (printPrompt) {
+        // Written straight to the two file descriptors rather than through the
+        // log, and that is the whole point of the flag. `log.warn` routes to
+        // sink.out, which is stdout — so the scope line landed in the pipe
+        // beside the prompt and `| pbcopy` copied both. The sink abstraction
+        // has no way to say "stderr" for a non-error, and these two lines are
+        // a matched pair: the prompt on fd 1, everything a human needs on fd 2.
+        process.stderr.write(
+          `profile ${report.scope.profile} — rules in scope: core` +
+            (report.scope.stacks.length ? `, ${report.scope.stacks.join(', ')}` : '') +
+            '. Paste the prompt into any assistant; it asks for JSON back.\n'
+        );
+        process.stdout.write(`${report.prompt ?? ''}\n`);
+        return 0;
+      }
 
       log.info(
         `profile ${report.scope.profile} — rules in scope: core` +
@@ -889,6 +1008,19 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           ? `no deterministic findings — ${report.evaluated.length} rule(s) evaluated with no model call`
           : `${report.findings.length} finding(s) from ${report.evaluated.length} deterministic rule(s)`
       );
+      // The other half of the same sentence, and the more important half on a
+      // clean run. Most of the catalogue cannot be decided without a model —
+      // hardcoded secrets, SQL built by concatenation, a missing auth check —
+      // so "no deterministic findings" against a diff that plainly breaks one
+      // of those reads as "this tool does not work". It read that way to the
+      // author of docs/verifying.md, who wrote the diff to prove the opposite.
+      const modelled = report.catalogue - report.evaluated.length;
+      if (modelled > 0) {
+        log.info(
+          `${modelled} of the ${report.catalogue} rule(s) in the catalogue cannot be decided without a ` +
+            'model and were not checked here — run `redline review` for those'
+        );
+      }
       for (const id of report.unimplemented) {
         log.warn(`${id} is classified deterministic but has no check — it is enforced by nobody`);
       }

@@ -40,6 +40,7 @@ const OPTS: GateOptions = {
 // status to post, and a request here would make the whole option need a
 // credential it has no use for.
 const refusingClient: GitHubClient = {
+  webBaseUrl: 'https://github.com',
   async rest(_method: string, path: string) {
     throw new Error(`no host call expected, got ${path}`);
   },
@@ -157,6 +158,23 @@ test('the hook pins the CLI it fetches rather than tracking latest', async () =>
 
   assert.doesNotMatch(body, /REDLINE_CLI_VERSION/);
   assert.match(body, /redlinegate@/);
+});
+
+// The placeholder appears twice: the npx invocation, and the `npm install -g`
+// line the hook prints when npx is costing a push real time. String-form
+// `replace` substitutes the first only, which pinned the thing that runs and
+// handed the engineer a literal `redlinegate@REDLINE_CLI_VERSION` to install —
+// a command that fails, printed at the exact moment they were being asked to
+// trust the tool's advice about its own speed.
+test('every pin in the hook is substituted, not just the first', async () => {
+  const cwd = tmp();
+  await install.installGate(REF, cwd, OPTS);
+  const body = readFileSync(join(cwd, LOCAL_HOOK_PATH), 'utf8');
+
+  const pins = body.match(/redlinegate@[^\s"']+/g) ?? [];
+  assert.ok(pins.length >= 2, `expected the npx pin and the install suggestion, got ${pins.length}`);
+  assert.equal(new Set(pins).size, 1, `every pin must name one version, got ${[...new Set(pins)].join(', ')}`);
+  assert.match(body, /npm install -g redlinegate@/);
 });
 
 // Content already correct but the execute bit lost — a file restored from an

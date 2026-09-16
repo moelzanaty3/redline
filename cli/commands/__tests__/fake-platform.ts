@@ -36,6 +36,9 @@ export interface FakePlatformOptions {
   // thing as what `enableSecurityFloor` returned when it was applied: an
   // administrator may have granted a capability since. Defaults to `security`.
   securityState?: CapabilityOutcome[];
+  // Where the real platforms point an operator at the settings page. Optional
+  // because a host that cannot name one must still verify.
+  settingsUrl?: string;
   // What the host says about the owners in CODEOWNERS. `null` (the default) is
   // "no CODEOWNERS file, or a host without the concept"; `[]` is a file whose
   // owners all resolve.
@@ -301,6 +304,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       return {
         outcomes: opts.securityState ??
           opts.security ?? [ok('secret-scanning'), ok('push-protection')],
+        ...(opts.settingsUrl === undefined ? {} : { settingsUrl: opts.settingsUrl }),
       };
     },
     async latestPullRequestNumber(): Promise<number | null> {

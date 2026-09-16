@@ -649,3 +649,172 @@ test('--gate and --repo together are refused rather than silently ignoring one',
   assert.equal(code, 2);
   assert.match(lines.join('\n'), /cannot target another repository/);
 });
+
+// npm's `engines` field only warns. Onboarding a repository pinned to Node 18
+// printed EBADENGINE and then ran the tool anyway, so the first real symptom
+// was a failure from inside a dependency, raised partway through a command
+// that may already have written files.
+test('a Node below the floor is refused before the command runs', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(['status'], { ...opts, nodeVersion: 'v18.13.0' });
+  assert.equal(code, 2);
+  assert.ok(lines.some((l) => l.includes('Node 22 or later')));
+  // The three ways to run one command under a newer Node without touching a
+  // pin the repository set deliberately.
+  assert.ok(lines.some((l) => l.includes('volta run')));
+  assert.ok(lines.some((l) => l.includes('fnm exec')));
+  assert.ok(lines.some((l) => l.includes('nvm exec')));
+});
+
+test('the Node refusal names the command that was actually typed', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['verify'], { ...opts, nodeVersion: 'v18.13.0' });
+  assert.ok(lines.some((l) => l.includes('npx redlinegate verify')));
+  assert.ok(!lines.some((l) => l.includes('npx redlinegate init')));
+});
+
+// Refusing to run the diagnostic on the machine that needs diagnosing is the
+// exact failure the guard exists to prevent.
+test('doctor is exempt from the Node guard', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(['doctor'], { ...opts, nodeVersion: 'v18.13.0' });
+  // It fails, because Node 18 is a real fault — but it fails having reported
+  // everything else it found rather than refusing at the door.
+  assert.equal(code, 1);
+  assert.ok(lines.some((l) => l.includes('node')));
+  assert.ok(lines.some((l) => l.includes('onboarded')));
+});
+
+test('doctor --json is machine readable', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['doctor', '--json'], { ...opts, nodeVersion: 'v22.11.0' });
+  const parsed = JSON.parse(lines.join('\n')) as { checks: { name: string }[]; ok: boolean };
+  assert.ok(parsed.checks.some((c) => c.name === 'node'));
+  assert.equal(typeof parsed.ok, 'boolean');
+});
+
+test('doctor appears in the usage', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['--help'], opts);
+  assert.ok(lines.some((l) => l.includes('redline doctor')));
+});
+
+function withDiffFile(body: string): string {
+  const dir = tmp('redline-diff-');
+  const path = join(dir, 'change.diff');
+  writeFileSync(path, body);
+  return path;
+}
+
+const CLEAN_DIFF = '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,2 @@\n x\n+const ok = 1;\n';
+
+// A clean `redline policy` used to read as "the standards found nothing". Only
+// four rules in the catalogue can be decided without a model, so what it
+// actually meant was "the four checkable rules found nothing" — and a
+// repository full of violations passing silently is how that gap gets
+// mistaken for a broken tool.
+test('policy says how much of the catalogue it could not decide', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['policy', '--diff-file', withDiffFile(CLEAN_DIFF)], opts);
+  const footer = lines.find((l) => l.includes('cannot be decided without a model'));
+  assert.ok(footer, `expected a catalogue footer, got:\n${lines.join('\n')}`);
+  assert.ok(footer.includes('redline review'));
+});
+
+// `redline review --print-prompt | pbcopy` has to copy the prompt and nothing
+// else.
+//
+// Both descriptors are captured, not just stdout, and not through the injected
+// sink. The first version of this test watched process.stdout alone with a sink
+// collecting everything else, so it passed while the real command printed the
+// scope line into the pipe: `log.warn` routes to sink.out, which is stdout.
+// Only a test that owns both fds can tell the two apart.
+test('--print-prompt puts the prompt on stdout and the rest on stderr', async () => {
+  const cwd = repo();
+  const out: string[] = [];
+  const err: string[] = [];
+  const realOut = process.stdout.write.bind(process.stdout);
+  const realErr = process.stderr.write.bind(process.stderr);
+  (process.stdout as unknown as { write: (c: string) => boolean }).write = (c: string) => {
+    out.push(String(c));
+    return true;
+  };
+  (process.stderr as unknown as { write: (c: string) => boolean }).write = (c: string) => {
+    err.push(String(c));
+    return true;
+  };
+  try {
+    // No sink: the default one is the whole subject here.
+    await run(['review', '--print-prompt', '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF)], {
+      cwd,
+      root,
+      resolvePlatform: async () => fakePlatform(),
+    });
+  } finally {
+    (process.stdout as unknown as { write: typeof realOut }).write = realOut;
+    (process.stderr as unknown as { write: typeof realErr }).write = realErr;
+  }
+
+  const piped = out.join('');
+  assert.ok(piped.includes('You are reviewing a change'), 'the prompt is not on stdout');
+  // The scope line is useful and still printed — just not into the pipe.
+  // Matched on the half of the line that only the log emits — the prompt body
+  // legitimately contains the words "rules in scope" itself.
+  assert.ok(!piped.includes('Paste the prompt'), `stdout carried the scope line:\n${piped.slice(0, 300)}`);
+  assert.ok(err.join('').includes('Paste the prompt'), 'the scope line went nowhere');
+});
+
+// --engine api calls an endpoint and parses a result; there is no prompt to
+// print. Accepting both would silently ignore one of them.
+test('--print-prompt with --engine api is a usage error', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(
+    ['review', '--print-prompt', '--engine', 'api', '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF)],
+    opts
+  );
+  assert.equal(code, 2);
+  assert.ok(lines.some((l) => l.includes('print-prompt')));
+});
+
+function gitRepo(branch: string): string {
+  const dir = repo();
+  spawnSync('git', ['init', '-q', '-b', 'main', '.'], { cwd: dir });
+  spawnSync('git', ['config', 'user.email', 't@example.com'], { cwd: dir });
+  spawnSync('git', ['config', 'user.name', 'T'], { cwd: dir });
+  spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:acme/widget.git'], { cwd: dir });
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['commit', '-qm', 'init'], { cwd: dir });
+  if (branch !== 'main') spawnSync('git', ['checkout', '-qb', branch], { cwd: dir });
+  return dir;
+}
+
+// "Commit them, then run redline init" is correct on a feature branch and a
+// trap on the default one: a protected default rejects the commit at push
+// time, which is after the operator has followed the instruction and now has a
+// commit to unpick.
+test('--no-commit on the default branch says to branch first', async () => {
+  const { opts, lines } = deps(gitRepo('main'));
+  await run(['init', '--no-commit', '--profile', 'web-react'], opts);
+  const advice = lines.find((l) => l.includes('not committed'));
+  assert.ok(advice, `expected the no-commit advice, got:\n${lines.join('\n')}`);
+  assert.ok(advice.includes('git checkout -b'), advice);
+});
+
+test('--no-commit on a feature branch does not', async () => {
+  const { opts, lines } = deps(gitRepo('feat/x'));
+  await run(['init', '--no-commit', '--profile', 'web-react'], opts);
+  const advice = lines.find((l) => l.includes('not committed'));
+  assert.ok(advice);
+  assert.ok(!advice.includes('git checkout -b'), advice);
+});
+
+// `redline remove` has existed all along, but the run that has just changed
+// somebody's repository is the first moment anyone wonders how to undo it — by
+// which point the help output is two commands behind them.
+test('a completed apply names the way back out', async () => {
+  const { opts, lines } = deps(gitRepo('feat/y'));
+  await run(['init', '--profile', 'web-react'], opts);
+  const hint = lines.find((l) => l.includes('Changed your mind'));
+  assert.ok(hint, `expected an undo hint, got:\n${lines.join('\n')}`);
+  assert.ok(hint.includes('redline remove --dry-run'), hint);
+});

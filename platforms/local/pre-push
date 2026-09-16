@@ -29,10 +29,19 @@
 set -eu
 
 # `redline` if it is installed; the published package otherwise.
+#
+# VIA_NPX matters beyond which string gets run. npx resolves the package on
+# every invocation, and this runs on every push — on a cold cache or a slow
+# link that is seconds of waiting before a single rule is evaluated. A gate
+# that makes pushing feel slow is a gate whose bypass becomes a habit, and a
+# bypass nobody thinks about is indistinguishable from no gate at all. So the
+# run is timed, and a slow one says how to stop paying it.
+VIA_NPX="false"
 if command -v redline >/dev/null 2>&1; then
   REDLINE="redline"
 elif command -v npx >/dev/null 2>&1; then
   REDLINE="npx --yes --package=redlinegate@REDLINE_CLI_VERSION redline"
+  VIA_NPX="true"
 else
   echo "redline: no redline and no npx on PATH — skipping the local gate" >&2
   exit 0
@@ -107,9 +116,24 @@ esac
 # is the answer rather than an accident, and the message below has to run either
 # way.
 set +e
+# `date +%s` only — no sub-second precision in POSIX sh, and none is needed:
+# the threshold below is whole seconds by design.
+started=$(date +%s)
 $REDLINE policy --diff-file "$patch" --fail-on "$fail_on"
 status=$?
 set -e
+elapsed=$(( $(date +%s) - started ))
+
+# Said once the cost has actually been paid, not predicted from the resolver
+# alone: a warm npx cache is fast, and telling someone their fast thing is slow
+# is how a tool loses the right to be believed. Five seconds is the point where
+# a push stops feeling like a command and starts feeling like a wait.
+if [ "$VIA_NPX" = "true" ] && [ "$elapsed" -ge 5 ]; then
+  echo "" >&2
+  echo "redline: that took ${elapsed}s, most of it npx resolving the package on this push." >&2
+  echo "         Install it once and the hook uses it directly:" >&2
+  echo "         npm install -g redlinegate@REDLINE_CLI_VERSION" >&2
+fi
 
 if [ "$status" -ne 0 ]; then
   if [ "$enforcing" != "true" ]; then

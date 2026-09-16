@@ -250,6 +250,15 @@ export interface PolicyResult {
 
 export interface SecurityResult {
   outcomes: CapabilityOutcome[];
+  // Where an administrator turns a `denied` capability on. Built by the
+  // platform because only the platform knows its own host. Absent where there
+  // is no single page to send someone to, which is not the same as "we could
+  // not be bothered" — the caller prints it only when it exists.
+  //
+  // `redline verify` used to report `disabled: secret-scanning,
+  // push-protection, dependency-alerts` and stop there. True, specific, and
+  // it still left the reader to find three settings pages by name.
+  readonly settingsUrl?: string;
 }
 
 export interface PlatformInstall {

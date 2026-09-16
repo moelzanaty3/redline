@@ -475,16 +475,24 @@ export async function verify(
     .map((o) => o.capability);
   const unlicensedDetail = `not available on this repository: ${unlicensed.join(', ')}`;
   const unobservedDetail = `not confirmed: ${unobserved.join(', ')} — not visible to this token`;
+  // Only when something is actually off. A link beside "security floor enabled"
+  // is noise, and a link beside "not visible to this token" sends the reader to
+  // a page their token could not read anyway — the fix there is a credential,
+  // not a setting.
+  const route =
+    off.length > 0 && security.settingsUrl !== undefined
+      ? ` — turn them on at ${security.settingsUrl}`
+      : '';
   add(
     'security-floor',
     off.length === 0 && (unobserved.length === 0 || opts.gate === true),
-    [
+    ([
       off.length > 0 ? `disabled: ${off.join(', ')}` : null,
       unobserved.length > 0 ? unobservedDetail : null,
       unlicensed.length > 0 ? unlicensedDetail : null,
     ]
       .filter((s): s is string => s !== null)
-      .join('. ') || 'security floor enabled'
+      .join('. ') || 'security floor enabled') + route
   );
 
   // Read-only: render() runs in check mode, which reports staleness without

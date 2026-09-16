@@ -16,6 +16,7 @@ const gitWith = (remote: string): ((cwd: string) => ReturnType<typeof createGit>
 };
 
 const fakeGitHubClient: GitHubClient = {
+  webBaseUrl: 'https://github.com',
   rest: async <T>() => ({ status: 200, body: {} as T }),
   graphql: async <T>() => ({}) as T,
 };

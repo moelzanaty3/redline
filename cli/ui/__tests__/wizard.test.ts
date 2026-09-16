@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findExistingPipeline } from '../facts.ts';
 import { isRedlineError } from '../../core/errors.ts';
-import { runWizard, type WizardFacts } from '../wizard.ts';
+import { ORIENTATION, runWizard, type WizardFacts } from '../wizard.ts';
 import type { Choice, Prompter } from '../prompt.ts';
 
 const roots: string[] = [];
@@ -394,9 +394,13 @@ test('a tool the repository already runs stands the gate job it covers down', as
     },
   });
   assert.ok(answers.capabilities.includes('gate'));
-  assert.equal(notes.length, 1);
-  assert.match(notes[0]!, /SonarQube already covers static analysis/);
-  assert.match(notes[0]!, /stood down rather than run a second time/);
+  // Still exactly one note ABOUT A TOOL. The orientation note is printed on
+  // every run and is excluded by identity rather than by position, so this
+  // keeps failing if a second tool note ever appears.
+  const toolNotes = notes.filter((n) => n !== ORIENTATION);
+  assert.equal(toolNotes.length, 1);
+  assert.match(toolNotes[0]!, /SonarQube already covers static analysis/);
+  assert.match(toolNotes[0]!, /stood down rather than run a second time/);
 });
 
 test('what .redline.json recorded outranks fresh detection on a re-run', async () => {

@@ -40,7 +40,13 @@ export function installLocalAgentGate(
   // means any npm publish changes the gate on every engineer's machine with no
   // pull request anywhere. Pin the version that wrote it, exactly as the CI
   // templates do, so a CLI upgrade arrives as a reviewable change.
-  const hook = readFileSync(join(PACKAGE_ROOT, 'platforms/local/pre-push'), 'utf8').replace(
+  //
+  // replaceAll, not replace: the placeholder appears twice — once in the npx
+  // invocation and once in the `npm install -g` line the hook prints when npx
+  // is costing a push real time. String-form `replace` substitutes the first
+  // only, which would have handed the engineer a literal
+  // `redlinegate@REDLINE_CLI_VERSION` to install.
+  const hook = readFileSync(join(PACKAGE_ROOT, 'platforms/local/pre-push'), 'utf8').replaceAll(
     'redlinegate@REDLINE_CLI_VERSION',
     CLI_VERSION === UNPUBLISHED_VERSION ? 'redlinegate@latest' : `redlinegate@${CLI_VERSION}`
   );

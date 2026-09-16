@@ -9,11 +9,54 @@ So this page is not "check it installed". It is **break it on purpose and watch 
 complain**. A green run you have never seen go red is not evidence.
 
 Work through it once after onboarding. It takes about ten minutes and needs no
-credential until step 5.
+credential until step 6.
 
 ---
 
-## 0. What does it think it installed?
+## 0. Can this machine run it at all?
+
+```sh
+redline doctor
+```
+
+Before asking what Redline installed, ask whether the tool can run here. `doctor`
+contacts no host, needs no credential, and is the one command that still works on a Node
+too old for the rest of them — which is the point, because that is exactly the machine
+that needs the answer.
+
+```
+ok    node                   v22.11.0 — at or above the required 22
+ok    git                    git version 2.50.1
+ok    remote                 github — acme/widget
+ok    credential             gh is logged in as octocat
+warn  onboarded              no .redline.json here yet
+        npx redlinegate init
+```
+
+Every line that is not `ok` prints the fix under it. The one worth knowing about in
+advance:
+
+**Node.** `npx redlinegate init` under Node 18 used to print npm's `EBADENGINE`
+*warning* and then run anyway, so the first real symptom was a failure from inside a
+dependency, partway through a command that had already written files. It now refuses,
+and names three ways to run one command under a newer Node without touching a pin the
+repository set deliberately:
+
+```sh
+volta run --node 22 -- npx redlinegate init
+fnm exec --using 22 npx redlinegate init
+nvm exec 22 npx redlinegate init
+```
+
+A `warn` is not a failure. `credential` warns on a machine that has deliberately not
+logged in, and the preview commands — `redline init --dry-run`, `redline init
+--no-commit` — are the ones that machine is meant to be running.
+
+`redline doctor --json` for a wrapper that has to act on it.
+
+---
+
+## 1. What does it think it installed?
 
 ```sh
 redline status
@@ -39,7 +82,7 @@ Read three lines before anything else:
   with `redline init --pipeline azure-pipelines`.
 - **`rung`** — how hard it bites. At `observe` and `warn` nothing is ever blocked. That is
   the correct place to start, but do not then go looking for a blocked merge.
-- **`installed`** — if `gate` is absent, Redline installed no gate here and steps 2–4 have
+- **`installed`** — if `gate` is absent, Redline installed no gate here and steps 3–5 have
   no subject.
 
 A non-empty `pendingAdmin` line means the files landed but a repository setting did not.
@@ -48,7 +91,7 @@ granted the rights.
 
 ---
 
-## 1. Do the deterministic rules fire at all?
+## 2. Do the deterministic rules fire at all?
 
 This is the step people skip, and it is the one that catches the most.
 
@@ -119,7 +162,7 @@ see findings you did not expect against files you did not write, see
 
 ---
 
-## 2. Does the gate actually refuse?
+## 3. Does the gate actually refuse?
 
 ### If your gate is `local-agent` (a pre-push hook)
 
@@ -141,7 +184,7 @@ git config core.hooksPath .redline/hooks
 **Every teammate runs that once in their own clone.** `redline init` does it for the clone
 it ran in and nothing else — this is the honest cost of a gate that needs no CI.
 
-Now push the probe file from step 1.
+Now push the probe file from step 2.
 
 **At `observe` or `warn`** the findings print and the push proceeds:
 
@@ -214,7 +257,7 @@ Then close the PR without merging.
 
 ---
 
-## 3. Does your assistant read the standards?
+## 4. Does your assistant read the standards?
 
 The deterministic half is four rules. The model half is the rest of the standard, and it
 is where most of the value is. Open the repository in your assistant and run:
@@ -239,9 +282,22 @@ You can see the exact prompt it is given, offline, with:
 redline review --base main
 ```
 
+**If your assistant is not in this terminal** — a browser tab, a chat window, an IDE
+panel — `--print-prompt` writes the prompt to stdout and everything else to stderr, so it
+pipes cleanly:
+
+```sh
+redline review --base main --print-prompt | pbcopy     # macOS
+redline review --base main --print-prompt | xclip -sel clip   # Linux
+```
+
+Paste that into any model you already have. It asks for JSON back in the output contract,
+so the answer is comparable with what the gate would have said. No API key, no endpoint,
+no configuration — the review half of Redline works with whatever model you can reach.
+
 ---
 
-## 4. Would a reviewer see what you see?
+## 5. Would a reviewer see what you see?
 
 ```sh
 redline explain core/untracked-todo
@@ -253,7 +309,7 @@ cannot, the finding is untraceable.
 
 ---
 
-## 5. Does the host agree? (needs a credential)
+## 6. Does the host agree? (needs a credential)
 
 ```sh
 redline verify
@@ -272,14 +328,14 @@ Common results and what they mean:
 | `FAIL gate-machinery` naming a file you deliberately did not install | The recorded pipeline is wrong. `redline init --pipeline <name>` |
 | `FAIL security-floor` | Secret scanning, push protection or dependency alerts are off. Usually needs an organisation administrator, not a re-run |
 | `ok check-name-reported … no required check configured yet` | Normal on an advisory install. Nothing is required, so nothing can hang |
-| `present but nothing runs it: core.hooksPath does not point at .redline/hooks` | Local gate, this clone only. The file is fine — see step 2 |
+| `present but nothing runs it: core.hooksPath does not point at .redline/hooks` | Local gate, this clone only. The file is fine — see step 3 |
 
 On a `local-agent` gate `verify` can only report on the clone it runs in, and says so.
 Whether the hook runs on your teammate's laptop is not a question any API can answer.
 
 ---
 
-## 6. Can you get back out?
+## 7. Can you get back out?
 
 Before you trust a tool with this blast radius, confirm the exit exists:
 
@@ -315,10 +371,21 @@ git rm probe.js sup.ts && git commit -m "remove redline verification probes"
 
 ### "no deterministic findings" on a file I know is bad
 
-Almost always correct. Only the four rules in step 1 are decided without a model — a
+Almost always correct. Only the four rules in step 2 are decided without a model — a
 hardcoded secret or a concatenated SQL string is a real BLOCKER in the standard and is
 reviewed by the model half, not by `redline policy`. Test the deterministic half with a
 `var`, a ticketless `TODO`, a radix-less `parseInt`, or a bare `@ts-ignore`.
+
+`redline policy` now says this itself, on every run:
+
+```
+372 of the 376 rule(s) in the catalogue cannot be decided without a model and
+were not checked here — run `redline review` for those
+```
+
+A clean `policy` means the four checkable rules found nothing. It does not mean the
+standard found nothing, and the gap between those two readings is the single most common
+way Redline gets mistaken for broken.
 
 ### The hook did not run at all
 
@@ -357,3 +424,15 @@ real suppression in a file you wrote is still a BLOCKER.
 
 That one is usually genuine and usually not yours to fix: Advanced Security is enabled at
 the organisation, not the repository. Take the finding to whoever administers the org.
+
+The finding now carries the address of the page that turns the settings on, so it can be
+forwarded as-is:
+
+```
+FAIL  security-floor  disabled: secret-scanning, push-protection — turn them on at
+      https://github.com/acme/widget/settings/security_analysis
+```
+
+No link appears when the capability is merely *unreadable* rather than off. The fix there
+is a credential with the scope to see it, not a setting — and the page would have been
+unreadable to that token too.

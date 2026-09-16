@@ -193,11 +193,26 @@ function vendorChoices(manifest: Manifest): Choice<string>[] {
  * and this repository's detection is wrong often enough that overruling has to
  * stay one keystroke away.
  */
+// Exported so a test that counts notes can exclude the one every run prints,
+// rather than asserting a total that silently absorbs a second note appearing.
+export const ORIENTATION =
+  'Around ten questions, most already answered.\n' +
+  'Whatever was detected is preselected, so enter accepts it.\n' +
+  'The last question can still be a preview that writes nothing.';
+
 export async function runWizard(p: Prompter, facts: WizardFacts): Promise<WizardAnswers> {
   const { manifest, survey, recorded } = facts;
   const defaultOwner = facts.defaultOwner ?? 'the platform team';
 
   p.intro('Redline');
+
+  // How long this is and what a default means, before the first question
+  // rather than discovered at the sixth. No "question 3 of 10" counter: four
+  // of these are conditional — the setup, gate-source, ownership and rung
+  // questions are each asked only when an earlier answer makes them mean
+  // anything — so a denominator would be a number the run cannot honour, and
+  // finishing at 8 of 11 reads as something having gone wrong.
+  p.note(ORIENTATION);
 
   // Said BEFORE the first question, never after the last. This is the only
   // thing in the menu the operator cannot answer their way out of, and ten

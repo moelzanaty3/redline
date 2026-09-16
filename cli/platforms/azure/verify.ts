@@ -345,6 +345,15 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
         refusal ?? (on === true ? 'applied' : 'denied');
 
       return {
+        // All three are facets of one Advanced Security switch here, so the
+        // repository's own settings page is the whole answer. `project` is
+        // part of the path on Azure DevOps and the ref always carries it by
+        // the time a security read happens.
+        ...(ref.project === undefined
+          ? {}
+          : {
+              settingsUrl: `https://dev.azure.com/${ref.org}/${ref.project}/_settings/repositories?repo=${ref.repo}&_a=security`,
+            }),
         outcomes: [
           {
             capability: 'secret-scanning',
