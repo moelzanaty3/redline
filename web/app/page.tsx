@@ -340,7 +340,8 @@ export default async function Home() {
               <h2 className="hm-h2">Try it on one repository</h2>
               <p className="hm-try-lead">
                 <code>{initCmd}</code> asks what your repository is, shows you
-                the plan, and offers <b>Dry run</b> before Apply. Choose Apply
+                the plan, and offers a preview that changes nothing before the
+                run that does. Choose <b>write, commit and open a pull request</b>
                 and it opens a single pull request on{" "}
                 <code>redline/onboard</code> — it never pushes to your default
                 branch. The gate starts advisory: it comments, it doesn&apos;t

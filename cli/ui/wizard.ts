@@ -202,8 +202,8 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
   // Said BEFORE the first question, never after the last. This is the only
   // thing in the menu the operator cannot answer their way out of, and ten
   // questions answered against a repository Redline was never going to reach
-  // is ten questions wasted — the run used to get all the way to "Apply"
-  // before finding out, and the answers died with the error.
+  // is ten questions wasted — the run used to get all the way to the last
+  // answer before finding out, and the answers died with the error.
   if (facts.unreachable !== null) {
     p.note(`A full run cannot work here yet.\n${facts.unreachable}\n\nThe two preview options below still work — they contact no host.`);
   }
@@ -487,26 +487,37 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
   const action = await p.select(
     'Ready?',
     [
+      // Each label names its own ceiling — what it does, and what it stops
+      // short of. "Dry run" and "Apply" named neither: both are terms of art
+      // that assume the reader already knows how far the run goes, and the
+      // one that goes furthest is the one it is least safe to guess at.
       {
         value: 'dry-run' as const,
-        label: 'Dry run',
-        hint: 'print the plan — writes nothing, contacts no host, needs no credential',
+        label: 'Preview the plan, change nothing',
+        hint: 'writes no files, contacts no host, needs no credential',
       },
       {
         value: 'no-commit' as const,
-        label: 'Write the files only',
-        hint: 'writes into your working tree, uncommitted — no host changes, no pull request',
+        label: 'Write the files, commit nothing',
+        hint: 'scaffolds into your working tree, uncommitted — no pull request, no repository settings',
       },
       {
         value: 'apply' as const,
-        label: 'Apply',
+        label: 'Write, commit and open a pull request',
         // Disabled rather than hidden, and with the reason on the row: the
         // preflight already proved this would fail, and an operator who
-        // cannot see why Apply is missing cannot go and fix it. The two
-        // choices above contact no host, so they stay available — being
+        // cannot see why the full run is missing cannot go and fix it. The
+        // two choices above contact no host, so they stay available — being
         // unable to reach the host is exactly when a preview is worth most.
         ...(facts.unreachable === null
-          ? { hint: 'write the files and open a pull request on redline/onboard' }
+          ? {
+              // The repository settings belong in the hint because they are
+              // the irreversible half. Files land on a branch a reviewer can
+              // close; labels, the ruleset and the merge policy land on the
+              // repository itself, and the old hint mentioned only the half
+              // that is easy to undo.
+              hint: 'commits on redline/onboard, opens the pull request, and applies the repository settings',
+            }
           : { disabled: facts.unreachable }),
       },
     ],

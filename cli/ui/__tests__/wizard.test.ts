@@ -272,7 +272,11 @@ test('the default action is a dry run, not an apply', async () => {
   const answers = await runWizard(prompter, FACTS);
   assert.equal(answers.action, 'dry-run');
   const ready = asked.find((a) => a.title === 'Ready?');
-  assert.deepEqual(ready?.labels, ['Dry run', 'Write the files only', 'Apply']);
+  assert.deepEqual(ready?.labels, [
+    'Preview the plan, change nothing',
+    'Write the files, commit nothing',
+    'Write, commit and open a pull request',
+  ]);
 });
 
 // Shown, not hidden. An operator looking for Cursor and not finding it cannot
@@ -488,11 +492,11 @@ test('an unreachable repository disables Apply with the reason on the row', asyn
   await runWizard(prompter, { ...FACTS, unreachable: 'that account cannot see it' });
   const ready = asked.find((a) => a.title === 'Ready?');
   assert.ok(ready);
-  const apply = ready.labels.indexOf('Apply');
-  assert.notEqual(apply, -1, 'Apply is still listed');
+  const apply = ready.labels.indexOf('Write, commit and open a pull request');
+  assert.notEqual(apply, -1, 'the full run is still listed');
   assert.equal(ready.disabled[apply], 'that account cannot see it');
-  assert.equal(ready.disabled[ready.labels.indexOf('Dry run')], undefined);
-  assert.equal(ready.disabled[ready.labels.indexOf('Write the files only')], undefined);
+  assert.equal(ready.disabled[ready.labels.indexOf('Preview the plan, change nothing')], undefined);
+  assert.equal(ready.disabled[ready.labels.indexOf('Write the files, commit nothing')], undefined);
 });
 
 test('a reachable repository says nothing and leaves Apply selectable', async () => {
@@ -504,7 +508,7 @@ test('a reachable repository says nothing and leaves Apply selectable', async ()
   );
   const ready = asked.find((a) => a.title === 'Ready?');
   assert.ok(ready);
-  assert.equal(ready.disabled[ready.labels.indexOf('Apply')], undefined);
+  assert.equal(ready.disabled[ready.labels.indexOf('Write, commit and open a pull request')], undefined);
   assert.equal(answers.action, 'dry-run');
 });
 

@@ -60,9 +60,11 @@ That is the whole procedure. With no flags, at a terminal, it asks before it wri
 which standards apply, where the repository lives, what runs your pull request checks,
 which assistants should read the rules, what to install, and how hard the gate should
 bite. Whatever it detected is preselected, so pressing enter through it accepts detection,
-and the last question offers **Dry run** before Apply.
+and the last question offers three answers, each naming its own ceiling: preview and
+change nothing, write the files and commit nothing, or write, commit and open a pull
+request.
 
-Choose Apply and it renders the standards, installs the merge-readiness template and the
+Choose the last one and it renders the standards, installs the merge-readiness template and the
 gate (advisory — it reports, it does not block), turns on the security floor, and opens a
 pull request on `redline/onboard`. It never pushes to your default branch, so `git status`
 stays clean. Anything that needed repository admin rights you do not have is listed at the

@@ -225,7 +225,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
   // The host is read from the git remote alone, with no credential and no
   // request — the menu's first question has to render before either exists,
-  // because "Dry run" is one of its answers. A remote this cannot classify is
+  // because the preview answers contact no host. A remote this cannot classify is
   // `null`, which is exactly the case the host question is there to settle.
   const detectHost = (): WizardHost | null => {
     try {

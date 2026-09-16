@@ -152,6 +152,20 @@ than the tests:
   repository actually has, and the `--repo` path says plainly that whether the hook runs is a
   property of each clone and no API read can decide it.
 
+### CLI — the last question named two terms of art and one irreversible act
+
+`Ready?` offered **Dry run**, **Write the files only** and **Apply**. Two of those are terms of
+art that assume the reader already knows how far the run goes, and the one that goes furthest was
+the vaguest: "Apply" names no outcome at all, and its hint said "write the files and open a pull
+request" — the reversible half. It also applies the repository settings. Files land on a branch a
+reviewer can close; labels, the ruleset and the merge policy land on the repository itself.
+
+The three answers now each name their own ceiling — what the run does, and what it stops short of:
+preview the plan and change nothing, write the files and commit nothing, or write, commit and open
+a pull request. The hint on the last one says the repository settings out loud. The flags
+(`--dry-run`, `--no-commit`) and the recorded action values are unchanged; this is what the
+operator reads, not what the CLI dispatches on.
+
 ### Docs — a guided run that makes the gate fail on purpose
 
 `docs/verifying.md`. A green run nobody has ever seen go red is not evidence, and every checkpoint
