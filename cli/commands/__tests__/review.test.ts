@@ -303,3 +303,28 @@ test('an explicit base url beats both', async () => {
   );
   assert.match(url, /proxy\.internal/);
 });
+
+test('an endpoint that never answers fails with a host error instead of hanging', async () => {
+  const engine = createApiEngine(
+    { provider: 'openai', model: 'm' },
+    {
+      fetch: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          // AbortSignal.timeout() uses an unref'd timer, so a ref'd handle is
+          // what keeps the runner from draining the loop before it fires.
+          const keepAlive = setInterval(() => {}, 1_000);
+          init?.signal?.addEventListener('abort', () => {
+            clearInterval(keepAlive);
+            reject(init.signal?.reason);
+          });
+        }),
+      env: {},
+      timeoutMs: 5,
+    }
+  );
+
+  await assert.rejects(
+    () => engine.review({ prompt: 'p' }),
+    (error: unknown) => isRedlineError(error) && error.kind === 'host' && /did not answer within/.test(error.message)
+  );
+});

@@ -1,7 +1,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGitHubInstall } from '../install.ts';
@@ -223,4 +223,132 @@ test('an unrecognised rung is not enforcing, matching the config and the CI gate
 
   const fallback = body.match(/\*\)\s*fail_on=\w+;\s*enforcing=(\w+)\s*;;/);
   assert.equal(fallback?.[1], 'false', `expected the catch-all rung to be non-enforcing: ${fallback?.[0]}`);
+});
+
+// husky v4, lefthook and pre-commit install into git's default hooks directory
+// and never set core.hooksPath, so the check above cannot see them. Pointing
+// core.hooksPath away makes git stop running that hook without a word.
+test('a pre-push hook already in the default hooks directory is reported, never orphaned', async () => {
+  const cwd = tmp();
+  const theirs = join(cwd, '.git/hooks/pre-push');
+  writeFileSync(theirs, '#!/bin/sh\nexit 0\n');
+  chmodSync(theirs, 0o755);
+
+  const result = await install.installGate(REF, cwd, OPTS);
+
+  assert.equal(readHooksPath(cwd), null);
+  assert.equal(result.outcomes[0]?.status, 'denied');
+  assert.match(result.outcomes[0]?.detail ?? '', /hooks\/pre-push/);
+  assert.equal(existsSync(join(cwd, LOCAL_HOOK_PATH)), true);
+});
+
+// Everything above reads the hook's text. These run it: a real repository, the
+// ref lines git feeds on stdin, and a stub `redline` on PATH that records the
+// patch it was handed and exits with whatever the test chooses.
+const ZERO = '0'.repeat(40);
+const git = (cwd: string, ...args: string[]): string =>
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, encoding: 'utf8' }).trim();
+
+const commit = (cwd: string, file: string, text: string): string => {
+  writeFileSync(join(cwd, file), text);
+  git(cwd, 'add', file);
+  git(cwd, 'commit', '-q', '-m', file);
+  return git(cwd, 'rev-parse', 'HEAD');
+};
+
+interface HookRun {
+  status: number | null;
+  stderr: string;
+  patch: string;
+}
+
+async function runHook(cwd: string, stdin: string, policyExit: number, rung: string | null): Promise<HookRun> {
+  await install.installGate(REF, cwd, OPTS);
+  if (rung !== null) writeFileSync(join(cwd, '.redline.json'), rung);
+
+  const bin = mkdtempSync(join(tmpdir(), 'redline-stub-'));
+  roots.push(bin);
+  const log = join(bin, 'patch.log');
+  writeFileSync(join(bin, 'redline'), `#!/bin/sh\ncat "$3" >> "${log}"\nexit ${policyExit}\n`);
+  chmodSync(join(bin, 'redline'), 0o755);
+
+  const run = spawnSync('sh', [join(cwd, LOCAL_HOOK_PATH), 'origin', 'git@example.com:acme/checkout.git'], {
+    cwd,
+    input: stdin,
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` },
+  });
+  return { status: run.status, stderr: run.stderr, patch: existsSync(log) ? readFileSync(log, 'utf8') : '' };
+}
+
+const posixOnly = { skip: process.platform === 'win32' };
+
+// Keeping only the last ref's range reviewed `feature` alone on
+// `git push origin main feature` and pushed whatever was new on `main` unchecked.
+test('every ref in a multi-ref push is checked, not only the last', posixOnly, async () => {
+  const cwd = tmp();
+  const root = commit(cwd, 'base.txt', 'base\n');
+  git(cwd, 'checkout', '-q', '-b', 'feature');
+  const feature = commit(cwd, 'feature.txt', 'from feature\n');
+  git(cwd, 'checkout', '-q', '-');
+  const main = commit(cwd, 'main.txt', 'from main\n');
+
+  const stdin =
+    `refs/heads/main ${main} refs/heads/main ${root}\n` +
+    `refs/heads/feature ${feature} refs/heads/feature ${root}\n`;
+  const run = await runHook(cwd, stdin, 0, '{"rung":"block-blocker"}');
+
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.patch, /from main/);
+  assert.match(run.patch, /from feature/);
+});
+
+test('a finding at an enforcing rung refuses the push', posixOnly, async () => {
+  const cwd = tmp();
+  const root = commit(cwd, 'a.txt', 'a\n');
+  const head = commit(cwd, 'b.txt', 'b\n');
+  const run = await runHook(cwd, `refs/heads/main ${head} refs/heads/main ${root}\n`, 1, '{"rung":"block-blocker"}');
+
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /a finding at or above BLOCKER/);
+});
+
+// Exit 4 is a host error, 2 a usage error, 127 an npx that could not fetch.
+// None of them is a finding, and saying so sent engineers hunting for a problem
+// in their change that was not there.
+test('a gate that fails to run is not reported as a finding', posixOnly, async () => {
+  const cwd = tmp();
+  const root = commit(cwd, 'a.txt', 'a\n');
+  const head = commit(cwd, 'b.txt', 'b\n');
+  const stdin = `refs/heads/main ${head} refs/heads/main ${root}\n`;
+
+  const enforced = await runHook(cwd, stdin, 4, '{"rung":"block-blocker"}');
+  assert.equal(enforced.status, 1);
+  assert.match(enforced.stderr, /could not run \(redline policy exited 4\)/);
+  assert.doesNotMatch(enforced.stderr, /a finding at or above/);
+
+  const observed = await runHook(cwd, stdin, 4, '{"rung":"observe"}');
+  assert.equal(observed.status, 0);
+  assert.doesNotMatch(observed.stderr, /findings above/);
+});
+
+// Falling back to not enforcing is right; doing it silently let a block-high
+// repository with a broken .redline.json push anything while looking clean.
+test('an unreadable .redline.json is said out loud, not silently observed', posixOnly, async () => {
+  const cwd = tmp();
+  const root = commit(cwd, 'a.txt', 'a\n');
+  const head = commit(cwd, 'b.txt', 'b\n');
+  const run = await runHook(cwd, `refs/heads/main ${head} refs/heads/main ${root}\n`, 1, '{"rung": block-high');
+
+  assert.equal(run.status, 0);
+  assert.match(run.stderr, /could not read the rung from \.redline\.json/);
+});
+
+test('a first push with no remote history diffs from the empty tree', posixOnly, async () => {
+  const cwd = tmp();
+  const head = commit(cwd, 'first.txt', 'the very first line\n');
+  const run = await runHook(cwd, `refs/heads/main ${head} refs/heads/main ${ZERO}\n`, 0, '{"rung":"observe"}');
+
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.patch, /the very first line/);
 });

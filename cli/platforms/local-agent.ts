@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import type { CapabilityOutcome, GateMachinery, GateOptions, InstallResult } from './types.ts';
@@ -90,6 +90,21 @@ function pointHooksPath(cwd: string): CapabilityOutcome {
     };
   }
 
+  // The same overwrite with no core.hooksPath to see: husky v4, lefthook and
+  // pre-commit install straight into the default hooks directory, and setting
+  // core.hooksPath makes git stop looking there without a word.
+  const existing = defaultPrePushHook(cwd);
+  if (existing !== null) {
+    return {
+      capability: 'gate',
+      status: 'denied',
+      detail:
+        `wrote ${LOCAL_HOOK_PATH}, but ${existing} already exists and pointing core.hooksPath ` +
+        'elsewhere would stop it firing — chain this one from it, or run: ' +
+        `git config core.hooksPath ${LOCAL_HOOKS_DIR}`,
+    };
+  }
+
   try {
     execFileSync('git', ['config', 'core.hooksPath', LOCAL_HOOKS_DIR], { cwd, stdio: 'ignore' });
   } catch {
@@ -112,6 +127,22 @@ function pointHooksPath(cwd: string): CapabilityOutcome {
       `${LOCAL_HOOK_PATH} runs on every push from this clone. It is not published to any host, ` +
       `so each teammate enables it once: git config core.hooksPath ${LOCAL_HOOKS_DIR}`,
   };
+}
+
+/** The pre-push hook in git's default hooks directory, or null when there is none. */
+function defaultPrePushHook(cwd: string): string | null {
+  try {
+    // --git-path rather than `.git/hooks`: a worktree or submodule keeps its
+    // hooks somewhere else, and `.git` there is a file.
+    const path = execFileSync('git', ['rev-parse', '--git-path', 'hooks/pre-push'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return existsSync(resolve(cwd, path)) ? path : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The clone's configured hooks path, or null when it has none. */

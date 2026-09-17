@@ -54,8 +54,16 @@ ZERO="0000000000000000000000000000000000000000"
 # git's empty tree. The base for the very first push of a repository, where the
 # oldest new commit is the root and has no parent to diff against.
 EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+patch=$(mktemp)
+# `trap` rather than a delete at the end: the script runs under `set -e`, so any
+# failure below would otherwise leave the file behind on every blocked push.
+trap 'rm -f "$patch"' EXIT
+
+# Every ref's range goes into the one patch. Keeping only the last line's range
+# meant `git push origin main feature` reviewed `feature` alone and pushed
+# whatever was new on `main` unchecked.
 base=""
-head=""
 while read -r _local_ref local_sha _remote_ref remote_sha; do
   # A deletion: nothing is being added, so there is nothing to review.
   [ "$local_sha" = "$ZERO" ] && continue
@@ -73,24 +81,14 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
   else
     base="$remote_sha"
   fi
-  head="$local_sha"
+  git diff "$base" "$local_sha" >> "$patch"
+  echo "redline: checking $(git rev-parse --short "$base" 2>/dev/null || echo "$base")..$(git rev-parse --short "$local_sha")"
 done
 
-# Nothing to judge: a delete-only push, or refs whose commits a remote already
-# has. Not a failure.
-[ -z "$head" ] && exit 0
-
-patch=$(mktemp)
-# `trap` rather than a delete at the end: the script runs under `set -e`, so any
-# failure below would otherwise leave the file behind on every blocked push.
-trap 'rm -f "$patch"' EXIT
-git diff "$base" "$head" > "$patch"
-
-# An empty diff — a merge that changed nothing, or a range that resolved to
-# itself. `redline policy` on an empty patch finds nothing by construction.
+# Nothing to judge: a delete-only push, refs whose commits a remote already
+# has, or ranges that changed nothing. `redline policy` on an empty patch finds
+# nothing by construction. Not a failure.
 [ -s "$patch" ] || exit 0
-
-echo "redline: checking $(git rev-parse --short "$base" 2>/dev/null || echo "$base")..$(git rev-parse --short "$head")"
 
 # The enforcement rung, read from .redline.json at run time rather than baked in
 # here. It is the same ladder the CI gate climbs and it has to mean the same
@@ -103,7 +101,14 @@ echo "redline: checking $(git rev-parse --short "$base" 2>/dev/null || echo "$ba
 # Read rather than substituted at install time for the same reason: the rung
 # lives in .redline.json, and a copy in this file is a second record free to
 # disagree with it.
-rung=$(node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(".redline.json","utf8")).rung||"observe"))}catch(e){process.stdout.write("observe")}' 2>/dev/null || echo observe)
+rung=$(node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(".redline.json","utf8")).rung||"observe"))}catch(e){process.stdout.write("unreadable")}' 2>/dev/null || echo unreadable)
+if [ "$rung" = "unreadable" ]; then
+  # Falls to not enforcing, like an unrecognised rung — but out loud. A
+  # repository at block-high whose .redline.json stopped parsing would
+  # otherwise let every push through while looking exactly like a clean run.
+  echo "redline: could not read the rung from .redline.json (missing, malformed, or no node on PATH)," >&2
+  echo "         so nothing on this push is enforced. Findings are still reported." >&2
+fi
 case "$rung" in
   # An unrecognised rung is NOT enforcing, matching cli/config and the CI gate:
   # a typo must never be able to make a repository stricter than anyone chose.
@@ -135,7 +140,20 @@ if [ "$VIA_NPX" = "true" ] && [ "$elapsed" -ge 5 ]; then
   echo "         npm install -g redlinegate@REDLINE_CLI_VERSION" >&2
 fi
 
-if [ "$status" -ne 0 ]; then
+# Exit 1 is `redline policy`'s answer. Anything else — 2 usage, 4 host, 127 an
+# npx that could not fetch the package — is the gate failing to run, and
+# reporting that as "a finding" sends the engineer hunting for a problem in
+# their change that is not there. Still refused at an enforcing rung: a gate
+# that opens whenever it breaks is not a gate.
+if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+  echo "" >&2
+  echo "redline: the local gate could not run (redline policy exited $status); see the output above." >&2
+  if [ "$enforcing" = "true" ]; then
+    echo "         The push is refused at rung \"$rung\". Push with --no-verify to skip the gate for this push." >&2
+    exit 1
+  fi
+  echo "         Not blocking: this repository is at rung \"$rung\"." >&2
+elif [ "$status" -eq 1 ]; then
   if [ "$enforcing" != "true" ]; then
     # observe and warn: the findings are printed above and the push proceeds.
     # Not "off" — measured and not yet enforced, which is the whole point of

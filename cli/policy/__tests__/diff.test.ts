@@ -229,3 +229,23 @@ test('the ownership line marks the rest of the file as generated', () => {
 
   assert.deepEqual(parseDiff(owned), []);
 });
+
+// The prefix is only evidence inside a directory a vendor renders into. Outside
+// one it is a name anybody can choose, and choosing it must not be a way past
+// every deterministic check.
+test('a redline-prefixed file outside a vendor directory is still the author\'s code', () => {
+  const named = `--- /dev/null
++++ b/scripts/redline-deploy.sh
+@@ -0,0 +1,1 @@
++# TODO: hand-written, not rendered
+--- /dev/null
++++ b/src/redline.config.ts
+@@ -0,0 +1,1 @@
++// @ts-ignore
+`;
+
+  assert.deepEqual(parseDiff(named), [
+    { file: 'scripts/redline-deploy.sh', line: 1, text: '# TODO: hand-written, not rendered' },
+    { file: 'src/redline.config.ts', line: 1, text: '// @ts-ignore' },
+  ]);
+});

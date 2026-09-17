@@ -9,11 +9,12 @@ const OWNERSHIP_LINE = /^(?:#|<!--|\/\/)?\s*Managed by Redline\b/;
 // The artifacts with nowhere to put that line: the per-stack instruction files
 // and the Cursor rules open with frontmatter a tool parses, so a comment above
 // it would break them. They are recognised the way `redline remove` recognises
-// the same files — by the `redline-` prefix on the name, in the directory a
-// vendor renders into. A prefix rather than a fixed list of paths: the list
-// goes stale the moment a vendor is added, and the prefix is what is actually
-// true of every one of them.
-const REDLINE_ARTIFACT = /(?:^|\/)redline[-.][^/]*$/;
+// the same files — by the `redline-` prefix on the name AND the directory the
+// vendor's PruneRule in render/vendors.ts owns. The prefix alone is not
+// evidence: it exempted a hand-written `scripts/redline-deploy.sh` from every
+// deterministic check, so naming a file was enough to get past the gate.
+const REDLINE_ARTIFACT =
+  /^(?:\.github\/instructions\/redline-[^/]+\.instructions\.md|\.cursor\/rules\/redline-[^/]+\.mdc)$/;
 
 // A unified diff, reduced to the only thing a deterministic check may look at:
 // the lines this change ADDED, with their file and line number.

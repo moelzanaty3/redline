@@ -32,10 +32,13 @@ export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export function createApiEngine(
   config: EngineConfig,
-  deps: { fetch?: FetchLike; env?: NodeJS.ProcessEnv } = {}
+  deps: { fetch?: FetchLike; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}
 ): ReviewEngine {
   const doFetch = deps.fetch ?? ((url, init) => fetch(url, init));
   const env = deps.env ?? process.env;
+  // Generous: a local model on a laptop can take minutes over a large diff. The
+  // bound exists so an endpoint that never answers fails instead of hanging.
+  const timeoutMs = deps.timeoutMs ?? 600_000;
   const defaults = DEFAULTS[config.provider];
   if (!defaults) {
     throw new RedlineError(
@@ -70,8 +73,15 @@ export function createApiEngine(
 
       let response: Response;
       try {
-        response = await doFetch(url, init);
+        response = await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+          throw new RedlineError(
+            'host',
+            `the review endpoint at ${baseUrl} did not answer within ${timeoutMs / 1000}s`,
+            'a smaller diff (--staged, or a closer --base) or a faster model answers sooner'
+          );
+        }
         throw new RedlineError(
           'host',
           `could not reach the review endpoint at ${baseUrl}: ${error instanceof Error ? error.message : String(error)}`,

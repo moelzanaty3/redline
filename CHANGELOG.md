@@ -7,6 +7,37 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — five holes in the gates this branch added, found by review
+
+- **A file named `redline-*` skipped every deterministic check.** The self-exemption for Redline's
+  own rendered artifacts matched the prefix anywhere in the tree, so a hand-written
+  `scripts/redline-deploy.sh` — or any file renamed on purpose — was never checked. It now matches
+  only `.github/instructions/redline-*.instructions.md` and `.cursor/rules/redline-*.mdc`, the two
+  artifacts that have nowhere to carry an ownership line.
+- **The pre-push hook checked only the last ref.** `git push origin main feature` reviewed
+  `feature` and pushed whatever was new on `main` unchecked. Every ref's range now goes into the
+  patch.
+- **Installing the local gate orphaned an existing `.git/hooks/pre-push`.** husky v4, lefthook and
+  pre-commit install there and never set `core.hooksPath`, so pointing it at `.redline/hooks`
+  silently stopped their hook. That is now reported as `denied`, the same as a foreign
+  `core.hooksPath`.
+- **A gate that could not run was reported as a finding.** Any non-zero exit from `redline policy`
+  — a usage error, a host error, an npx that could not fetch — said "a finding at or above
+  BLOCKER". Only exit 1 is a finding now; anything else says the gate failed to run, and is still
+  refused at an enforcing rung. An unreadable `.redline.json` still falls to not enforcing, but
+  says so instead of looking like a clean run.
+- **`review --json` exited 1 on findings** while the human output always exits 0, reopening the
+  second-gate-in-CI door the human path closes on purpose. Both exit 0; the findings are in the
+  document.
+
+Also: every host request now times out after 30s per attempt, and an `--engine api` review after
+ten minutes. A connection that was dropped rather than refused used to hang the command — and an
+estate `sync` with it — with nothing to report. A timed-out write is not retried, for the same
+reason a 5xx POST is not: it may already have created the pull request.
+
+The hook is now tested by running it — a real repository, git's ref lines on stdin, a stub
+`redline` on PATH — rather than by matching its text.
+
 ### CLI — the rung ladder was decorative, and seven other things a senior look found
 
 The enforcement ladder is the centre of this product's argument: a repository starts at `observe`,

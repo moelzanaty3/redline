@@ -900,3 +900,30 @@ test('nothing is recorded unless the variable is set', async () => {
 
   assert.equal(existsSync(join(dir, '.redline', 'funnel.jsonl')), false);
 });
+
+// The human output always exits 0 so nobody wires a local review into CI as a
+// second gate that enforces nothing. `--json` exiting 1 on findings reopened
+// exactly that door for the callers most likely to script it.
+test('review --json exits 0 with findings, the same as the human output', async () => {
+  const realFetch = globalThis.fetch;
+  const content = JSON.stringify({
+    findings: [{ rule: 'core/uncatalogued', severity: 'BLOCKER', file: 'src/a.ts', line: 2, problem: 'x', fix: 'y' }],
+  });
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  try {
+    const argv = [
+      'review', '--engine', 'api', '--provider', 'openai', '--model', 'm',
+      '--base-url', 'http://localhost:1/v1', '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF),
+    ];
+    const json = deps(repo());
+    const jsonCode = await run([...argv, '--json'], json.opts);
+    assert.ok(json.lines.join('\n').includes('core/uncatalogued'), `the finding did not reach the document:\n${json.lines.join('\n')}`);
+    assert.equal(jsonCode, 0);
+
+    const human = deps(repo());
+    assert.equal(await run(argv, human.opts), 0);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

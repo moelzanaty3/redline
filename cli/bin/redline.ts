@@ -1104,7 +1104,9 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
             2
           )
         );
-        return report.findings.length > 0 ? exitCodeFor('failed') : 0;
+        // 0, as below. The exit code answers "may this proceed" and a local
+        // review never decides that; the findings are in the document.
+        return 0;
       }
 
       log.info(

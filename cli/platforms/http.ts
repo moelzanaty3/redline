@@ -12,6 +12,7 @@ export interface HttpOptions {
   fetch?: FetchLike;
   retries?: number;
   sleep?: (ms: number) => Promise<void>;
+  timeoutMs?: number;
 }
 
 export interface Http {
@@ -33,6 +34,11 @@ const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 // inside a command, and failing with a rate-limit hint beats a process that
 // looks hung.
 const MAX_RETRY_WAIT_MS = 60_000;
+
+// Per attempt. A connection that never completes — a proxy or firewall that
+// drops rather than refuses — otherwise hangs the command, and `sync` across an
+// estate looks stuck with nothing to report.
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 function retryAfterMs(response: Response, now: number = Date.now()): number | null {
   const after = response.headers.get('retry-after');
@@ -64,6 +70,7 @@ export function createHttp(
   const doFetch = opts.fetch ?? globalThis.fetch;
   const retries = opts.retries ?? 3;
   const sleep = opts.sleep ?? defaultSleep;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return {
     async request<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>> {
@@ -78,10 +85,18 @@ export function createHttp(
       for (let attempt = 0; attempt < retries; attempt += 1) {
         let response: Response;
         try {
-          response = await doFetch(url, init);
+          response = await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
         } catch (cause) {
-          if (attempt === retries - 1) {
-            throw new RedlineError('host', `request to ${url} failed: ${String(cause)}`);
+          const timedOut = cause instanceof DOMException && cause.name === 'TimeoutError';
+          // A timed-out write may still have committed server-side, the same
+          // reason a 5xx POST is not retried above.
+          if (attempt === retries - 1 || (timedOut && !IDEMPOTENT.has(method.toUpperCase()))) {
+            throw new RedlineError(
+              'host',
+              timedOut
+                ? `request to ${url} timed out after ${timeoutMs / 1000}s`
+                : `request to ${url} failed: ${String(cause)}`
+            );
           }
           await sleep(2 ** attempt * 200);
           continue;

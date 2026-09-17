@@ -222,3 +222,45 @@ test('a 5xx still uses exponential backoff', async () => {
   await assert.rejects(() => http.request('GET', '/x'));
   assert.deepEqual(waits, [200, 400]);
 });
+
+// A fetch that never settles until its signal fires — the packet-dropping proxy
+// that used to hang a command, and an estate sync with it, indefinitely. A real
+// socket holds the loop open while it waits; AbortSignal.timeout() uses an
+// unref'd timer, so without a ref'd handle here the runner drains the loop and
+// cancels the test before the abort ever fires.
+const hanging: FetchLike = (_input, init) =>
+  new Promise((_resolve, reject) => {
+    const keepAlive = setInterval(() => {}, 1_000);
+    init?.signal?.addEventListener('abort', () => {
+      clearInterval(keepAlive);
+      reject(init.signal?.reason);
+    });
+  });
+
+test('a request that never answers times out as a host error', async () => {
+  let calls = 0;
+  const fetch: FetchLike = (input, init) => {
+    calls += 1;
+    return hanging(input, init);
+  };
+  const http = createHttp('https://api.example.com', {}, { fetch, sleep: noSleep, timeoutMs: 5 });
+
+  await assert.rejects(
+    () => http.request('GET', '/x'),
+    (error: unknown) => isRedlineError(error) && error.kind === 'host' && /timed out/.test(error.message)
+  );
+  assert.equal(calls, 3, 'an idempotent read is retried after a timeout');
+});
+
+// A write that timed out may already have created the pull request or policy.
+test('a timed-out POST is not retried', async () => {
+  let calls = 0;
+  const fetch: FetchLike = (input, init) => {
+    calls += 1;
+    return hanging(input, init);
+  };
+  const http = createHttp('https://api.example.com', {}, { fetch, sleep: noSleep, timeoutMs: 5 });
+
+  await assert.rejects(() => http.request('POST', '/x', {}), /timed out/);
+  assert.equal(calls, 1);
+});
