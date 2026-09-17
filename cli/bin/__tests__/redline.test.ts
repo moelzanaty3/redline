@@ -139,6 +139,23 @@ test('an internal defect points at REDLINE_DEBUG, and the variable prints the st
   }
 });
 
+test('completion prints a script for a named shell and refuses anything else', async () => {
+  const bash = deps(repo());
+  assert.equal(await run(['completion', 'bash'], bash.opts), 0);
+  assert.ok(bash.lines.join('\n').includes('complete -F _redline redline redlinegate'));
+
+  const missing = deps(repo());
+  assert.equal(await run(['completion'], missing.opts), 2);
+  const unknown = deps(repo());
+  assert.equal(await run(['completion', 'powershell'], unknown.opts), 2);
+  assert.ok(unknown.lines.some((l) => l.includes('"powershell"')));
+});
+
+test('completion runs on a Node too old for the rest, so a shell startup never prints an error', async () => {
+  const { opts } = deps(repo());
+  assert.equal(await run(['completion', 'zsh'], { ...opts, nodeVersion: 'v18.0.0' }), 0);
+});
+
 test('--version prints the version and exits 0', async () => {
   const { opts, lines } = deps(repo());
   assert.equal(await run(['--version'], opts), 0);
