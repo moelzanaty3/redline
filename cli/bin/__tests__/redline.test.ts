@@ -70,6 +70,75 @@ test('an unknown flag exits 2', async () => {
   assert.ok(lines.length > 0);
 });
 
+test('--help is an index of every command, not every flag', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['--help'], opts), 0);
+  const usage = lines.join('\n');
+  for (const command of ['init', 'remove', 'verify', 'review', 'policy', 'sync', 'metrics', 'funnel']) {
+    assert.match(usage, new RegExp(`redline ${command}\\b`));
+  }
+  assert.ok(!usage.includes('--adopt-caller'));
+  assert.ok(usage.includes('redline <command> --help'));
+});
+
+test('<command> --help and -h print that command alone and exit 0', async () => {
+  for (const flag of ['--help', '-h']) {
+    const { opts, lines } = deps(repo());
+    assert.equal(await run(['verify', flag], opts), 0);
+    const help = lines.join('\n');
+    assert.match(help, /redline verify \[--gate\]/);
+    assert.ok(!help.includes('redline init'));
+  }
+});
+
+test('<command> --help works on a Node too old to run the command', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['init', '--help'], { ...opts, nodeVersion: 'v18.0.0' }), 0);
+  assert.ok(lines.some((l) => l.includes('--dry-run')));
+});
+
+test('a mistyped flag names the one it was probably meant to be', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['init', '--dryrun'], opts), 2);
+  assert.ok(lines.some((l) => l.includes('did you mean --dry-run?')));
+  assert.ok(lines.some((l) => l.includes('run: redline init --help')));
+});
+
+test('a mistyped command names the one it was probably meant to be', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['veriy'], opts), 2);
+  assert.ok(lines.some((l) => l.includes('did you mean redline verify?')));
+});
+
+test('output through an injected sink carries no colour codes', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['--help'], opts);
+  await run(['doctor'], opts);
+  await run(['init', '--dryrun'], opts);
+  assert.ok(lines.every((l) => !l.includes('\x1b[')));
+});
+
+test('an internal defect points at REDLINE_DEBUG, and the variable prints the stack', async () => {
+  const defect = async () => {
+    throw new TypeError('boom');
+  };
+  const plain = deps(repo());
+  assert.equal(await run(['init'], { ...plain.opts, resolvePlatform: defect }), 4);
+  assert.ok(plain.lines.some((l) => l.includes('REDLINE_DEBUG=1')));
+  assert.ok(!plain.lines.some((l) => /^\s+at /.test(l)));
+
+  const previous = process.env.REDLINE_DEBUG;
+  process.env.REDLINE_DEBUG = '1';
+  try {
+    const traced = deps(repo());
+    assert.equal(await run(['init'], { ...traced.opts, resolvePlatform: defect }), 4);
+    assert.ok(traced.lines.some((l) => l.startsWith('TypeError: boom')));
+  } finally {
+    if (previous === undefined) delete process.env.REDLINE_DEBUG;
+    else process.env.REDLINE_DEBUG = previous;
+  }
+});
+
 test('--version prints the version and exits 0', async () => {
   const { opts, lines } = deps(repo());
   assert.equal(await run(['--version'], opts), 0);
@@ -247,9 +316,9 @@ test('init --vendors overrides detection and skips a deselected vendor', async (
   assert.ok(existsSync(join(cwd, 'AGENTS.md')));
 });
 
-test('usage names --dry-run and says what --no-a11y and --no-speckit actually do', async () => {
+test('init --help names --dry-run and says what --no-a11y and --no-speckit actually do', async () => {
   const { opts, lines } = deps(repo());
-  await run(['--help'], opts);
+  assert.equal(await run(['init', '--help'], opts), 0);
   const usage = lines.join('\n');
   assert.ok(usage.includes('--dry-run'));
   assert.ok(usage.includes('--no-speckit'));
@@ -266,7 +335,7 @@ test('init accepts --adopt-caller and the usage says what it is for', async () =
   assert.equal(await run(['init', '--adopt-caller'], opts), 0, lines.join('\n'));
 
   const help = deps(repo());
-  await run(['--help'], help.opts);
+  await run(['init', '--help'], help.opts);
   const usage = help.lines.join('\n');
   assert.ok(usage.includes('--adopt-caller'));
   assert.ok(usage.includes('attributes it to Redline'));
@@ -476,9 +545,9 @@ test('an unknown capability name exits 2 and lists the real ones', async () => {
   assert.ok(lines.some((l) => l.includes('unknown capability "pipelines"')));
 });
 
-test('--help documents the per-capability selection', async () => {
+test('init --help documents the per-capability selection', async () => {
   const { opts, lines } = deps(repo());
-  await run(['--help'], opts);
+  await run(['init', '--help'], opts);
   const usage = lines.join('\n');
   assert.match(usage, /--skip/);
   assert.match(usage, /--with/);
@@ -899,6 +968,34 @@ test('nothing is recorded unless the variable is set', async () => {
   }
 
   assert.equal(existsSync(join(dir, '.redline', 'funnel.jsonl')), false);
+});
+
+// The provider line is commentary, not the result. On stdout it sat in front of
+// the document and `redline review --engine api --json | jq` could not parse it.
+test('review --json with an inferred provider keeps stdout a parseable document', async () => {
+  const realFetch = globalThis.fetch;
+  const previous = process.env.REDLINE_REVIEW_PROVIDER;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' } }] }), { status: 200 });
+  process.env.REDLINE_REVIEW_PROVIDER = 'openai';
+  try {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(
+      [
+        'review', '--engine', 'api', '--model', 'm', '--base-url', 'http://localhost:1/v1',
+        '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF), '--json',
+      ],
+      { cwd: repo(), root, sink: { out: (l) => out.push(l), err: (l) => err.push(l) } }
+    );
+    assert.equal(code, 0, err.join('\n'));
+    assert.doesNotThrow(() => JSON.parse(out.join('\n')), out.join('\n'));
+    assert.ok(err.some((l) => l.startsWith('provider openai')));
+  } finally {
+    globalThis.fetch = realFetch;
+    if (previous === undefined) delete process.env.REDLINE_REVIEW_PROVIDER;
+    else process.env.REDLINE_REVIEW_PROVIDER = previous;
+  }
 });
 
 // The human output always exits 0 so nobody wires a local review into CI as a
