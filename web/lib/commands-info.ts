@@ -1,5 +1,5 @@
-// Every command the CLI has, including the two that act on the estate rather
-// than on a repository. All eleven are built; `built` stays on the type because
+// Every command the CLI has, including the ones that act on the estate rather
+// than on a repository. All fifteen are built; `built` stays on the type because
 // a command that is later specified ahead of its implementation should be
 // documented as unbuilt rather than omitted — "does redline review exist?" is a
 // question people ask, and a page that lacks the answer reads as an oversight
@@ -246,6 +246,11 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
           "openai covers every OpenAI-compatible endpoint, which is the fully local case for free: Ollama, LM Studio and vLLM all expose it, and a local endpoint needs no API key. That matters — a review that has to send a diff to a third party is a review several markets cannot run at all. The model is never baked in: one that is would be a model nobody can change when it is deprecated or when a regulator objects.",
       },
       {
+        flag: "--print-prompt",
+        detail:
+          "Writes the bounded prompt to stdout and everything else to stderr, so `redline review --print-prompt | pbcopy` copies the prompt alone. For anyone whose model is a browser tab rather than an API key or an assistant in the terminal. Refused together with --engine api, which has no prompt to hand back.",
+      },
+      {
         flag: "--base <ref>",
         detail:
           "What to diff against, the repository's default branch otherwise. The comparison is a three-dot merge-base diff: two dots would hand the model every commit that landed on the base branch since yours started, and it would dutifully review someone else's work.",
@@ -300,6 +305,93 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     output:
       "Severity and id, the rule text, then four attributions: who decided it, the standards file and line it is defined at, which files it is scoped to, and every profile that receives it. An unknown id is an error that names `--list` rather than a guess at what you meant — a rule explained approximately is worse than one not explained, because the reader acts on it.",
     edit: "cli/rules/catalogue.ts compiles the catalogue from standards/; the command surface is in cli/bin/redline.ts. Ids are permanent by design — reword a rule freely, but never edit its id, or every historical telemetry record for it orphans and its tuning history resets to nothing.",
+  },
+  doctor: {
+    what: "Answers \"can this machine run Redline against this repository?\" before anything has gone wrong: the Node version, git, whether origin is a host Redline knows, a credential, and whether .redline.json is here and readable. It is the command to run first on a new laptop and the one to paste into an issue.",
+    built: true,
+    onboard:
+      "Nothing to install and nothing to authorise. It contacts no host — a credential is read from GH_TOKEN, GITHUB_TOKEN or `gh auth status`, never tested with a request. It is exempt from the Node floor every other command enforces, because refusing to run the diagnostic on the machine that needs diagnosing is the failure it exists to prevent.",
+    usage: [
+      "redline doctor                        # what is set up here, and the fix for what is not",
+      "redline doctor --json                 # the same checks, for a script or an issue",
+    ],
+    flags: [
+      {
+        flag: "--json",
+        detail:
+          "Every check as { name, status, detail, fix? } plus an overall ok. A warning is not a failure: a machine that has deliberately not logged in warns on credential, and the preview commands are exactly what that machine is meant to run.",
+      },
+    ],
+    output:
+      "One line per check — ok, warn or FAIL, the same three columns verify prints — with the fix indented beneath anything that is not ok: `gh auth refresh -s repo,read:org` for a login missing a scope, `npx redlinegate init` for a repository not yet onboarded. A remote on a host Redline does not know is named without printing the URL, because a remote can carry a token and this output is written to be pasted. Exit 0 unless a check FAILs.",
+    edit: "cli/commands/doctor.ts. Each check is a function returning a status, a detail and an optional fix; the bin only prints them. A new check belongs here only if it can be answered from the machine alone — a host round-trip would make the one command that must always run depend on the network.",
+  },
+  evidence: {
+    what: "Shows the measurement behind this repository's enforcement rung and what the next rung asks for. With record, it writes a measurement into .redline.json — the only thing that can raise a rung. A repository starts at observe and earns its way up on recorded figures; without this the ladder refused every promotion, because nothing ever supplied the evidence it asks for.",
+    built: true,
+    onboard:
+      "Reads and writes the checkout only. The figures come from the metrics plane, which sees the estate over a window; the CLI supplies the audit trail — validated, dated, attributed, and in git where a reviewer can see it move — not the numbers. Once a record makes the next rung eligible, raise it with `redline init --rung <name>`.",
+    usage: [
+      "redline evidence                      # the rung, the record, what the next rung asks for",
+      "redline evidence record --source <where> --seed-recall 1 --acted-on-rate 0.72 --sample-size 40 --false-positives 0",
+      "redline evidence --json",
+    ],
+    flags: [
+      {
+        flag: "--source <where>",
+        detail:
+          "Required on record: a workflow run URL, a job name, or a person — whatever answers \"where did this number come from\" for whoever reads it next. Evidence with no provenance is an assertion.",
+      },
+      {
+        flag: "--seed-recall, --acted-on-rate <0..1>",
+        detail:
+          "Seeded-corpus BLOCKER recall for this stack, and the share of findings acted on over the window. A value outside 0..1 is refused rather than clamped: a 94 meant as 94% and clamped to 1 would read as exactly the perfect recall the blocking rungs require.",
+      },
+      {
+        flag: "--sample-size, --false-positives <n>",
+        detail:
+          "How many pull requests the rate is computed from, and findings raised on the clean corpus. Whole numbers only. Any false positive at all blocks a blocking rung: a reviewer that flags correct code cannot be given a veto.",
+      },
+    ],
+    output:
+      "The rung, then the recorded figures with the date and source — marked STALE past 90 days, when evidence stops justifying a promotion. Then either `eligible for <rung>` with the command that raises it, or `not yet eligible` with each blocker and the thresholds the next rung asks for. Not being eligible is an answer, not a failure: it exits 0, so a script asking how far off it is does not break.",
+    edit: "cli/commands/evidence.ts for the command, cli/enforce/ladder.ts for the rungs and REQUIREMENTS — the thresholds each rung asks for live there and nowhere else. The record's shape is validated in cli/config/redline-json.ts on the way in and on the way out.",
+  },
+  funnel: {
+    what: "Where your own runs of this CLI succeed and where they stop: runs, successes, failures and median time per command, and which errors happen most. Every fix to this tool before it came from watching one terminal over someone's shoulder, which does not scale past the people sitting nearby.",
+    built: true,
+    onboard:
+      "Off unless you switch it on: `export REDLINE_TELEMETRY=1`. There is no endpoint in the code that writes it. The record is ~/.redline/funnel.jsonl on this machine and holds a command name, an outcome, a duration and an error kind — never arguments, paths, repository names or diffs. Moving it anywhere is your deliberate act.",
+    usage: [
+      "export REDLINE_TELEMETRY=1            # start recording, locally",
+      "redline funnel                        # what has been recorded",
+      "redline funnel clear                  # delete the file",
+    ],
+    flags: [
+      {
+        flag: "--json",
+        detail:
+          "The file path, whether recording is on, and the summary — per-command runs, ok, failed and median milliseconds, plus the most frequent error kinds.",
+      },
+    ],
+    output:
+      "A row per command and the five commonest error kinds, closing on a line that says the file has never left the machine. When recording is off it says so and how to turn it on; when nothing is recorded it names where the file would be written. An unrecognised command word is recorded as `unknown`, never as typed: `redline ghp_xxx` is a paste that missed its terminal.",
+    edit: "cli/core/telemetry.ts for recording and summarising, and the funnel branch of cli/bin/redline.ts for the command. A failure to write the record is silent on purpose — a full disk must never turn a successful onboarding into an error.",
+  },
+  completion: {
+    what: "Prints a tab-completion script for bash, zsh or fish: every command with its one-line summary, every flag each command accepts, and the metrics subcommands with their own flags.",
+    built: true,
+    onboard:
+      "Load it from your shell's startup file. It is generated from the same table the argument parser reads, so it cannot offer a flag the command refuses. It runs on any Node — a shell sourcing it at startup must never print an error on every new terminal.",
+    usage: [
+      "source <(redline completion bash)     # in ~/.bashrc",
+      "source <(redline completion zsh)      # in ~/.zshrc, after compinit",
+      "redline completion fish > ~/.config/fish/completions/redline.fish",
+    ],
+    flags: [],
+    output:
+      "The script on stdout and nothing else. It completes both `redline` and `redlinegate`. A missing or unknown shell exits 2 and points at `redline completion --help`.",
+    edit: "cli/bin/commands.ts — completionTree builds the words from COMMANDS and the metrics option tables, completionScript renders them per shell. Adding a command or a flag to the table updates completion with no change here.",
   },
   registry: {
     what: "Derives the register of onboarded repositories by walking the organisation and reading the .redline.json each one carries. It is the input both redline sync and the estate dashboard run off — sync needs to know who to open a pull request on, and coverage needs to know the denominator.",

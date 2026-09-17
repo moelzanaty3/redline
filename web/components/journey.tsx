@@ -56,7 +56,7 @@ const MENU: [string, string][] = [
   ["What should Redline install?", "gate, merge-policy, labels"],
   ["Where should the merge gate live?", "in the organisation"],
   ["How hard should the check bite?", "observe"],
-  ["Ready?", "Apply"],
+  ["Ready?", "Write, commit and open a pull request"],
 ];
 
 const dim = (t: string): Tok => ({ t, c: "tk-dim" });

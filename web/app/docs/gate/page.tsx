@@ -83,6 +83,28 @@ export default function Page() {
         config file claims — before it will call the check name confirmed.
       </p>
 
+      <h2 id="local-agent">No CI at all: the local-agent gate</h2>
+      <p>
+        <code>redline init --pipeline local-agent</code> installs no workflow.
+        The gate is <code>.redline/hooks/pre-push</code>, committed so it can be
+        reviewed, versioned and removed like anything else. Before{" "}
+        <code>git push</code> it runs the deterministic rules as{" "}
+        <code>redline policy</code> over every ref being pushed, and the
+        repository&apos;s enforcement rung decides what a finding does:{" "}
+        <code>observe</code> and <code>warn</code> report,{" "}
+        <code>block-blocker</code> and <code>block-high</code> refuse the push.
+        The model-judged rules are handed to whichever assistant you already use.
+      </p>
+      <p>
+        It publishes no check, so no ruleset can require it, and{" "}
+        <code>git push --no-verify</code> skips it — the honest trade for a gate
+        that needs no CI, no credential and no host. Each engineer runs{" "}
+        <code>git config core.hooksPath .redline/hooks</code> once per clone. A
+        hook already installed in <code>.git/hooks/pre-push</code> by husky v4,
+        lefthook or pre-commit is reported as <code>denied</code> rather than
+        silently orphaned.
+      </p>
+
       <h2 id="adding-a-check">Adding a check of your own</h2>
       <p>
         Three ways, in the order you should reach for them. The first two need no

@@ -20,7 +20,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { FLAT_DOCS } from "./docs-nav";
 import { getRules, type Severity } from "./rules";
-import { PLANS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS } from "./registry";
+import { SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS } from "./registry";
 
 /** A rule as its own search result, rather than a page that happens to list it. */
 export type RuleHit = {
@@ -133,7 +133,6 @@ const RENDERED_FILES: [base: string, entries: { slug: string; file: string }[]][
   ["/docs/templates", TEMPLATES],
   ["/docs/scripts", SCRIPTS],
   ["/docs/seeds", SEEDS],
-  ["/docs/roadmap", PLANS],
 ];
 
 function read(file: string): string {

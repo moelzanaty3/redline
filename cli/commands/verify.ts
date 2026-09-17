@@ -148,7 +148,7 @@ export async function verify(
   // Read before the policy, because whether anything in this repository can
   // publish the Redline check is what decides whether a blocking policy is a
   // working gate or a repository-wide deadlock. Local: no host call.
-  const machinery = platform.readGateMachinery(opts.cwd);
+  const machinery = platform.readGateMachinery(opts.cwd, config.pipeline);
   const gateOwned = config.capabilities.gate;
   // A fact about the repository, not about who owns it: a gate file a
   // deselection stopped maintaining still fires on every pull request until
@@ -286,7 +286,22 @@ export async function verify(
     !renamed &&
     requiredChecks.length > 0 &&
     !requiredChecks.includes(machinery.publishes);
-  const machineryHealthy = machinery.present && machinery.publishes !== null && !renamed && !policyMoved;
+  // A gate whose check is named outside this repository is healthy on the one
+  // question a checkout can answer: the file is there and still runs on pull
+  // requests. Holding it to `publishes` instead failed every GitHub-hosted
+  // repository built by Azure Pipelines, telling it to re-run init over a file
+  // that was already correct — see GateMachinery.externallyNamed.
+  const machineryHealthy =
+    machinery.externallyNamed === true
+      ? machinery.present
+      : machinery.present && machinery.publishes !== null && !renamed && !policyMoved;
+  // Every sentence below is about a file a build agent runs and a check name a
+  // host shows. A pre-push hook has neither, so on that pipeline they described
+  // machinery this repository does not have — the unwired case in particular
+  // reported the file as edited when the file was untouched and only
+  // `core.hooksPath` was wrong, sending the reader to the one thing that was
+  // already correct.
+  const localAgent = config.pipeline === 'local-agent';
   add(
     'gate-machinery',
     !gateOwned || machineryHealthy,
@@ -309,10 +324,25 @@ export async function verify(
         : `${OFF_BY_CHOICE} — this repository publishes its own merge gate, so Redline installs none ` +
           `at ${machinery.path}`
       : !machinery.present
-        ? `${machinery.path} is not in this repository, so nothing will ever publish ${machinery.expected}` +
-          `${requiredChecks.includes(machinery.expected) ? ' — which the policy requires' : ''}` +
-          '; re-run redline init'
-        : machinery.publishes === null
+        ? localAgent
+          ? `${machinery.path} is not in this repository, so nothing reviews a push here; re-run redline init`
+          : `${machinery.path} is not in this repository, so nothing will ever publish ${machinery.expected}` +
+            `${requiredChecks.includes(machinery.expected) ? ' — which the policy requires' : ''}` +
+            '; re-run redline init'
+        : localAgent
+          ? machinery.externallyNamed === true
+            ? `${machinery.path} runs before every push from this clone. It reports to no host, so ` +
+              'there is no check name here for a ruleset to require — and every other clone needs ' +
+              '`git config core.hooksPath .redline/hooks` once before the gate runs there too'
+            : `${machinery.path} is present but nothing runs it: core.hooksPath does not point at ` +
+              '.redline/hooks, or the file is not executable. The hook itself is fine — run ' +
+              '`git config core.hooksPath .redline/hooks` in this clone'
+          : machinery.externallyNamed === true
+          ? `${machinery.path} runs on pull requests. The check GitHub shows is published by the ` +
+            'Azure Pipelines app under the pipeline definition\'s own name, which is not in this ' +
+            'repository — register the definition in Azure DevOps if you have not, and require ' +
+            'that name in the ruleset'
+          : machinery.publishes === null
           ? `${machinery.path} no longer publishes ${machinery.expected} — the gate is not triggered by ` +
             'pull requests, or the part of the file that reports it has been edited; re-run redline init'
           : renamed
@@ -445,16 +475,24 @@ export async function verify(
     .map((o) => o.capability);
   const unlicensedDetail = `not available on this repository: ${unlicensed.join(', ')}`;
   const unobservedDetail = `not confirmed: ${unobserved.join(', ')} — not visible to this token`;
+  // Only when something is actually off. A link beside "security floor enabled"
+  // is noise, and a link beside "not visible to this token" sends the reader to
+  // a page their token could not read anyway — the fix there is a credential,
+  // not a setting.
+  const route =
+    off.length > 0 && security.settingsUrl !== undefined
+      ? ` — turn them on at ${security.settingsUrl}`
+      : '';
   add(
     'security-floor',
     off.length === 0 && (unobserved.length === 0 || opts.gate === true),
-    [
+    ([
       off.length > 0 ? `disabled: ${off.join(', ')}` : null,
       unobserved.length > 0 ? unobservedDetail : null,
       unlicensed.length > 0 ? unlicensedDetail : null,
     ]
       .filter((s): s is string => s !== null)
-      .join('. ') || 'security floor enabled'
+      .join('. ') || 'security floor enabled') + route
   );
 
   // Read-only: render() runs in check mode, which reports staleness without

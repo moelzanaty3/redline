@@ -53,6 +53,10 @@ export const BEHAVIOUR: Record<Rung, RungBehaviour> = {
 // than in code paths that use them, so raising the bar is one edit and is
 // reviewable as a policy change.
 export interface Evidence {
+  // When the measurement was taken, ISO 8601. Optional so the type stays usable
+  // for a caller computing evidence live rather than reading a record; a live
+  // figure has no staleness to check.
+  recordedAt?: string;
   // Seeded-corpus BLOCKER recall for this repository's stack, 0..1, or null when
   // the canary has never scored it.
   seedRecall: number | null;
@@ -96,6 +100,24 @@ export const REQUIREMENTS: Record<Rung, Requirement> = {
   },
 };
 
+/**
+ * How old a measurement may be and still justify a promotion.
+ *
+ * Ninety days. Evidence describes a reviewer, a rule set and a codebase at a
+ * moment; all three move. A recall figure from last year says nothing about the
+ * rules shipped since, and a repository holding a blocking rung on a stale
+ * number is exactly the "guarantee nobody checked" the ladder exists to
+ * prevent. Demotion is unaffected — the safe direction never needs evidence,
+ * fresh or otherwise.
+ */
+export const EVIDENCE_MAX_AGE_DAYS = 90;
+
+export function evidenceAgeDays(recordedAt: string, now: Date = new Date()): number | null {
+  const then = Date.parse(recordedAt);
+  if (Number.isNaN(then)) return null;
+  return Math.floor((now.getTime() - then) / 86_400_000);
+}
+
 export interface PromotionCheck {
   // The rung being asked about.
   to: Rung;
@@ -126,7 +148,10 @@ export function canPromote(
   from: Rung,
   to: Rung,
   evidence: Evidence,
-  marketFloor: Rung = 'observe'
+  marketFloor: Rung = 'observe',
+  // Supplied so the freshness check is testable without waiting ninety days,
+  // and so a single run judges every repository against one clock.
+  now: Date = new Date()
 ): PromotionCheck {
   const blockers: string[] = [];
 
@@ -157,6 +182,27 @@ export function canPromote(
   }
 
   const need = REQUIREMENTS[to];
+
+  // Freshness first, because everything below it is read off the same record.
+  // Only asked of rungs that require something: `warn` from `observe` needs a
+  // sample size and nothing else, and failing that on age would be a second
+  // hurdle the requirement table never declared.
+  const requiresEvidence =
+    need.minSampleSize > 0 ||
+    need.minSeedRecall !== null ||
+    need.minActedOnRate !== null ||
+    need.maxFalsePositives !== null;
+  if (requiresEvidence && evidence.recordedAt !== undefined) {
+    const age = evidenceAgeDays(evidence.recordedAt, now);
+    if (age === null) {
+      blockers.push('the recorded evidence has no readable date, so nothing shows when it was measured');
+    } else if (age > EVIDENCE_MAX_AGE_DAYS) {
+      blockers.push(
+        `the evidence is ${age} days old and ${EVIDENCE_MAX_AGE_DAYS} is the limit — rules, reviewer and ` +
+          'codebase have all moved since, so re-measure before raising enforcement on it'
+      );
+    }
+  }
 
   if (evidence.sampleSize < need.minSampleSize) {
     blockers.push(

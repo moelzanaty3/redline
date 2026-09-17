@@ -222,3 +222,98 @@ test('a target carrying artifacts its profile no longer renders is not "current"
 
   assert.equal(report.results[0]?.outcome.kind, 'current');
 });
+
+// Serial was fine for the eight repositories this was built against. At two
+// hundred, each several round trips deep, the wall-clock cost is the estate
+// size times the latency and the operator watching a silent terminal
+// reasonably concludes it has hung.
+test('repositories are synced in parallel, up to the limit', async () => {
+  let inFlight = 0;
+  let peak = 0;
+  const base = fakeHost();
+  const host: SyncHost = {
+    ...base.host,
+    async readRemoteConfig(ref) {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight -= 1;
+      return base.host.readRemoteConfig(ref);
+    },
+  };
+
+  const reg = registry(...Array.from({ length: 12 }, (_, i) => entry(`web-${i}`)));
+  await runSync(host, reg, { root: ROOT, standardsVersion: '0.0.1', concurrency: 4 });
+
+  assert.ok(peak > 1, 'ran serially');
+  assert.ok(peak <= 4, `exceeded the limit: ${peak}`);
+});
+
+// The report is what gets diffed against the last run. Workers finish in
+// whatever order the host answers, and a report whose order changes run to run
+// cannot be compared to anything.
+test('the report comes back in plan order however the workers interleave', async () => {
+  const base = fakeHost();
+  const host: SyncHost = {
+    ...base.host,
+    async readRemoteConfig(ref) {
+      // Later repositories answer first.
+      const delay = Math.max(0, 40 - Number(ref.repo.split('-')[1]) * 10);
+      await new Promise((r) => setTimeout(r, delay));
+      return base.host.readRemoteConfig(ref);
+    },
+  };
+
+  const reg = registry(...Array.from({ length: 4 }, (_, i) => entry(`web-${i}`)));
+  const report = await runSync(host, reg, { root: ROOT, standardsVersion: '0.0.1', concurrency: 4 });
+
+  assert.deepEqual(
+    report.results.map((r) => r.repo),
+    ['acme/web-0', 'acme/web-1', 'acme/web-2', 'acme/web-3']
+  );
+});
+
+test('one unreachable repository does not stop the rest, in parallel too', async () => {
+  const { host } = fakeHost({ throwOn: 'web-1' });
+  const reg = registry(entry('web-0'), entry('web-1'), entry('web-2'));
+
+  const report = await runSync(host, reg, { root: ROOT, standardsVersion: '0.0.1', concurrency: 3 });
+
+  assert.equal(report.failures, 1);
+  assert.equal(report.results[1]?.outcome.kind, 'failed');
+  assert.equal(report.results[0]?.outcome.kind, 'opened');
+  assert.equal(report.results[2]?.outcome.kind, 'opened');
+});
+
+test('progress is reported as each repository settles, not only at the end', async () => {
+  const { host } = fakeHost();
+  const seen: string[] = [];
+  const reg = registry(entry('web-0'), entry('web-1'));
+
+  await runSync(host, reg, {
+    root: ROOT,
+    standardsVersion: '0.0.1',
+    concurrency: 1,
+    onResult: (result, done, total) => seen.push(`${done}/${total} ${result.repo}`),
+  });
+
+  assert.deepEqual(seen, ['1/2 acme/web-0', '2/2 acme/web-1']);
+});
+
+// A concurrency above the target count must not spawn idle workers or, worse,
+// index past the end of the plan.
+test('a limit larger than the estate is harmless', async () => {
+  const { host } = fakeHost();
+  const report = await runSync(host, registry(entry('web-0')), {
+    root: ROOT,
+    standardsVersion: '0.0.1',
+    concurrency: 50,
+  });
+  assert.equal(report.results.length, 1);
+});
+
+test('an empty plan completes rather than hanging', async () => {
+  const { host } = fakeHost();
+  const report = await runSync(host, registry(), { root: ROOT, standardsVersion: '0.0.1' });
+  assert.deepEqual(report.results, []);
+});

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { RedlineError } from '../core/errors.ts';
 import { parseRegistry } from '../registry/serialize.ts';
 import type { Registry } from '../registry/types.ts';
-import { runSync, type SyncHost, type SyncReport } from '../sync/run.ts';
+import { runSync, type SyncRunOptions, type SyncHost, type SyncReport } from '../sync/run.ts';
 
 export interface SyncOptions {
   // Where standards/ and the manifest live. These ship inside the package, so
@@ -17,6 +17,8 @@ export interface SyncOptions {
   repo?: string;
   force?: boolean;
   dryRun?: boolean;
+  concurrency?: number;
+  onResult?: SyncRunOptions['onResult'];
   // Overridable for tests; the register is a file in the source repo.
   registryPath?: string;
 }
@@ -63,5 +65,7 @@ export async function sync(host: SyncHost, opts: SyncOptions): Promise<SyncRepor
     ...(opts.repo ? { repo: opts.repo } : {}),
     ...(opts.force ? { force: true } : {}),
     ...(opts.dryRun ? { dryRun: true } : {}),
+    ...(opts.concurrency === undefined ? {} : { concurrency: opts.concurrency }),
+    ...(opts.onResult === undefined ? {} : { onResult: opts.onResult }),
   });
 }

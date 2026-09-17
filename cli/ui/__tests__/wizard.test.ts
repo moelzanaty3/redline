@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findExistingPipeline } from '../facts.ts';
 import { isRedlineError } from '../../core/errors.ts';
-import { runWizard, type WizardFacts } from '../wizard.ts';
+import { ORIENTATION, runWizard, type WizardFacts } from '../wizard.ts';
 import type { Choice, Prompter } from '../prompt.ts';
 
 const roots: string[] = [];
@@ -272,7 +272,11 @@ test('the default action is a dry run, not an apply', async () => {
   const answers = await runWizard(prompter, FACTS);
   assert.equal(answers.action, 'dry-run');
   const ready = asked.find((a) => a.title === 'Ready?');
-  assert.deepEqual(ready?.labels, ['Dry run', 'Write the files only', 'Apply']);
+  assert.deepEqual(ready?.labels, [
+    'Preview the plan, change nothing',
+    'Write the files, commit nothing',
+    'Write, commit and open a pull request',
+  ]);
 });
 
 // Shown, not hidden. An operator looking for Cursor and not finding it cannot
@@ -390,9 +394,13 @@ test('a tool the repository already runs stands the gate job it covers down', as
     },
   });
   assert.ok(answers.capabilities.includes('gate'));
-  assert.equal(notes.length, 1);
-  assert.match(notes[0]!, /SonarQube already covers static analysis/);
-  assert.match(notes[0]!, /stood down rather than run a second time/);
+  // Still exactly one note ABOUT A TOOL. The orientation note is printed on
+  // every run and is excluded by identity rather than by position, so this
+  // keeps failing if a second tool note ever appears.
+  const toolNotes = notes.filter((n) => n !== ORIENTATION);
+  assert.equal(toolNotes.length, 1);
+  assert.match(toolNotes[0]!, /SonarQube already covers static analysis/);
+  assert.match(toolNotes[0]!, /stood down rather than run a second time/);
 });
 
 test('what .redline.json recorded outranks fresh detection on a re-run', async () => {
@@ -488,11 +496,11 @@ test('an unreachable repository disables Apply with the reason on the row', asyn
   await runWizard(prompter, { ...FACTS, unreachable: 'that account cannot see it' });
   const ready = asked.find((a) => a.title === 'Ready?');
   assert.ok(ready);
-  const apply = ready.labels.indexOf('Apply');
-  assert.notEqual(apply, -1, 'Apply is still listed');
+  const apply = ready.labels.indexOf('Write, commit and open a pull request');
+  assert.notEqual(apply, -1, 'the full run is still listed');
   assert.equal(ready.disabled[apply], 'that account cannot see it');
-  assert.equal(ready.disabled[ready.labels.indexOf('Dry run')], undefined);
-  assert.equal(ready.disabled[ready.labels.indexOf('Write the files only')], undefined);
+  assert.equal(ready.disabled[ready.labels.indexOf('Preview the plan, change nothing')], undefined);
+  assert.equal(ready.disabled[ready.labels.indexOf('Write the files, commit nothing')], undefined);
 });
 
 test('a reachable repository says nothing and leaves Apply selectable', async () => {
@@ -504,6 +512,101 @@ test('a reachable repository says nothing and leaves Apply selectable', async ()
   );
   const ready = asked.find((a) => a.title === 'Ready?');
   assert.ok(ready);
-  assert.equal(ready.disabled[ready.labels.indexOf('Apply')], undefined);
+  assert.equal(ready.disabled[ready.labels.indexOf('Write, commit and open a pull request')], undefined);
   assert.equal(answers.action, 'dry-run');
+});
+
+// --- no pull request check at all --------------------------------------------
+
+// A repository with no CI had no way to say so at the question that asks. It
+// could deselect `gate` two questions later, but only after answering what runs
+// checks it does not have — and the menu went on to ask where the gate should
+// live and how hard it should bite.
+test('the pipeline question offers "nothing" and it deselects the gate', async () => {
+  const { prompter, asked } = acceptDefaults({
+    'What runs your pull request checks?': 'none',
+  });
+  const answers = await runWizard(prompter, FACTS);
+
+  assert.ok(!answers.capabilities.includes('gate'), 'the gate is not installed');
+  const install = asked.find((q) => q.title === 'What should Redline install?');
+  assert.ok(!install?.labels.includes('gate'), 'and it is not offered to be ticked back on');
+});
+
+// Both are questions about a gate, and neither has a subject once there is none.
+test('choosing nothing asks neither where the gate lives nor how hard it bites', async () => {
+  const { prompter, asked } = acceptDefaults({
+    'What runs your pull request checks?': 'none',
+  });
+  const answers = await runWizard(prompter, FACTS);
+
+  assert.ok(!asked.some((q) => q.title === 'Where should the merge gate live?'));
+  assert.ok(!asked.some((q) => q.title === 'How hard should the check bite?'));
+  assert.equal(answers.rung, 'observe');
+});
+
+// `capabilities.gate` is the one record of whether a gate exists. Recording a
+// third pipeline value beside it would be a second record that could disagree,
+// and the field decides which file IS the gate — so with no gate it takes the
+// value that changes nothing.
+test('choosing nothing records no third pipeline, just the inert default', async () => {
+  const { prompter } = acceptDefaults({
+    'What runs your pull request checks?': 'none',
+  });
+  const answers = await runWizard(prompter, FACTS);
+  assert.equal(answers.pipeline, 'github-actions');
+});
+
+// The two real pipelines are untouched by the third choice.
+test('choosing a pipeline still selects the gate', async () => {
+  const { prompter } = acceptDefaults({
+    'What runs your pull request checks?': 'azure-pipelines',
+  });
+  const answers = await runWizard(prompter, FACTS);
+  assert.equal(answers.pipeline, 'azure-pipelines');
+  assert.ok(answers.capabilities.includes('gate'));
+});
+
+// --- a gate that runs on this machine ----------------------------------------
+
+// Distinct from having no gate. This one refuses a push; it just does it
+// somewhere a branch ruleset cannot see. Keeping the two answers apart is what
+// lets `capabilities.gate` stay the record of whether a gate exists while
+// `pipeline` stays the record of what runs it.
+test('a local agent gate is a gate, unlike "nothing"', async () => {
+  const { prompter, asked } = acceptDefaults({
+    'What runs your pull request checks?': 'local-agent',
+  });
+  const answers = await runWizard(prompter, FACTS);
+
+  const question = asked.find((q) => q.title === 'What runs your pull request checks?');
+  assert.ok(
+    question?.labels.some((label) => /agent on this machine/i.test(label)),
+    `expected the question to offer it, got ${JSON.stringify(question?.labels)}`
+  );
+  assert.equal(answers.pipeline, 'local-agent');
+  assert.ok(answers.capabilities.includes('gate'));
+});
+
+// There is no reusable workflow to source, only a hook this repository carries,
+// so answering `org` there would record a preference that decides nothing.
+test('a local agent gate is not asked where the gate lives', async () => {
+  const { prompter, asked } = acceptDefaults({
+    'What runs your pull request checks?': 'local-agent',
+  });
+  await runWizard(prompter, FACTS);
+
+  assert.ok(!asked.some((q) => q.title === 'Where should the merge gate live?'));
+});
+
+// It does bite, so the rung question keeps its subject — the difference from
+// "nothing", asked at the question that decides it.
+test('a local agent gate is still asked how hard it bites, unlike "nothing"', async () => {
+  const withGate = acceptDefaults({ 'What runs your pull request checks?': 'local-agent' });
+  await runWizard(withGate.prompter, FACTS);
+  assert.ok(withGate.asked.some((q) => q.title === 'How hard should the check bite?'));
+
+  const without = acceptDefaults({ 'What runs your pull request checks?': 'none' });
+  await runWizard(without.prompter, FACTS);
+  assert.ok(!without.asked.some((q) => q.title === 'How hard should the check bite?'));
 });

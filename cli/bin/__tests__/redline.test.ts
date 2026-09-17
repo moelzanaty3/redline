@@ -11,6 +11,7 @@ import { createGit, type GitRunner } from '../../core/git.ts';
 import { RedlineError } from '../../core/errors.ts';
 import { resolvePlatform, type ResolvePlatformOptions } from '../../platforms/resolve.ts';
 import { fakePlatform, type FakePlatform } from '../../commands/__tests__/fake-platform.ts';
+import { readConfig } from '../../config/redline-json.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const BIN = fileURLToPath(new URL('../redline.ts', import.meta.url));
@@ -67,6 +68,92 @@ test('an unknown flag exits 2', async () => {
   const { opts, lines } = deps(repo());
   assert.equal(await run(['init', '--nope'], opts), 2);
   assert.ok(lines.length > 0);
+});
+
+test('--help is an index of every command, not every flag', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['--help'], opts), 0);
+  const usage = lines.join('\n');
+  for (const command of ['init', 'remove', 'verify', 'review', 'policy', 'sync', 'metrics', 'funnel']) {
+    assert.match(usage, new RegExp(`redline ${command}\\b`));
+  }
+  assert.ok(!usage.includes('--adopt-caller'));
+  assert.ok(usage.includes('redline <command> --help'));
+});
+
+test('<command> --help and -h print that command alone and exit 0', async () => {
+  for (const flag of ['--help', '-h']) {
+    const { opts, lines } = deps(repo());
+    assert.equal(await run(['verify', flag], opts), 0);
+    const help = lines.join('\n');
+    assert.match(help, /redline verify \[--gate\]/);
+    assert.ok(!help.includes('redline init'));
+  }
+});
+
+test('<command> --help works on a Node too old to run the command', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['init', '--help'], { ...opts, nodeVersion: 'v18.0.0' }), 0);
+  assert.ok(lines.some((l) => l.includes('--dry-run')));
+});
+
+test('a mistyped flag names the one it was probably meant to be', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['init', '--dryrun'], opts), 2);
+  assert.ok(lines.some((l) => l.includes('did you mean --dry-run?')));
+  assert.ok(lines.some((l) => l.includes('run: redline init --help')));
+});
+
+test('a mistyped command names the one it was probably meant to be', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['veriy'], opts), 2);
+  assert.ok(lines.some((l) => l.includes('did you mean redline verify?')));
+});
+
+test('output through an injected sink carries no colour codes', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['--help'], opts);
+  await run(['doctor'], opts);
+  await run(['init', '--dryrun'], opts);
+  assert.ok(lines.every((l) => !l.includes('\x1b[')));
+});
+
+test('an internal defect points at REDLINE_DEBUG, and the variable prints the stack', async () => {
+  const defect = async () => {
+    throw new TypeError('boom');
+  };
+  const plain = deps(repo());
+  assert.equal(await run(['init'], { ...plain.opts, resolvePlatform: defect }), 4);
+  assert.ok(plain.lines.some((l) => l.includes('REDLINE_DEBUG=1')));
+  assert.ok(!plain.lines.some((l) => /^\s+at /.test(l)));
+
+  const previous = process.env.REDLINE_DEBUG;
+  process.env.REDLINE_DEBUG = '1';
+  try {
+    const traced = deps(repo());
+    assert.equal(await run(['init'], { ...traced.opts, resolvePlatform: defect }), 4);
+    assert.ok(traced.lines.some((l) => l.startsWith('TypeError: boom')));
+  } finally {
+    if (previous === undefined) delete process.env.REDLINE_DEBUG;
+    else process.env.REDLINE_DEBUG = previous;
+  }
+});
+
+test('completion prints a script for a named shell and refuses anything else', async () => {
+  const bash = deps(repo());
+  assert.equal(await run(['completion', 'bash'], bash.opts), 0);
+  assert.ok(bash.lines.join('\n').includes('complete -F _redline redline redlinegate'));
+
+  const missing = deps(repo());
+  assert.equal(await run(['completion'], missing.opts), 2);
+  const unknown = deps(repo());
+  assert.equal(await run(['completion', 'powershell'], unknown.opts), 2);
+  assert.ok(unknown.lines.some((l) => l.includes('"powershell"')));
+});
+
+test('completion runs on a Node too old for the rest, so a shell startup never prints an error', async () => {
+  const { opts } = deps(repo());
+  assert.equal(await run(['completion', 'zsh'], { ...opts, nodeVersion: 'v18.0.0' }), 0);
 });
 
 test('--version prints the version and exits 0', async () => {
@@ -246,9 +333,9 @@ test('init --vendors overrides detection and skips a deselected vendor', async (
   assert.ok(existsSync(join(cwd, 'AGENTS.md')));
 });
 
-test('usage names --dry-run and says what --no-a11y and --no-speckit actually do', async () => {
+test('init --help names --dry-run and says what --no-a11y and --no-speckit actually do', async () => {
   const { opts, lines } = deps(repo());
-  await run(['--help'], opts);
+  assert.equal(await run(['init', '--help'], opts), 0);
   const usage = lines.join('\n');
   assert.ok(usage.includes('--dry-run'));
   assert.ok(usage.includes('--no-speckit'));
@@ -265,7 +352,7 @@ test('init accepts --adopt-caller and the usage says what it is for', async () =
   assert.equal(await run(['init', '--adopt-caller'], opts), 0, lines.join('\n'));
 
   const help = deps(repo());
-  await run(['--help'], help.opts);
+  await run(['init', '--help'], help.opts);
   const usage = help.lines.join('\n');
   assert.ok(usage.includes('--adopt-caller'));
   assert.ok(usage.includes('attributes it to Redline'));
@@ -475,9 +562,9 @@ test('an unknown capability name exits 2 and lists the real ones', async () => {
   assert.ok(lines.some((l) => l.includes('unknown capability "pipelines"')));
 });
 
-test('--help documents the per-capability selection', async () => {
+test('init --help documents the per-capability selection', async () => {
   const { opts, lines } = deps(repo());
-  await run(['--help'], opts);
+  await run(['init', '--help'], opts);
   const usage = lines.join('\n');
   assert.match(usage, /--skip/);
   assert.match(usage, /--with/);
@@ -648,4 +735,309 @@ test('--gate and --repo together are refused rather than silently ignoring one',
 
   assert.equal(code, 2);
   assert.match(lines.join('\n'), /cannot target another repository/);
+});
+
+// npm's `engines` field only warns. Onboarding a repository pinned to Node 18
+// printed EBADENGINE and then ran the tool anyway, so the first real symptom
+// was a failure from inside a dependency, raised partway through a command
+// that may already have written files.
+test('a Node below the floor is refused before the command runs', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(['status'], { ...opts, nodeVersion: 'v18.13.0' });
+  assert.equal(code, 2);
+  assert.ok(lines.some((l) => l.includes('Node 22 or later')));
+  // The three ways to run one command under a newer Node without touching a
+  // pin the repository set deliberately.
+  assert.ok(lines.some((l) => l.includes('volta run')));
+  assert.ok(lines.some((l) => l.includes('fnm exec')));
+  assert.ok(lines.some((l) => l.includes('nvm exec')));
+});
+
+test('the Node refusal names the command that was actually typed', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['verify'], { ...opts, nodeVersion: 'v18.13.0' });
+  assert.ok(lines.some((l) => l.includes('npx redlinegate verify')));
+  assert.ok(!lines.some((l) => l.includes('npx redlinegate init')));
+});
+
+// Refusing to run the diagnostic on the machine that needs diagnosing is the
+// exact failure the guard exists to prevent.
+test('doctor is exempt from the Node guard', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(['doctor'], { ...opts, nodeVersion: 'v18.13.0' });
+  // It fails, because Node 18 is a real fault — but it fails having reported
+  // everything else it found rather than refusing at the door.
+  assert.equal(code, 1);
+  assert.ok(lines.some((l) => l.includes('node')));
+  assert.ok(lines.some((l) => l.includes('onboarded')));
+});
+
+test('doctor --json is machine readable', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['doctor', '--json'], { ...opts, nodeVersion: 'v22.11.0' });
+  const parsed = JSON.parse(lines.join('\n')) as { checks: { name: string }[]; ok: boolean };
+  assert.ok(parsed.checks.some((c) => c.name === 'node'));
+  assert.equal(typeof parsed.ok, 'boolean');
+});
+
+test('doctor appears in the usage', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['--help'], opts);
+  assert.ok(lines.some((l) => l.includes('redline doctor')));
+});
+
+function withDiffFile(body: string): string {
+  const dir = tmp('redline-diff-');
+  const path = join(dir, 'change.diff');
+  writeFileSync(path, body);
+  return path;
+}
+
+const CLEAN_DIFF = '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,2 @@\n x\n+const ok = 1;\n';
+
+// A clean `redline policy` used to read as "the standards found nothing". Only
+// four rules in the catalogue can be decided without a model, so what it
+// actually meant was "the four checkable rules found nothing" — and a
+// repository full of violations passing silently is how that gap gets
+// mistaken for a broken tool.
+test('policy says how much of the catalogue it could not decide', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['policy', '--diff-file', withDiffFile(CLEAN_DIFF)], opts);
+  const footer = lines.find((l) => l.includes('cannot be decided without a model'));
+  assert.ok(footer, `expected a catalogue footer, got:\n${lines.join('\n')}`);
+  assert.ok(footer.includes('redline review'));
+});
+
+// `redline review --print-prompt | pbcopy` has to copy the prompt and nothing
+// else.
+//
+// Both descriptors are captured, not just stdout, and not through the injected
+// sink. The first version of this test watched process.stdout alone with a sink
+// collecting everything else, so it passed while the real command printed the
+// scope line into the pipe: `log.warn` routes to sink.out, which is stdout.
+// Only a test that owns both fds can tell the two apart.
+test('--print-prompt puts the prompt on stdout and the rest on stderr', async () => {
+  const cwd = repo();
+  const out: string[] = [];
+  const err: string[] = [];
+  const realOut = process.stdout.write.bind(process.stdout);
+  const realErr = process.stderr.write.bind(process.stderr);
+  (process.stdout as unknown as { write: (c: string) => boolean }).write = (c: string) => {
+    out.push(String(c));
+    return true;
+  };
+  (process.stderr as unknown as { write: (c: string) => boolean }).write = (c: string) => {
+    err.push(String(c));
+    return true;
+  };
+  try {
+    // No sink: the default one is the whole subject here.
+    await run(['review', '--print-prompt', '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF)], {
+      cwd,
+      root,
+      resolvePlatform: async () => fakePlatform(),
+    });
+  } finally {
+    (process.stdout as unknown as { write: typeof realOut }).write = realOut;
+    (process.stderr as unknown as { write: typeof realErr }).write = realErr;
+  }
+
+  const piped = out.join('');
+  assert.ok(piped.includes('You are reviewing a change'), 'the prompt is not on stdout');
+  // The scope line is useful and still printed — just not into the pipe.
+  // Matched on the half of the line that only the log emits — the prompt body
+  // legitimately contains the words "rules in scope" itself.
+  assert.ok(!piped.includes('Paste the prompt'), `stdout carried the scope line:\n${piped.slice(0, 300)}`);
+  assert.ok(err.join('').includes('Paste the prompt'), 'the scope line went nowhere');
+});
+
+// --engine api calls an endpoint and parses a result; there is no prompt to
+// print. Accepting both would silently ignore one of them.
+test('--print-prompt with --engine api is a usage error', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(
+    ['review', '--print-prompt', '--engine', 'api', '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF)],
+    opts
+  );
+  assert.equal(code, 2);
+  assert.ok(lines.some((l) => l.includes('print-prompt')));
+});
+
+function gitRepo(branch: string): string {
+  const dir = repo();
+  spawnSync('git', ['init', '-q', '-b', 'main', '.'], { cwd: dir });
+  spawnSync('git', ['config', 'user.email', 't@example.com'], { cwd: dir });
+  spawnSync('git', ['config', 'user.name', 'T'], { cwd: dir });
+  spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:acme/widget.git'], { cwd: dir });
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['commit', '-qm', 'init'], { cwd: dir });
+  if (branch !== 'main') spawnSync('git', ['checkout', '-qb', branch], { cwd: dir });
+  return dir;
+}
+
+// "Commit them, then run redline init" is correct on a feature branch and a
+// trap on the default one: a protected default rejects the commit at push
+// time, which is after the operator has followed the instruction and now has a
+// commit to unpick.
+test('--no-commit on the default branch says to branch first', async () => {
+  const { opts, lines } = deps(gitRepo('main'));
+  await run(['init', '--no-commit', '--profile', 'web-react'], opts);
+  const advice = lines.find((l) => l.includes('not committed'));
+  assert.ok(advice, `expected the no-commit advice, got:\n${lines.join('\n')}`);
+  assert.ok(advice.includes('git checkout -b'), advice);
+});
+
+test('--no-commit on a feature branch does not', async () => {
+  const { opts, lines } = deps(gitRepo('feat/x'));
+  await run(['init', '--no-commit', '--profile', 'web-react'], opts);
+  const advice = lines.find((l) => l.includes('not committed'));
+  assert.ok(advice);
+  assert.ok(!advice.includes('git checkout -b'), advice);
+});
+
+// `redline remove` has existed all along, but the run that has just changed
+// somebody's repository is the first moment anyone wonders how to undo it — by
+// which point the help output is two commands behind them.
+test('a completed apply names the way back out', async () => {
+  const { opts, lines } = deps(gitRepo('feat/y'));
+  await run(['init', '--profile', 'web-react'], opts);
+  const hint = lines.find((l) => l.includes('Changed your mind'));
+  assert.ok(hint, `expected an undo hint, got:\n${lines.join('\n')}`);
+  assert.ok(hint.includes('redline remove --dry-run'), hint);
+});
+
+// The ladder was decorative: canPromote asked for evidence, the bin never
+// passed any, so every repository was refused every promotion and stayed at
+// observe forever. The only route up was hand-editing the file that tells you
+// not to edit it by hand.
+test('a recorded measurement lets a repository climb a rung', async () => {
+  const cwd = gitRepo('feat/rung');
+  const { opts } = deps(cwd);
+  await run(['init', '--no-commit', '--profile', 'web-react'], opts);
+  assert.equal(readConfig(cwd)?.rung, 'observe');
+
+  await run(['evidence', 'record', '--sample-size', '12', '--source', 'metrics run 1'], deps(cwd).opts);
+  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+  assert.equal(readConfig(cwd)?.rung, 'warn');
+});
+
+// Promotion used to erase the measurement that justified it: init rebuilt
+// .redline.json field by field and had no line for evidence. A repository sat
+// at block-blocker with nothing on file saying why, and the freshness window
+// could never fire because no record survived long enough to age.
+test('a promotion does not destroy the evidence that justified it', async () => {
+  const cwd = gitRepo('feat/keep');
+  await run(['init', '--no-commit', '--profile', 'web-react'], deps(cwd).opts);
+  await run(
+    ['evidence', 'record', '--sample-size', '30', '--seed-recall', '1', '--source', 'canary 7'],
+    deps(cwd).opts
+  );
+  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+
+  const kept = readConfig(cwd)?.evidence;
+  assert.equal(kept?.sampleSize, 30, 'the record was dropped by the run that used it');
+  assert.equal(kept?.source, 'canary 7');
+});
+
+test('a repository with no evidence is still refused', async () => {
+  const cwd = gitRepo('feat/norung');
+  await run(['init', '--no-commit', '--profile', 'web-react'], deps(cwd).opts);
+  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+  assert.equal(readConfig(cwd)?.rung, 'observe');
+});
+
+// `redline ghp_xxx` is a paste that missed the terminal it was meant for.
+// Writing the word to a file would be this tool breaking its own
+// core/customer-data-in-logs rule on its own author.
+test('an unrecognised command word is never written to the funnel', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-funnel-bin-'));
+  const path = join(dir, 'funnel.jsonl');
+  const { opts } = deps(gitRepo('main'));
+
+  const realHome = process.env['HOME'];
+  process.env['REDLINE_TELEMETRY'] = '1';
+  process.env['HOME'] = dir;
+  try {
+    await run(['ghp_averyrealtokenpastedbymistake'], opts);
+  } finally {
+    delete process.env['REDLINE_TELEMETRY'];
+    if (realHome === undefined) delete process.env['HOME'];
+    else process.env['HOME'] = realHome;
+  }
+
+  const written = existsSync(join(dir, '.redline', 'funnel.jsonl'))
+    ? readFileSync(join(dir, '.redline', 'funnel.jsonl'), 'utf8')
+    : '';
+  assert.doesNotMatch(written, /ghp_/);
+  assert.equal(existsSync(path), false);
+});
+
+test('nothing is recorded unless the variable is set', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-funnel-off-'));
+  const { opts } = deps(gitRepo('main'));
+  const realHome = process.env['HOME'];
+  process.env['HOME'] = dir;
+  try {
+    await run(['--version'], opts);
+  } finally {
+    if (realHome === undefined) delete process.env['HOME'];
+    else process.env['HOME'] = realHome;
+  }
+
+  assert.equal(existsSync(join(dir, '.redline', 'funnel.jsonl')), false);
+});
+
+// The provider line is commentary, not the result. On stdout it sat in front of
+// the document and `redline review --engine api --json | jq` could not parse it.
+test('review --json with an inferred provider keeps stdout a parseable document', async () => {
+  const realFetch = globalThis.fetch;
+  const previous = process.env.REDLINE_REVIEW_PROVIDER;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' } }] }), { status: 200 });
+  process.env.REDLINE_REVIEW_PROVIDER = 'openai';
+  try {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await run(
+      [
+        'review', '--engine', 'api', '--model', 'm', '--base-url', 'http://localhost:1/v1',
+        '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF), '--json',
+      ],
+      { cwd: repo(), root, sink: { out: (l) => out.push(l), err: (l) => err.push(l) } }
+    );
+    assert.equal(code, 0, err.join('\n'));
+    assert.doesNotThrow(() => JSON.parse(out.join('\n')), out.join('\n'));
+    assert.ok(err.some((l) => l.startsWith('provider openai')));
+  } finally {
+    globalThis.fetch = realFetch;
+    if (previous === undefined) delete process.env.REDLINE_REVIEW_PROVIDER;
+    else process.env.REDLINE_REVIEW_PROVIDER = previous;
+  }
+});
+
+// The human output always exits 0 so nobody wires a local review into CI as a
+// second gate that enforces nothing. `--json` exiting 1 on findings reopened
+// exactly that door for the callers most likely to script it.
+test('review --json exits 0 with findings, the same as the human output', async () => {
+  const realFetch = globalThis.fetch;
+  const content = JSON.stringify({
+    findings: [{ rule: 'core/uncatalogued', severity: 'BLOCKER', file: 'src/a.ts', line: 2, problem: 'x', fix: 'y' }],
+  });
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  try {
+    const argv = [
+      'review', '--engine', 'api', '--provider', 'openai', '--model', 'm',
+      '--base-url', 'http://localhost:1/v1', '--profile', 'web-react', '--diff-file', withDiffFile(CLEAN_DIFF),
+    ];
+    const json = deps(repo());
+    const jsonCode = await run([...argv, '--json'], json.opts);
+    assert.ok(json.lines.join('\n').includes('core/uncatalogued'), `the finding did not reach the document:\n${json.lines.join('\n')}`);
+    assert.equal(jsonCode, 0);
+
+    const human = deps(repo());
+    assert.equal(await run(argv, human.opts), 0);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

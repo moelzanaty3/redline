@@ -1,9 +1,29 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs';
-import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { CLI_VERSION } from '../core/version.ts';
-import { createLog, type Sink } from '../core/log.ts';
+import { createLog, paintMarker, paintSeverity, type Log, type Sink } from '../core/log.ts';
+import { closest } from '../core/suggest.ts';
+import {
+  COMMANDS,
+  commandHelp,
+  completionScript,
+  completionTree,
+  isCommand,
+  parseCliArgs,
+  parseCommand,
+  SHELLS,
+  usage,
+} from './commands.ts';
+import {
+  clear as clearFunnel,
+  record as recordFunnel,
+  summarise as summariseFunnel,
+  telemetryEnabled,
+  telemetryPath,
+  TELEMETRY_ENV,
+  type FunnelEvent,
+} from '../core/telemetry.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
 import { isSeverity } from '../core/severity.ts';
 import { isRung, RUNGS } from '../enforce/ladder.ts';
@@ -18,7 +38,7 @@ import { createGit } from '../core/git.ts';
 import { parseRemote } from '../platforms/detect.ts';
 import { Cancelled, createPrompter, isInteractive, type Prompter, type Task } from '../ui/prompt.ts';
 import { renderReport } from '../ui/report.ts';
-import { colorDepth, colorEnabled, glyphs, palette } from '../ui/tty.ts';
+import { colorDepth, colorEnabled, glyphs, palette, type Palette } from '../ui/tty.ts';
 import { gatherFacts } from '../ui/facts.ts';
 import { runWizard, type Host as WizardHost, type WizardAnswers } from '../ui/wizard.ts';
 import {
@@ -31,166 +51,32 @@ import { remove, REMOVE_BRANCH } from '../commands/remove.ts';
 import { createHostWithdrawal } from '../remove/host.ts';
 import { verify } from '../commands/verify.ts';
 import { sync } from '../commands/sync.ts';
+import { DEFAULT_CONCURRENCY } from '../sync/run.ts';
 import { exempt } from '../commands/exempt.ts';
 import { formatFinding, policy } from '../commands/policy.ts';
 import { review } from '../commands/review.ts';
 import { renderFinding } from '../review/schema.ts';
 import { embedded } from '../review/engines/embedded.ts';
 import { createApiEngine } from '../review/engines/api.ts';
-import { METRICS_COMMANDS, helpFor } from '../metrics/options.ts';
+import { detectModel, detectProvider, MODEL_ENV, PROVIDER_ENV } from '../review/detect.ts';
+import { METRICS_COMMANDS, REGISTRY_COMMAND, helpFor } from '../metrics/options.ts';
 import { runMetrics, specFor } from '../metrics/run.ts';
 import { createSyncHost } from '../sync/host.ts';
 import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
 import { standardsVersion } from '../commands/sync.ts';
-import { isGatePipeline, isGateSource } from '../platforms/types.ts';
+import { doctor } from '../commands/doctor.ts';
+import { evidenceReport, formatEvidence, recordEvidence } from '../commands/evidence.ts';
+import { nodeSupport, unsupportedNodeHint, unsupportedNodeMessage } from '../core/runtime.ts';
+import { GATE_PIPELINES, isGatePipeline, isGateSource } from '../platforms/types.ts';
 import type { Platform, RepoRef } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
 import type { RemoteVerifyHost } from '../verify/remote.ts';
 import type { HostWithdrawal } from '../remove/host.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-
-const USAGE = [
-  'redline — engineering control plane',
-  '',
-  '  redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]',
-  '               [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]',
-  '               [--gate-source org|local] [--docs-url <base>] [--no-commit]',
-  '      onboard this repository: standards, security floor, merge gate (advisory), registration',
-  '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
-  '      --no-commit write the files into the working tree and stop: no repository setting is',
-  '                  changed, no branch is made, nothing is committed and no pull request is',
-  '                  opened. Needs no credential and contacts no host, so it works offline — and',
-  '                  so an org-sourced caller is written without checking the organisation',
-  '                  publishes the gate it references. Run redline verify once you have committed',
-  '      --profile <list>  one profile, or several separated by commas, whose stacks are',
-  '                  rendered together — a React app with its own Terraform beside it is',
-  '                  web,infra. The recorded name is sorted, so the order you type cannot',
-  '                  change the artifacts. Omitted, the stack is detected from the checkout',
-  '      --vendors <list>  comma-separated vendor ids (copilot,agents,claude,cursor) to render for —',
-  '                  overrides both detection and whatever .redline.json already recorded; a vendor',
-  '                  the org has not enabled never renders no matter what this list names',
-  '      --blocking  promote the merge gate from advisory to blocking',
-  '      --no-a11y   recorded in .redline.json for a later phase; changes nothing in Phase 1',
-  '      --speckit / --no-speckit, --tmf / --no-tmf  the optional context sections rendered',
-  '                  into the standards artifacts beside the rules. speckit is on by default',
-  '                  and is dropped automatically where the repository already runs Spec Kit;',
-  '                  tmf is off unless asked for. Passing the negative on a later run removes',
-  '                  a section already rendered — the block is regenerated, not appended to',
-  '      --repair    re-apply every capability even if this repository looks already onboarded — for',
-  '                  labels, review-ownership, repo-property, gate and merge-policy, whose recorded',
-  '                  pendingAdmin entry a plain re-run can never clear on its own; composes with --dry-run',
-  `      --skip <list>  comma-separated capabilities this repository does not want Redline to install:`,
-  `                  ${OPTIONAL_CAPABILITIES.join(', ')}. Use it when the repository already has its own —`,
-  '                  a deselected capability is not attempted, not written, and not reported as missing.',
-  '                  The security floor (secret scanning, push protection, dependency alerts) is the',
-  '                  organisation-wide minimum and is refused by name rather than deselected',
-  '      --with <list>  the same names, selected again — how a deselection recorded in .redline.json is',
-  '                  reversed',
-  '      --gate-source org|local  where the gate machinery lives. org (the default) references the',
-  '                  reusable workflow published at <org>/.github; local vendors a copy into this',
-  '                  repository at .github/workflows/redline-gate.yml, for a repository whose',
-  '                  organisation has no shared .github repo yet. local is the WEAKER control: the',
-  '                  workflow runs from the pull request\'s own head commit, so a pull request can',
-  '                  edit the gate that is judging it — protect .github/workflows/ with CODEOWNERS.',
-  '                  Omitting the flag keeps whatever the repository already recorded',
-  '      --docs-url <base>  where your organisation publishes its copy of the standard. Set it and',
-  '                  every finding carries the address of the rule it cites, as <base>/r/<rule-id>,',
-  '                  so a reviewer reaches the rule from the comment instead of searching for it.',
-  '                  Unset by default — there is no honest default, and a link that goes nowhere',
-  '                  costs the reader the click. Pass an empty string to clear one',
-  `      --rung <name>  the enforcement rung: ${RUNGS.join(', ')}. A promotion needs recorded`,
-  '                  evidence and is refused without it; a demotion is always allowed. Omitting',
-  '                  the flag keeps whatever the repository already recorded',
-  '      --branches <patterns>  which branches the merge policy governs, comma separated, in the',
-  '      host\'s own syntax (~DEFAULT_BRANCH, refs/heads/release/*). Default: the default branch',
-  '      alone. Widening this widens an enforcement boundary, so it is never detected for you.',
-  '      --review-owners <list>  who owns the paths seeded into CODEOWNERS — a team, a user or',
-  '      an email, several separated by commas. Defaults to the platform team, which may not',
-  '      exist in your organisation: GitHub ignores an owner it cannot resolve, so the file',
-  '      would install and enforce nothing.',
-  '      --setup <list>  controls to install alongside Redline: dependabot, renovate, codeql.',
-  '      Only what works with no account and no token is offered — writes .github/dependabot.yml,',
-  '      renovate.json, .github/workflows/codeql.yml. An existing file is never overwritten.',
-  '      --integrations <list>  comma-separated ids of controls this repository already runs',
-  '      (sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql). Overrides what',
-  '      detection found — it reads a checkout, so it cannot see a scanner wired through a',
-  '      shared pipeline template. Recorded, so the correction is made once.',
-  '      --pipeline <name>  github-actions or azure-pipelines — what actually runs this',
-  '                  repository\'s pull request checks. Asked separately from the host because',
-  '                  the two come apart: a repository on GitHub can be built entirely by Azure',
-  '                  Pipelines, and installing an Actions workflow there gates nothing',
-  '      --adopt-caller  let Redline take over the gate machinery file (.github/workflows/redline.yml,',
-  '                  .azuredevops/redline-gate.yml) when what is already there carries nothing that',
-  '                  attributes it to Redline — a 2.1 caller, in practice. Without it the run refuses',
-  '                  rather than overwrite a file that may be the repository\'s own',
-  '      omitted flags keep whatever .redline.json already recorded',
-  '',
-  '  redline remove [--dry-run]',
-  '      take Redline back out of this repository: rendered standards, gate machinery, slash',
-  '      commands, the host state it applied, and .redline.json last of all — as a pull request',
-  '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
-  '      only content Redline can prove it wrote is removed. A merged file keeps every byte',
-  '      outside its REDLINE block; anything unattributable is left in place and named',
-  '      the security floor (secret scanning, push protection, dependency alerts) is the',
-  '      organisation\'s minimum, not Redline\'s state — no flag here turns it off',
-  '',
-  '  redline verify [--gate] [--repo <owner/name>] [--json]',
-  '      --json      the whole report as JSON, for a wrapper that has to act on it',
-  '      check this repository still matches what .redline.json claims',
-  '      --repo <owner/name>  check a repository over the API, with no checkout — a check',
-  '                  that genuinely needs a working tree reports ?? rather than passing',
-  '',
-  '  redline review [--staged] [--diff-file <path>] [--base <ref>] [--engine <name>]',
-  '      review this change against ONLY the rules that apply to the files it touches',
-  '      --engine embedded  emit the bounded prompt for the assistant running this (default)',
-  '      --engine api       call a configured endpoint — local or hosted — and parse the result',
-  '      local findings are never sent to the telemetry that tunes rules',
-  '',
-  '  redline policy --diff-file <path>',
-  '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER',
-  '',
-  '  redline status [--json]',
-  '      what is installed here, how hard it bites, what an administrator still owes',
-  '      you and whether the standards have moved on. Reads the checkout only.',
-  '  redline explain <rule-id> [--json]',
-  '      what a rule means, who decided it, which files it is scoped to and which',
-  '      profiles receive it. The id is the bracketed part of a finding.',
-  '      --list      every rule id in the standards, with its severity',
-  '  redline exempt --body-file <path> [--scope <check>]',
-  '      decide whether a pull request carries a valid exemption for a failing process',
-  '      check — a reason, an actor and an expiry, not a bare label. Exit 0 if it applies',
-  '',
-  '  redline sync [--dry-run] [--repo <owner/name>] [--force]',
-  '      open a pull request on every registered repository whose standards are behind',
-  '      --dry-run   print the plan; opens nothing, pushes nothing',
-  '      --repo <owner/name>  one repository instead of the estate',
-  '      --force     re-render a repository already at the current standards version',
-  '      run from a checkout of the Redline source repository, not a product repo',
-  '',
-  '  redline metrics <command> [--flags]',
-  `      the estate's measurement plane: ${Object.keys(METRICS_COMMANDS).join(', ')}`,
-  '      run `redline metrics <command> --help` for its flags. These act on an organisation',
-  '      or its collected telemetry, not on the repository you are standing in',
-  '',
-  '  redline registry [--flags]',
-  '      derive the register of onboarded repositories by walking the org',
-  '',
-  '  redline --version',
-].join('\n');
-
-// node:util's parseArgs throws a plain Error on an unrecognised flag — that
-// is bad input, not an internal defect, so it is converted to a usage
-// RedlineError right at its own call site rather than left for the run()
-// catch-all below to misclassify.
-function parseCliArgs<T>(fn: () => T): T {
-  try {
-    return fn();
-  } catch (error) {
-    throw new RedlineError('usage', error instanceof Error ? error.message : String(error));
-  }
-}
+const DEBUG_ENV = 'REDLINE_DEBUG';
+const ISSUES_URL = 'https://github.com/moelzanaty3/redline/issues';
 
 export interface RunDeps {
   cwd?: string;
@@ -207,6 +93,9 @@ export interface RunDeps {
   // Injected so the metrics dispatch can be asserted without executing a runner
   // that talks to GitHub.
   loadRunner?: (path: string) => Promise<unknown>;
+  // Injected so the Node guard can be asserted on both sides of the boundary
+  // without the test suite depending on the runtime it happens to run under.
+  nodeVersion?: string;
   // Whether a stepped menu can be shown. Injected so the existing command tests
   // — which run with no TTY but must keep asserting the flag path — cannot be
   // silently answered by a prompt nobody is there to fill in.
@@ -215,15 +104,73 @@ export interface RunDeps {
   prompter?: () => Prompter;
 }
 
+// Timing and the funnel record wrap the command rather than living inside it:
+// every one of the forty-odd returns below would otherwise need a line, and the
+// one that got missed would be the interesting one.
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
+  const startedAt = Date.now();
+  const command = argv[0] ?? '--help';
+  let code = 0;
+  let errorCode: string | undefined;
+  try {
+    code = await runCommand(argv, deps);
+    return code;
+  } catch (error) {
+    code = 4;
+    errorCode = isRedlineError(error) ? error.kind : 'internal';
+    throw error;
+  } finally {
+    if (telemetryEnabled()) {
+      recordFunnel({
+        at: new Date().toISOString(),
+        // The command word only, and only if it is one of ours. Never the
+        // arguments — a --diff-file path or a --repo names a person's machine
+        // and a customer's project — and never an unrecognised word either:
+        // `redline ghp_xxx` is a paste that missed the terminal it was meant
+        // for, and writing it to a file would be this tool breaking its own
+        // core/customer-data-in-logs rule on its own author.
+        command: funnelName(command),
+        outcome: outcomeFor(code),
+        ms: Date.now() - startedAt,
+        ...(errorCode === undefined ? {} : { code: errorCode }),
+      });
+    }
+  }
+}
+
+function funnelName(command: string): string {
+  if (command === '--version' || command === '-v') return 'version';
+  if (command === '--help' || command === '-h') return 'help';
+  return isCommand(command) ? command : 'unknown';
+}
+
+function outcomeFor(code: number): FunnelEvent['outcome'] {
+  if (code === 0) return 'ok';
+  if (code === 2) return 'usage';
+  if (code === 3) return 'permission';
+  if (code === 4) return 'host';
+  return 'failed';
+}
+
+async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
   const cwd = deps.cwd ?? process.cwd();
   const root = deps.root ?? PACKAGE_ROOT;
-  const log = createLog(deps.sink);
+  // Colour is decided the same way the prompts decide it, and from the same
+  // env: NO_COLOR, FORCE_COLOR, a dumb terminal and a pipe all have to mean the
+  // same thing in every part of one run. Per stream, because stdout and stderr
+  // are redirected independently. An injected sink is a test or a pipe, so it
+  // is never painted — and neither is a JSON document, which log.info never
+  // paints.
+  const depth = colorDepth(process.env);
+  const paint = (isTty: boolean): Palette =>
+    palette(deps.sink === undefined && colorEnabled(process.env, isTty), depth);
+  const out = paint(process.stdout.isTTY === true);
+  const log = createLog(deps.sink, { out, err: paint(process.stderr.isTTY === true) });
   const interactive = deps.isInteractive ?? (() => isInteractive());
 
   // The host is read from the git remote alone, with no credential and no
   // request — the menu's first question has to render before either exists,
-  // because "Dry run" is one of its answers. A remote this cannot classify is
+  // because the preview answers contact no host. A remote this cannot classify is
   // `null`, which is exactly the case the host question is there to settle.
   const detectHost = (): WizardHost | null => {
     try {
@@ -285,15 +232,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     return { answers, prompter };
   };
 
-  // Report colour is decided the same way the prompts decide it, and from the
-  // same env: NO_COLOR, FORCE_COLOR, a dumb terminal and a pipe all have to
-  // mean the same thing in both halves of one run. An injected sink is a test
-  // or a pipe, so it is never painted.
   const reportTheme = {
-    palette: palette(
-      deps.sink === undefined && colorEnabled(process.env, process.stdout.isTTY === true),
-      colorDepth(process.env)
-    ),
+    palette: out,
     glyphs: glyphs(process.env),
     width: process.stdout.columns ?? 80,
   };
@@ -308,47 +248,70 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     return 0;
   }
   if (command === undefined || command === '--help' || command === '-h') {
-    log.info(USAGE);
+    log.info(usage(out));
     return command === undefined ? exitCodeFor('usage') : 0;
   }
 
+  // Ahead of the Node guard for the same reason --help is: reading how a
+  // command works must not depend on being able to run it. `metrics` and
+  // `registry` have no section because their help is generated from their own
+  // option tables further down.
+  const section = isCommand(command) ? COMMANDS[command].help : null;
+  if (section !== null && (rest.includes('--help') || rest.includes('-h'))) {
+    log.info(commandHelp(section, out));
+    return 0;
+  }
+
+  // Before anything else, and after --version/--help so a broken runtime can
+  // still be identified. npm's engines field only warns, so without this the
+  // first symptom of Node 18 is a parse error inside a dependency, raised
+  // partway through a command that may already have written files.
+  //
+  // `doctor` is exempt: it exists to say this out loud, in a list, with the
+  // three ways out. Refusing to run the diagnostic on the machine that needs
+  // diagnosing is the failure mode this whole guard is here to avoid.
+  // `completion` too: it prints a fixed script that a shell sources at startup,
+  // and an error there would print on every new terminal.
+  if (command !== 'doctor' && command !== 'funnel' && command !== 'completion') {
+    const support = nodeSupport(deps.nodeVersion ?? process.version);
+    if (!support.ok) {
+      log.error(unsupportedNodeMessage(deps.nodeVersion ?? process.version));
+      log.info(unsupportedNodeHint(command));
+      log.info('');
+      log.info('`redline doctor` runs on any Node and reports the rest of what it finds.');
+      return exitCodeFor('usage');
+    }
+  }
+
   try {
+    if (command === 'doctor') {
+      const { values } = parseCommand('doctor', COMMANDS.doctor, rest);
+
+      const report = doctor({ cwd, ...(deps.nodeVersion === undefined ? {} : { nodeVersion: deps.nodeVersion }) });
+      if (values.json === true) {
+        log.info(JSON.stringify(report, null, 2));
+      } else {
+        // The same three-column shape `verify` prints, deliberately: these two
+        // are read back to back when something is wrong, and a second layout
+        // for the same kind of answer is one more thing to parse by eye.
+        const marker = { ok: 'ok  ', warn: 'warn', fail: 'FAIL' } as const;
+        for (const check of report.checks) {
+          const detail = check.status === 'ok' ? out.dim(check.detail) : check.detail;
+          log.info(`${paintMarker(marker[check.status], out)}  ${check.name.padEnd(22)} ${detail}`);
+          if (check.fix !== undefined) {
+            for (const line of check.fix.split('\n')) log.info(`        ${line}`);
+          }
+        }
+      }
+      // A warning is not a failure. `credential` warns on a machine that has
+      // deliberately not logged in, and the preview commands are the ones that
+      // machine is meant to be running — exiting non-zero there would fail a
+      // CI step that is working exactly as intended.
+      return report.ok ? 0 : exitCodeFor('failed');
+    }
+
     if (command === 'init') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          // No `default`: parseArgs then leaves an untyped flag `undefined`,
-          // which is how init() tells "the user asked for advisory" from "the
-          // user said nothing, keep what the repository already chose". A
-          // default here silently demoted every --blocking repo on its next
-          // plain re-run.
-          options: {
-            profile: { type: 'string' },
-            vendors: { type: 'string' },
-            blocking: { type: 'boolean' },
-            'no-a11y': { type: 'boolean' },
-            speckit: { type: 'boolean' },
-            'no-speckit': { type: 'boolean' },
-            tmf: { type: 'boolean' },
-            'no-tmf': { type: 'boolean' },
-            'dry-run': { type: 'boolean' },
-            'no-commit': { type: 'boolean' },
-            repair: { type: 'boolean' },
-            'adopt-caller': { type: 'boolean' },
-            skip: { type: 'string' },
-            with: { type: 'string' },
-            rung: { type: 'string' },
-            pipeline: { type: 'string' },
-            'gate-source': { type: 'string' },
-            'docs-url': { type: 'string' },
-            integrations: { type: 'string' },
-            'review-owners': { type: 'string' },
-            setup: { type: 'string' },
-            branches: { type: 'string' },
-          },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('init', COMMANDS.init, rest);
 
       // `redline init` with nothing after it, at a terminal, is a person asking
       // to be walked through onboarding — so walk them through it. Any flag at
@@ -413,7 +376,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values.pipeline !== undefined && !isGatePipeline(values.pipeline)) {
         throw new RedlineError(
           'usage',
-          `--pipeline must be github-actions or azure-pipelines, not "${values.pipeline}"`,
+          `--pipeline must be one of ${GATE_PIPELINES.join(', ')}, not "${values.pipeline}"`,
           'a repository on GitHub whose pull request checks are Azure Pipelines wants azure-pipelines'
         );
       }
@@ -446,6 +409,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const profileChoice = wizard?.answers.profile ?? values.profile;
       const vendorChoice = wizard ? [...wizard.answers.vendors] : vendors;
       const rungChoice = wizard?.answers.rung ?? values.rung;
+      // Read here rather than inside init() so the same record is what `redline
+      // evidence` reports and what a promotion is judged against — two readers
+      // of one file, not two notions of what was measured.
+      const recordedEvidence = readConfig(cwd)?.evidence ?? null;
       const setupChoice = wizard
         ? [...wizard.answers.setup]
         : values.setup?.split(',').map((id) => id.trim()).filter((id) => id !== '');
@@ -476,6 +443,14 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
         ...(rungChoice ? { rung: rungChoice } : {}),
+        // The recorded measurement, read back from .redline.json.
+        //
+        // Without this the ladder was decorative: canPromote asked for evidence,
+        // nothing ever passed any, so every promotion was refused and every
+        // repository stayed at observe forever. Absent is still absent — a
+        // repository nobody has measured is refused, which is correct — but a
+        // repository that HAS been measured can now climb.
+        ...(recordedEvidence === null ? {} : { evidence: recordedEvidence }),
         ...(integrationChoice ? { integrations: integrationChoice } : {}),
         ...(ownerChoice && ownerChoice.length > 0 ? { reviewOwners: ownerChoice } : {}),
         ...(branchChoice && branchChoice.length > 0 ? { branches: branchChoice } : {}),
@@ -553,7 +528,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             .join(' ')}`
         );
         log.info('');
-        log.info('dry run — nothing was written, read or changed on the host');
+        log.info(out.yellow('dry run — nothing was written, read or changed on the host'));
         return 0;
       }
 
@@ -564,9 +539,32 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // is untouched, and the branch a full run would have opened does not
       // exist. The run that finishes the job is named rather than described.
       if (report.noCommit === true) {
+        // Determined work, not a claim about settings this path never touched:
+        // the gate installer really did run, so a pipeline definition nobody has
+        // registered is known about now and is the operator's to act on. Printed
+        // before the "not committed" line so the last thing on screen is still
+        // the run that finishes the job.
+        if (report.pendingAdmin.length > 0) {
+          log.warn(
+            `an administrator must still enable: ${report.pendingAdmin.join(', ')}`
+          );
+        }
+        // Branch-aware, because the generic version of this advice is a trap.
+        // "Commit them, then run redline init" is correct on a feature branch
+        // and wrong on the default one: a protected default branch rejects the
+        // commit at push time, which is after the operator has followed the
+        // instruction and has a commit to unpick. The branch is a local read
+        // with a safe fallback, so this costs no host call.
+        const here = createGit(cwd);
+        const branch = here.currentBranch();
+        const onDefault = branch !== 'HEAD' && branch === here.defaultBranch();
         log.info(
-          '  not committed — the files are in your working tree. Review them, commit them, then ' +
-            'run redline init to apply the repository settings and open the pull request'
+          onDefault
+            ? `  not committed — the files are in your working tree, and you are on ${branch}, the ` +
+              'default branch. Branch first (git checkout -b redline/standards), commit there, then ' +
+              'run redline init to apply the repository settings and open the pull request'
+            : '  not committed — the files are in your working tree. Review them, commit them, then ' +
+              'run redline init to apply the repository settings and open the pull request'
         );
         return 0;
       }
@@ -604,6 +602,16 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           `  the changes are committed on ${ONBOARD_BRANCH} and pushed, not in your working tree —`
         );
         log.info('  `git status` here stays clean. Review and merge the pull request above.');
+        // The exit, named at the moment somebody might want it. `redline
+        // remove` has existed all along, and the run that has just changed
+        // their repository is the first time anyone wonders how to undo it —
+        // by which point the help output is two commands behind them. Closing
+        // the pull request is the cheaper answer while it is still open, so it
+        // goes first.
+        log.info(
+          '  Changed your mind? Close the pull request, or run `redline remove --dry-run` to see ' +
+            'what taking Redline back out would do.'
+        );
       } else if (report.alreadyOnboarded) {
         log.info(
           `already onboarded — nothing to change (recorded in .redline.json; ` +
@@ -614,13 +622,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
 
     if (command === 'remove') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: { 'dry-run': { type: 'boolean', default: false } },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('remove', COMMANDS.remove, rest);
 
       const dryRun = values['dry-run'] === true;
       // Same contract as `init --dry-run`: the plan is built from the local
@@ -632,6 +634,27 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         () => deps.hostWithdrawal?.(cwd) ?? createHostWithdrawal(cwd),
         { cwd, root, ...(dryRun ? { dryRun: true } : {}) }
       );
+
+      if (values.json === true) {
+        log.info(
+          JSON.stringify(
+            {
+              dryRun: report.dryRun,
+              actions: report.actions,
+              caveats: report.caveats,
+              notes: report.notes,
+              hostPlan: report.hostPlan,
+              outcomes: report.outcomes,
+              pendingAdmin: report.pendingAdmin,
+              pullRequest: report.pullRequest ?? null,
+              pullRequestError: report.pullRequestError,
+            },
+            null,
+            2
+          )
+        );
+        return report.pullRequestError !== null ? exitCodeFor('failed') : 0;
+      }
 
       for (const action of report.actions) {
         if (action.kind === 'kept') continue;
@@ -649,7 +672,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
       if (report.dryRun) {
         for (const step of report.hostPlan) log.info(`  would apply   ${step}`);
-        log.info('dry run — nothing was written, read or changed on the host');
+        log.info(out.yellow('dry run — nothing was written, read or changed on the host'));
+        printCaveats(log, report.caveats);
         return 0;
       }
 
@@ -673,21 +697,12 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       }
       if (report.pullRequest) log.info(`pull request: ${report.pullRequest.url}`);
       else log.info('nothing left to remove from the working tree — no pull request was opened');
+      printCaveats(log, report.caveats);
       return 0;
     }
 
     if (command === 'verify') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: {
-            gate: { type: 'boolean', default: false },
-            repo: { type: 'string' },
-            json: { type: 'boolean', default: false },
-          },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('verify', COMMANDS.verify, rest);
 
       if (values.repo !== undefined) {
         if (values.gate === true) {
@@ -741,46 +756,68 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
 
     if (command === 'review') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: {
-            staged: { type: 'boolean', default: false },
-            'diff-file': { type: 'string' },
-            base: { type: 'string' },
-            profile: { type: 'string' },
-            engine: { type: 'string', default: 'embedded' },
-            provider: { type: 'string', default: 'openai' },
-            model: { type: 'string' },
-            'base-url': { type: 'string' },
-          },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('review', COMMANDS.review, rest);
+
+      // --print-prompt is the embedded engine with the log turned off. The
+      // prompt was always reachable, but it came out wrapped in the scope line
+      // and any uncovered-file warning, so copying it meant copying those too
+      // and hoping the model ignored them. Anyone whose model is a browser tab
+      // rather than an API key needs `redline review --print-prompt | pbcopy`
+      // to put exactly the prompt on the clipboard and nothing else.
+      const printPrompt = values['print-prompt'] === true;
+      if (printPrompt && values.engine !== 'embedded') {
+        throw new RedlineError(
+          'usage',
+          '--print-prompt has nothing to print with --engine api',
+          'the api engine calls a model itself; --print-prompt hands you the prompt to paste'
+        );
+      }
 
       let engine = embedded;
       if (values.engine === 'api') {
-        if (!values.model) {
+        // The engine stays something you asked for; only its configuration is
+        // inferred. `--engine api` used to need --provider and --model on every
+        // run, which made the one command that actually reviews a diff four
+        // flags long — so it was demonstrated once and never used again.
+        const detected = detectProvider();
+        const model = values.model ?? detectModel();
+        if (!model) {
           throw new RedlineError(
             'usage',
-            '--engine api needs --model <name>',
-            'a model baked into the tool is one nobody can change when it is deprecated'
+            '--engine api needs a model',
+            `pass --model <name>, or set ${MODEL_ENV} once and drop the flag — a model baked into ` +
+              'the tool is one nobody can change when it is deprecated'
           );
         }
         // Not a silent fallback: `--provider anthropc` used to become openai and
         // send the diff to a local endpoint that was not running, reporting a
         // connection error for what was a typo.
-        if (values.provider !== 'openai' && values.provider !== 'anthropic') {
+        const named = values.provider ?? detected.provider;
+        if (named !== 'openai' && named !== 'anthropic') {
           throw new RedlineError(
             'usage',
-            `--provider must be openai or anthropic, not "${values.provider}"`,
-            'openai covers every OpenAI-compatible endpoint, including a local one'
+            values.provider === undefined
+              ? '--engine api needs a provider and no API key is set to infer one from'
+              : `--provider must be openai or anthropic, not "${values.provider}"`,
+            values.provider === undefined
+              ? 'export OPENAI_API_KEY or ANTHROPIC_API_KEY and it is inferred, or pass --provider. ' +
+                'openai covers every OpenAI-compatible endpoint, including a local one that needs no key'
+              : 'openai covers every OpenAI-compatible endpoint, including a local one'
           );
         }
-        const provider = values.provider;
+        const provider = named;
+        // Under --json these went to stdout ahead of the document, so
+        // `redline review --engine api --json | jq` failed to parse.
+        const say = values.json === true ? log.note : log.info;
+        if (values.provider === undefined && detected.from !== null) {
+          say(`provider ${provider}, from ${detected.from}`);
+          if (detected.available.length > 1) {
+            say(`  ${detected.available.join(' and ')} keys are both set — ${PROVIDER_ENV} overrides`);
+          }
+        }
         engine = createApiEngine({
           provider,
-          model: values.model,
+          model,
           ...(values['base-url'] ? { baseUrl: values['base-url'] } : {}),
         });
       } else if (values.engine !== 'embedded') {
@@ -798,6 +835,35 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             ? { kind: 'staged' }
             : { kind: 'worktree' },
       });
+
+      if (printPrompt) {
+        // Written straight to the two file descriptors rather than through the
+        // log, and that is the whole point of the flag. `log.warn` routes to
+        // sink.out, which is stdout — so the scope line landed in the pipe
+        // beside the prompt and `| pbcopy` copied both. The sink abstraction
+        // has no way to say "stderr" for a non-error, and these two lines are
+        // a matched pair: the prompt on fd 1, everything a human needs on fd 2.
+        process.stderr.write(
+          `profile ${report.scope.profile} — rules in scope: core` +
+            (report.scope.stacks.length ? `, ${report.scope.stacks.join(', ')}` : '') +
+            '. Paste the prompt into any assistant; it asks for JSON back.\n'
+        );
+        process.stdout.write(`${report.prompt ?? ''}\n`);
+        return 0;
+      }
+
+      if (values.json === true) {
+        log.info(
+          JSON.stringify(
+            { scope: report.scope, prompt: report.prompt, findings: report.findings },
+            null,
+            2
+          )
+        );
+        // 0, as below. The exit code answers "may this proceed" and a local
+        // review never decides that; the findings are in the document.
+        return 0;
+      }
 
       log.info(
         `profile ${report.scope.profile} — rules in scope: core` +
@@ -826,8 +892,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // against the working tree, so the config beside it is the authority.
       const reviewDocsUrl = readConfig(cwd)?.docsBaseUrl ?? '';
       for (const finding of report.findings) {
-        log.info(`${finding.file}:${finding.line}`);
-        log.info(`  ${renderFinding(finding, reviewDocsUrl)}`);
+        log.info(out.bold(`${finding.file}:${finding.line}`));
+        log.info(`  ${paintSeverity(renderFinding(finding, reviewDocsUrl), out)}`);
       }
       for (const { reason } of report.rejected) {
         log.warn(`discarded a finding from the model: ${reason}`);
@@ -848,13 +914,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
 
     if (command === 'policy') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: { 'diff-file': { type: 'string' }, 'fail-on': { type: 'string' } },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('policy', COMMANDS.policy, rest);
       const diffFile = values['diff-file'];
       if (!diffFile) throw new RedlineError('usage', 'redline policy needs --diff-file <path>');
       const failOn = values['fail-on'];
@@ -865,9 +925,44 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const report = policy({ root, diffFile, ...(failOn ? { failOn } : {}) });
 
       const policyDocsUrl = readConfig(cwd)?.docsBaseUrl ?? '';
+
+      // The exit code answers "may this proceed", which is deliberately not the
+      // same question as "was anything found" — three HIGH findings pass a
+      // BLOCKER gate. Anything building on top of this needs both answers and
+      // the findings themselves, and parsing them back out of prose written for
+      // a human is how a wrapper breaks on a wording change.
+      if (values.json) {
+        log.info(
+          JSON.stringify(
+            {
+              ok: report.ok,
+              failOn: failOn ?? 'BLOCKER',
+              findings: report.findings.map((finding) => ({
+                rule: finding.ruleId,
+                severity: finding.severity,
+                file: finding.file,
+                line: finding.line,
+                problem: finding.problem,
+                ...(policyDocsUrl ? { docs: `${policyDocsUrl}/r/${finding.ruleId}` } : {}),
+              })),
+              evaluated: report.evaluated,
+              // Not a detail. Most of the catalogue needs a model, so a caller
+              // that reads `findings: []` as "this diff is clean" is wrong
+              // about the majority of the standard.
+              catalogue: report.catalogue,
+              modelled: report.catalogue - report.evaluated.length,
+              unimplemented: report.unimplemented,
+            },
+            null,
+            2
+          )
+        );
+        return report.ok ? 0 : exitCodeFor('failed');
+      }
+
       for (const finding of report.findings) {
-        log.info(`${finding.file}:${finding.line}`);
-        log.info(`  ${formatFinding(finding, policyDocsUrl)}`);
+        log.info(out.bold(`${finding.file}:${finding.line}`));
+        log.info(`  ${paintSeverity(formatFinding(finding, policyDocsUrl), out)}`);
       }
       // Said on every run, including the clean one. A reviewer has to be able to
       // tell "checked and clean" from "not checked", and silence looks the same
@@ -877,6 +972,19 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           ? `no deterministic findings — ${report.evaluated.length} rule(s) evaluated with no model call`
           : `${report.findings.length} finding(s) from ${report.evaluated.length} deterministic rule(s)`
       );
+      // The other half of the same sentence, and the more important half on a
+      // clean run. Most of the catalogue cannot be decided without a model —
+      // hardcoded secrets, SQL built by concatenation, a missing auth check —
+      // so "no deterministic findings" against a diff that plainly breaks one
+      // of those reads as "this tool does not work". It read that way to the
+      // author of docs/verifying.md, who wrote the diff to prove the opposite.
+      const modelled = report.catalogue - report.evaluated.length;
+      if (modelled > 0) {
+        log.info(
+          `${modelled} of the ${report.catalogue} rule(s) in the catalogue cannot be decided without a ` +
+            'model and were not checked here — run `redline review` for those'
+        );
+      }
       for (const id of report.unimplemented) {
         log.warn(`${id} is classified deterministic but has no check — it is enforced by nobody`);
       }
@@ -884,14 +992,109 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       return report.ok ? 0 : exitCodeFor('failed');
     }
 
+    if (command === 'evidence') {
+      const { values, positionals } = parseCommand('evidence', COMMANDS.evidence, rest);
+
+      const sub = positionals[0];
+      if (sub !== undefined && sub !== 'record') {
+        throw new RedlineError('usage', `unknown evidence subcommand "${sub}" — use \`record\`, or no subcommand to report`);
+      }
+
+      // A flag given but unparseable is refused rather than read as absent.
+      // "Not measured" and "the recorder emitted NaN" mean opposite things to
+      // the ladder, and silently turning the second into the first would grant
+      // a promotion on a number nobody produced.
+      const num = (flag: string): number | null => {
+        const raw = values[flag as 'seed-recall'];
+        if (raw === undefined) return null;
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed)) {
+          throw new RedlineError('usage', `--${flag} must be a number, not "${raw}"`);
+        }
+        return parsed;
+      };
+
+      if (sub === 'record') {
+        const report = recordEvidence({
+          cwd,
+          seedRecall: num('seed-recall'),
+          actedOnRate: num('acted-on-rate'),
+          sampleSize: num('sample-size') ?? 0,
+          falsePositives: num('false-positives'),
+          source: values.source ?? '',
+        });
+        if (values.json === true) {
+          log.info(JSON.stringify(report, null, 2));
+        } else {
+          log.info('recorded.');
+          log.info('');
+          for (const line of formatEvidence(report)) log.info(line);
+        }
+        return 0;
+      }
+
+      const report = evidenceReport({ cwd });
+      if (values.json === true) {
+        log.info(JSON.stringify(report, null, 2));
+      } else {
+        for (const line of formatEvidence(report)) log.info(line);
+      }
+      // Not eligible is an answer, not a failure — this is the command somebody
+      // runs to find out how far off they are, and a non-zero exit would break
+      // the script that asked.
+      return 0;
+    }
+
+    if (command === 'funnel') {
+      const { values, positionals } = parseCommand('funnel', COMMANDS.funnel, rest);
+
+      const path = telemetryPath();
+      if (positionals[0] === 'clear') {
+        log.info(clearFunnel(path) ? `removed ${path}` : 'nothing recorded — nothing to remove');
+        return 0;
+      }
+      if (positionals[0] !== undefined) {
+        throw new RedlineError('usage', `unknown funnel subcommand "${positionals[0]}" — use: clear`);
+      }
+
+      const summary = summariseFunnel(path);
+      if (values.json === true) {
+        log.info(JSON.stringify({ path, enabled: telemetryEnabled(), ...summary }, null, 2));
+        return 0;
+      }
+
+      if (!telemetryEnabled()) {
+        log.info(`off — export ${TELEMETRY_ENV}=1 to record locally`);
+      }
+      if (summary.total === 0) {
+        log.info('nothing recorded yet');
+        log.info(`  it would be written to ${path}, on this machine, and sent nowhere`);
+        return 0;
+      }
+
+      log.info(`${summary.total} run(s) recorded in ${path}`);
+      log.info('');
+      for (const row of summary.byCommand) {
+        log.info(
+          `  ${row.command.padEnd(10)} ${String(row.runs).padStart(4)} run(s)  ` +
+            `${String(row.ok).padStart(4)} ok  ${String(row.failed).padStart(4)} failed  ` +
+            `median ${row.medianMs}ms`
+        );
+      }
+      if (summary.topErrors.length > 0) {
+        log.info('');
+        log.info('  what fails most');
+        for (const row of summary.topErrors.slice(0, 5)) {
+          log.info(`    ${row.code.padEnd(12)} ${row.count}`);
+        }
+      }
+      log.info('');
+      log.info('  this file has never left this machine. redline funnel clear removes it');
+      return 0;
+    }
+
     if (command === 'status') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: { json: { type: 'boolean', default: false } },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('status', COMMANDS.status, rest);
 
       const report = status(cwd, root);
       if (values.json === true) {
@@ -906,18 +1109,12 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
 
     if (command === 'explain') {
-      const { values, positionals } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: { list: { type: 'boolean', default: false }, json: { type: 'boolean', default: false } },
-          allowPositionals: true,
-        })
-      );
+      const { values, positionals } = parseCommand('explain', COMMANDS.explain, rest);
 
       const rules = loadRules(root);
       if (values.list === true) {
         for (const rule of rules.values()) {
-          log.info(`${rule.severity.padEnd(10)} ${rule.id}`);
+          log.info(`${paintSeverity(rule.severity.padEnd(10), out)} ${rule.id}`);
         }
         log.info(`${rules.size} rule(s) across the core standard and every stack`);
         return 0;
@@ -938,7 +1135,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         return 0;
       }
 
-      log.info(`${found.rule.severity} ${found.rule.id}`);
+      log.info(`${paintSeverity(found.rule.severity, out)} ${out.bold(found.rule.id)}`);
       log.info('');
       log.info(`  ${found.rule.text}`);
       log.info('');
@@ -954,13 +1151,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
 
     if (command === 'exempt') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: { 'body-file': { type: 'string' }, scope: { type: 'string' } },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('exempt', COMMANDS.exempt, rest);
       const bodyFile = values['body-file'];
       if (!bodyFile) {
         throw new RedlineError('usage', 'redline exempt needs --body-file <path>');
@@ -970,6 +1161,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         bodyFile,
         ...(values.scope ? { scope: values.scope } : {}),
       });
+      if (values.json === true) {
+        log.info(JSON.stringify({ applies: report.applies, messages: report.messages }, null, 2));
+        return report.applies ? 0 : exitCodeFor('failed');
+      }
       for (const message of report.messages) {
         if (report.applies) log.info(message);
         else log.warn(message);
@@ -980,30 +1175,66 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     }
 
     if (command === 'sync') {
-      const { values } = parseCliArgs(() =>
-        parseArgs({
-          args: rest,
-          options: {
-            'dry-run': { type: 'boolean', default: false },
-            repo: { type: 'string' },
-            force: { type: 'boolean', default: false },
-          },
-          allowPositionals: false,
-        })
-      );
+      const { values } = parseCommand('sync', COMMANDS.sync, rest);
 
       const dryRun = values['dry-run'] === true;
       // A dry run reads the register and the target's own files but never
       // writes, so it still needs a read credential — unlike `init --dry-run`,
       // which contacts no host at all. Saying so beats a confusing 403.
+      const concurrency = values.concurrency === undefined ? undefined : Number(values.concurrency);
+      if (concurrency !== undefined && (!Number.isInteger(concurrency) || concurrency < 1)) {
+        throw new RedlineError(
+          'usage',
+          `--concurrency must be a whole number of 1 or more, not "${values.concurrency}"`,
+          `the default is ${DEFAULT_CONCURRENCY}; lower it if the host is rate limiting the run`
+        );
+      }
+
       const report = await sync(deps.syncHost?.() ?? createSyncHost(), {
         root,
         cwd,
         ...(values.repo ? { repo: values.repo } : {}),
         ...(values.force ? { force: true } : {}),
         ...(dryRun ? { dryRun: true } : {}),
+        ...(concurrency === undefined ? {} : { concurrency }),
+        // A two-hundred repository run took twenty minutes and said nothing
+        // until it finished, which is indistinguishable from hung. Suppressed
+        // under --json so the document on stdout stays a document.
+        ...(values.json === true
+          ? {}
+          : {
+              onResult: (result, done, total) => {
+                const counter = out.dim(`[${done}/${total}]`);
+                if (result.outcome.kind === 'failed') {
+                  log.warn(`  ${counter} ${result.repo}: ${result.outcome.detail}`);
+                } else {
+                  log.info(`  ${counter} ${result.repo}: ${result.outcome.kind}`);
+                }
+              },
+            }),
       });
 
+      // An estate run across 200 repositories is the case that gets piped into
+      // a dashboard, and the per-repository outcome is the whole point of it.
+      if (values.json === true) {
+        log.info(
+          JSON.stringify(
+            {
+              standardsVersion: report.plan.standardsVersion,
+              dryRun,
+              targets: report.plan.targets.length,
+              skipped: report.plan.skipped,
+              failures: report.failures,
+              results: report.results.map(({ repo, outcome }) => ({ repo, ...outcome })),
+            },
+            null,
+            2
+          )
+        );
+        return report.failures > 0 ? exitCodeFor('failed') : 0;
+      }
+
+      log.info('');
       log.info(`standards v${report.plan.standardsVersion} — ${report.plan.targets.length} target(s), ${report.plan.skipped.length} skipped`);
       for (const { repo, outcome } of report.results) {
         if (outcome.kind === 'failed') log.error(`  ${repo}: ${outcome.detail}`);
@@ -1019,12 +1250,28 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           );
         } else log.info(`  ${repo}: ${outcome.kind} ${outcome.url}`);
       }
-      if (dryRun) log.info('dry run — no branch was pushed and no pull request was opened');
+      if (dryRun) log.info(out.yellow('dry run — no branch was pushed and no pull request was opened'));
 
       // A partially failed estate run is a failure. Reporting 0 because most
       // repositories succeeded is how a distribution quietly stops covering the
       // ones it cannot reach.
       return report.failures > 0 ? exitCodeFor('failed') : 0;
+    }
+
+    if (command === 'completion') {
+      const { positionals } = parseCommand('completion', COMMANDS.completion, rest);
+      const shell = SHELLS.find((name) => name === positionals[0]);
+      if (shell === undefined) {
+        throw new RedlineError(
+          'usage',
+          positionals[0] === undefined
+            ? `redline completion needs a shell: ${SHELLS.join(', ')}`
+            : `redline completion supports ${SHELLS.join(', ')}, not "${positionals[0]}"`,
+          'redline completion --help shows how to load it in each shell'
+        );
+      }
+      log.info(completionScript(shell, completionTree(METRICS_COMMANDS, REGISTRY_COMMAND)));
+      return 0;
     }
 
     if (command === 'metrics' || command === 'registry') {
@@ -1056,15 +1303,21 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
           { type: option.type === 'boolean' ? ('boolean' as const) : ('string' as const) },
         ])
       );
-      const { values } = parseCliArgs(() =>
-        parseArgs({ args: flagArgs, options, allowPositionals: false })
-      );
+      const { values } = parseCliArgs(command === 'registry' ? 'registry' : `metrics ${sub}`, {
+        args: flagArgs,
+        options,
+        allowPositionals: false,
+      });
 
       await runMetrics(sub!, { root, flags: values, ...(deps.loadRunner ? { load: deps.loadRunner } : {}) });
       return 0;
     }
 
-    log.error(`unknown command "${command}"`, 'run: redline --help');
+    const guess = closest(command, Object.keys(COMMANDS));
+    log.error(
+      `unknown command "${command}"`,
+      guess === undefined ? 'run: redline --help' : `did you mean redline ${guess}? run: redline --help`
+    );
     return exitCodeFor('usage');
   } catch (error) {
     // Cancelling at a prompt is a decision, not a failure. It must not print an
@@ -1079,7 +1332,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       return error.exitCode;
     }
     // Not a RedlineError: parseArgs failures are already converted to a
-    // usage RedlineError at their own call site (parseCliArgs above), and
+    // usage RedlineError at their own call site (parseCliArgs in commands.ts), and
     // resolveProfile (unknown profile) and render() (unknown vendor) in
     // cli/render/ throw RedlineError('usage', ...) as of Task 21. So
     // whatever reaches here is a genuine internal defect — a TypeError, a
@@ -1089,7 +1342,20 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
     // thing. There is no sixth exit code to add for "internal defect", so
     // this reuses exit 4 (host/network) as the least-wrong of the five
     // published codes: at least it does not accuse the user.
-    log.error(`redline failed unexpectedly: ${error instanceof Error ? error.message : String(error)}`);
+    //
+    // No stack by default: a trace is noise to an operator whose run broke. It
+    // is one variable away for whoever files the report.
+    const debug = (process.env[DEBUG_ENV] ?? '') !== '' && process.env[DEBUG_ENV] !== '0';
+    log.error(
+      `redline failed unexpectedly: ${error instanceof Error ? error.message : String(error)}`,
+      debug
+        ? `this is a defect in Redline, not in how it was run — report it with the trace below at ${ISSUES_URL}`
+        : `this is a defect in Redline, not in how it was run — re-run with ${DEBUG_ENV}=1 for the ` +
+            `stack trace and report it at ${ISSUES_URL}`
+    );
+    if (debug && error instanceof Error && error.stack !== undefined) {
+      for (const line of error.stack.split('\n')) log.note(line);
+    }
     return exitCodeFor('host');
   }
 }
@@ -1100,6 +1366,21 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 // which would make `redline verify --gate` pass unconditionally in CI. Compare
 // resolved real paths instead. realpathSync throws if argv[1] is not a real
 // path (an eval/stdin entry point), which is not this module being executed.
+// What removal did NOT do. Both lines below used to sit in the middle of the
+// notes array, printed with log.info between "removed AGENTS.md" and the pull
+// request URL, and they were read as flavour text — one team came away
+// believing Redline had switched their secret scanning off on the way out.
+// A heading, a warning channel, and the last position on screen.
+function printCaveats(log: Log, caveats: readonly string[]): void {
+  if (caveats.length === 0) return;
+  // The separator goes through info, not warn: an empty string on the warn
+  // channel prints a bare `warn` prefix with nothing after it, which reads as a
+  // warning the tool forgot to write.
+  log.info('');
+  log.warn('what this did not do');
+  for (const caveat of caveats) log.warn(`  · ${caveat}`);
+}
+
 function isDirectlyExecuted(): boolean {
   const entry = process.argv[1];
   if (entry === undefined) return false;

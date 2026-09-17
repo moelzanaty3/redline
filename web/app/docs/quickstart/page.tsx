@@ -50,10 +50,12 @@ export default async function Page() {
         checks, which assistants should read the rules, what to install and how
         hard the gate should bite. Whatever it detected is preselected, so
         pressing enter through it takes step 1&apos;s plan. The last question
-        offers <b>Dry run</b> again before Apply. In CI, in a pipe, or with any
-        flag present it asks nothing.
+        offers three answers, each naming its own ceiling: <b>preview and change
+        nothing</b>, <b>write the files and commit nothing</b>, or <b>write,
+        commit and open a pull request</b>. In CI, in a pipe, or with any flag
+        present it asks nothing.
       </p>
-      <p>Choose Apply and you get a pull request containing:</p>
+      <p>Choose the last one and you get a pull request containing:</p>
       <ul>
         <li>
           The standard, rendered for whichever AI tools this repository uses —

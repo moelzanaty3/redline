@@ -4,6 +4,7 @@ import { resolveProfile } from '../render/profile.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { TOOL_PROBES } from '../detect/existing.ts';
 import type { Rung } from '../enforce/ladder.ts';
+import type { GatePipeline } from '../platforms/types.ts';
 
 // Where this repository stands, on one screen and with no credential.
 //
@@ -18,6 +19,8 @@ export interface StatusReport {
   readonly profile: string;
   readonly stacks: readonly string[];
   readonly host: string;
+  /** What runs the pull request checks. Only meaningful when a gate is installed. */
+  readonly pipeline: GatePipeline;
   readonly rung: Rung;
   readonly vendors: readonly string[];
   readonly capabilities: readonly string[];
@@ -42,6 +45,7 @@ export function status(cwd: string, root: string): StatusReport {
       profile: '',
       stacks: [],
       host: '',
+      pipeline: 'github-actions',
       rung: 'observe',
       vendors: [],
       capabilities: [],
@@ -74,6 +78,7 @@ export function status(cwd: string, root: string): StatusReport {
     profile: config.profile,
     stacks,
     host: config.host,
+    pipeline: config.pipeline,
     rung: config.rung,
     vendors: config.vendors,
     capabilities: selected,
@@ -97,13 +102,33 @@ export function formatStatus(report: StatusReport): string[] {
     ];
   }
 
+  // `rung` and `pipeline` are recorded whether or not a gate was installed, but
+  // both only ever describe a gate: the rung is substituted into the gate file,
+  // and the pipeline decides which file that is. On a repository that opted out
+  // of a gate, printing them describes a check that will never run — and "the
+  // check is always green" reads as reassurance about machinery that is absent.
+  const gated = report.capabilities.includes(capabilityName('gate'));
+
   const lines = [
     `profile      ${report.profile}${report.stacks.length > 0 ? ` (${report.stacks.join(', ')})` : ''}`,
     `host         ${report.host}`,
-    `rung         ${report.rung} — ${RUNG_MEANING[report.rung]}`,
+    ...(gated
+      ? [
+          `checks       ${PIPELINE_LABEL[report.pipeline]}`,
+          `rung         ${report.rung} — ${
+            report.pipeline === 'local-agent'
+              ? LOCAL_RUNG_MEANING[report.rung]
+              : RUNG_MEANING[report.rung]
+          }`,
+        ]
+      : []),
     `assistants   ${report.vendors.join(', ')}`,
     `installed    ${report.capabilities.length > 0 ? report.capabilities.join(', ') : 'nothing'}`,
   ];
+
+  if (!gated) {
+    lines.push('checks       none — the standards are rendered for assistants to read');
+  }
 
   if (report.integrations.length > 0) {
     const labels = report.integrations.map(
@@ -130,9 +155,27 @@ export function formatStatus(report: StatusReport): string[] {
 
 // Record<Rung, …> rather than a lookup with a fallback: a rung added to the
 // ladder has to be given a meaning here, and the build says so.
+// Record<GatePipeline, …> rather than a lookup with a fallback: a pipeline added
+// to the type without a label here is a compile error, not a blank line.
+const PIPELINE_LABEL: Record<GatePipeline, string> = {
+  'github-actions': 'GitHub Actions',
+  'azure-pipelines': 'Azure Pipelines',
+  'local-agent': 'an agent on this machine — a pre-push hook, nothing on the host',
+};
+
 const RUNG_MEANING: Record<Rung, string> = {
   observe: 'comments only, the check is always green',
   warn: 'comments and labels, still never blocks a merge',
   'block-blocker': 'a BLOCKER finding stops the merge',
   'block-high': 'BLOCKER and HIGH both stop the merge',
+};
+
+// The ladder is the same on a gate that runs here, but there is no check to be
+// green and no merge to stop: it refuses the push instead. Reusing the CI
+// wording sent the reader looking for a check that does not exist.
+const LOCAL_RUNG_MEANING: Record<Rung, string> = {
+  observe: 'findings are printed, the push is never blocked',
+  warn: 'findings are printed, the push is still never blocked',
+  'block-blocker': 'a BLOCKER finding refuses the push',
+  'block-high': 'BLOCKER and HIGH both refuse the push',
 };

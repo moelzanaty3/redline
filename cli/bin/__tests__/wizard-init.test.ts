@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../redline.ts';
+import { GATE_PIPELINES } from '../../platforms/types.ts';
 import { fakePlatform } from '../../commands/__tests__/fake-platform.ts';
 import { Cancelled, type Choice, type Prompter } from '../../ui/prompt.ts';
 import { RedlineError } from '../../core/errors.ts';
@@ -170,11 +171,23 @@ test('Ctrl-C at a prompt exits 130 without printing an error', async () => {
   assert.ok(lines.some((l) => l.includes('cancelled — nothing was written')));
 });
 
-test('--pipeline rejects a name that is neither of the two', async () => {
+// The message names every accepted value, read from the same list the parser
+// validates against. Spelling them out here froze the error at two while a
+// third was added, so the flag rejected `local-agent`'s name in its own advice.
+test('--pipeline rejects an unknown name and names every one it accepts', async () => {
   const { prompter } = defaults();
   const { opts, lines } = deps(repo(), prompter, false);
   assert.equal(await run(['init', '--pipeline', 'jenkins'], opts), 2);
-  assert.ok(lines.some((l) => l.includes('github-actions or azure-pipelines')), lines.join('\n'));
+  const printed = lines.join('\n');
+  for (const pipeline of GATE_PIPELINES) {
+    assert.ok(printed.includes(pipeline), `${pipeline} missing from: ${printed}`);
+  }
+});
+
+test('--pipeline local-agent is accepted on the scripted path', async () => {
+  const { prompter } = defaults();
+  const { opts } = deps(repo(), prompter, false);
+  assert.equal(await run(['init', '--pipeline', 'local-agent', '--dry-run'], opts), 0);
 });
 
 test('--pipeline azure-pipelines is accepted on the scripted path', async () => {

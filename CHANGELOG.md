@@ -7,6 +7,449 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — finding your way around a tool with fifteen commands
+
+Everything below was found by using the CLI the way a first-time user does, not by reading it.
+
+- **`redline <command> --help` was an error.** `redline init --help` printed `Unknown option
+  '--help'` and exited 2, so the first thing a curious user typed was refused. Every command now
+  prints its own help and exits 0, ahead of the Node guard — reading how a command works does
+  not depend on being able to run it. `redline --help` is now an index of the commands with one
+  line each; it used to be 165 lines, 75 of them `init`'s flags, which scrolled the quickstart
+  out of view.
+- **A typo got no suggestion.** `init --dryrun` said only `Unknown option '--dryrun'`. It now
+  adds `did you mean --dry-run? run: redline init --help`, and `redline veriy` suggests
+  `verify`. The match is deliberately strict: a wrong suggestion costs more than none.
+- **`review --engine api --json` was not valid JSON.** The inferred-provider line was written to
+  stdout ahead of the document, so piping it to a parser failed. Commentary under `--json` now
+  goes to stderr.
+- **26 flags were accepted and never documented**, `verify --gate` and every `--json` among
+  them. Each command's summary, help text and flags now live in one table
+  (`cli/bin/commands.ts`) that the parser, both help screens, the typo suggestions and the
+  shell completion all read, and a test fails when a command accepts a flag its help does not
+  describe, or its help names a flag it refuses. It found all 26 on its first run.
+- **Colour reached two screens.** The palette the `init` wizard and report already used now
+  reaches every command: `ok`/`FAIL`/`??` markers, `warn` and `error` prefixes, finding
+  severities, file locations, dry-run banners and help. The words stay, so nothing depends on
+  colour. It is decided per stream — `2> err.log` gets no escape codes — and `NO_COLOR`, a
+  pipe and `--json` keep output byte-identical to before.
+- **An internal defect gave nothing to report.** It now says it is a defect in Redline rather
+  than in how it was run, names the issues page, and prints the stack trace to stderr when
+  `REDLINE_DEBUG=1` is set. The exit code is unchanged (4).
+
+New: `redline completion bash|zsh|fish` prints a tab-completion script generated from the same
+table, including the `metrics` subcommands and their flags. It is exempt from the Node guard,
+so a shell that sources it at startup never prints an error. `npm run test:watch` for
+contributors.
+
+### CLI — five holes in the gates this branch added, found by review
+
+- **A file named `redline-*` skipped every deterministic check.** The self-exemption for Redline's
+  own rendered artifacts matched the prefix anywhere in the tree, so a hand-written
+  `scripts/redline-deploy.sh` — or any file renamed on purpose — was never checked. It now matches
+  only `.github/instructions/redline-*.instructions.md` and `.cursor/rules/redline-*.mdc`, the two
+  artifacts that have nowhere to carry an ownership line.
+- **The pre-push hook checked only the last ref.** `git push origin main feature` reviewed
+  `feature` and pushed whatever was new on `main` unchecked. Every ref's range now goes into the
+  patch.
+- **Installing the local gate orphaned an existing `.git/hooks/pre-push`.** husky v4, lefthook and
+  pre-commit install there and never set `core.hooksPath`, so pointing it at `.redline/hooks`
+  silently stopped their hook. That is now reported as `denied`, the same as a foreign
+  `core.hooksPath`.
+- **A gate that could not run was reported as a finding.** Any non-zero exit from `redline policy`
+  — a usage error, a host error, an npx that could not fetch — said "a finding at or above
+  BLOCKER". Only exit 1 is a finding now; anything else says the gate failed to run, and is still
+  refused at an enforcing rung. An unreadable `.redline.json` still falls to not enforcing, but
+  says so instead of looking like a clean run.
+- **`review --json` exited 1 on findings** while the human output always exits 0, reopening the
+  second-gate-in-CI door the human path closes on purpose. Both exit 0; the findings are in the
+  document.
+- **A declared secret scanner did not stand the gate scan down on Azure Repos.** The
+  GitHub-on-Azure-Pipelines template honoured `standDown`; the Azure Repos template had no
+  variable for it and ran TruffleHog on every pull request anyway. Both templates now carry
+  the same comma-fenced condition.
+
+Also: every host request now times out after 30s per attempt, and an `--engine api` review after
+ten minutes. A connection that was dropped rather than refused used to hang the command — and an
+estate `sync` with it — with nothing to report. A timed-out write is not retried, for the same
+reason a 5xx POST is not: it may already have created the pull request.
+
+The hook is now tested by running it — a real repository, git's ref lines on stdin, a stub
+`redline` on PATH — rather than by matching its text.
+
+### CLI — the rung ladder was decorative, and seven other things a senior look found
+
+The enforcement ladder is the centre of this product's argument: a repository starts at `observe`,
+and a rung above it is *earned* on a recorded measurement rather than asserted by whoever runs the
+command. `canPromote` implemented that faithfully. Nothing ever called it with any evidence. The
+bin read the flags, built the options and passed no `evidence` key at all, so the default — a
+sample size of zero — reached the ladder on every run, and the ladder correctly refused. Every
+repository in the estate was permanently advisory, and the only route up was hand-editing the file
+whose own header says to edit it with the command instead. Four rungs, three of them unreachable,
+for as long as the tool has existed.
+
+Closing it took three pieces. `RecordedEvidence` is now a field on `.redline.json`, validated on
+the way in and on the way out: a rate outside `0..1` is *rejected rather than clamped*, because a
+`94` meant as 94% and clamped to `1` reads as exactly the perfect recall the blocking rungs
+require, and a broken recorder must not be able to grant a veto. `redline evidence` reports the
+measurement behind the current rung and what the next one asks for; `redline evidence record`
+writes one, with `--source` mandatory because evidence with no provenance is an assertion. The
+figures themselves come from the metrics plane, which sees the estate over a window — the CLI owns
+the mechanism and the audit trail, not the numbers.
+
+Wiring it up exposed a second defect underneath the first, and a worse one. `init` rebuilds
+`.redline.json` field by field on every run that does real work, and it had no line for evidence.
+So the run that consumed a measurement to authorise a promotion *erased that measurement in the
+same write*: a repository arrived at `block-blocker` with nothing on file saying why, the next rung
+could never be earned, and the 90-day freshness window could never fire because no record survived
+long enough to age. Evidence is now carried forward the way `onboardedAt` always was, and the
+regression test fails without that one line.
+
+Freshness is new and deliberate. Evidence describes a reviewer, a rule set and a codebase at a
+moment, and all three move; a blocking rung held up by last year's number is the guarantee nobody
+checked. Ninety days. Demotion is untouched — the safe direction never needs permission.
+
+The rest came from reading the CLI as a product rather than as a test subject:
+
+- **`--json` on `policy`, `review`, `exempt`, `sync` and `remove --dry-run`.** A tool whose whole
+  claim is auditability was unreadable by anything but a human at five of its exits. The `policy`
+  document carries `catalogue` and `modelled` alongside the findings for a specific reason: the exit
+  code answers *may this proceed*, not *was anything found* — three HIGH findings pass a BLOCKER
+  gate — and a caller reading `findings: []` as "this diff is clean" is wrong about the 372 rules of
+  376 that need a model.
+- **Host failures name the remedy, not just the status.** Around fifteen sites reported
+  `reading acme/web returned 403` and stopped. 403 is the one that wastes the most time: it reads as
+  "you are not allowed" when it is nearly always a missing scope, or a SAML organisation a
+  perfectly-scoped token was never authorised for. 404 now says a private repository the token
+  cannot see looks identical. 5xx and 429 say the host is failing and there is nothing to fix. An
+  unexpected body shape says it is this tool's bug and what to attach.
+- **`sync` survives an estate.** It was a serial loop — fine for the eight repositories it was
+  built against, twenty silent minutes at two hundred, which is indistinguishable from hung. Now
+  eight in flight by default (`--concurrency`), results indexed in plan order so two runs can be
+  diffed, and each repository reported as it settles. Underneath it, a rate limit was being answered
+  with the wrong curve entirely: 200ms, 400ms, 800ms against a window asking for sixty seconds
+  burned all three attempts and failed. `Retry-After` and `x-ratelimit-reset` are now honoured, and
+  capped at a minute so a command never looks hung instead.
+- **`remove` says what it did not do, last and under a heading.** That the security floor stays on,
+  and that `verify` will now report this repository as "not onboarded" — indistinguishable from
+  never onboarded — were two entries in an undifferentiated notes array, printed between "removed
+  AGENTS.md" and the pull request URL. They read as flavour text there, and a team came away
+  believing Redline had switched their secret scanning off on the way out.
+- **`--help` opens with the three commands of a first run.** It opened on `redline init` with
+  eleven flags attached, so the first thing a new reader met was the full surface of the most
+  consequential command in the tool, and the safe way to try it was the fourth line of its own flag
+  list. `doctor`, then `init --dry-run`, then `init`, and a line saying none of it is irreversible.
+- **`review --engine api` works with a key and a model name.** The provider is inferred from
+  `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, the model from `REDLINE_REVIEW_MODEL`. Choosing the
+  engine stays explicit — nothing is sent anywhere because a key happens to be exported. That
+  inference exposed one more: with a key set, `openai` still pointed at `localhost:11434`, so
+  exporting a real OpenAI key sent the review to an Ollama that was not running and reported
+  `fetch failed` against an address the operator never chose. A key present now selects the hosted
+  endpoint; with no key the local default stands, because a review that must send a diff to a third
+  party is one several of this organisation's markets cannot run at all.
+- **`redline funnel`, off unless you switch it on.** Every fix in this tool so far came from
+  watching one person's terminal over their shoulder, which does not scale past the people sitting
+  near me. It records a command name, an outcome and a duration to `~/.redline`. There is no
+  endpoint in the file that writes it and a test fails if one is ever added; the word is only
+  recorded if it is one of ours, so a `redline ghp_xxx` paste that missed its terminal never reaches
+  disk. It cannot tell you which repository struggled, so it cannot be used to performance-manage
+  anyone. That is a limit, not an omission.
+
+### CLI — a GitHub repository built by Azure Pipelines onboarded correctly, then verified as broken
+
+`redline init` asks what runs the pull request checks, and for a GitHub-hosted repository whose
+checks are Azure Pipelines it writes `.azuredevops/redline-gate.yml` — the combination the estate
+actually runs. It then threw the answer away: `.redline.json` had no field for it. Nothing
+downstream could tell the two apart, so every repository onboarded down that path failed
+`gate-machinery` on the next command it was given, naming a workflow the run had deliberately not
+written and advising a re-run that would have installed an Actions caller into a repository that
+runs no Actions.
+
+Found onboarding a real repository: React and Express on GitHub, `cicd/*.yaml` on Azure Pipelines,
+SonarQube and gitleaks already in place. `init` wrote eleven correct files; `verify` then reported
+two failures, one of which was this.
+
+- **The pipeline is recorded and read back.** New `pipeline` field in `.redline.json`. Absent reads
+  back as `github-actions` — every repository onboarded before the field existed runs Actions,
+  because that was the only gate the CLI could install — and an unrecognised value reads back the
+  same way rather than pointing `verify` at a file the CLI never wrote.
+- **The second manifestation, and the worse one.** `init` is meant to be safe to re-run. Without the
+  recorded answer a re-run that said nothing about the pipeline fell back to the host default and
+  wrote an Actions caller over a correct Azure install. It now takes the same precedence as the gate
+  source: the flag, then what the repository chose, then the default. A pipeline change also defeats
+  the settled verdict, as a menu or capability change already does — switching normally moves a file,
+  but not where the target is already on disk, and the record must not name one pipeline while the
+  repository is gated by the other.
+- **`verify` reads the file that is actually the gate**, on both the local path and `--repo`. The
+  check name on this combination is published by the Azure Pipelines GitHub App under the pipeline
+  *definition's* name in Azure DevOps, which is not in the checkout — so `GateMachinery` gained
+  `externallyNamed` and the finding passes on the file being present and triggered, rather than on a
+  name nothing can compute. A missing definition still fails, naming the path it looked for, and so
+  does one whose `pr:` trigger was removed: Azure spells its pull request trigger `pr:`, not Actions'
+  `on:`, so reusing the Actions reader would have reported every correctly-triggered pipeline as dead.
+- **A declared secret scanner now actually stands the gate's scan down.** The wizard said "the gate's
+  secrets job is stood down here" and wrote a pipeline that ran TruffleHog on every pull request
+  regardless. That scan is the one check no label can waive, so a finding the repository's own
+  scanner allowlists blocked the pull request with no exemption path. The Azure template gained
+  `REDLINE_STAND_DOWN` and a step condition, mirroring the Actions gate.
+- **`--no-commit` keeps work the installer could not finish.** The mode skips the host, so it owes an
+  administrator nothing — except where the installer genuinely ran and stopped short, which is
+  exactly this path: the pipeline definition is on disk, but until somebody registers it in Azure
+  DevOps it runs on no pull request. That outcome was dropped from `pendingAdmin`, and with it the
+  only record that the job was still owed. It is now carried, and printed.
+
+Three more places read the Actions path unconditionally, found by looking for every caller once the
+field existed:
+
+- **`redline remove` left the gate behind.** It read `.github/workflows/redline.yml`, found nothing,
+  deleted nothing, and reported Redline removed — while the Redline pipeline it had installed went
+  on judging every pull request in the repository.
+- **`init`'s "already wired" note named the wrong directory.** It lists what else sits where this
+  host runs its gate from, to offer `--skip gate` when one of them is already the merge gate. On an
+  Azure Pipelines repository it listed `.github/workflows/`, a directory whose contents are not merge
+  gates there, and invited the operator to stand Redline's gate down in favour of one of them.
+- **A blocking policy on this combination would have blocked every pull request forever.** `init`
+  already refuses the same deadlock reached by deselecting the gate; this route walks past that guard
+  because the gate is present and correct. The ruleset names the Actions gate's check, which nothing
+  on an Azure Pipelines repository publishes. Now refused before a host is contacted or a byte is
+  written, pointing at the advisory policy and at requiring the pipeline's own check by hand.
+
+The fake platform was part of why these survived: it answered the Actions path whatever it was asked
+and always claimed the gate was present, so every caller that forgot to pass the pipeline passed its
+tests. It now models both — the path from the pipeline, presence from the checkout, as both real
+adapters do.
+
+Twenty-one tests. Nineteen fail without the fixes; the other two are guard rails — that
+`externallyNamed` does not become "present is good enough" and report a repository with no gate as
+healthy, and that choosing a real pipeline still selects the gate.
+
+### CLI — a repository with no CI at all, and a review command for it
+
+`redline init` asked what runs the pull request checks and offered two answers, both of which are a
+CI system. A repository with neither could only say so two questions later by unticking `gate`, after
+answering a question about checks it does not have — and was then asked where the gate should live
+and how hard it should bite. Nothing in the product acknowledged that a team might want the standards
+without a pipeline.
+
+- **"Nothing — no pull request check here" is the third answer**, at the question that asks it. It
+  deselects the gate and stops the two follow-up questions that have no subject without one. It is
+  not a third pipeline value: `capabilities.gate` is the one record of whether a gate exists, and a
+  second record that could disagree with it is how a gate goes missing. `--skip gate` was and remains
+  the flag equivalent.
+- **`/redline-review` — the review, run by whatever assistant the engineer has.** A new command file
+  rendered to every vendor already wired: `.github/prompts/redline-review.prompt.md` for Copilot,
+  `.claude/commands/`, `.cursor/commands/`, `.opencode/command/`. It reads the standards out of the
+  repository's own rendered artifacts — they are already there, inside the markers — takes the diff
+  against the merge base, and reports in the same output contract, with the same severity ladder and
+  the same noise rules the gate applies. No CI, no credential, no network.
+- **It is a review, not an enforcement point**, and says so: where the gate runs, the gate decides a
+  merge; where it does not, this is advice a human acts on. `redline verify` remains the other
+  question — whether the repository's guardrails are still in place, not whether a change is any good.
+- **It defers to `redline review --engine embedded` where that will run.** The CLI already narrows
+  the standard to the stacks the changed files belong to, so a React rule is never applied to a build
+  script; re-deriving that from the rendered artifacts is strictly worse. Reading the artifacts is now
+  the documented fallback for the case the command cannot cover — an older Node, no network for the
+  package, an assistant with no shell — which is the same repository this option exists for.
+
+### CLI — a gate for a repository that has nowhere to run one
+
+The section above added a way to say "no CI" at the question that asks. It answered half the
+repositories that need it. The other half want the rules enforced and simply have nowhere to run
+them, and telling them "no gate" renders the standards for an assistant to read and installs
+nothing that reads them — running, looking green, doing nothing, which is the failure this product
+exists to remove.
+
+`--pipeline local-agent` is a third gate topology, beside `github-actions` and `azure-pipelines`.
+It writes a `pre-push` hook at `.redline/hooks/pre-push` and points `core.hooksPath` at it. The
+deterministic half runs `redline policy` over the range being pushed, gated by the same
+enforcement rung as in CI; the rest is handed to whichever assistant the engineer already has,
+through the `/redline-review` command. No CI, no credential, no network, no host. The decision and what it
+costs are recorded in `docs/adr/0002-a-local-agent-gate.md`; the README has the table and the
+one-line `git config` each clone needs.
+
+It is bypassable with `git push --no-verify`, and the documentation says so rather than implying a
+required check. It publishes nothing, so `--blocking` is refused on it — the third route to a
+deadlock that was already closed for a repository with no gate and for a GitHub repository built by
+Azure Pipelines, all three now refused at one guard before anything is written.
+
+Four bugs in the building of it, three of them in the hook, all found by running the binary rather
+than the tests:
+
+- **The hook enforced at every rung.** It blocked on a finding regardless of what
+  `.redline.json` said, so `redline status` reported "observe — comments only, the check is always
+  green" about a gate that was refusing pushes, and the promotion ladder — the mechanism by which a
+  repository earns its way to blocking — decided nothing at all here. It now reads the rung at run
+  time rather than having a copy substituted into it, maps it to a severity floor exactly as
+  `workflows/redline-gate.yml` does, and treats an unrecognised value as non-enforcing for the same
+  reason `cli/config` does: a typo must never make a repository stricter than anyone chose.
+
+- **The hook reviewed nothing on the first push of a branch.** It guessed the range against
+  `origin/main`, which is not a ref on a fresh clone and is not the default branch everywhere. The
+  guess failed silently and the push sailed through — a gate that passes because it looked at no
+  code is worse than no gate, because someone believes it. It now asks git what is actually
+  unpushed, and falls back to the empty tree so the first push of a new repository reviews all of
+  it.
+- **The hook printed "no deterministic findings" directly beneath two findings.** `redline policy`
+  exits 0 on a HIGH — only a BLOCKER exits 1 — so the exit code is the answer to "may this push
+  proceed", not to "was anything found". The success message says which of those it is.
+- **`verify` described a pre-push hook as an Azure pipeline.** Every sentence in `gate-machinery`
+  was written about a file a build agent runs and a check name a host shows. The worst of them fired
+  when `core.hooksPath` was not pointed at the hook: it reported that the file had been edited, when
+  the file was untouched and only git's configuration was wrong — sending the reader to the one
+  thing that was already correct. Both the local path and `--repo` now answer for the machinery the
+  repository actually has, and the `--repo` path says plainly that whether the hook runs is a
+  property of each clone and no API read can decide it.
+
+### CLI — the last question named two terms of art and one irreversible act
+
+`Ready?` offered **Dry run**, **Write the files only** and **Apply**. Two of those are terms of
+art that assume the reader already knows how far the run goes, and the one that goes furthest was
+the vaguest: "Apply" names no outcome at all, and its hint said "write the files and open a pull
+request" — the reversible half. It also applies the repository settings. Files land on a branch a
+reviewer can close; labels, the ruleset and the merge policy land on the repository itself.
+
+The three answers now each name their own ceiling — what the run does, and what it stops short of:
+preview the plan and change nothing, write the files and commit nothing, or write, commit and open
+a pull request. The hint on the last one says the repository settings out loud. The flags
+(`--dry-run`, `--no-commit`) and the recorded action values are unchanged; this is what the
+operator reads, not what the CLI dispatches on.
+
+### Docs — a guided run that makes the gate fail on purpose
+
+`docs/verifying.md`. A green run nobody has ever seen go red is not evidence, and every checkpoint
+in the README's "Is it working?" table proves a positive — that something is installed, that
+something reported. None of them prove the thing an operator actually needs: that the gate refuses
+a change it should refuse.
+
+The new page is the other half. It walks a fresh install through breaking it deliberately: a probe
+file that trips the deterministic rules, the exit code that means "may this proceed" rather than
+"was anything found", a push refused at a blocking rung, the `--no-verify` bypass working as
+documented, and `redline remove --dry-run` proving the exit exists before anyone trusts the entry.
+
+The section it exists for is the one about what `redline policy` cannot decide. **Only four rules
+are checkable without a model** — `core/type-checker-suppression`, `core/untracked-todo`,
+`javascript/var-in-new-code`, `javascript/unsafe-numeric-coercion` — so an operator testing the
+gate with a hardcoded secret gets "no deterministic findings" and concludes the install is broken.
+It is not: that rule is real and is reviewed by the model half. Writing this page is how the trap
+was found, because the author walked into it.
+
+Two more found while wiring it, each the same shape as a bug this changelog already records — one
+fact kept in two places:
+
+- **`--pipeline`'s help text and its rejection message both named two values.** A third was added
+  and the flag went on advertising two, so `local-agent` was accepted but never mentioned by the
+  error that lists what is accepted. Both now read the list the parser validates against, and the
+  test asserts every accepted value appears rather than freezing the sentence.
+- **The wizard kept its own copy of the pipeline union.** It is now an alias of `GatePipeline`. A
+  second list that could disagree with the first is how the original Azure bug happened.
+
+And one found by following the new guide's own instructions:
+
+- **`redline init --no-commit` contacted the host on a re-run.** The flag is documented as needing
+  no credential and contacting no host, and every read honours that — the comment on the one that
+  resolves the repository ref says so in as many words. The settled-repository check was the
+  exception: it guarded on `--dry-run` alone, so a second `--no-commit` run issued `GET /rulesets`,
+  and against a token that cannot list rulesets it exited non-zero *after* writing the files. The
+  one command whose whole promise is that it works offline was the one that did not.
+
+### CLI — seven places the tool knew something and did not say it
+
+Seven changes with one shape in common: in each, Redline already held the fact the operator
+needed and printed something else, or nothing. None of them is a crash. All of them cost
+somebody an hour.
+
+- **`redline doctor`.** npm's `engines` field only warns. `npx redlinegate init` on a repository
+  pinned to Node 18 printed `EBADENGINE` and then ran the tool anyway, so the first real symptom
+  was a failure from inside a dependency, raised partway through a command that may already have
+  written files, with a message naming neither Node nor Redline. Every command now refuses below
+  Node 22 and names three ways to run one command under a newer runtime — `volta run`, `fnm exec`,
+  `nvm exec` — without touching a pin the repository set deliberately. `doctor` itself is exempt
+  from that guard, because refusing to run the diagnostic on the machine that needs diagnosing is
+  the exact failure the guard exists to prevent. It checks the runtime, git, the remote, the
+  credential and `.redline.json`, contacts no host, and prints the fix under every line that is not
+  `ok`. Three bugs in it were found by running it rather than by testing it: the no-remote branch
+  was unreachable, because `remoteUrl()` returns the empty string rather than throwing, so a
+  repository with no remote was reported as one on an unknown host with the fix for the wrong
+  problem; the unknown-host branch forwarded `parseRemote`'s message, which embeds the URL it was
+  given, and a remote can carry a credential in its userinfo — into output written to be pasted
+  into a ticket; and a `.redline.json` that failed validation took the whole command down with an
+  uncaught throw, which is the one command somebody runs *because* something here is wrong.
+
+- **`redline policy` says how much it could not decide.** Four rules in a catalogue of three
+  hundred and seventy-six can be evaluated without a model. A clean run therefore read as "the
+  standards found nothing" when it meant "the four checkable rules found nothing", and a repository
+  full of real violations passing silently is how this tool gets mistaken for a broken one. Every
+  run now ends with the ratio and points at `redline review` for the rest.
+
+- **`redline review --print-prompt`.** The embedded engine already produced the prompt; the scope
+  line was printed beside it, so the output could not be piped. The log now goes to stderr and the
+  prompt alone to stdout, which makes `redline review --print-prompt | pbcopy` copy the prompt and
+  nothing else. Anyone with a browser tab and a model can run the review half of Redline — no API
+  key, no endpoint, no configuration. Combined with `--engine api` it is a usage error rather than
+  a silently ignored flag: the api engine calls a model itself and has no prompt to hand over.
+
+- **`security-floor` carries the address of the page that fixes it.** `disabled: secret-scanning,
+  push-protection, dependency-alerts` named three settings and no way to reach them, leaving the
+  reader to search a settings tree they may never have opened. The finding now ends with the
+  settings URL for the host it is talking about. Not on a passing run, where a link is noise on
+  every line, and not for a capability that is merely unreadable — the fix there is a credential
+  with the scope to see it, and the page would have been unreadable to that token too.
+
+- **The advice after `--no-commit` is branch-aware.** "Review them, commit them, then run redline
+  init" is correct on a feature branch and a trap on the default one: a protected default rejects
+  the commit at push time, which is after the operator has followed the instruction and now has a
+  commit to unpick. On the default branch it says to branch first, and names the command. The
+  branch is a local read with a safe fallback, so this costs no host call.
+
+- **The way back out is named at the moment it is wanted.** `redline remove` has existed all along,
+  but the run that has just changed somebody's repository is the first time anyone wonders how to
+  undo it — by which point the help output is two commands behind them. A completed apply now
+  points at closing the pull request first, and `redline remove --dry-run` second.
+
+- **The menu says what it is before the first question.** Onboarding asks up to eleven questions
+  and the reader had no idea how many were coming or what would happen at the end. A short
+  orientation now precedes them. Deliberately no `[n of N]` counter: four of the questions are
+  conditional, so a denominator would be a lie, and "8 of 11" on the final question reads as a
+  fault rather than as progress.
+
+- **The pre-push hook says when `npx` is the reason it is slow.** The hook resolves the CLI through
+  `npx` when nothing is installed globally, which adds seconds to every push. It now times its own
+  run and, past five seconds, suggests the global install — once, on stderr, with the pinned
+  version. Writing that suggestion exposed a real defect: the hook template was rendered with
+  `String.prototype.replace`, which substitutes the first occurrence only, so the second
+  `redlinegate@REDLINE_CLI_VERSION` would have shipped unresolved and handed the engineer a command
+  that fails, at the exact moment they were being asked to trust the tool's advice about its own
+  speed.
+
+### CLI — three found by running the commands rather than the tests
+
+The Azure Pipelines work above was proven by unit tests and by a fixture shaped like the repository
+that surfaced it. Running the built binary against that fixture — `init`, `status`, `verify`,
+`remove`, `review`, `policy`, in the order an operator would — found three more that no test asked
+about.
+
+- **`redline policy` reported a BLOCKER against Redline's own rendered standards.** The text of
+  `react/exhaustive-deps-disabled` has to spell out the thing it bans, and the deterministic
+  suppression check matched the rule's own prose. The first diff this fires on is the onboarding pull
+  request, whose entire contents are Redline's artifacts: the product's opening move was to fail its
+  own gate. No type-checker or linter reads Markdown, so a suppression quoted in prose is
+  documentation about a suppression rather than one — the check now skips `.md`, `.mdx`, `.mdc`,
+  `.markdown`, `.rst`, `.txt` and `.adoc`. The exclusion is by file type, not by content: a real
+  suppression in a real source file is still a BLOCKER, and a test holds that line so the fix cannot
+  trade a false positive for a false negative.
+- **`redline remove` offered to remove `AGENTS.md` twice.** The plan is built by sweeping every
+  vendor rather than the ones the repository selected — deliberately, so an artifact left behind by a
+  vendor since dropped is still found — and `codex` and `agents` both render `AGENTS.md` on purpose.
+  The duplicate was harmless to execute and corrosive to read: a plan that double-counts cannot be
+  checked against the tree, which is the only thing a reviewer of a removal has to go on. Deduplicated
+  by path, with a test that asserts every path in the plan is acted on exactly once.
+- **`redline status` never said what runs the checks.** It reported the host and the rung, so a
+  repository on GitHub gated by Azure Pipelines read identically to one gated by Actions — sending an
+  operator looking for `.github/workflows` on a repository that has no such file, which is the exact
+  confusion the `gate-machinery` failure above was made of. It now prints the pipeline. Where no gate
+  was installed it prints `checks none` and drops the rung entirely, rather than reassuring the reader
+  that "the check is always green" about a check that does not exist.
+
 ### Standards 0.1.0 — Next.js and Express stacks
 
 Two frameworks the standards had no rules for, and one boundary each that nothing else in the

@@ -160,7 +160,10 @@ export function Choices() {
         <p className="hm-choices-lead">
           <code>redline init</code> with no flags, at a terminal, walks these
           one at a time — detected answer preselected, every term explained
-          beside the choice that uses it, and <b>Dry run</b> before Apply. In CI,
+          beside the choice that uses it, and a last question whose three
+          answers each name their own ceiling — preview and change nothing,
+          write the files and commit nothing, or write, commit and open a pull
+          request. In CI,
           in a pipe, or with any flag at all, it prompts for nothing.{" "}
           The run above is one repository&apos;s answers. Yours are recorded in{" "}
           <code>.redline.json</code>, explained inline in that file, and every one

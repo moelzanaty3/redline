@@ -7,6 +7,7 @@ import type { GitHubClient } from '../client.ts';
 // what order it was asked.
 function client(answers: Record<string, number>, onCall?: (path: string) => void): GitHubClient {
   return {
+    webBaseUrl: 'https://github.com',
     async rest<T>(_method: string, path: string) {
       onCall?.(path);
       const status = answers[path] ?? answers[path.split('?')[0]!] ?? 404;
@@ -63,6 +64,7 @@ test('a 403 is unreadable, never "does not exist"', async () => {
 
 test('a transport failure is unreadable and never throws', async () => {
   const thrower: GitHubClient = {
+    webBaseUrl: 'https://github.com',
     async rest() {
       throw new Error('ECONNREFUSED');
     },

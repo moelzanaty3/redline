@@ -2,6 +2,7 @@ import { RedlineError } from '../../core/errors.ts';
 import { parseRemoteConfig, type RemoteConfigResult } from '../remote.ts';
 import type { RepoRef } from '../types.ts';
 import type { GitHubClient } from './client.ts';
+import { hostHint } from '../../core/host-hint.ts';
 
 const repoPath = (ref: RepoRef): string => `/repos/${ref.org}/${ref.repo}`;
 
@@ -28,7 +29,8 @@ export async function readRemoteFile(
   if (response.status >= 400) {
     throw new RedlineError(
       'host',
-      `${ref.org}/${ref.repo}: reading ${path} returned ${response.status}`
+      `${ref.org}/${ref.repo}: reading ${path} returned ${response.status}`,
+      hostHint(response.status)
     );
   }
   const body = response.body;

@@ -54,6 +54,7 @@
     "publish:local": "node scripts/publish-local.mjs",
     "publish:local:clean": "npm rm -g redlinegate",
     "test": "node --test 'cli/**/__tests__/*.test.ts' 'scripts/**/__tests__/*.test.mjs'",
+    "test:watch": "node --test --watch 'cli/**/__tests__/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

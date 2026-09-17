@@ -60,9 +60,11 @@ That is the whole procedure. With no flags, at a terminal, it asks before it wri
 which standards apply, where the repository lives, what runs your pull request checks,
 which assistants should read the rules, what to install, and how hard the gate should
 bite. Whatever it detected is preselected, so pressing enter through it accepts detection,
-and the last question offers **Dry run** before Apply.
+and the last question offers three answers, each naming its own ceiling: preview and
+change nothing, write the files and commit nothing, or write, commit and open a pull
+request.
 
-Choose Apply and it renders the standards, installs the merge-readiness template and the
+Choose the last one and it renders the standards, installs the merge-readiness template and the
 gate (advisory — it reports, it does not block), turns on the security floor, and opens a
 pull request on `redline/onboard`. It never pushes to your default branch, so `git status`
 stays clean. Anything that needed repository admin rights you do not have is listed at the
@@ -75,7 +77,46 @@ path — a prompt in a pipeline is a hang with nobody there to answer it:
 npx redlinegate init --dry-run                 # the plan; writes nothing, contacts no host
 npx redlinegate init --profile web-react,infra # a React app with its own Terraform beside it
 npx redlinegate init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines
+npx redlinegate init --pipeline local-agent      # no CI: the gate is a pre-push hook
 ```
+
+### Where the gate runs
+
+`--pipeline` answers a question the host does not: what actually runs your pull request
+checks. The two come apart — a repository can live on GitHub and be built entirely by
+Azure Pipelines, and installing an Actions workflow there gates nothing at all.
+
+| `--pipeline` | What gets installed | What a ruleset can require |
+| --- | --- | --- |
+| `github-actions` (default) | `.github/workflows/redline.yml` | `redline-gate / gate` |
+| `azure-pipelines` | `.azuredevops/redline-gate.yml` | the pipeline's own name in Azure DevOps |
+| `local-agent` | `.redline/hooks/pre-push` | nothing — it publishes no check |
+| *(the wizard's "Nothing")* | no gate at all | nothing |
+
+The last two are both answers from a repository with no CI, and they are not the same
+answer. **Nothing** renders the standards for your assistants to read and installs no gate.
+**`local-agent`** installs a real one that runs before `git push`: the deterministic rules
+run as `redline policy`, and whether a finding refuses the push is decided by the same
+enforcement rung as in CI — `observe` and `warn` report, `block-blocker` and `block-high`
+refuse. The rest is handed to whichever assistant you already use. It is a gate you can
+bypass with `git push --no-verify`, which is the honest trade for one that needs no CI, no
+credential and no host.
+
+Two things it needs that a CI gate does not:
+
+```sh
+git config core.hooksPath .redline/hooks   # once per clone, per engineer
+```
+
+The hook is committed to the repository so it can be reviewed, versioned and removed like
+anything else — `.git/hooks` is none of those things. The cost is that git has to be
+pointed at it in each clone. `redline init` does that for the clone it runs in and refuses
+to touch a `core.hooksPath` somebody else set, so a repository running husky keeps its
+hooks and gets told what to do instead.
+
+And because it reports to no host, **no branch ruleset may require it** — there is no check
+name to name. `redline init --blocking` is refused on this pipeline for that reason: it
+would demand a check nothing publishes and hang every pull request forever.
 
 Install it once and the everyday command is shorter:
 
@@ -97,8 +138,10 @@ Both GitHub and Azure DevOps are supported. Redline detects which from your git 
 
 ## The whole command surface
 
-`init` and `verify` are what a repository uses day to day, but they are two of eleven.
-`redline --help` prints every flag; this is the map.
+`init` and `verify` are what a repository uses day to day, but they are two of fifteen.
+`redline --help` opens with the three-command quickstart and lists every command in one
+line each; `redline <command> --help` prints that command's flags. A mistyped flag or
+command names the one you probably meant. This is the map.
 
 **In a repository you are standing in:**
 
@@ -109,20 +152,32 @@ Both GitHub and Azure DevOps are supported. Redline detects which from your git 
 | `redline verify` | Check the repository still matches what `.redline.json` claims. `--repo owner/name` checks over the API with no checkout; `--json` for a wrapper |
 | `redline review` | Review a change against **only** the rules its files touch. `--engine embedded` (default) hands the bounded prompt to the assistant running it; `--engine api` calls a configured endpoint, local or hosted. Findings never reach rule-tuning telemetry |
 | `redline explain <rule-id>` | What a rule means, who decided it, which files it scopes to, which profiles receive it. `--list` prints every id with its severity |
+| `redline doctor` | Can this machine run Redline against this repository — runtime, git, remote, credential, onboarded? Every failing line carries its fix. The one command that still runs on a Node too old for the rest |
+| `redline evidence` | The measurement behind this repository's rung, and what the next one asks for. `evidence record --source <where>` writes one. Nothing else can raise enforcement |
+| `redline funnel` | Where your own runs of this CLI succeed and where they stop. **Off unless you switch it on**, written to `~/.redline`, sent nowhere |
 | `redline remove` | Take Redline back out, as a pull request. Only content it can prove it wrote; the security floor is the org's minimum and no flag here turns it off |
+| `redline completion bash\|zsh\|fish` | Print a tab-completion script for commands, flags and `metrics` subcommands. `source <(redline completion zsh)` in `~/.zshrc`, after `compinit`; `redline completion --help` for bash and fish |
 
 **What the gate calls** (no model, deterministic, exit code is the answer):
 
 | Command | What it does |
 | --- | --- |
-| `redline policy --diff-file <path>` | Evaluate the rules a checker can decide without a model call. Exit 1 on a BLOCKER |
+| `redline policy --diff-file <path>` | Evaluate the rules a checker can decide without a model call. Exit 1 on a BLOCKER. `--json` for a wrapper |
 | `redline exempt --body-file <path>` | Decide whether a pull request carries a *valid* exemption for a failing process check — a reason, an actor and an expiry, not a bare label |
+
+`verify`, `status`, `doctor`, `policy`, `review`, `explain`, `exempt`, `evidence`, `sync`,
+`funnel` and `remove` all take `--json`, and under it stdout carries the document alone —
+anything said about the run goes to stderr. The exit code
+answers *may this proceed*, which is deliberately not the same question as *was anything
+found* — three HIGH findings pass a BLOCKER gate. Anything building on top of these needs
+both answers, and scraping them out of prose written for a human is how a wrapper breaks on
+a wording change.
 
 **Estate-level, from a checkout of this repository:**
 
 | Command | What it does |
 | --- | --- |
-| `redline sync` | Open a pull request on every registered repository whose standards are behind. `--dry-run` prints the plan and opens nothing; `--repo` for one; `--force` to re-render one already current |
+| `redline sync` | Open a pull request on every registered repository whose standards are behind. `--dry-run` prints the plan and opens nothing; `--repo` for one; `--force` to re-render one already current; `--concurrency` for how many run at once (default 8) |
 | `redline registry` | Derive the register of onboarded repositories by walking the org. Runs nightly in the source repo |
 | `redline metrics <cmd>` | The measurement plane: `collect`, `dashboard`, `digest`, `inbox`, `baseline`, `roi`, `correlate`, `score-seeds`. `redline metrics <cmd> --help` for flags |
 
@@ -135,6 +190,73 @@ Two things worth knowing before you reach for these:
   in brackets; paste it into `explain` and you get the rule, its source line in
   `standards/`, and the profiles it reaches. That closes the loop between a comment on a
   pull request and the file a human edits to change it.
+- **`redline doctor` runs before anything is wrong, not after.** It is exempt from the Node
+  floor, because refusing to run the diagnostic on the machine that needs diagnosing is the
+  failure it exists to prevent.
+- **Output is coloured at a terminal and plain everywhere else.** `ok`, `FAIL`, severities
+  and errors are painted, but the words carry the meaning on their own. `NO_COLOR` turns it
+  off, `FORCE_COLOR` turns it on for a capture, and a pipe or `--json` is never painted.
+- **`redline failed unexpectedly` is a defect in Redline, not in how you ran it.** Re-run
+  with `REDLINE_DEBUG=1` for the stack trace and include it in an issue.
+
+### Reviewing with your own model
+
+`redline review --engine api` calls an endpoint rather than handing a prompt to whatever
+assistant is running the command. The provider is inferred from `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY` and the model from `REDLINE_REVIEW_MODEL`, so a key and a model name
+set once are enough — but *choosing* the engine stays explicit. Nothing is ever sent
+anywhere because a key happens to be exported.
+
+With no key set, `--provider openai` points at `http://localhost:11434/v1`, which Ollama,
+LM Studio and vLLM all serve. That matters: a review that has to send a diff to a third
+party is one several of this organisation's markets cannot run at all. With a key set, the
+hosted endpoint is used instead — nobody exports `OPENAI_API_KEY` meaning *send this to the
+Ollama on my laptop*.
+
+If your model is a browser tab, `redline review --print-prompt | pbcopy` puts exactly the
+prompt on the clipboard and nothing else.
+
+### Earning a rung
+
+Enforcement climbs `observe → warn → block-blocker → block-high`, and a rung is *earned on
+a recorded measurement*, never asserted:
+
+```
+redline evidence                       # what the next rung asks for
+redline evidence record \
+  --sample-size 40 --seed-recall 1 \
+  --acted-on-rate 0.85 --false-positives 0 \
+  --source "canary cohort, weeks 1-6"  # --source is required
+redline init --rung warn               # now permitted
+```
+
+The numbers come from the metrics plane, which sees the estate over a window; the CLI
+supplies the mechanism and the audit trail, not the figures. `--source` has no default
+because evidence with no provenance is an assertion. A rate outside `0..1` is rejected
+rather than clamped — a `94` meant as *94%* and clamped to `1` would read as the perfect
+recall the blocking rungs require. Evidence older than 90 days stops justifying a
+promotion: it describes a reviewer, a rule set and a codebase at a moment, and all three
+move. Demotion never needs evidence — the safe direction never asks permission.
+
+## Slash commands
+
+`init` also writes three command files, so the everyday operations are reachable from
+inside the assistant rather than only from a shell. They are rendered per vendor —
+`.github/prompts/*.prompt.md` for Copilot, `.claude/commands/`, `.cursor/commands/`,
+`.opencode/command/` — and are regenerated by `redline init`, not edited by hand.
+
+| Command | What it does |
+| --- | --- |
+| `/redline-init` | Onboard this repository and report what the run printed |
+| `/redline-verify` | Check the repository still matches what it claims, and report the findings table |
+| `/redline-review` | Review the change in front of you against the rules its files touch, in Redline's output contract |
+
+`/redline-review` is the one to know. It runs `redline review --engine embedded`, which
+narrows the standards to the rules the changed files actually scope to and hands that
+bounded prompt to whichever assistant you are already using — so the review needs no CI,
+no credential and no network. It is the same review the `local-agent` gate points at after
+the deterministic half has run, and it is worth running in a repository with a CI gate too:
+it is the cheapest way to see the findings before a reviewer does.
 
 ## Is it working?
 
@@ -143,15 +265,24 @@ nothing. Each checkpoint below has a command that proves it, and a quiet failure
 looks identical from the outside. The long version, with the numbers to expect, is
 [docs/success](https://redline-gate.vercel.app/docs/success).
 
+**New install?** Work through [docs/verifying.md](docs/verifying.md) once. It is a
+ten-minute guided run that makes the gate fail on purpose — a green run you have never
+seen go red is not evidence — and it covers all three gate topologies, the rung ladder,
+the bypass, and how to get back out.
+
 | Question | Command | Quiet failure it rules out |
 | --- | --- | --- |
+| Can this machine run it? | `redline doctor` | Node 18 running the tool anyway on npm's `EBADENGINE` *warning*, failing later from inside a dependency with a message that names neither Node nor Redline |
 | What is installed here? | `redline status` | A non-empty `pendingAdmin` nobody read — the files landed, the merge policy never applied. Fix with `--repair` once an admin grants the rights |
 | Does the host agree? | `redline verify` | A required check whose name nothing reports: every PR stuck on "Expected — waiting for status" forever |
 | What does this finding mean? | `redline explain <id>` | An id `explain --list` does not know was invented by the model, and every aggregate keyed on it is fiction |
 | Would this diff pass? | `redline review` | — run it before you push, against only the rules your files touch |
+| No assistant in this terminal? | `redline review --print-prompt \| pbcopy` | Paste into any model you have. Prompt on stdout, everything else on stderr, so the pipe carries the prompt alone |
 | Who is onboarded? | `redline registry` | A register nobody derived, so `sync` reaches a stale list |
 | Is review being acted on? | `redline metrics dashboard` | Review running and being ignored. The hero number is **findings acted on**; the rule tuning queue names the rules responsible |
 | Does it still catch defects? | `redline metrics score-seeds` | "No findings" and "nothing to find" are indistinguishable without it. Recall below 100% means do not widen the rollout |
+| May we enforce harder yet? | `redline evidence` | A rung raised on a hunch. The ladder refuses a promotion with nothing recorded behind it, and 90-day-old evidence stops counting |
+| Where do people give up? | `redline funnel` | Off by default. Every fix in this tool so far came from watching one terminal over someone's shoulder, which does not scale past the people sitting near you |
 | What did it cost? | `redline metrics roi` | Spend measured against what was caught — it refuses to answer a per-repo question with an org-wide figure |
 
 A dashboard built in week one is empty, and that is a sample size, not a failure. Nothing

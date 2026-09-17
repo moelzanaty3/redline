@@ -1,9 +1,10 @@
 import { RedlineError } from '../core/errors.ts';
 import type { Host, RepoRef } from '../platforms/types.ts';
 import { createGitHubClient, type GitHubClient } from '../platforms/github/client.ts';
-import { createGitHubVerify, machineryFromBody } from '../platforms/github/verify.ts';
+import { createGitHubVerify, gateMachineryFor } from '../platforms/github/verify.ts';
 import { readRemoteConfig, readRemoteFile } from '../platforms/github/remote.ts';
 import type { RemoteVerifyHost } from './remote.ts';
+import { hostHint } from '../core/host-hint.ts';
 
 // One client per host, for the same reason sync needs one: a remote verify runs
 // across an estate that spans both, where every other command acts on a single
@@ -27,7 +28,7 @@ export function createRemoteVerifyHost(clients: { github?: GitHubClient } = {}):
     resolveRef: (repo) => resolveRemoteRef(github, repo),
     readRemoteConfig: (ref) => (only(ref), readRemoteConfig(github, ref)),
     readRemoteFile: (ref, path) => (only(ref), readRemoteFile(github, ref, path)),
-    machineryFromBody,
+    machineryFromBody: gateMachineryFor,
     readPolicy: (ref) => (only(ref), githubVerify.readPolicy(ref)),
     readSecurityState: (ref) => (only(ref), githubVerify.readSecurityState(ref)),
     latestPullRequestNumber: (ref) => (only(ref), githubVerify.latestPullRequestNumber(ref)),
@@ -49,10 +50,10 @@ export async function resolveRemoteRef(
   }
   const response = await client.rest<{ default_branch?: string }>('GET', `/repos/${org}/${name}`);
   if (response.status === 404) {
-    throw new RedlineError('host', `${repo} not found, or this token cannot see it`);
+    throw new RedlineError('host', `${repo} not found, or this token cannot see it`, hostHint(404));
   }
   if (response.status >= 400) {
-    throw new RedlineError('host', `reading ${repo} returned ${response.status}`);
+    throw new RedlineError('host', `reading ${repo} returned ${response.status}`, hostHint(response.status));
   }
   return {
     host: 'github',

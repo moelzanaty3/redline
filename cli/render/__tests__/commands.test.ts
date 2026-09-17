@@ -23,14 +23,16 @@ const tmp = (): string => {
   return dir;
 };
 
-test('both command sources load with a name and description', () => {
+test('every command source loads with a name and description', () => {
   const commands = loadCommands(root).sort((a, b) => a.name.localeCompare(b.name));
   assert.deepEqual(
     commands.map((c) => c.name),
-    ['redline-init', 'redline-verify']
+    ['redline-init', 'redline-review', 'redline-verify']
   );
-  assert.ok(commands[0]!.description.length > 0);
-  assert.ok(!commands[0]!.body.startsWith('---'), 'frontmatter must be stripped from the body');
+  for (const command of commands) {
+    assert.ok(command.description.length > 0, `${command.name} has no description`);
+    assert.ok(!command.body.startsWith('---'), `frontmatter must be stripped from ${command.name}`);
+  }
 });
 
 test('copilot prompts land in .github/prompts with agent mode', () => {

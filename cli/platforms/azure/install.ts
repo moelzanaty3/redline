@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { RedlineError } from '../../core/errors.ts';
 import type { Git } from '../../core/git.ts';
 import { CLI_VERSION, UNPUBLISHED_VERSION } from '../../core/version.ts';
+import { installLocalAgentGate } from '../local-agent.ts';
 import type {
   AdminCapability,
   CapabilityOutcome,
@@ -950,6 +951,12 @@ export function createAzureInstall(
       check = false
     ): Promise<InstallResult> {
       const files: string[] = [];
+      // No pull request check at all: the gate is a pre-push hook on the
+      // engineer's machine, identical on either host because it touches
+      // neither.
+      if (opts.pipeline === 'local-agent') {
+        return installLocalAgentGate(cwd, opts, check);
+      }
       refuseForeignGateFile(cwd, opts);
       const pipeline = readFileSync(join(PACKAGE_ROOT, 'platforms/azure/gate-template.yml'), 'utf8')
         .replace(/ADR_DIFF_THRESHOLD: \d+/, `ADR_DIFF_THRESHOLD: ${opts.adrDiffThreshold}`)
@@ -957,7 +964,12 @@ export function createAzureInstall(
           /FAIL_ON_DEPENDENCY_SEVERITY: \w+/,
           `FAIL_ON_DEPENDENCY_SEVERITY: ${opts.failOnDependencySeverity}`
         )
-        .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`);
+        .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`)
+        // Without this the wizard's "the gate's secrets job is stood down here"
+        // was a statement about a file that still ran TruffleHog on every pull
+        // request — and as a non-waivable check, a finding the declared scanner
+        // allowlists then blocked the pull request with no way to waive it.
+        .replace(/REDLINE_STAND_DOWN: .*/, `REDLINE_STAND_DOWN: '${(opts.standDown ?? []).join(',')}'`);
       // `redlinegate@latest` inside a template installed across every
       // onboarded repository means any npm publish changes org-wide gate
       // behaviour with no pull request anywhere. Pin the version that wrote

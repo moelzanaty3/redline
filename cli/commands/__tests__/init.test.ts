@@ -689,6 +689,23 @@ test('a capability the host still denies keeps the repository settled and is rep
   assert.deepEqual(report.pendingAdmin, ['secret-scanning']);
 });
 
+// --no-commit carries the same documented promise as --dry-run: it writes files
+// into the working tree and contacts no host. Every other read honours it; the
+// settled-repository check did not, so a re-run on an already-onboarded
+// repository issued GET /rulesets — and where the token could not list rulesets
+// it exited non-zero after writing the files, from the one command whose whole
+// point is that it works offline.
+test('--no-commit reads nothing from the host, on a re-run as well as a first run', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, noCommit: true });
+
+  const second = fakePlatform();
+  await init(second, { cwd, root, now, noCommit: true });
+
+  assert.deepEqual(second.reads, [], 'a --no-commit run must work offline and with an unscoped token');
+  assert.deepEqual(second.applied, []);
+});
+
 test('--dry-run reads nothing from the host at all, not even the repository', async () => {
   const cwd = repo();
   const platform = fakePlatform();
@@ -1940,4 +1957,162 @@ test('--no-commit is not a dry run and does not report as one', async () => {
   const report = await init(fakePlatform(), { cwd, root, now, noCommit: true });
   assert.equal(report.dryRun, false);
   assert.ok(existsSync(join(cwd, '.redline.json')));
+});
+
+// --- the pipeline the wizard asked for ---------------------------------------
+
+// The wizard asks what runs the pull request checks, installs the right gate,
+// and then threw the answer away. Nothing downstream could tell an Actions
+// repository from an Azure Pipelines one, so `verify` looked for a workflow
+// this run had deliberately not written and reported the repository as having
+// no gate at all.
+test('the pipeline the run installed against is recorded', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, noCommit: true, pipeline: 'azure-pipelines' });
+  assert.equal(readConfig(cwd)?.pipeline, 'azure-pipelines');
+});
+
+// The second manifestation, and the worse one: `init` is meant to be safe to
+// re-run, but a re-run without the flag reverted to an Actions caller and
+// undid the correct install.
+test('a re-run without the flag keeps the pipeline the repository was onboarded with', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, noCommit: true, pipeline: 'azure-pipelines' });
+  const platform = fakePlatform();
+  await init(platform, { cwd, root, now, noCommit: true });
+
+  assert.equal(readConfig(cwd)?.pipeline, 'azure-pipelines');
+  assert.equal(platform.gateOptions.at(-1)?.pipeline, 'azure-pipelines');
+});
+
+// An explicit flag still wins — and it has to survive the settled verdict to
+// do it, because switching pipelines changes no rendered artifact of its own.
+test('an explicit flag overrides the recorded pipeline', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, noCommit: true, pipeline: 'azure-pipelines' });
+  await init(fakePlatform(), { cwd, root, now, noCommit: true, pipeline: 'github-actions' });
+  assert.equal(readConfig(cwd)?.pipeline, 'github-actions');
+});
+
+// --no-commit skips the host, so it owes an administrator nothing — except
+// where the installer genuinely ran and could not finish. Writing an Azure
+// pipeline definition is exactly that case: the file is on disk, but until
+// somebody registers it in Azure DevOps it runs on no pull request. Dropping
+// the outcome lost the only record that the job was still owed.
+test('--no-commit keeps work the gate installer could not finish', async () => {
+  const cwd = repo();
+  const platform = fakePlatform({
+    gate: [{ capability: 'gate', status: 'denied', detail: 'register the pipeline in Azure DevOps' }],
+  });
+  const report = await init(platform, { cwd, root, now, noCommit: true, pipeline: 'azure-pipelines' });
+
+  assert.deepEqual(readConfig(cwd)?.pendingAdmin, ['gate']);
+  assert.deepEqual(report.pendingAdmin, ['gate']);
+});
+
+// The same deadlock from the other side, and the one the guard above misses:
+// the gate here is present and correct, but on a GitHub-hosted repository built
+// by Azure Pipelines the check GitHub sees is named by the pipeline definition
+// in Azure DevOps. A blocking ruleset names the Actions gate's check, which
+// nothing here publishes — so every pull request would hang.
+test('a blocking policy on an Azure Pipelines gate is refused before anything is touched', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+
+  await assert.rejects(
+    init(platform, { cwd, root, now, pipeline: 'azure-pipelines', menu: { blockingGate: true } }),
+    /blocked/
+  );
+  assert.deepEqual(platform.applied, []);
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});
+
+// Advisory is the working configuration on that combination and must stay
+// reachable — the refusal is about the blocking policy, not the pipeline.
+test('an advisory policy on an Azure Pipelines gate is fine', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), {
+    cwd,
+    root,
+    now,
+    noCommit: true,
+    pipeline: 'azure-pipelines',
+  });
+  assert.equal(report.dryRun, false);
+  assert.equal(readConfig(cwd)?.pipeline, 'azure-pipelines');
+});
+
+// The third route to the same deadlock. A gate that runs on somebody's laptop
+// reports to no host at all — no build, no app, no status call — so no check
+// name exists for a ruleset to require, on either host.
+test('a blocking policy on a local agent gate is refused before anything is touched', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+
+  await assert.rejects(
+    init(platform, { cwd, root, now, pipeline: 'local-agent', menu: { blockingGate: true } }),
+    /blocked/
+  );
+  assert.deepEqual(platform.applied, []);
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});
+
+// Advisory is the working configuration here too, and the pipeline is recorded
+// so a later run does not fall back to the host default and write a CI file
+// into a repository that runs none.
+test('an advisory policy on a local agent gate is fine and records the pipeline', async () => {
+  const cwd = repo();
+  const report = await init(fakePlatform(), {
+    cwd,
+    root,
+    now,
+    noCommit: true,
+    pipeline: 'local-agent',
+  });
+  assert.equal(report.dryRun, false);
+  assert.equal(readConfig(cwd)?.pipeline, 'local-agent');
+});
+
+// The note is about the Actions caller, which references a workflow in another
+// repository. An Azure pipeline definition is standalone and a pre-push hook
+// contacts nothing, so on those it described a file the run had not written and
+// sent the operator to check a reference that does not exist.
+test('the org-caller note is not printed for a gate that has no caller', async () => {
+  for (const pipeline of ['azure-pipelines', 'local-agent'] as const) {
+    const report = await init(fakePlatform(), {
+      cwd: repo(),
+      root,
+      now,
+      noCommit: true,
+      pipeline,
+    });
+    assert.equal(
+      report.notes.some((note) => note.includes('caller workflow references')),
+      false,
+      pipeline
+    );
+  }
+});
+
+// The note names what else sits in the directory the gate runs from. Reading
+// the Actions path on an Azure Pipelines repository listed `.github/workflows/`
+// — a directory whose contents are not merge gates here — and invited the
+// operator to `--skip gate` in favour of one of them.
+test('the already-wired note looks in the directory this repository gates from', async () => {
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/workflows/linked-work-item.yml': 'name: linked\n',
+    '.azuredevops/pr-validation.yml': 'pr: none\n',
+  });
+  const report = await init(fakePlatform(), {
+    cwd,
+    root,
+    now,
+    noCommit: true,
+    pipeline: 'azure-pipelines',
+  });
+
+  const note = report.notes.find((n) => /already has/.test(n)) ?? '';
+  assert.match(note, /pr-validation\.yml/);
+  assert.ok(!note.includes('linked-work-item.yml'), `named an Actions workflow: ${note}`);
 });

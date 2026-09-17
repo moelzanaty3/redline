@@ -263,3 +263,68 @@ test('an unreachable endpoint is a host error naming the endpoint', async () => 
     (err: unknown) => isRedlineError(err) && err.kind === 'host' && /localhost:11434/.test(err.message)
   );
 });
+
+// Nobody exports OPENAI_API_KEY meaning "send this to the Ollama on my laptop".
+// The local default is right for the dialect and wrong the moment a key exists,
+// and a local server that is not running answered that mistake with `fetch
+// failed` against an address the operator never chose.
+const endpointFor = async (
+  env: NodeJS.ProcessEnv,
+  config: Parameters<typeof createApiEngine>[0]
+): Promise<string> => {
+  let seen = '';
+  const engine = createApiEngine(config, {
+    env,
+    fetch: async (url) => {
+      seen = url;
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' } }] }), {
+        status: 200,
+      });
+    },
+  });
+  await engine.review({ prompt: 'p' });
+  return seen;
+};
+
+test('a key present sends to the hosted endpoint, not localhost', async () => {
+  const url = await endpointFor({ OPENAI_API_KEY: 'sk-x' }, { provider: 'openai', model: 'gpt-4o' });
+  assert.match(url, /api\.openai\.com/);
+});
+
+test('no key keeps the local default, which needs none', async () => {
+  const url = await endpointFor({}, { provider: 'openai', model: 'llama3' });
+  assert.match(url, /localhost:11434/);
+});
+
+test('an explicit base url beats both', async () => {
+  const url = await endpointFor(
+    { OPENAI_API_KEY: 'sk-x' },
+    { provider: 'openai', model: 'gpt-4o', baseUrl: 'https://proxy.internal/v1' }
+  );
+  assert.match(url, /proxy\.internal/);
+});
+
+test('an endpoint that never answers fails with a host error instead of hanging', async () => {
+  const engine = createApiEngine(
+    { provider: 'openai', model: 'm' },
+    {
+      fetch: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          // AbortSignal.timeout() uses an unref'd timer, so a ref'd handle is
+          // what keeps the runner from draining the loop before it fires.
+          const keepAlive = setInterval(() => {}, 1_000);
+          init?.signal?.addEventListener('abort', () => {
+            clearInterval(keepAlive);
+            reject(init.signal?.reason);
+          });
+        }),
+      env: {},
+      timeoutMs: 5,
+    }
+  );
+
+  await assert.rejects(
+    () => engine.review({ prompt: 'p' }),
+    (error: unknown) => isRedlineError(error) && error.kind === 'host' && /did not answer within/.test(error.message)
+  );
+});

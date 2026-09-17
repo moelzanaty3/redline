@@ -109,3 +109,18 @@ test('findings carry the file and line a reviewer can open', () => {
     assert.equal(first?.line, 2);
   });
 });
+
+// Only four rules in the catalogue can be decided without a model. A clean
+// `redline policy` therefore reads as "the standards found nothing", when what
+// it means is "the four checkable rules found nothing" — and the gap between
+// those two readings cost a full debugging session, because a repository full
+// of violations passed and nobody could see why.
+test('the report carries the size of the catalogue it did not check', () => {
+  withDiff(diffWith('const ok = 1;'), (diffFile) => {
+    const report = policy({ root: ROOT, diffFile });
+    assert.ok(report.catalogue > report.evaluated.length);
+    // Not a hardcoded number: the point is the ratio exists and is honest, and
+    // pinning the count here would make every new rule break this test.
+    assert.ok(report.evaluated.length > 0);
+  });
+});

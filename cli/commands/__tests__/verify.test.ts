@@ -1175,3 +1175,162 @@ test('owners that all resolve pass, and a host without CODEOWNERS is not a failu
   const absent = await verify(() => fakePlatform({ codeownersProblems: null }), { cwd, root });
   assert.equal(find(absent, 'review-ownership')?.ok, true);
 });
+
+// --- a gate whose check name lives outside the repository ---------------------
+
+// A GitHub-hosted repository built by Azure Pipelines has no name to read: the
+// Azure Pipelines app publishes under the pipeline DEFINITION's name, which is
+// in Azure DevOps and not in the checkout. Holding it to a `publishes` nothing
+// can compute failed every such repository — and told it to re-run init, which
+// would have written an Actions workflow it never runs.
+test('a gate named outside the repository verifies on being present', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    gateMachinery: {
+      path: '.azuredevops/redline-gate.yml',
+      present: true,
+      publishes: null,
+      expected: 'its Azure Pipelines check',
+      vendored: null,
+      externallyNamed: true,
+    },
+  });
+  const report = await verify(() => platform, { cwd, root });
+  assert.equal(find(report, 'gate-machinery')?.ok, true, find(report, 'gate-machinery')?.detail);
+});
+
+// The half that IS readable: no pipeline definition, no gate. `externallyNamed`
+// must not become "present is good enough" — that would report a repository
+// with no gate at all as healthy.
+test('a missing pipeline definition still fails, naming the file it looked for', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    gateMachinery: {
+      path: '.azuredevops/redline-gate.yml',
+      present: false,
+      publishes: null,
+      expected: 'its Azure Pipelines check',
+      vendored: null,
+      externallyNamed: false,
+    },
+  });
+  const report = await verify(() => platform, { cwd, root });
+  const finding = find(report, 'gate-machinery');
+  assert.equal(finding?.ok, false);
+  assert.match(finding?.detail ?? '', /\.azuredevops\/redline-gate\.yml/);
+});
+
+// --- a gate that runs on this machine ----------------------------------------
+
+// Every sentence this finding had was about a build agent and a check name.
+// A pre-push hook has neither, so on that pipeline it described machinery the
+// repository does not have and sent the reader to look for a workflow.
+test('a wired local hook is reported as a local hook, not as an Azure pipeline', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pipeline: 'local-agent' });
+
+  const platform = fakePlatform();
+  platform.readGateMachinery = () => ({
+    path: '.redline/hooks/pre-push',
+    present: true,
+    publishes: null,
+    expected: 'the pre-push hook on this machine',
+    vendored: null,
+    externallyNamed: true,
+  });
+
+  const finding = find(await verify(() => platform, { cwd, root }), 'gate-machinery');
+  assert.equal(finding?.ok, true, finding?.detail);
+  assert.doesNotMatch(finding?.detail ?? '', /Azure/);
+  assert.match(finding?.detail ?? '', /core\.hooksPath/);
+});
+
+// The worst of the three. The file is untouched and only git's configuration is
+// wrong, and the report said the file had been edited — pointing the reader at
+// the one thing that was already correct.
+test('an unwired local hook blames the hooks path, not the file', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pipeline: 'local-agent' });
+
+  const platform = fakePlatform();
+  platform.readGateMachinery = () => ({
+    path: '.redline/hooks/pre-push',
+    present: true,
+    publishes: null,
+    expected: 'the pre-push hook on this machine',
+    vendored: null,
+    externallyNamed: false,
+  });
+
+  const finding = find(await verify(() => platform, { cwd, root }), 'gate-machinery');
+  assert.equal(finding?.ok, false, finding?.detail);
+  assert.match(finding?.detail ?? '', /core\.hooksPath/);
+  assert.doesNotMatch(finding?.detail ?? '', /pull request/);
+  assert.doesNotMatch(finding?.detail ?? '', /has been edited/);
+});
+
+test('a missing local hook is not described as failing to publish anything', async () => {
+  const cwd = await onboarded();
+  const config = readConfig(cwd)!;
+  writeConfig(cwd, { ...config, pipeline: 'local-agent' });
+
+  const platform = fakePlatform();
+  platform.readGateMachinery = () => ({
+    path: '.redline/hooks/pre-push',
+    present: false,
+    publishes: null,
+    expected: 'the pre-push hook on this machine',
+    vendored: null,
+  });
+
+  const finding = find(await verify(() => platform, { cwd, root }), 'gate-machinery');
+  assert.equal(finding?.ok, false);
+  assert.doesNotMatch(finding?.detail ?? '', /publish/);
+  assert.match(finding?.detail ?? '', /nothing reviews a push/);
+});
+
+// "disabled: secret-scanning, push-protection, dependency-alerts" names three
+// settings and no way to reach them. The operator's next move is a search
+// through a settings tree they may never have opened, on a repository they may
+// not have admin on — so the line carries the address of the page.
+test('a disabled capability carries the address of the page that turns it on', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    security: [
+      { capability: 'secret-scanning', status: 'applied', detail: '' },
+      { capability: 'push-protection', status: 'denied', detail: 'off' },
+    ],
+    settingsUrl: 'https://github.com/acme/widget/settings/security_analysis',
+  });
+  const report = await verify(() => platform, { cwd, root });
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.ok, false);
+  assert.match(floor?.detail ?? '', /turn them on at https:\/\/github\.com\/acme\/widget\/settings/);
+});
+
+// A link beside "security floor enabled" is noise on every passing run.
+test('a passing floor carries no link', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({ settingsUrl: 'https://github.com/acme/widget/settings/security_analysis' });
+  const report = await verify(() => platform, { cwd, root });
+  const floor = find(report, 'security-floor');
+  assert.equal(floor?.ok, true);
+  assert.doesNotMatch(floor?.detail ?? '', /turn them on/);
+});
+
+// The fix for an unreadable capability is a credential, not a setting — the
+// page the link points at is one the token could not read either.
+test('an unobserved capability carries no link', async () => {
+  const cwd = await onboarded();
+  const platform = fakePlatform({
+    security: [
+      { capability: 'secret-scanning', status: 'applied', detail: 'on' },
+      { capability: 'push-protection', status: 'unknown', detail: 'not visible to this token' },
+    ],
+    settingsUrl: 'https://github.com/acme/widget/settings/security_analysis',
+  });
+  const report = await verify(() => platform, { cwd, root });
+  assert.doesNotMatch(find(report, 'security-floor')?.detail ?? '', /turn them on/);
+});

@@ -79,6 +79,10 @@ export const COMMANDS: RegistryEntry[] = [
   { slug: "status", title: "redline status", file: "cli/commands/status.ts", description: "What is installed here, how hard it bites, what an administrator still owes you, and whether the standards have moved on — from the checkout alone, with no credential." },
   { slug: "explain", title: "redline explain", file: "cli/rules/catalogue.ts", description: "What a rule means, who decided it, which files it is scoped to and which profiles receive it — the bracketed id in a finding, turned back into the line a human edits." },
   { slug: "registry", title: "redline registry", file: "cli/registry/discover.ts", description: "Derives the register of onboarded repositories by walking the org, from the .redline.json each one carries. Nothing about it is hand-maintained." },
+  { slug: "doctor", title: "redline doctor", file: "cli/commands/doctor.ts", description: "Can this machine run Redline against this repository — Node, git, the remote, a credential, onboarded? Every line that is wrong carries its fix, and it runs on a Node too old for the rest." },
+  { slug: "evidence", title: "redline evidence", file: "cli/commands/evidence.ts", description: "The measurement behind this repository's rung and what the next one asks for — and, with record, the only way a rung above observe is earned." },
+  { slug: "funnel", title: "redline funnel", file: "cli/core/telemetry.ts", description: "Where your own runs of this CLI succeed and where they stop. Off unless switched on, written to a file on this machine, sent nowhere." },
+  { slug: "completion", title: "redline completion", file: "cli/bin/commands.ts", description: "Prints a bash, zsh or fish tab-completion script for every command, flag and metrics subcommand, generated from the table the parser itself reads." },
   { slug: "metrics", title: "redline metrics", file: "cli/metrics/options.ts", description: "The estate's measurement plane as eight subcommands — collect, dashboard, digest, inbox, baseline, roi, correlate and score-seeds — each with a validated flag surface over the runner it drives." },
 ];
 
@@ -100,14 +104,6 @@ export const SEEDS: RegistryEntry[] = [
   { slug: "kotlin", title: "kotlin", file: "seeded/kotlin/SeededViolations.kt", description: "Seeded Kotlin defects — GlobalScope launches, swallowed CancellationException, leaked Context." },
   { slug: "swift", title: "swift", file: "seeded/swift/SeededViolations.swift", description: "Seeded Swift defects — UI off the main actor, uncancelled Tasks, retain cycles, force unwraps." },
   { slug: "terraform", title: "terraform", file: "seeded/terraform/seeded_violations.tf", description: "Seeded Terraform defects — committed secrets, public exposure, a rename with no moved block." },
-];
-
-export const PLANS: RegistryEntry[] = [
-  { slug: "roadmap", title: "Roadmap after the Harness evaluation", file: "docs/superpowers/specs/2026-09-03-redline-roadmap.md", description: "Eight pieces across five phases, and the boundary between what Redline governs and what a delivery platform does. Phase 0 gates everything after it." },
-  { slug: "v3-design", title: "Redline v3 design", file: "docs/superpowers/specs/2026-09-01-redline-v3-design.md", description: "The design the roadmap builds on. Every non-goal and decision in it still holds." },
-  { slug: "registry-discovery", title: "Registry discovery (Phase 0.1)", file: "docs/superpowers/plans/2026-09-04-registry-discovery.md", description: "The plan for the derived register of onboarded repositories. Implemented — this is the record of how." },
-  { slug: "v3-hardening", title: "v3 hardening", file: "docs/superpowers/plans/2026-09-02-redline-v3-hardening.md", description: "The hardening pass executed after v3 phase 1." },
-  { slug: "v3-phase-1", title: "v3 phase 1", file: "docs/superpowers/plans/2026-09-01-redline-v3-phase-1.md", description: "The plan the v3 CLI was executed from." },
 ];
 
 export function findBySlug(list: RegistryEntry[], slug: string): RegistryEntry | undefined {

@@ -56,6 +56,13 @@ function once<T>(make: () => T): () => T {
 function lazyGitHubClient(make: () => GitHubClient): GitHubClient {
   const client = once(make);
   return {
+    // A getter, not a value: reading it eagerly would build the client — and
+    // therefore resolve a credential, and therefore throw `permission` — at the
+    // moment this wrapper is created, which is exactly what `once` exists to
+    // postpone. Every caller reads it after a request has already been made.
+    get webBaseUrl(): string {
+      return client().webBaseUrl;
+    },
     rest<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>> {
       return client().rest<T>(method, path, body);
     },

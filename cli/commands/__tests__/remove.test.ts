@@ -10,6 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +20,7 @@ import { init } from '../init.ts';
 import { remove, type RemoveReport } from '../remove.ts';
 import { createGitHubWithdrawal, type HostWithdrawal, type WithdrawalResult } from '../../remove/host.ts';
 import { CONFIG_FILE } from '../../config/redline-json.ts';
+import { LOCAL_HOOKS_DIR, readHooksPath } from '../../platforms/local-agent.ts';
 import { BEGIN, END } from '../../render/markers.ts';
 import { isRedlineError } from '../../core/errors.ts';
 import type { CapabilityOutcome, RepoRef } from '../../platforms/types.ts';
@@ -95,8 +97,21 @@ test('the marker block goes and every byte outside it survives', async () => {
   assert.equal(acted(report, 'AGENTS.md')?.kind, 'unmerge');
 });
 
-test('a shared file that was nothing but the Redline block is deleted', async () => {
+test('every path in the plan is acted on exactly once', async () => {
   const cwd = await onboarded();
+  // The rendered surface is swept across EVERY vendor, not the ones this
+  // repository selected, so that an artifact left by a vendor since dropped is
+  // still found. Two vendors name the same file on purpose — `codex` and
+  // `agents` both render AGENTS.md — and without deduplication the plan offers
+  // to remove it twice. A reviewer reading a doubled plan cannot tell a real
+  // second artifact from a bookkeeping artefact.
+  const report = await remove(fakePlatform(), () => fakeWithdrawal(), { cwd, root });
+  const paths = report.actions.map((action) => action.path);
+  assert.deepEqual(paths, [...new Set(paths)]);
+  assert.equal(paths.filter((path) => path === 'AGENTS.md').length, 1);
+});
+
+test('a shared file that was nothing but the Redline block is deleted', async () => {  const cwd = await onboarded();
   // What init writes on a greenfield repository: CLAUDE.md is created by
   // Redline and holds its block and nothing else.
   assert.equal(existsSync(join(cwd, 'CLAUDE.md')), true);
@@ -240,7 +255,7 @@ test('a default run never touches the security floor', async () => {
       `${call.method} ${call.path} carried a secret-scanning setting`
     );
   }
-  assert.ok(report.notes.some((note) => /security floor stays on/.test(note)));
+  assert.ok(report.caveats.some((note) => /security floor stays on/.test(note)));
 });
 
 test('.redline.json is removed last, and the report says what that means', async () => {
@@ -250,7 +265,7 @@ test('.redline.json is removed last, and the report says what that means', async
   assert.equal(report.actions.at(-1)?.path, CONFIG_FILE);
   assert.equal(report.files.at(-1), CONFIG_FILE);
   assert.equal(existsSync(join(cwd, CONFIG_FILE)), false);
-  assert.ok(report.notes.some((note) => /redline verify stops recognising this repository/.test(note)));
+  assert.ok(report.caveats.some((note) => /redline verify stops recognising this repository/.test(note)));
 });
 
 test("the repository's own local rules file is never removed", async () => {
@@ -416,4 +431,78 @@ test('--dry-run leaves the vendored gate where it is', async () => {
 
   assert.deepEqual(snapshot(cwd), before);
   assert.equal(acted(report, VENDORED)?.kind, 'delete');
+});
+
+// `remove` read the Actions path whatever the repository was gated by, so on a
+// GitHub-hosted repository built by Azure Pipelines it found nothing, deleted
+// nothing, and reported Redline removed — while the Redline pipeline it had
+// installed went on judging every pull request.
+test("an Azure Pipelines gate is deleted, not left behind", async () => {
+  const cwd = tempRepo();
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  await init(fakePlatform(), { cwd, root, now, pipeline: 'azure-pipelines' });
+
+  const gate = '.azuredevops/redline-gate.yml';
+  mkdirSync(join(cwd, '.azuredevops'), { recursive: true });
+  writeFileSync(join(cwd, gate), '# Managed by Redline; regenerate with `redline init`.\npr: none\n');
+
+  const report = await remove(fakePlatform(), () => fakeWithdrawal(), { cwd, root });
+  assert.equal(acted(report, gate)?.kind, 'delete');
+  assert.equal(existsSync(join(cwd, gate)), false);
+});
+
+// Same failure, third shape: a hook left on disk keeps refusing pushes after
+// Redline is gone, and with no `.redline.json` to name it nobody knows what is
+// blocking them.
+test('a local agent hook is deleted, not left refusing pushes', async () => {
+  const cwd = tempRepo();
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  await init(fakePlatform(), { cwd, root, now, pipeline: 'local-agent' });
+
+  const hook = '.redline/hooks/pre-push';
+  mkdirSync(join(cwd, '.redline/hooks'), { recursive: true });
+  writeFileSync(join(cwd, hook), '#!/bin/sh\n# Managed by Redline\n', { mode: 0o755 });
+
+  const report = await remove(fakePlatform(), () => fakeWithdrawal(), { cwd, root });
+  assert.equal(acted(report, hook)?.kind, 'delete');
+  assert.equal(existsSync(join(cwd, hook)), false);
+});
+
+// Deleting the file is half of it: git is still pointed at the directory that
+// held it, so every hook the engineer had before Redline stays disabled.
+test('removing a local agent gate puts core.hooksPath back', async () => {
+  const cwd = tempRepo();
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  await init(fakePlatform(), { cwd, root, now, pipeline: 'local-agent' });
+  execFileSync('git', ['init', '-q'], { cwd });
+  execFileSync('git', ['config', 'core.hooksPath', LOCAL_HOOKS_DIR], { cwd });
+  assert.equal(readHooksPath(cwd), LOCAL_HOOKS_DIR);
+
+  await remove(fakePlatform(), () => fakeWithdrawal(), { cwd, root });
+
+  assert.equal(readHooksPath(cwd), null);
+});
+
+// The two lines above are the ones an operator has to act on, and they used to
+// print with log.info in the middle of the notes array, between "removed
+// AGENTS.md" and the pull request URL. They read as flavour text there — one
+// team came away believing Redline had switched their secret scanning off.
+test('what removal did not do is kept apart from what it did', async () => {
+  const cwd = await onboarded();
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [] },
+    'GET /repos/acme/web/labels/no-adr': { status: 404 },
+    'GET /repos/acme/web/labels/redline-exempt': { status: 404 },
+    'GET /repos/acme/web/labels/redline-sync': { status: 404 },
+  });
+
+  const report = await remove(fakePlatform(), () => createGitHubWithdrawal(client), { cwd, root });
+
+  assert.ok(report.caveats.length >= 2);
+  // Not a filtering detail: a caller reading `notes` to print "for your
+  // information" must not find a security statement in there.
+  assert.equal(
+    report.notes.some((note) => /security floor|stops recognising/.test(note)),
+    false
+  );
 });

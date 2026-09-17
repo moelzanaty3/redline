@@ -15,6 +15,12 @@ export interface GitHubClientOptions {
 export interface GitHubClient {
   rest<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>>;
   graphql<T>(query: string, variables: Record<string, unknown>): Promise<T>;
+  // Where a human goes, as opposed to where the API lives. Derived from the
+  // same hostname as the API base and exposed for the same reason: a settings
+  // link assembled anywhere else would say github.com to somebody on an
+  // Enterprise Server instance, and a link to the wrong host is worse than no
+  // link — it looks authoritative and goes nowhere they can act.
+  readonly webBaseUrl: string;
 }
 
 const DOT_COM = 'github.com';
@@ -28,6 +34,10 @@ const DOT_COM = 'github.com';
 //
 // GITHUB_API_URL still wins. It is what GitHub Actions sets on every runner,
 // and an operator who exports it has stated something the remote cannot.
+export function gitHubWebBaseUrl(hostname?: string): string {
+  return `https://${hostname ?? DOT_COM}`;
+}
+
 export function gitHubApiBaseUrl(env: NodeJS.ProcessEnv, hostname?: string): string {
   const override = env['GITHUB_API_URL'];
   if (override) return override;
@@ -87,6 +97,7 @@ export function createGitHubClient(opts: GitHubClientOptions = {}): GitHubClient
   const graphqlUrl = `${baseUrl.replace(/\/api\/v3$/, '/api')}/graphql`;
 
   return {
+    webBaseUrl: gitHubWebBaseUrl(opts.hostname),
     rest: (method, path, body) => http.request(method, path, body),
     async graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
       const res = await http.request<{ data?: T; errors?: { message: string }[] }>(

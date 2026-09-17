@@ -179,3 +179,73 @@ test('the block state does not leak into the next file', () => {
     { file: 'src/app.ts', line: 1, text: '// TODO: a real one' },
   ]);
 });
+
+// The other half of the marker problem, and the one that reached a real push.
+// These files are Redline's output WHOLE and open with frontmatter a tool
+// parses, so there is nowhere to put a marker or an ownership comment above it.
+// Nothing recognised them, and the rendered rule text has to spell out every
+// construct the checks hunt for — so `redline init`'s own diff opened with a
+// BLOCKER from the rule that forbids suppressions and a HIGH from the rule that
+// forbids untracked TODOs, against files Redline had just written.
+test('a file Redline renders whole is not the author\'s code', () => {
+  const rendered = `--- /dev/null
++++ b/.github/instructions/redline-react.instructions.md
+@@ -0,0 +1,2 @@
++- \`react/exhaustive-deps-disabled\` — **\`eslint-disable react-hooks/exhaustive-deps\`** — hides bugs.
++- \`core/untracked-todo\` — Flag \`TODO\`/\`FIXME\` without a ticket reference.
+--- /dev/null
++++ b/.cursor/rules/redline-core.mdc
+@@ -0,0 +1,1 @@
++- \`core/untracked-todo\` — Flag \`TODO\` without a ticket.
+`;
+
+  assert.deepEqual(parseDiff(rendered), []);
+});
+
+// Recognition is by the `redline-` prefix, not by directory, so it must not
+// swallow a file the repository owns that merely sits beside one.
+test('a neighbouring file the repository owns is still the author\'s code', () => {
+  const beside = `--- /dev/null
++++ b/.github/instructions/house-style.instructions.md
+@@ -0,0 +1,1 @@
++// TODO: write this properly
+`;
+
+  assert.deepEqual(parseDiff(beside), [
+    { file: '.github/instructions/house-style.instructions.md', line: 1, text: '// TODO: write this properly' },
+  ]);
+});
+
+// The formats that DO have somewhere to put the line — the vendored gate, the
+// pre-push hook — are recognised by it rather than by name, because neither
+// name carries the prefix in every host's layout.
+test('the ownership line marks the rest of the file as generated', () => {
+  const owned = `--- /dev/null
++++ b/.redline/hooks/pre-push
+@@ -0,0 +1,2 @@
++# Managed by Redline; regenerate with \`redline init\` rather than editing here.
++# TODO: this line is Redline's own prose, not the author's work
+`;
+
+  assert.deepEqual(parseDiff(owned), []);
+});
+
+// The prefix is only evidence inside a directory a vendor renders into. Outside
+// one it is a name anybody can choose, and choosing it must not be a way past
+// every deterministic check.
+test('a redline-prefixed file outside a vendor directory is still the author\'s code', () => {
+  const named = `--- /dev/null
++++ b/scripts/redline-deploy.sh
+@@ -0,0 +1,1 @@
++# TODO: hand-written, not rendered
+--- /dev/null
++++ b/src/redline.config.ts
+@@ -0,0 +1,1 @@
++// @ts-ignore
+`;
+
+  assert.deepEqual(parseDiff(named), [
+    { file: 'scripts/redline-deploy.sh', line: 1, text: '# TODO: hand-written, not rendered' },
+    { file: 'src/redline.config.ts', line: 1, text: '// @ts-ignore' },
+  ]);
+});

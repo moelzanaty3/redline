@@ -309,6 +309,32 @@ test('installGate threads a non-default dependency severity into the rendered pi
   assert.match(yml, /FAIL_ON_DEPENDENCY_SEVERITY: critical/);
 });
 
+// The GitHub-on-Azure-Pipelines template honoured `standDown` and this one did
+// not, so `init` told the operator the gate's secrets job was stood down while
+// TruffleHog still scanned every pull request. Safe — an extra scan is never a
+// bypass — but the wizard was describing a file it had not written.
+test('a declared secret scanner stands the gate scan down in the written pipeline', async () => {
+  const cwd = tmp();
+  await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, {
+    ...gateOpts,
+    standDown: ['secrets'],
+  });
+  const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
+
+  assert.match(yml, /REDLINE_STAND_DOWN: 'secrets'/);
+  assert.match(yml, /condition: not\(contains\(format\(',\{0\},', variables\.REDLINE_STAND_DOWN\), ',secrets,'\)\)/);
+});
+
+// Declaring nothing must still run everything: an empty list that accidentally
+// matched would stand the unwaivable scan down on every repository at once.
+test('declaring no scanner leaves the secret scan running', async () => {
+  const cwd = tmp();
+  await createAzureInstall(fakeAzure(registrationRoutes), gitFor).installGate(ref, cwd, gateOpts);
+  const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
+  assert.match(yml, /REDLINE_STAND_DOWN: ''/);
+  assert.doesNotMatch(yml, /REDLINE_STAND_DOWN: '.*secrets/);
+});
+
 // --- gate build definition + Build Validation policy. Azure Repos ignores
 // YAML `pr:` triggers, so without a registered pipeline definition and a
 // Build Validation branch policy the gate never runs and `redline/gate` is

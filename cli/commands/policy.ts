@@ -4,6 +4,7 @@ import { SEVERITY_RANK, type Severity } from '../core/severity.ts';
 import { loadManifest } from '../render/manifest.ts';
 import { parseDiff } from '../policy/diff.ts';
 import { formatFinding, runChecks, type PolicyFinding } from '../policy/checks.ts';
+import { loadRules } from '../rules/catalogue.ts';
 
 export interface PolicyOptions {
   root: string;
@@ -23,6 +24,13 @@ export interface PolicyReport {
   // classified as machine-checked and then checked by nobody is worse than one
   // left to the model, because everyone believes it is covered.
   unimplemented: string[];
+  // Every rule in the catalogue, deterministic or not. Reported so the caller
+  // can say what this run could NOT decide: a reader who sees "no deterministic
+  // findings" after deliberately committing a hardcoded secret concludes the
+  // install is broken, when the truth is that `core/hardcoded-secrets` is real
+  // and is reviewed by a model. Silence about the remainder is what makes the
+  // wrong conclusion the reasonable one.
+  catalogue: number;
   ok: boolean;
 }
 
@@ -49,7 +57,7 @@ export function policy(opts: PolicyOptions): PolicyReport {
   const failOn = opts.failOn ?? 'BLOCKER';
   const ok = !findings.some((f) => SEVERITY_RANK[f.severity] >= SEVERITY_RANK[failOn]);
 
-  return { findings, evaluated, unimplemented, ok };
+  return { findings, evaluated, unimplemented, catalogue: loadRules(opts.root).size, ok };
 }
 
 export { formatFinding };

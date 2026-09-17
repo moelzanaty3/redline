@@ -19,11 +19,13 @@ import type {
   AdminCapability,
   CapabilityOutcome,
   GateMachinery,
+  GatePipeline,
   Host,
   Platform,
   PullRequestRef,
 } from '../platforms/types.ts';
 import type { HostWithdrawal } from '../remove/host.ts';
+import { LOCAL_HOOKS_DIR, unsetHooksPath } from '../platforms/local-agent.ts';
 
 export const REMOVE_BRANCH = 'redline/remove';
 
@@ -71,6 +73,12 @@ export interface RemoveReport {
   // What a dry run prints instead of contacting the host.
   hostPlan: string[];
   notes: string[];
+  // Split out of `notes` deliberately. These are the things an operator has to
+  // know after the command succeeds — what did NOT get removed, and what breaks
+  // once it did. Mixed into one undifferentiated list under a wall of "removed
+  // X" lines they were read as flavour text, which is how a team came away
+  // believing Redline had turned their secret scanning off.
+  caveats: string[];
 }
 
 // CONTRACT with cli/render/commands.ts's MANAGED_BY / MANAGED_HEADER: the
@@ -157,16 +165,22 @@ function renderedSurface(root: string, cwd: string, profile: string): RenderedSu
   // No contexts: `remove` strips the block whole, so what it rendered into it
   // does not change which bytes come out.
   const ctx: RenderContext = { manifest, root, profile, stacks, contexts: [], local: readLocalRules(cwd) };
-  const merged: string[] = [];
+  // Deduplicated by path, because the sweep is over EVERY vendor rather than the
+  // ones this repository selected — that is what finds an artifact left behind by
+  // a vendor since dropped. Two vendors can name the same file on purpose:
+  // `codex` and `agents` both render AGENTS.md. Without this the plan offers to
+  // remove that file twice, and a plan that double-counts is a plan a reviewer
+  // cannot check against the tree.
+  const merged = new Set<string>();
   const prunes: PruneRule[] = [];
   for (const renderer of Object.values(VENDORS)) {
     const output = renderer(ctx);
     prunes.push(...output.prune);
     for (const [path, file] of output.files) {
-      if (file.merge === true) merged.push(path);
+      if (file.merge === true) merged.add(path);
     }
   }
-  return { merged, prunes };
+  return { merged: [...merged], prunes };
 }
 
 // A shared file: strip the block, keep everything else byte for byte, and
@@ -273,8 +287,18 @@ function planCommandFiles(
   }
 }
 
-function planGateMachinery(platform: Platform, cwd: string, actions: FileAction[]): void {
-  const machinery = platform.readGateMachinery(cwd);
+function planGateMachinery(
+  platform: Platform,
+  cwd: string,
+  pipeline: GatePipeline,
+  actions: FileAction[]
+): void {
+  // The recorded pipeline, not this host's default: a GitHub-hosted repository
+  // built by Azure Pipelines has a pipeline definition and no Actions workflow,
+  // and reading the Actions path here found nothing and left the real gate in
+  // place — telling the operator Redline was removed while a Redline gate went
+  // on running against every pull request.
+  const machinery = platform.readGateMachinery(cwd, pipeline);
   if (!machinery.present) return;
   // Planned before the caller below, so the two files are reported in the order
   // they are read rather than the order they happen to be deleted in.
@@ -396,6 +420,7 @@ function plan(
   platform: Platform,
   opts: RemoveOptions,
   profile: string,
+  pipeline: GatePipeline,
   commandFiles: Record<string, string>
 ): FileAction[] {
   const { cwd, root } = opts;
@@ -421,7 +446,7 @@ function plan(
 
   for (const relPath of surface.merged) planMergedFile(cwd, relPath, actions);
   planCommandFiles(cwd, root, commandFiles, actions);
-  planGateMachinery(platform, cwd, actions);
+  planGateMachinery(platform, cwd, pipeline, actions);
   planPullRequestTemplates(platform, cwd, actions);
   planCodeowners(cwd, actions);
 
@@ -468,20 +493,34 @@ export async function remove(
     );
   }
 
-  const actions = plan(platform, opts, config.profile, config.commandFiles);
+  const actions = plan(platform, opts, config.profile, config.pipeline, config.commandFiles);
   const files = actions.filter((action) => action.kind !== 'kept').map((action) => action.path);
 
-  const notes = [
+  const caveats = [
     'the security floor stays on: secret scanning, push protection and dependency alerts are the ' +
       "organisation's minimum, not Redline's own state, and removing Redline is not a reason to " +
       'lower them. This command has no flag that turns them off',
     `once ${CONFIG_FILE} is gone, redline verify stops recognising this repository: it reports "not ` +
-      'onboarded" and exits 2 rather than reporting drift',
+      'onboarded" and exits 2 rather than reporting drift — which reads identically to a repository ' +
+      'that was never onboarded, so record this removal somewhere verify cannot',
   ];
+  const notes: string[] = [];
   if (existsSync(join(cwd, LOCAL_RULES_FILE))) {
     notes.push(
       `${LOCAL_RULES_FILE} is this repository's own rules file — Redline never wrote it and does not ` +
         'remove it; it is left exactly where it is'
+    );
+  }
+
+  // Not a file, so it cannot ride along in the action list, and not host state,
+  // so the withdrawal below never sees it. Left behind it points git at a
+  // directory that is about to stop existing, and every later `git push` in
+  // this clone runs no hooks at all while looking as though it does.
+  if (config.pipeline === 'local-agent') {
+    caveats.push(
+      `core.hooksPath is unset in this clone where it points at ${LOCAL_HOOKS_DIR}. It is per-clone ` +
+        'configuration, so each teammate who enabled the hook unsets it themselves: git config ' +
+        '--unset core.hooksPath'
     );
   }
 
@@ -507,6 +546,7 @@ export async function remove(
       pullRequestError: null,
       hostPlan,
       notes,
+      caveats,
     };
   }
 
@@ -520,6 +560,8 @@ export async function remove(
     if (action.path === CONFIG_FILE) continue;
     apply(cwd, action);
   }
+
+  if (config.pipeline === 'local-agent') unsetHooksPath(cwd);
 
   const withdrawal = await (await hostFor()).withdraw(ref);
   notes.push(...withdrawal.notes);
@@ -561,6 +603,7 @@ export async function remove(
     pullRequestError,
     hostPlan,
     notes,
+    caveats,
   };
 }
 
