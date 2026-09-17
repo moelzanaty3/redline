@@ -138,9 +138,10 @@ Both GitHub and Azure DevOps are supported. Redline detects which from your git 
 
 ## The whole command surface
 
-`init` and `verify` are what a repository uses day to day, but they are two of thirteen.
-`redline --help` prints every flag and opens with the three-command quickstart; this is
-the map.
+`init` and `verify` are what a repository uses day to day, but they are two of fifteen.
+`redline --help` opens with the three-command quickstart and lists every command in one
+line each; `redline <command> --help` prints that command's flags. A mistyped flag or
+command names the one you probably meant. This is the map.
 
 **In a repository you are standing in:**
 
@@ -155,6 +156,7 @@ the map.
 | `redline evidence` | The measurement behind this repository's rung, and what the next one asks for. `evidence record --source <where>` writes one. Nothing else can raise enforcement |
 | `redline funnel` | Where your own runs of this CLI succeed and where they stop. **Off unless you switch it on**, written to `~/.redline`, sent nowhere |
 | `redline remove` | Take Redline back out, as a pull request. Only content it can prove it wrote; the security floor is the org's minimum and no flag here turns it off |
+| `redline completion bash\|zsh\|fish` | Print a tab-completion script for commands, flags and `metrics` subcommands. `source <(redline completion zsh)` in `~/.zshrc`, after `compinit`; `redline completion --help` for bash and fish |
 
 **What the gate calls** (no model, deterministic, exit code is the answer):
 
@@ -163,7 +165,9 @@ the map.
 | `redline policy --diff-file <path>` | Evaluate the rules a checker can decide without a model call. Exit 1 on a BLOCKER. `--json` for a wrapper |
 | `redline exempt --body-file <path>` | Decide whether a pull request carries a *valid* exemption for a failing process check — a reason, an actor and an expiry, not a bare label |
 
-`policy`, `review`, `exempt`, `sync` and `remove --dry-run` all take `--json`. The exit code
+`verify`, `status`, `doctor`, `policy`, `review`, `explain`, `exempt`, `evidence`, `sync`,
+`funnel` and `remove` all take `--json`, and under it stdout carries the document alone —
+anything said about the run goes to stderr. The exit code
 answers *may this proceed*, which is deliberately not the same question as *was anything
 found* — three HIGH findings pass a BLOCKER gate. Anything building on top of these needs
 both answers, and scraping them out of prose written for a human is how a wrapper breaks on
@@ -186,9 +190,14 @@ Two things worth knowing before you reach for these:
   in brackets; paste it into `explain` and you get the rule, its source line in
   `standards/`, and the profiles it reaches. That closes the loop between a comment on a
   pull request and the file a human edits to change it.
-- **`redline doctor` runs before anything is wrong, not after.** It is the one command
-  exempt from the Node floor, because refusing to run the diagnostic on the machine that
-  needs diagnosing is the failure it exists to prevent.
+- **`redline doctor` runs before anything is wrong, not after.** It is exempt from the Node
+  floor, because refusing to run the diagnostic on the machine that needs diagnosing is the
+  failure it exists to prevent.
+- **Output is coloured at a terminal and plain everywhere else.** `ok`, `FAIL`, severities
+  and errors are painted, but the words carry the meaning on their own. `NO_COLOR` turns it
+  off, `FORCE_COLOR` turns it on for a capture, and a pipe or `--json` is never painted.
+- **`redline failed unexpectedly` is a defect in Redline, not in how you ran it.** Re-run
+  with `REDLINE_DEBUG=1` for the stack trace and include it in an issue.
 
 ### Reviewing with your own model
 

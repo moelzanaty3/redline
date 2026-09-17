@@ -314,6 +314,18 @@ export default function Page() {
         worth having anyway.
       </p>
 
+      <h2 id="failed-unexpectedly">
+        <code>redline failed unexpectedly</code>
+      </h2>
+      <p>
+        That line means a defect in Redline, not a mistake in how it was run —
+        a usage mistake exits 2 and names the flag, and a mistyped flag or
+        command says which one you probably meant. Re-run the same command with{" "}
+        <code>REDLINE_DEBUG=1</code> set and the stack trace is printed to
+        stderr. Include it when you open an issue. The exit code stays{" "}
+        <code>4</code>.
+      </p>
+
       <h2>Still stuck</h2>
       <p>
         <code>redline status</code> prints what this repository recorded, and{" "}

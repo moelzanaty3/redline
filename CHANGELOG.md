@@ -7,6 +7,41 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — finding your way around a tool with fifteen commands
+
+Everything below was found by using the CLI the way a first-time user does, not by reading it.
+
+- **`redline <command> --help` was an error.** `redline init --help` printed `Unknown option
+  '--help'` and exited 2, so the first thing a curious user typed was refused. Every command now
+  prints its own help and exits 0, ahead of the Node guard — reading how a command works does
+  not depend on being able to run it. `redline --help` is now an index of the commands with one
+  line each; it used to be 165 lines, 75 of them `init`'s flags, which scrolled the quickstart
+  out of view.
+- **A typo got no suggestion.** `init --dryrun` said only `Unknown option '--dryrun'`. It now
+  adds `did you mean --dry-run? run: redline init --help`, and `redline veriy` suggests
+  `verify`. The match is deliberately strict: a wrong suggestion costs more than none.
+- **`review --engine api --json` was not valid JSON.** The inferred-provider line was written to
+  stdout ahead of the document, so piping it to a parser failed. Commentary under `--json` now
+  goes to stderr.
+- **26 flags were accepted and never documented**, `verify --gate` and every `--json` among
+  them. Each command's summary, help text and flags now live in one table
+  (`cli/bin/commands.ts`) that the parser, both help screens, the typo suggestions and the
+  shell completion all read, and a test fails when a command accepts a flag its help does not
+  describe, or its help names a flag it refuses. It found all 26 on its first run.
+- **Colour reached two screens.** The palette the `init` wizard and report already used now
+  reaches every command: `ok`/`FAIL`/`??` markers, `warn` and `error` prefixes, finding
+  severities, file locations, dry-run banners and help. The words stay, so nothing depends on
+  colour. It is decided per stream — `2> err.log` gets no escape codes — and `NO_COLOR`, a
+  pipe and `--json` keep output byte-identical to before.
+- **An internal defect gave nothing to report.** It now says it is a defect in Redline rather
+  than in how it was run, names the issues page, and prints the stack trace to stderr when
+  `REDLINE_DEBUG=1` is set. The exit code is unchanged (4).
+
+New: `redline completion bash|zsh|fish` prints a tab-completion script generated from the same
+table, including the `metrics` subcommands and their flags. It is exempt from the Node guard,
+so a shell that sources it at startup never prints an error. `npm run test:watch` for
+contributors.
+
 ### CLI — five holes in the gates this branch added, found by review
 
 - **A file named `redline-*` skipped every deterministic check.** The self-exemption for Redline's

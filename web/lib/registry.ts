@@ -79,6 +79,10 @@ export const COMMANDS: RegistryEntry[] = [
   { slug: "status", title: "redline status", file: "cli/commands/status.ts", description: "What is installed here, how hard it bites, what an administrator still owes you, and whether the standards have moved on — from the checkout alone, with no credential." },
   { slug: "explain", title: "redline explain", file: "cli/rules/catalogue.ts", description: "What a rule means, who decided it, which files it is scoped to and which profiles receive it — the bracketed id in a finding, turned back into the line a human edits." },
   { slug: "registry", title: "redline registry", file: "cli/registry/discover.ts", description: "Derives the register of onboarded repositories by walking the org, from the .redline.json each one carries. Nothing about it is hand-maintained." },
+  { slug: "doctor", title: "redline doctor", file: "cli/commands/doctor.ts", description: "Can this machine run Redline against this repository — Node, git, the remote, a credential, onboarded? Every line that is wrong carries its fix, and it runs on a Node too old for the rest." },
+  { slug: "evidence", title: "redline evidence", file: "cli/commands/evidence.ts", description: "The measurement behind this repository's rung and what the next one asks for — and, with record, the only way a rung above observe is earned." },
+  { slug: "funnel", title: "redline funnel", file: "cli/core/telemetry.ts", description: "Where your own runs of this CLI succeed and where they stop. Off unless switched on, written to a file on this machine, sent nowhere." },
+  { slug: "completion", title: "redline completion", file: "cli/bin/commands.ts", description: "Prints a bash, zsh or fish tab-completion script for every command, flag and metrics subcommand, generated from the table the parser itself reads." },
   { slug: "metrics", title: "redline metrics", file: "cli/metrics/options.ts", description: "The estate's measurement plane as eight subcommands — collect, dashboard, digest, inbox, baseline, roi, correlate and score-seeds — each with a validated flag surface over the runner it drives." },
 ];
 

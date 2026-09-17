@@ -12,7 +12,7 @@ export default function Page() {
     <DocsPage
       crumb="Who runs what"
       title="Who runs what"
-      intro="redline --help prints eleven commands as one flat list. They are not one thing: they run in four different places, under three different credentials, with three different blast radii. This page is that map, with the file and the environment variable for each."
+      intro="redline --help prints fifteen commands as one flat list. They are not one thing: they run in four different places, under three different credentials, with three different blast radii. This page is that map, with the file and the environment variable for each."
       href="/docs/who-runs-what"
     >
       <p>
@@ -29,6 +29,14 @@ export default function Page() {
         <code>redline init</code>, <code>redline verify</code>,{" "}
         <code>redline review</code> and <code>redline remove</code>. You run
         them from a checkout, in your own shell.
+      </p>
+      <p>
+        Beside them, six that need no credential and contact no host at all:{" "}
+        <code>redline status</code>, <code>redline explain</code>,{" "}
+        <code>redline doctor</code>, <code>redline evidence</code> (which writes
+        only <code>.redline.json</code>), <code>redline funnel</code> (a file in{" "}
+        <code>~/.redline</code>, off by default) and{" "}
+        <code>redline completion</code>.
       </p>
       <ul>
         <li>
