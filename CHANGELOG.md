@@ -29,6 +29,10 @@ Record seed scores here. A standards change with no measurement is an opinion.
 - **`review --json` exited 1 on findings** while the human output always exits 0, reopening the
   second-gate-in-CI door the human path closes on purpose. Both exit 0; the findings are in the
   document.
+- **A declared secret scanner did not stand the gate scan down on Azure Repos.** The
+  GitHub-on-Azure-Pipelines template honoured `standDown`; the Azure Repos template had no
+  variable for it and ran TruffleHog on every pull request anyway. Both templates now carry
+  the same comma-fenced condition.
 
 Also: every host request now times out after 30s per attempt, and an `--engine api` review after
 ten minutes. A connection that was dropped rather than refused used to hang the command — and an

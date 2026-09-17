@@ -27,6 +27,11 @@ variables:
   # literal string "$(NAME)" rather than empty, which is the kind of quiet
   # wrong answer this gate exists to prevent.
   REDLINE_SECURITY_FAILED: 'false'
+  # Gate jobs a tool this repository already runs makes redundant, as DECLARED
+  # by whoever onboarded it — never a detection guess. `redline init` substitutes
+  # it; empty runs everything, which is what an operator who declared nothing
+  # gets. Only `secrets` is meaningful here.
+  REDLINE_STAND_DOWN: ''
   # Pinned by image digest, not by tag: a tag is mutable and this scans the diff
   # of every pull request in the repository. The version in the trailing comment
   # is what scripts/check-pins.mjs re-resolves the digest against, exactly as it
@@ -74,6 +79,10 @@ steps:
       fi
     displayName: Secret scan (diff)
     name: secrets
+    # Stood down only when the operator declared a scanner that covers this.
+    # Same expression shape as gate-template-github.yml, comma-fenced so
+    # `secrets` never matches a longer id that contains it.
+    condition: not(contains(format(',{0},', variables.REDLINE_STAND_DOWN), ',secrets,'))
     env:
       TRUFFLEHOG_IMAGE: $(TRUFFLEHOG_IMAGE)
 

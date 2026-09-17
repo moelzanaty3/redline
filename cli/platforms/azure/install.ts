@@ -964,7 +964,12 @@ export function createAzureInstall(
           /FAIL_ON_DEPENDENCY_SEVERITY: \w+/,
           `FAIL_ON_DEPENDENCY_SEVERITY: ${opts.failOnDependencySeverity}`
         )
-        .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`);
+        .replace(/SOFT_FAIL_LABELS: .*/, `SOFT_FAIL_LABELS: ${opts.softFailLabels.join(',')}`)
+        // Without this the wizard's "the gate's secrets job is stood down here"
+        // was a statement about a file that still ran TruffleHog on every pull
+        // request — and as a non-waivable check, a finding the declared scanner
+        // allowlists then blocked the pull request with no way to waive it.
+        .replace(/REDLINE_STAND_DOWN: .*/, `REDLINE_STAND_DOWN: '${(opts.standDown ?? []).join(',')}'`);
       // `redlinegate@latest` inside a template installed across every
       // onboarded repository means any npm publish changes org-wide gate
       // behaviour with no pull request anywhere. Pin the version that wrote
