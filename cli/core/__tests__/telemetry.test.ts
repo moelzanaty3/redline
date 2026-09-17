@@ -49,9 +49,19 @@ test('a run is appended and read back', () => {
 
 // The measurement is worth strictly less than the thing being measured: a
 // read-only home must never turn a successful onboarding into an error.
+//
+// The unwritable path is built here rather than hardcoded. An earlier version
+// of this test used /proc/nope, which does not exist on macOS — so it threw
+// instantly and looked fine — while on Linux procfs refuses the mkdir in a way
+// that sends Node's recursive mkdirSync into an infinite loop. The whole suite
+// hung on CI and passed on every developer's machine. A path under a real file
+// gives ENOTDIR immediately and identically everywhere.
 test('an unwritable path fails silently rather than breaking the command', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'redline-funnel-')), 'not-a-directory');
+  writeFileSync(file, 'x');
+
   assert.doesNotThrow(() =>
-    record({ at: 'x', command: 'init', outcome: 'ok', ms: 1 }, '/proc/nope/funnel.jsonl')
+    record({ at: 'x', command: 'init', outcome: 'ok', ms: 1 }, join(file, 'funnel.jsonl'))
   );
 });
 
