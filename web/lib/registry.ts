@@ -106,14 +106,6 @@ export const SEEDS: RegistryEntry[] = [
   { slug: "terraform", title: "terraform", file: "seeded/terraform/seeded_violations.tf", description: "Seeded Terraform defects — committed secrets, public exposure, a rename with no moved block." },
 ];
 
-export const PLANS: RegistryEntry[] = [
-  { slug: "roadmap", title: "Roadmap after the Harness evaluation", file: "docs/superpowers/specs/2026-09-03-redline-roadmap.md", description: "Eight pieces across five phases, and the boundary between what Redline governs and what a delivery platform does. Phase 0 gates everything after it." },
-  { slug: "v3-design", title: "Redline v3 design", file: "docs/superpowers/specs/2026-09-01-redline-v3-design.md", description: "The design the roadmap builds on. Every non-goal and decision in it still holds." },
-  { slug: "registry-discovery", title: "Registry discovery (Phase 0.1)", file: "docs/superpowers/plans/2026-09-04-registry-discovery.md", description: "The plan for the derived register of onboarded repositories. Implemented — this is the record of how." },
-  { slug: "v3-hardening", title: "v3 hardening", file: "docs/superpowers/plans/2026-09-02-redline-v3-hardening.md", description: "The hardening pass executed after v3 phase 1." },
-  { slug: "v3-phase-1", title: "v3 phase 1", file: "docs/superpowers/plans/2026-09-01-redline-v3-phase-1.md", description: "The plan the v3 CLI was executed from." },
-];
-
 export function findBySlug(list: RegistryEntry[], slug: string): RegistryEntry | undefined {
   return list.find((e) => e.slug === slug);
 }

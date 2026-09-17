@@ -1,4 +1,4 @@
-import { COMMANDS, PLANS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
+import { COMMANDS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
 import { entriesOfKind, hrefOf, publisherOf, type Kind } from "@/lib/skills-catalog";
 
 export type DocLink = {
@@ -306,13 +306,6 @@ export const DOCS_NAV: DocSection[] = [
         description: "Internal maintainer tooling for this repo's own CI, telemetry and validation — not something an onboarded repo runs.",
         keywords: "scripts maintainer ci validate score collect digest inbox dashboard assign-rule-ids check-pins render-self internal redline-metrics",
         children: childrenOf(SCRIPTS, "/docs/scripts", "script source"),
-      },
-      {
-        title: "Roadmap & plans",
-        href: "/docs/roadmap",
-        description: "Where Redline is going, why it stops where it does, and the record of how each piece was built.",
-        keywords: "roadmap spec plan phase harness sarif skills policy tier dora cost enforcement exemptions review correlation non-goals",
-        children: childrenOf(PLANS, "/docs/roadmap", "roadmap spec plan"),
       },
     ],
   },

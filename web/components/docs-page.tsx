@@ -89,7 +89,6 @@ const CRUMB_HREFS: Record<string, string> = {
   workflows: "/docs/workflows",
   templates: "/docs/templates",
   scripts: "/docs/scripts",
-  roadmap: "/docs/roadmap",
   skills: "/docs/skills",
   agents: "/docs/agents",
   "seeded corpus": "/docs/seeds",
