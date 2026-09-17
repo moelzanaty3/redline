@@ -6,6 +6,7 @@ import type { Platform, RepoRef } from '../types.ts';
 import type { AzureClient } from './client.ts';
 import { createAzureInstall } from './install.ts';
 import { createAzureVerify } from './verify.ts';
+import { hostHint, shapeHint } from '../../core/host-hint.ts';
 
 export interface AzurePlatformOptions {
   client: AzureClient;
@@ -57,10 +58,18 @@ export function createAzurePlatform(opts: AzurePlatformOptions): Platform {
         );
       }
       if (repo.status < 200 || repo.status >= 300) {
-        throw new RedlineError('host', `Azure DevOps returned HTTP ${repo.status} reading ${path}`);
+        throw new RedlineError(
+          'host',
+          `Azure DevOps returned HTTP ${repo.status} reading ${path}`,
+          hostHint(repo.status, 'azure')
+        );
       }
       if (!isNonNullObject(repo.body) || typeof repo.body['id'] !== 'string') {
-        throw new RedlineError('host', `Azure DevOps returned an unexpected shape for ${path}`);
+        throw new RedlineError(
+          'host',
+          `Azure DevOps returned an unexpected shape for ${path}`,
+          shapeHint(`the repository record at ${path}`)
+        );
       }
       const defaultBranch = repo.body['defaultBranch'];
       if (defaultBranch !== undefined && typeof defaultBranch !== 'string') {

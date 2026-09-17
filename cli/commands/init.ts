@@ -1097,6 +1097,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       localRules: existsSync(join(cwd, LOCAL_RULES_FILE)),
       commandFiles: commands.contentIds,
       rung,
+    // Carried forward, never written here. `init` consumes evidence to decide a
+      // promotion; recording it is `redline evidence record`'s job. Dropping it
+      // on write destroyed the audit trail at the exact moment it mattered — the
+      // run that raised enforcement erased the measurement that justified it, so
+      // a repository sat at block-blocker with nothing on file saying why, and
+      // the freshness window could never fire because no record ever survived
+      // long enough to age.
+      ...(existing?.evidence === undefined ? {} : { evidence: existing.evidence }),
       gateSource,
       gateVersion:
         gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
@@ -1189,6 +1197,14 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     // a re-run for an unrelated reason silently promoting a repository is how a
     // ladder loses the trust it exists to build.
     rung,
+    // Carried forward, never written here. `init` consumes evidence to decide a
+    // promotion; recording it is `redline evidence record`'s job. Dropping it
+    // on write destroyed the audit trail at the exact moment it mattered — the
+    // run that raised enforcement erased the measurement that justified it, so
+    // a repository sat at block-blocker with nothing on file saying why, and
+    // the freshness window could never fire because no record ever survived
+    // long enough to age.
+    ...(existing?.evidence === undefined ? {} : { evidence: existing.evidence }),
     gateSource,
     // Only a vendored gate has a version to record, and only a published CLI
     // stamps one: a development build leaves the reusable copy's own pin alone

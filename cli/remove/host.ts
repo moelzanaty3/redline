@@ -13,6 +13,7 @@ import {
 } from '../platforms/azure/policy-types.ts';
 import { isNonNullObject, isSuccess } from '../platforms/shape.ts';
 import type { AdminCapability, CapabilityOutcome, Host, RepoRef } from '../platforms/types.ts';
+import { shapeHint } from '../core/host-hint.ts';
 
 // Withdrawing the host state `redline init` created.
 //
@@ -159,7 +160,11 @@ export function createGitHubWithdrawal(client: GitHubClient): HostWithdrawal {
     }
     const rulesets = parseNamedObjects(listed.body);
     if (rulesets === null) {
-      throw new RedlineError('host', 'GitHub returned an unexpected shape for the rulesets list');
+      throw new RedlineError(
+        'host',
+        'GitHub returned an unexpected shape for the rulesets list',
+        shapeHint('the rulesets list')
+      );
     }
     // By name, which is the only attribution a ruleset carries. A ruleset a
     // human named anything else is theirs even if it requires the Redline
@@ -194,7 +199,11 @@ export function createGitHubWithdrawal(client: GitHubClient): HostWithdrawal {
       }
       const description = parseLabelDescription(read.body);
       if (description === null) {
-        throw new RedlineError('host', 'GitHub returned an unexpected shape for a label');
+        throw new RedlineError(
+          'host',
+          'GitHub returned an unexpected shape for a label',
+          shapeHint('a label record')
+        );
       }
       if (description !== label.description) {
         notes.push(

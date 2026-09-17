@@ -255,7 +255,7 @@ test('a default run never touches the security floor', async () => {
       `${call.method} ${call.path} carried a secret-scanning setting`
     );
   }
-  assert.ok(report.notes.some((note) => /security floor stays on/.test(note)));
+  assert.ok(report.caveats.some((note) => /security floor stays on/.test(note)));
 });
 
 test('.redline.json is removed last, and the report says what that means', async () => {
@@ -265,7 +265,7 @@ test('.redline.json is removed last, and the report says what that means', async
   assert.equal(report.actions.at(-1)?.path, CONFIG_FILE);
   assert.equal(report.files.at(-1), CONFIG_FILE);
   assert.equal(existsSync(join(cwd, CONFIG_FILE)), false);
-  assert.ok(report.notes.some((note) => /redline verify stops recognising this repository/.test(note)));
+  assert.ok(report.caveats.some((note) => /redline verify stops recognising this repository/.test(note)));
 });
 
 test("the repository's own local rules file is never removed", async () => {
@@ -481,4 +481,28 @@ test('removing a local agent gate puts core.hooksPath back', async () => {
   await remove(fakePlatform(), () => fakeWithdrawal(), { cwd, root });
 
   assert.equal(readHooksPath(cwd), null);
+});
+
+// The two lines above are the ones an operator has to act on, and they used to
+// print with log.info in the middle of the notes array, between "removed
+// AGENTS.md" and the pull request URL. They read as flavour text there — one
+// team came away believing Redline had switched their secret scanning off.
+test('what removal did not do is kept apart from what it did', async () => {
+  const cwd = await onboarded();
+  const client = fakeGitHubClient({
+    'GET /repos/acme/web/rulesets': { status: 200, body: [] },
+    'GET /repos/acme/web/labels/no-adr': { status: 404 },
+    'GET /repos/acme/web/labels/redline-exempt': { status: 404 },
+    'GET /repos/acme/web/labels/redline-sync': { status: 404 },
+  });
+
+  const report = await remove(fakePlatform(), () => createGitHubWithdrawal(client), { cwd, root });
+
+  assert.ok(report.caveats.length >= 2);
+  // Not a filtering detail: a caller reading `notes` to print "for your
+  // information" must not find a security statement in there.
+  assert.equal(
+    report.notes.some((note) => /security floor|stops recognising/.test(note)),
+    false
+  );
 });

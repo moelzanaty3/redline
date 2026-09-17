@@ -47,6 +47,29 @@ export interface CapabilitySelections {
 
 export const CAPABILITY_KEYS: (keyof CapabilitySelections)[] = ['gate', 'mergePolicy', 'labels'];
 
+/**
+ * Evidence as stored, which is the measurement plus its provenance.
+ *
+ * The provenance is not decoration. A number with no source and no date is an
+ * assertion wearing a measurement's clothes, and the whole point of the ladder
+ * is that a repository climbs on evidence rather than on assertion. `recordedAt`
+ * is what lets a stale figure expire; `source` is what a reviewer reads when
+ * they ask where 94% came from.
+ */
+export interface RecordedEvidence {
+  seedRecall: number | null;
+  actedOnRate: number | null;
+  sampleSize: number;
+  falsePositives: number | null;
+  // ISO 8601. Evidence older than the freshness window does not justify a
+  // promotion — see cli/enforce/ladder.ts.
+  recordedAt: string;
+  // Where the numbers came from, in the words of whoever recorded them: a
+  // workflow run URL, a job name, a person. Free text because the honest answer
+  // varies by organisation, and an enum here would be guessed wrong.
+  source: string;
+}
+
 export interface RedlineConfig {
   standardsVersion: string;
   cliVersion: string;
@@ -79,6 +102,18 @@ export interface RedlineConfig {
   // doing. A stale or hand-edited value must never be able to silently raise
   // enforcement, so an unrecognised rung reads back as `observe` too.
   rung: Rung;
+  // The measurement behind the rung, and the only thing that can raise one.
+  //
+  // Absent until something records it, which is the honest state: a repository
+  // that has never been measured has no evidence, and `canPromote` refuses on
+  // that rather than on a zero it invented. Recorded by `redline evidence
+  // record`, whose numbers come from the metrics plane — the CLI supplies the
+  // mechanism and the audit trail, not the figures.
+  //
+  // Read back defensively for the same reason `rung` is: a hand edit must not
+  // be able to raise enforcement. Anything malformed reads back as absent,
+  // which refuses every promotion rather than granting one.
+  evidence?: RecordedEvidence;
   // Whether `.redline/local.md` was present at the last run. It is what lets
   // `verify` tell "this repository never had repo-local rules" from "it had
   // some and they are gone" — the rendered artifacts look the same in both
@@ -331,6 +366,12 @@ export function parseConfig(raw: unknown): RedlineConfig {
   const rungRaw = o['rung'];
   const rung: Rung = isRung(rungRaw) ? rungRaw : 'observe';
 
+  // Every field has to be the right shape or the whole record is discarded.
+  // A partially-readable measurement is worse than none: it would promote on
+  // whichever half survived, and the half that survives is not the half a
+  // reviewer checked.
+  const evidence = readEvidence(o['evidence']);
+
   const onboardedAt = str('onboardedAt');
   const lastRunRaw = o['lastRunAt'];
   const lastRunAt = typeof lastRunRaw === 'string' && lastRunRaw !== '' ? lastRunRaw : onboardedAt;
@@ -352,6 +393,7 @@ export function parseConfig(raw: unknown): RedlineConfig {
     onboardedAt,
     lastRunAt,
     rung,
+    ...(evidence === null ? {} : { evidence }),
     localRules: o['localRules'] === true,
     capabilities,
     commandFiles,
@@ -366,6 +408,43 @@ export function parseConfig(raw: unknown): RedlineConfig {
     // scheme into a comment on someone else's pull request.
     docsBaseUrl: typeof o['docsBaseUrl'] === 'string' ? o['docsBaseUrl'].trim() : '',
   };
+}
+
+/**
+ * Anything malformed reads back as `null`, which refuses every promotion. The
+ * failure direction here is the one that blocks nobody and grants nothing.
+ */
+function readEvidence(raw: unknown): RecordedEvidence | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const e = raw as Record<string, unknown>;
+
+  // A rate outside 0..1 is not a rate. Rejecting rather than clamping: a 1.4
+  // recall clamped to 1 is a perfect score invented from a broken recorder, and
+  // perfect recall is exactly what the blocking rungs require.
+  const rate = (v: unknown): number | null | undefined => {
+    if (v === null) return null;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1) return undefined;
+    return v;
+  };
+  const count = (v: unknown): number | null | undefined => {
+    if (v === null) return null;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) return undefined;
+    return v;
+  };
+
+  const seedRecall = rate(e['seedRecall']);
+  const actedOnRate = rate(e['actedOnRate']);
+  const falsePositives = count(e['falsePositives']);
+  const sampleSize = count(e['sampleSize']);
+  const recordedAt = e['recordedAt'];
+  const source = e['source'];
+
+  if (seedRecall === undefined || actedOnRate === undefined || falsePositives === undefined) return null;
+  if (sampleSize === undefined || sampleSize === null) return null;
+  if (typeof recordedAt !== 'string' || Number.isNaN(Date.parse(recordedAt))) return null;
+  if (typeof source !== 'string' || source.trim() === '') return null;
+
+  return { seedRecall, actedOnRate, sampleSize, falsePositives, recordedAt, source: source.trim() };
 }
 
 export function readConfig(cwd: string): RedlineConfig | null {

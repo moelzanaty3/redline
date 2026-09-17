@@ -119,3 +119,106 @@ test('a 200 with a non-JSON body is a host error naming status and url, never th
     return true;
   });
 });
+
+// Exponential backoff answers a blip. A rate limit is not a blip: GitHub's
+// secondary limit asks for sixty seconds, and 200ms then 400ms then 800ms burns
+// all three attempts and fails — which is exactly what an estate sync across
+// 200 repositories provokes.
+test('a 429 waits as long as the host asked, not the backoff curve', async () => {
+  const waits: number[] = [];
+  let calls = 0;
+  const fetch = async (): Promise<Response> => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response('{}', { status: 429, headers: { 'retry-after': '30' } });
+    }
+    return new Response('{"ok":true}', { status: 200 });
+  };
+
+  const http = createHttp('https://api.example', {}, {
+    fetch: fetch as never,
+    sleep: async (ms: number) => { waits.push(ms); },
+  });
+  const response = await http.request('GET', '/x');
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(waits, [30_000]);
+});
+
+test('x-ratelimit-reset is honoured when there is no retry-after', async () => {
+  const waits: number[] = [];
+  let calls = 0;
+  const resetAt = Math.floor((Date.now() + 20_000) / 1000);
+  const fetch = async (): Promise<Response> => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response('{}', {
+        status: 429,
+        headers: { 'x-ratelimit-reset': String(resetAt) },
+      });
+    }
+    return new Response('{"ok":true}', { status: 200 });
+  };
+
+  const http = createHttp('https://api.example', {}, {
+    fetch: fetch as never,
+    sleep: async (ms: number) => { waits.push(ms); },
+  });
+  await http.request('GET', '/x');
+
+  assert.equal(waits.length, 1);
+  assert.ok((waits[0] ?? 0) > 15_000 && (waits[0] ?? 0) <= 20_000, `waited ${waits[0]}`);
+});
+
+// A header asking for an hour is not something to sit through inside a command:
+// a process that looks hung is worse than an error carrying a rate-limit hint.
+test('an absurd retry-after is capped rather than obeyed', async () => {
+  const waits: number[] = [];
+  const fetch = async (): Promise<Response> =>
+    new Response('{}', { status: 429, headers: { 'retry-after': '3600' } });
+
+  const http = createHttp('https://api.example', {}, {
+    fetch: fetch as never,
+    sleep: async (ms: number) => { waits.push(ms); },
+    retries: 2,
+  });
+  await assert.rejects(() => http.request('GET', '/x'));
+  assert.deepEqual(waits, [60_000]);
+});
+
+test('a stale reset in the past retries at once rather than waiting', async () => {
+  const waits: number[] = [];
+  let calls = 0;
+  const fetch = async (): Promise<Response> => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response('{}', {
+        status: 429,
+        headers: { 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) - 500) },
+      });
+    }
+    return new Response('{"ok":true}', { status: 200 });
+  };
+
+  const http = createHttp('https://api.example', {}, {
+    fetch: fetch as never,
+    sleep: async (ms: number) => { waits.push(ms); },
+  });
+  await http.request('GET', '/x');
+  assert.deepEqual(waits, [0]);
+});
+
+// A 5xx has no Retry-After to read, and the existing curve is the right answer
+// for it. This is the regression guard on not applying the new path everywhere.
+test('a 5xx still uses exponential backoff', async () => {
+  const waits: number[] = [];
+  const fetch = async (): Promise<Response> => new Response('{}', { status: 503 });
+
+  const http = createHttp('https://api.example', {}, {
+    fetch: fetch as never,
+    sleep: async (ms: number) => { waits.push(ms); },
+    retries: 3,
+  });
+  await assert.rejects(() => http.request('GET', '/x'));
+  assert.deepEqual(waits, [200, 400]);
+});

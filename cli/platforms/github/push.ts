@@ -1,6 +1,7 @@
 import { RedlineError } from '../../core/errors.ts';
 import type { RepoRef } from '../types.ts';
 import type { GitHubClient } from './client.ts';
+import { hostHint, shapeHint } from '../../core/host-hint.ts';
 
 const repoPath = (ref: RepoRef): string => `/repos/${ref.org}/${ref.repo}`;
 
@@ -35,7 +36,7 @@ interface RefResponse {
 
 const ok = <T>(status: number, body: T | null, what: string): T => {
   if (status >= 400 || body === null) {
-    throw new RedlineError('host', `${what} returned ${status}`);
+    throw new RedlineError('host', `${what} returned ${status}`, hostHint(status));
   }
   return body;
 };
@@ -61,14 +62,22 @@ export async function pushRemoteFiles(
     `${repoPath(ref)}/git/ref/heads/${ref.defaultBranch}`
   );
   const baseSha = ok(baseRef.status, baseRef.body, `reading heads/${ref.defaultBranch}`).object?.sha;
-  if (!baseSha) throw new RedlineError('host', `${ref.defaultBranch} has no commit sha`);
+  if (!baseSha) {
+    throw new RedlineError(
+      'host',
+      `${ref.defaultBranch} has no commit sha`,
+      shapeHint(`the ref for ${ref.defaultBranch}`)
+    );
+  }
 
   const baseCommit = await client.rest<{ tree?: { sha?: string } }>(
     'GET',
     `${repoPath(ref)}/git/commits/${baseSha}`
   );
   const baseTree = ok(baseCommit.status, baseCommit.body, 'reading the base commit').tree?.sha;
-  if (!baseTree) throw new RedlineError('host', 'base commit has no tree');
+  if (!baseTree) {
+    throw new RedlineError('host', 'base commit has no tree', shapeHint('the base commit'));
+  }
 
   const tree = await client.rest<{ sha?: string }>('POST', `${repoPath(ref)}/git/trees`, {
     base_tree: baseTree,

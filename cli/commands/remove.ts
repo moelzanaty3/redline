@@ -73,6 +73,12 @@ export interface RemoveReport {
   // What a dry run prints instead of contacting the host.
   hostPlan: string[];
   notes: string[];
+  // Split out of `notes` deliberately. These are the things an operator has to
+  // know after the command succeeds — what did NOT get removed, and what breaks
+  // once it did. Mixed into one undifferentiated list under a wall of "removed
+  // X" lines they were read as flavour text, which is how a team came away
+  // believing Redline had turned their secret scanning off.
+  caveats: string[];
 }
 
 // CONTRACT with cli/render/commands.ts's MANAGED_BY / MANAGED_HEADER: the
@@ -490,13 +496,15 @@ export async function remove(
   const actions = plan(platform, opts, config.profile, config.pipeline, config.commandFiles);
   const files = actions.filter((action) => action.kind !== 'kept').map((action) => action.path);
 
-  const notes = [
+  const caveats = [
     'the security floor stays on: secret scanning, push protection and dependency alerts are the ' +
       "organisation's minimum, not Redline's own state, and removing Redline is not a reason to " +
       'lower them. This command has no flag that turns them off',
     `once ${CONFIG_FILE} is gone, redline verify stops recognising this repository: it reports "not ` +
-      'onboarded" and exits 2 rather than reporting drift',
+      'onboarded" and exits 2 rather than reporting drift — which reads identically to a repository ' +
+      'that was never onboarded, so record this removal somewhere verify cannot',
   ];
+  const notes: string[] = [];
   if (existsSync(join(cwd, LOCAL_RULES_FILE))) {
     notes.push(
       `${LOCAL_RULES_FILE} is this repository's own rules file — Redline never wrote it and does not ` +
@@ -509,7 +517,7 @@ export async function remove(
   // directory that is about to stop existing, and every later `git push` in
   // this clone runs no hooks at all while looking as though it does.
   if (config.pipeline === 'local-agent') {
-    notes.push(
+    caveats.push(
       `core.hooksPath is unset in this clone where it points at ${LOCAL_HOOKS_DIR}. It is per-clone ` +
         'configuration, so each teammate who enabled the hook unsets it themselves: git config ' +
         '--unset core.hooksPath'
@@ -538,6 +546,7 @@ export async function remove(
       pullRequestError: null,
       hostPlan,
       notes,
+      caveats,
     };
   }
 
@@ -594,6 +603,7 @@ export async function remove(
     pullRequestError,
     hostPlan,
     notes,
+    caveats,
   };
 }
 

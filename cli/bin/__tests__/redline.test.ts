@@ -11,6 +11,7 @@ import { createGit, type GitRunner } from '../../core/git.ts';
 import { RedlineError } from '../../core/errors.ts';
 import { resolvePlatform, type ResolvePlatformOptions } from '../../platforms/resolve.ts';
 import { fakePlatform, type FakePlatform } from '../../commands/__tests__/fake-platform.ts';
+import { readConfig } from '../../config/redline-json.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const BIN = fileURLToPath(new URL('../redline.ts', import.meta.url));
@@ -817,4 +818,85 @@ test('a completed apply names the way back out', async () => {
   const hint = lines.find((l) => l.includes('Changed your mind'));
   assert.ok(hint, `expected an undo hint, got:\n${lines.join('\n')}`);
   assert.ok(hint.includes('redline remove --dry-run'), hint);
+});
+
+// The ladder was decorative: canPromote asked for evidence, the bin never
+// passed any, so every repository was refused every promotion and stayed at
+// observe forever. The only route up was hand-editing the file that tells you
+// not to edit it by hand.
+test('a recorded measurement lets a repository climb a rung', async () => {
+  const cwd = gitRepo('feat/rung');
+  const { opts } = deps(cwd);
+  await run(['init', '--no-commit', '--profile', 'web-react'], opts);
+  assert.equal(readConfig(cwd)?.rung, 'observe');
+
+  await run(['evidence', 'record', '--sample-size', '12', '--source', 'metrics run 1'], deps(cwd).opts);
+  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+  assert.equal(readConfig(cwd)?.rung, 'warn');
+});
+
+// Promotion used to erase the measurement that justified it: init rebuilt
+// .redline.json field by field and had no line for evidence. A repository sat
+// at block-blocker with nothing on file saying why, and the freshness window
+// could never fire because no record survived long enough to age.
+test('a promotion does not destroy the evidence that justified it', async () => {
+  const cwd = gitRepo('feat/keep');
+  await run(['init', '--no-commit', '--profile', 'web-react'], deps(cwd).opts);
+  await run(
+    ['evidence', 'record', '--sample-size', '30', '--seed-recall', '1', '--source', 'canary 7'],
+    deps(cwd).opts
+  );
+  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+
+  const kept = readConfig(cwd)?.evidence;
+  assert.equal(kept?.sampleSize, 30, 'the record was dropped by the run that used it');
+  assert.equal(kept?.source, 'canary 7');
+});
+
+test('a repository with no evidence is still refused', async () => {
+  const cwd = gitRepo('feat/norung');
+  await run(['init', '--no-commit', '--profile', 'web-react'], deps(cwd).opts);
+  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+  assert.equal(readConfig(cwd)?.rung, 'observe');
+});
+
+// `redline ghp_xxx` is a paste that missed the terminal it was meant for.
+// Writing the word to a file would be this tool breaking its own
+// core/customer-data-in-logs rule on its own author.
+test('an unrecognised command word is never written to the funnel', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-funnel-bin-'));
+  const path = join(dir, 'funnel.jsonl');
+  const { opts } = deps(gitRepo('main'));
+
+  const realHome = process.env['HOME'];
+  process.env['REDLINE_TELEMETRY'] = '1';
+  process.env['HOME'] = dir;
+  try {
+    await run(['ghp_averyrealtokenpastedbymistake'], opts);
+  } finally {
+    delete process.env['REDLINE_TELEMETRY'];
+    if (realHome === undefined) delete process.env['HOME'];
+    else process.env['HOME'] = realHome;
+  }
+
+  const written = existsSync(join(dir, '.redline', 'funnel.jsonl'))
+    ? readFileSync(join(dir, '.redline', 'funnel.jsonl'), 'utf8')
+    : '';
+  assert.doesNotMatch(written, /ghp_/);
+  assert.equal(existsSync(path), false);
+});
+
+test('nothing is recorded unless the variable is set', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'redline-funnel-off-'));
+  const { opts } = deps(gitRepo('main'));
+  const realHome = process.env['HOME'];
+  process.env['HOME'] = dir;
+  try {
+    await run(['--version'], opts);
+  } finally {
+    if (realHome === undefined) delete process.env['HOME'];
+    else process.env['HOME'] = realHome;
+  }
+
+  assert.equal(existsSync(join(dir, '.redline', 'funnel.jsonl')), false);
 });

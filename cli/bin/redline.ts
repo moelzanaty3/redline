@@ -3,7 +3,16 @@ import { realpathSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { CLI_VERSION } from '../core/version.ts';
-import { createLog, type Sink } from '../core/log.ts';
+import { createLog, type Log, type Sink } from '../core/log.ts';
+import {
+  clear as clearFunnel,
+  record as recordFunnel,
+  summarise as summariseFunnel,
+  telemetryEnabled,
+  telemetryPath,
+  TELEMETRY_ENV,
+  type FunnelEvent,
+} from '../core/telemetry.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
 import { isSeverity } from '../core/severity.ts';
 import { isRung, RUNGS } from '../enforce/ladder.ts';
@@ -31,12 +40,14 @@ import { remove, REMOVE_BRANCH } from '../commands/remove.ts';
 import { createHostWithdrawal } from '../remove/host.ts';
 import { verify } from '../commands/verify.ts';
 import { sync } from '../commands/sync.ts';
+import { DEFAULT_CONCURRENCY } from '../sync/run.ts';
 import { exempt } from '../commands/exempt.ts';
 import { formatFinding, policy } from '../commands/policy.ts';
 import { review } from '../commands/review.ts';
 import { renderFinding } from '../review/schema.ts';
 import { embedded } from '../review/engines/embedded.ts';
 import { createApiEngine } from '../review/engines/api.ts';
+import { detectModel, detectProvider, MODEL_ENV, PROVIDER_ENV } from '../review/detect.ts';
 import { METRICS_COMMANDS, helpFor } from '../metrics/options.ts';
 import { runMetrics, specFor } from '../metrics/run.ts';
 import { createSyncHost } from '../sync/host.ts';
@@ -44,6 +55,7 @@ import { verifyRemote } from '../verify/remote.ts';
 import { createRemoteVerifyHost } from '../verify/host.ts';
 import { standardsVersion } from '../commands/sync.ts';
 import { doctor } from '../commands/doctor.ts';
+import { evidenceReport, formatEvidence, recordEvidence } from '../commands/evidence.ts';
 import { nodeSupport, unsupportedNodeHint, unsupportedNodeMessage } from '../core/runtime.ts';
 import { GATE_PIPELINES, isGatePipeline, isGateSource } from '../platforms/types.ts';
 import type { Platform, RepoRef } from '../platforms/types.ts';
@@ -53,8 +65,25 @@ import type { HostWithdrawal } from '../remove/host.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
+// The first three lines are the whole of a first run, in order, and they sit
+// above everything else deliberately. What was here before opened on `redline
+// init` with eleven flags attached, so the first thing a new user read was the
+// full surface of the most consequential command in the tool — and the safe way
+// to try it, --dry-run, was the fourth line of its own flag list.
+const QUICKSTART = [
+  'first time here? three commands, in this order:',
+  '',
+  '  redline doctor              is this machine set up — runtime, git, credential',
+  '  redline init --dry-run      what onboarding would do, writing nothing',
+  '  redline init                do it',
+  '',
+  '  nothing is irreversible: redline remove backs it all out.',
+];
+
 const USAGE = [
   'redline — engineering control plane',
+  '',
+  ...QUICKSTART,
   '',
   '  redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]',
   '               [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]',
@@ -131,7 +160,7 @@ const USAGE = [
   '                  rather than overwrite a file that may be the repository\'s own',
   '      omitted flags keep whatever .redline.json already recorded',
   '',
-  '  redline remove [--dry-run]',
+  '  redline remove [--dry-run] [--json]',
   '      take Redline back out of this repository: rendered standards, gate machinery, slash',
   '      commands, the host state it applied, and .redline.json last of all — as a pull request',
   '      --dry-run   print the plan; writes nothing, needs no credential, contacts no host',
@@ -147,22 +176,46 @@ const USAGE = [
   '                  that genuinely needs a working tree reports ?? rather than passing',
   '',
   '  redline review [--staged] [--diff-file <path>] [--base <ref>] [--engine <name>] [--print-prompt]',
+  '                 [--provider openai|anthropic] [--model <name>] [--base-url <url>] [--json]',
   '      review this change against ONLY the rules that apply to the files it touches',
   '      --engine embedded  emit the bounded prompt for the assistant running this (default)',
-  '      --engine api       call a configured endpoint — local or hosted — and parse the result',
+  '      --engine api       call a configured endpoint — local or hosted — and parse the result.',
+  '                  The provider is inferred from OPENAI_API_KEY or ANTHROPIC_API_KEY, and the',
+  '                  model from REDLINE_REVIEW_MODEL, so a key and a model name set once are',
+  '                  enough. Choosing this engine stays explicit: nothing is ever sent anywhere',
+  '                  because a key happens to be exported',
   '      --print-prompt     write the prompt to stdout and nothing else, for any assistant you',
   '                  already have — a browser tab counts. Everything else goes to stderr, so',
   '                  `redline review --print-prompt | pbcopy` copies the prompt alone',
   '      local findings are never sent to the telemetry that tunes rules',
   '',
-  '  redline policy --diff-file <path>',
-  '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER',
+  '  redline policy --diff-file <path> [--fail-on <severity>] [--json]',
+  '      evaluate the rules a checker can decide, with no model call. Exit 1 on a BLOCKER.',
+  '      Most of the catalogue needs a model — the run says how many it could not decide',
   '',
   '  redline doctor [--json]',
   '      can this machine run Redline against this repository? Node version, git, the',
   '      remote, a credential and whether .redline.json is here — with the fix for each',
   '      thing that is wrong. Contacts no host, needs no credential, and is the one',
   '      command that still runs on a Node too old for the rest',
+  '',
+  '  redline evidence [--json]',
+  '      the measurement behind this repository\'s rung, and what the next one asks for.',
+  '      Nothing else can raise enforcement: a rung is earned on a recorded figure, not',
+  '      asserted. Reads the checkout only.',
+  '  redline evidence record --source <where> [--seed-recall <0..1>] [--acted-on-rate <0..1>]',
+  '                          [--sample-size <n>] [--false-positives <n>]',
+  '      record a measurement against this repository. The numbers come from the metrics',
+  '      plane, which sees the estate over a window — the CLI supplies the audit trail,',
+  '      not the figures. --source is required: evidence with no provenance is an',
+  '      assertion. Evidence older than 90 days no longer justifies a promotion',
+  '',
+  '  redline funnel [--json] | redline funnel clear',
+  '      where your own runs of this CLI succeed and where they stop. OFF by default;',
+  `      export ${TELEMETRY_ENV}=1 to record. There is no endpoint in the code that writes it:`,
+  '      the record is a file in ~/.redline on this machine, it holds a command name, an',
+  '      outcome and a duration — never arguments, paths, repository names or diffs — and',
+  '      moving it anywhere is your deliberate act. redline funnel clear deletes it',
   '',
   '  redline status [--json]',
   '      what is installed here, how hard it bites, what an administrator still owes',
@@ -171,15 +224,17 @@ const USAGE = [
   '      what a rule means, who decided it, which files it is scoped to and which',
   '      profiles receive it. The id is the bracketed part of a finding.',
   '      --list      every rule id in the standards, with its severity',
-  '  redline exempt --body-file <path> [--scope <check>]',
+  '  redline exempt --body-file <path> [--scope <check>] [--json]',
   '      decide whether a pull request carries a valid exemption for a failing process',
   '      check — a reason, an actor and an expiry, not a bare label. Exit 0 if it applies',
   '',
-  '  redline sync [--dry-run] [--repo <owner/name>] [--force]',
+  '  redline sync [--dry-run] [--repo <owner/name>] [--force] [--concurrency <n>] [--json]',
   '      open a pull request on every registered repository whose standards are behind',
   '      --dry-run   print the plan; opens nothing, pushes nothing',
   '      --repo <owner/name>  one repository instead of the estate',
   '      --force     re-render a repository already at the current standards version',
+  '      --concurrency <n>  repositories in flight at once (default 8). Lower it if the host',
+  '                  starts rate limiting; a 429 is waited out for as long as the host asks',
   '      run from a checkout of the Redline source repository, not a product repo',
   '',
   '  redline metrics <command> [--flags]',
@@ -231,7 +286,60 @@ export interface RunDeps {
   prompter?: () => Prompter;
 }
 
+// Timing and the funnel record wrap the command rather than living inside it:
+// every one of the forty-odd returns below would otherwise need a line, and the
+// one that got missed would be the interesting one.
 export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
+  const startedAt = Date.now();
+  const command = argv[0] ?? '--help';
+  let code = 0;
+  let errorCode: string | undefined;
+  try {
+    code = await runCommand(argv, deps);
+    return code;
+  } catch (error) {
+    code = 4;
+    errorCode = isRedlineError(error) ? error.kind : 'internal';
+    throw error;
+  } finally {
+    if (telemetryEnabled()) {
+      recordFunnel({
+        at: new Date().toISOString(),
+        // The command word only, and only if it is one of ours. Never the
+        // arguments — a --diff-file path or a --repo names a person's machine
+        // and a customer's project — and never an unrecognised word either:
+        // `redline ghp_xxx` is a paste that missed the terminal it was meant
+        // for, and writing it to a file would be this tool breaking its own
+        // core/customer-data-in-logs rule on its own author.
+        command: funnelName(command),
+        outcome: outcomeFor(code),
+        ms: Date.now() - startedAt,
+        ...(errorCode === undefined ? {} : { code: errorCode }),
+      });
+    }
+  }
+}
+
+const FUNNEL_COMMANDS = new Set([
+  'init', 'verify', 'remove', 'review', 'policy', 'doctor', 'evidence', 'status',
+  'explain', 'exempt', 'sync', 'registry', 'metrics', 'funnel',
+]);
+
+function funnelName(command: string): string {
+  if (command === '--version' || command === '-v') return 'version';
+  if (command === '--help' || command === '-h') return 'help';
+  return FUNNEL_COMMANDS.has(command) ? command : 'unknown';
+}
+
+function outcomeFor(code: number): FunnelEvent['outcome'] {
+  if (code === 0) return 'ok';
+  if (code === 2) return 'usage';
+  if (code === 3) return 'permission';
+  if (code === 4) return 'host';
+  return 'failed';
+}
+
+async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
   const cwd = deps.cwd ?? process.cwd();
   const root = deps.root ?? PACKAGE_ROOT;
   const log = createLog(deps.sink);
@@ -336,7 +444,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
   // `doctor` is exempt: it exists to say this out loud, in a list, with the
   // three ways out. Refusing to run the diagnostic on the machine that needs
   // diagnosing is the failure mode this whole guard is here to avoid.
-  if (command !== 'doctor') {
+  if (command !== 'doctor' && command !== 'funnel') {
     const support = nodeSupport(deps.nodeVersion ?? process.version);
     if (!support.ok) {
       log.error(unsupportedNodeMessage(deps.nodeVersion ?? process.version));
@@ -512,6 +620,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const profileChoice = wizard?.answers.profile ?? values.profile;
       const vendorChoice = wizard ? [...wizard.answers.vendors] : vendors;
       const rungChoice = wizard?.answers.rung ?? values.rung;
+      // Read here rather than inside init() so the same record is what `redline
+      // evidence` reports and what a promotion is judged against — two readers
+      // of one file, not two notions of what was measured.
+      const recordedEvidence = readConfig(cwd)?.evidence ?? null;
       const setupChoice = wizard
         ? [...wizard.answers.setup]
         : values.setup?.split(',').map((id) => id.trim()).filter((id) => id !== '');
@@ -542,6 +654,14 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(repair ? { repair: true } : {}),
         ...(adoptCaller ? { adoptCaller: true } : {}),
         ...(rungChoice ? { rung: rungChoice } : {}),
+        // The recorded measurement, read back from .redline.json.
+        //
+        // Without this the ladder was decorative: canPromote asked for evidence,
+        // nothing ever passed any, so every promotion was refused and every
+        // repository stayed at observe forever. Absent is still absent — a
+        // repository nobody has measured is refused, which is correct — but a
+        // repository that HAS been measured can now climb.
+        ...(recordedEvidence === null ? {} : { evidence: recordedEvidence }),
         ...(integrationChoice ? { integrations: integrationChoice } : {}),
         ...(ownerChoice && ownerChoice.length > 0 ? { reviewOwners: ownerChoice } : {}),
         ...(branchChoice && branchChoice.length > 0 ? { branches: branchChoice } : {}),
@@ -716,7 +836,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const { values } = parseCliArgs(() =>
         parseArgs({
           args: rest,
-          options: { 'dry-run': { type: 'boolean', default: false } },
+          options: {
+            'dry-run': { type: 'boolean', default: false },
+            json: { type: 'boolean', default: false },
+          },
           allowPositionals: false,
         })
       );
@@ -731,6 +854,27 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         () => deps.hostWithdrawal?.(cwd) ?? createHostWithdrawal(cwd),
         { cwd, root, ...(dryRun ? { dryRun: true } : {}) }
       );
+
+      if (values.json === true) {
+        log.info(
+          JSON.stringify(
+            {
+              dryRun: report.dryRun,
+              actions: report.actions,
+              caveats: report.caveats,
+              notes: report.notes,
+              hostPlan: report.hostPlan,
+              outcomes: report.outcomes,
+              pendingAdmin: report.pendingAdmin,
+              pullRequest: report.pullRequest ?? null,
+              pullRequestError: report.pullRequestError,
+            },
+            null,
+            2
+          )
+        );
+        return report.pullRequestError !== null ? exitCodeFor('failed') : 0;
+      }
 
       for (const action of report.actions) {
         if (action.kind === 'kept') continue;
@@ -749,6 +893,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (report.dryRun) {
         for (const step of report.hostPlan) log.info(`  would apply   ${step}`);
         log.info('dry run — nothing was written, read or changed on the host');
+        printCaveats(log, report.caveats);
         return 0;
       }
 
@@ -772,6 +917,7 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       }
       if (report.pullRequest) log.info(`pull request: ${report.pullRequest.url}`);
       else log.info('nothing left to remove from the working tree — no pull request was opened');
+      printCaveats(log, report.caveats);
       return 0;
     }
 
@@ -850,9 +996,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             profile: { type: 'string' },
             engine: { type: 'string', default: 'embedded' },
             'print-prompt': { type: 'boolean', default: false },
-            provider: { type: 'string', default: 'openai' },
+            provider: { type: 'string' },
             model: { type: 'string' },
             'base-url': { type: 'string' },
+            json: { type: 'boolean', default: false },
           },
           allowPositionals: false,
         })
@@ -875,27 +1022,46 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 
       let engine = embedded;
       if (values.engine === 'api') {
-        if (!values.model) {
+        // The engine stays something you asked for; only its configuration is
+        // inferred. `--engine api` used to need --provider and --model on every
+        // run, which made the one command that actually reviews a diff four
+        // flags long — so it was demonstrated once and never used again.
+        const detected = detectProvider();
+        const model = values.model ?? detectModel();
+        if (!model) {
           throw new RedlineError(
             'usage',
-            '--engine api needs --model <name>',
-            'a model baked into the tool is one nobody can change when it is deprecated'
+            '--engine api needs a model',
+            `pass --model <name>, or set ${MODEL_ENV} once and drop the flag — a model baked into ` +
+              'the tool is one nobody can change when it is deprecated'
           );
         }
         // Not a silent fallback: `--provider anthropc` used to become openai and
         // send the diff to a local endpoint that was not running, reporting a
         // connection error for what was a typo.
-        if (values.provider !== 'openai' && values.provider !== 'anthropic') {
+        const named = values.provider ?? detected.provider;
+        if (named !== 'openai' && named !== 'anthropic') {
           throw new RedlineError(
             'usage',
-            `--provider must be openai or anthropic, not "${values.provider}"`,
-            'openai covers every OpenAI-compatible endpoint, including a local one'
+            values.provider === undefined
+              ? '--engine api needs a provider and no API key is set to infer one from'
+              : `--provider must be openai or anthropic, not "${values.provider}"`,
+            values.provider === undefined
+              ? 'export OPENAI_API_KEY or ANTHROPIC_API_KEY and it is inferred, or pass --provider. ' +
+                'openai covers every OpenAI-compatible endpoint, including a local one that needs no key'
+              : 'openai covers every OpenAI-compatible endpoint, including a local one'
           );
         }
-        const provider = values.provider;
+        const provider = named;
+        if (values.provider === undefined && detected.from !== null) {
+          log.info(`provider ${provider}, from ${detected.from}`);
+          if (detected.available.length > 1) {
+            log.info(`  ${detected.available.join(' and ')} keys are both set — ${PROVIDER_ENV} overrides`);
+          }
+        }
         engine = createApiEngine({
           provider,
-          model: values.model,
+          model,
           ...(values['base-url'] ? { baseUrl: values['base-url'] } : {}),
         });
       } else if (values.engine !== 'embedded') {
@@ -928,6 +1094,17 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         );
         process.stdout.write(`${report.prompt ?? ''}\n`);
         return 0;
+      }
+
+      if (values.json === true) {
+        log.info(
+          JSON.stringify(
+            { scope: report.scope, prompt: report.prompt, findings: report.findings },
+            null,
+            2
+          )
+        );
+        return report.findings.length > 0 ? exitCodeFor('failed') : 0;
       }
 
       log.info(
@@ -982,7 +1159,11 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const { values } = parseCliArgs(() =>
         parseArgs({
           args: rest,
-          options: { 'diff-file': { type: 'string' }, 'fail-on': { type: 'string' } },
+          options: {
+            'diff-file': { type: 'string' },
+            'fail-on': { type: 'string' },
+            json: { type: 'boolean', default: false },
+          },
           allowPositionals: false,
         })
       );
@@ -996,6 +1177,41 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const report = policy({ root, diffFile, ...(failOn ? { failOn } : {}) });
 
       const policyDocsUrl = readConfig(cwd)?.docsBaseUrl ?? '';
+
+      // The exit code answers "may this proceed", which is deliberately not the
+      // same question as "was anything found" — three HIGH findings pass a
+      // BLOCKER gate. Anything building on top of this needs both answers and
+      // the findings themselves, and parsing them back out of prose written for
+      // a human is how a wrapper breaks on a wording change.
+      if (values.json) {
+        log.info(
+          JSON.stringify(
+            {
+              ok: report.ok,
+              failOn: failOn ?? 'BLOCKER',
+              findings: report.findings.map((finding) => ({
+                rule: finding.ruleId,
+                severity: finding.severity,
+                file: finding.file,
+                line: finding.line,
+                problem: finding.problem,
+                ...(policyDocsUrl ? { docs: `${policyDocsUrl}/r/${finding.ruleId}` } : {}),
+              })),
+              evaluated: report.evaluated,
+              // Not a detail. Most of the catalogue needs a model, so a caller
+              // that reads `findings: []` as "this diff is clean" is wrong
+              // about the majority of the standard.
+              catalogue: report.catalogue,
+              modelled: report.catalogue - report.evaluated.length,
+              unimplemented: report.unimplemented,
+            },
+            null,
+            2
+          )
+        );
+        return report.ok ? 0 : exitCodeFor('failed');
+      }
+
       for (const finding of report.findings) {
         log.info(`${finding.file}:${finding.line}`);
         log.info(`  ${formatFinding(finding, policyDocsUrl)}`);
@@ -1026,6 +1242,126 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       }
 
       return report.ok ? 0 : exitCodeFor('failed');
+    }
+
+    if (command === 'evidence') {
+      const { values, positionals } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: {
+            json: { type: 'boolean', default: false },
+            'seed-recall': { type: 'string' },
+            'acted-on-rate': { type: 'string' },
+            'sample-size': { type: 'string' },
+            'false-positives': { type: 'string' },
+            source: { type: 'string' },
+          },
+          allowPositionals: true,
+        })
+      );
+
+      const sub = positionals[0];
+      if (sub !== undefined && sub !== 'record') {
+        throw new RedlineError('usage', `unknown evidence subcommand "${sub}" — use \`record\`, or no subcommand to report`);
+      }
+
+      // A flag given but unparseable is refused rather than read as absent.
+      // "Not measured" and "the recorder emitted NaN" mean opposite things to
+      // the ladder, and silently turning the second into the first would grant
+      // a promotion on a number nobody produced.
+      const num = (flag: string): number | null => {
+        const raw = values[flag as 'seed-recall'];
+        if (raw === undefined) return null;
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed)) {
+          throw new RedlineError('usage', `--${flag} must be a number, not "${raw}"`);
+        }
+        return parsed;
+      };
+
+      if (sub === 'record') {
+        const report = recordEvidence({
+          cwd,
+          seedRecall: num('seed-recall'),
+          actedOnRate: num('acted-on-rate'),
+          sampleSize: num('sample-size') ?? 0,
+          falsePositives: num('false-positives'),
+          source: values.source ?? '',
+        });
+        if (values.json === true) {
+          log.info(JSON.stringify(report, null, 2));
+        } else {
+          log.info('recorded.');
+          log.info('');
+          for (const line of formatEvidence(report)) log.info(line);
+        }
+        return 0;
+      }
+
+      const report = evidenceReport({ cwd });
+      if (values.json === true) {
+        log.info(JSON.stringify(report, null, 2));
+      } else {
+        for (const line of formatEvidence(report)) log.info(line);
+      }
+      // Not eligible is an answer, not a failure — this is the command somebody
+      // runs to find out how far off they are, and a non-zero exit would break
+      // the script that asked.
+      return 0;
+    }
+
+    if (command === 'funnel') {
+      const { values, positionals } = parseCliArgs(() =>
+        parseArgs({
+          args: rest,
+          options: { json: { type: 'boolean', default: false } },
+          allowPositionals: true,
+        })
+      );
+
+      const path = telemetryPath();
+      if (positionals[0] === 'clear') {
+        log.info(clearFunnel(path) ? `removed ${path}` : 'nothing recorded — nothing to remove');
+        return 0;
+      }
+      if (positionals[0] !== undefined) {
+        throw new RedlineError('usage', `unknown funnel subcommand "${positionals[0]}" — use: clear`);
+      }
+
+      const summary = summariseFunnel(path);
+      if (values.json === true) {
+        log.info(JSON.stringify({ path, enabled: telemetryEnabled(), ...summary }, null, 2));
+        return 0;
+      }
+
+      if (!telemetryEnabled()) {
+        log.info(`off — export ${TELEMETRY_ENV}=1 to record locally`);
+      }
+      if (summary.total === 0) {
+        log.info('nothing recorded yet');
+        log.info(`  it would be written to ${path}, on this machine, and sent nowhere`);
+        return 0;
+      }
+
+      log.info(`${summary.total} run(s) recorded in ${path}`);
+      log.info('');
+      for (const row of summary.byCommand) {
+        log.info(
+          `  ${row.command.padEnd(10)} ${String(row.runs).padStart(4)} run(s)  ` +
+            `${String(row.ok).padStart(4)} ok  ${String(row.failed).padStart(4)} failed  ` +
+            `median ${row.medianMs}ms`
+        );
+      }
+      if (summary.topErrors.length > 0) {
+        log.info('');
+        log.info('  what fails most');
+        for (const row of summary.topErrors.slice(0, 5)) {
+          log.info(`    ${row.code.padEnd(12)} ${row.count}`);
+        }
+      }
+      log.info('');
+      log.info('  this file has never left this machine. redline funnel clear removes it');
+      return 0;
     }
 
     if (command === 'status') {
@@ -1101,7 +1437,11 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       const { values } = parseCliArgs(() =>
         parseArgs({
           args: rest,
-          options: { 'body-file': { type: 'string' }, scope: { type: 'string' } },
+          options: {
+            'body-file': { type: 'string' },
+            scope: { type: 'string' },
+            json: { type: 'boolean', default: false },
+          },
           allowPositionals: false,
         })
       );
@@ -1114,6 +1454,10 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
         bodyFile,
         ...(values.scope ? { scope: values.scope } : {}),
       });
+      if (values.json === true) {
+        log.info(JSON.stringify({ applies: report.applies, messages: report.messages }, null, 2));
+        return report.applies ? 0 : exitCodeFor('failed');
+      }
       for (const message of report.messages) {
         if (report.applies) log.info(message);
         else log.warn(message);
@@ -1131,6 +1475,8 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
             'dry-run': { type: 'boolean', default: false },
             repo: { type: 'string' },
             force: { type: 'boolean', default: false },
+            json: { type: 'boolean', default: false },
+            concurrency: { type: 'string' },
           },
           allowPositionals: false,
         })
@@ -1140,14 +1486,59 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
       // A dry run reads the register and the target's own files but never
       // writes, so it still needs a read credential — unlike `init --dry-run`,
       // which contacts no host at all. Saying so beats a confusing 403.
+      const concurrency = values.concurrency === undefined ? undefined : Number(values.concurrency);
+      if (concurrency !== undefined && (!Number.isInteger(concurrency) || concurrency < 1)) {
+        throw new RedlineError(
+          'usage',
+          `--concurrency must be a whole number of 1 or more, not "${values.concurrency}"`,
+          `the default is ${DEFAULT_CONCURRENCY}; lower it if the host is rate limiting the run`
+        );
+      }
+
       const report = await sync(deps.syncHost?.() ?? createSyncHost(), {
         root,
         cwd,
         ...(values.repo ? { repo: values.repo } : {}),
         ...(values.force ? { force: true } : {}),
         ...(dryRun ? { dryRun: true } : {}),
+        ...(concurrency === undefined ? {} : { concurrency }),
+        // A two-hundred repository run took twenty minutes and said nothing
+        // until it finished, which is indistinguishable from hung. Suppressed
+        // under --json so the document on stdout stays a document.
+        ...(values.json === true
+          ? {}
+          : {
+              onResult: (result, done, total) => {
+                if (result.outcome.kind === 'failed') {
+                  log.warn(`  [${done}/${total}] ${result.repo}: ${result.outcome.detail}`);
+                } else {
+                  log.info(`  [${done}/${total}] ${result.repo}: ${result.outcome.kind}`);
+                }
+              },
+            }),
       });
 
+      // An estate run across 200 repositories is the case that gets piped into
+      // a dashboard, and the per-repository outcome is the whole point of it.
+      if (values.json === true) {
+        log.info(
+          JSON.stringify(
+            {
+              standardsVersion: report.plan.standardsVersion,
+              dryRun,
+              targets: report.plan.targets.length,
+              skipped: report.plan.skipped,
+              failures: report.failures,
+              results: report.results.map(({ repo, outcome }) => ({ repo, ...outcome })),
+            },
+            null,
+            2
+          )
+        );
+        return report.failures > 0 ? exitCodeFor('failed') : 0;
+      }
+
+      log.info('');
       log.info(`standards v${report.plan.standardsVersion} — ${report.plan.targets.length} target(s), ${report.plan.skipped.length} skipped`);
       for (const { repo, outcome } of report.results) {
         if (outcome.kind === 'failed') log.error(`  ${repo}: ${outcome.detail}`);
@@ -1244,6 +1635,21 @@ export async function run(argv: string[], deps: RunDeps = {}): Promise<number> {
 // which would make `redline verify --gate` pass unconditionally in CI. Compare
 // resolved real paths instead. realpathSync throws if argv[1] is not a real
 // path (an eval/stdin entry point), which is not this module being executed.
+// What removal did NOT do. Both lines below used to sit in the middle of the
+// notes array, printed with log.info between "removed AGENTS.md" and the pull
+// request URL, and they were read as flavour text — one team came away
+// believing Redline had switched their secret scanning off on the way out.
+// A heading, a warning channel, and the last position on screen.
+function printCaveats(log: Log, caveats: readonly string[]): void {
+  if (caveats.length === 0) return;
+  // The separator goes through info, not warn: an empty string on the warn
+  // channel prints a bare `warn` prefix with nothing after it, which reads as a
+  // warning the tool forgot to write.
+  log.info('');
+  log.warn('what this did not do');
+  for (const caveat of caveats) log.warn(`  · ${caveat}`);
+}
+
 function isDirectlyExecuted(): boolean {
   const entry = process.argv[1];
   if (entry === undefined) return false;

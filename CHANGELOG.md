@@ -7,6 +7,84 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — the rung ladder was decorative, and seven other things a senior look found
+
+The enforcement ladder is the centre of this product's argument: a repository starts at `observe`,
+and a rung above it is *earned* on a recorded measurement rather than asserted by whoever runs the
+command. `canPromote` implemented that faithfully. Nothing ever called it with any evidence. The
+bin read the flags, built the options and passed no `evidence` key at all, so the default — a
+sample size of zero — reached the ladder on every run, and the ladder correctly refused. Every
+repository in the estate was permanently advisory, and the only route up was hand-editing the file
+whose own header says to edit it with the command instead. Four rungs, three of them unreachable,
+for as long as the tool has existed.
+
+Closing it took three pieces. `RecordedEvidence` is now a field on `.redline.json`, validated on
+the way in and on the way out: a rate outside `0..1` is *rejected rather than clamped*, because a
+`94` meant as 94% and clamped to `1` reads as exactly the perfect recall the blocking rungs
+require, and a broken recorder must not be able to grant a veto. `redline evidence` reports the
+measurement behind the current rung and what the next one asks for; `redline evidence record`
+writes one, with `--source` mandatory because evidence with no provenance is an assertion. The
+figures themselves come from the metrics plane, which sees the estate over a window — the CLI owns
+the mechanism and the audit trail, not the numbers.
+
+Wiring it up exposed a second defect underneath the first, and a worse one. `init` rebuilds
+`.redline.json` field by field on every run that does real work, and it had no line for evidence.
+So the run that consumed a measurement to authorise a promotion *erased that measurement in the
+same write*: a repository arrived at `block-blocker` with nothing on file saying why, the next rung
+could never be earned, and the 90-day freshness window could never fire because no record survived
+long enough to age. Evidence is now carried forward the way `onboardedAt` always was, and the
+regression test fails without that one line.
+
+Freshness is new and deliberate. Evidence describes a reviewer, a rule set and a codebase at a
+moment, and all three move; a blocking rung held up by last year's number is the guarantee nobody
+checked. Ninety days. Demotion is untouched — the safe direction never needs permission.
+
+The rest came from reading the CLI as a product rather than as a test subject:
+
+- **`--json` on `policy`, `review`, `exempt`, `sync` and `remove --dry-run`.** A tool whose whole
+  claim is auditability was unreadable by anything but a human at five of its exits. The `policy`
+  document carries `catalogue` and `modelled` alongside the findings for a specific reason: the exit
+  code answers *may this proceed*, not *was anything found* — three HIGH findings pass a BLOCKER
+  gate — and a caller reading `findings: []` as "this diff is clean" is wrong about the 372 rules of
+  376 that need a model.
+- **Host failures name the remedy, not just the status.** Around fifteen sites reported
+  `reading acme/web returned 403` and stopped. 403 is the one that wastes the most time: it reads as
+  "you are not allowed" when it is nearly always a missing scope, or a SAML organisation a
+  perfectly-scoped token was never authorised for. 404 now says a private repository the token
+  cannot see looks identical. 5xx and 429 say the host is failing and there is nothing to fix. An
+  unexpected body shape says it is this tool's bug and what to attach.
+- **`sync` survives an estate.** It was a serial loop — fine for the eight repositories it was
+  built against, twenty silent minutes at two hundred, which is indistinguishable from hung. Now
+  eight in flight by default (`--concurrency`), results indexed in plan order so two runs can be
+  diffed, and each repository reported as it settles. Underneath it, a rate limit was being answered
+  with the wrong curve entirely: 200ms, 400ms, 800ms against a window asking for sixty seconds
+  burned all three attempts and failed. `Retry-After` and `x-ratelimit-reset` are now honoured, and
+  capped at a minute so a command never looks hung instead.
+- **`remove` says what it did not do, last and under a heading.** That the security floor stays on,
+  and that `verify` will now report this repository as "not onboarded" — indistinguishable from
+  never onboarded — were two entries in an undifferentiated notes array, printed between "removed
+  AGENTS.md" and the pull request URL. They read as flavour text there, and a team came away
+  believing Redline had switched their secret scanning off on the way out.
+- **`--help` opens with the three commands of a first run.** It opened on `redline init` with
+  eleven flags attached, so the first thing a new reader met was the full surface of the most
+  consequential command in the tool, and the safe way to try it was the fourth line of its own flag
+  list. `doctor`, then `init --dry-run`, then `init`, and a line saying none of it is irreversible.
+- **`review --engine api` works with a key and a model name.** The provider is inferred from
+  `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, the model from `REDLINE_REVIEW_MODEL`. Choosing the
+  engine stays explicit — nothing is sent anywhere because a key happens to be exported. That
+  inference exposed one more: with a key set, `openai` still pointed at `localhost:11434`, so
+  exporting a real OpenAI key sent the review to an Ollama that was not running and reported
+  `fetch failed` against an address the operator never chose. A key present now selects the hosted
+  endpoint; with no key the local default stands, because a review that must send a diff to a third
+  party is one several of this organisation's markets cannot run at all.
+- **`redline funnel`, off unless you switch it on.** Every fix in this tool so far came from
+  watching one person's terminal over their shoulder, which does not scale past the people sitting
+  near me. It records a command name, an outcome and a duration to `~/.redline`. There is no
+  endpoint in the file that writes it and a test fails if one is ever added; the word is only
+  recorded if it is one of ours, so a `redline ghp_xxx` paste that missed its terminal never reaches
+  disk. It cannot tell you which repository struggled, so it cannot be used to performance-manage
+  anyone. That is a limit, not an omission.
+
 ### CLI — a GitHub repository built by Azure Pipelines onboarded correctly, then verified as broken
 
 `redline init` asks what runs the pull request checks, and for a GitHub-hosted repository whose

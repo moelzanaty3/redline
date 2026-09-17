@@ -354,8 +354,57 @@ git config --unset core.hooksPath
 ```
 
 Only content Redline can prove it wrote is removed. A merged file keeps every byte outside
-its `REDLINE` block, and anything unattributable is left in place and named. The security
-floor is the organisation's minimum, not Redline's state — no flag here turns it off.
+its `REDLINE` block, and anything unattributable is left in place and named.
+
+The run ends with a **what this did not do** block, and it is the half of the answer you
+have to act on yourself:
+
+```
+what this did not do
+  · the security floor stays on: secret scanning, push protection and dependency alerts
+    are the organisation's minimum, not Redline's own state...
+  · once .redline.json is gone, redline verify stops recognising this repository...
+```
+
+Read it. Those lines used to print in the middle of the file list, and a team came away
+believing Redline had switched their secret scanning off on the way out.
+
+---
+
+## 8. Can enforcement actually be raised?
+
+```sh
+redline evidence
+```
+
+Enforcement climbs `observe → warn → block-blocker → block-high`, and every rung above the
+first is *earned on a recorded measurement*. With nothing recorded, the report says so and
+names what the next rung asks for. Confirm it refuses:
+
+```sh
+redline init --no-commit --rung warn
+redline status          # still observe
+```
+
+Then record a measurement and watch it move:
+
+```sh
+redline evidence record --sample-size 12 --source "verification walkthrough"
+redline init --no-commit --rung warn
+redline status          # warn
+```
+
+The figures come from the metrics plane, which sees the estate over a window — the CLI
+supplies the mechanism and the audit trail, not the numbers. `--source` has no default
+because evidence with no provenance is an assertion. Check the record survived the
+promotion that used it:
+
+```sh
+grep -A 3 '"evidence"' .redline.json
+```
+
+If it is gone, the run that raised enforcement erased the measurement justifying it, and
+nothing on file says why the repository is where it is.
 
 ---
 

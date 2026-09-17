@@ -47,9 +47,23 @@ export interface SyncRunOptions extends PlanOptions {
   // Injected so the generated exemption's expiry is testable, and so a rerun of
   // the same sync reaches the same verdict about the same pull request.
   now?: Date;
+  // How many repositories are in flight at once. Serial was fine for the eight
+  // repositories this was built against and is not fine for two hundred: each
+  // target is several round trips, so the wall-clock cost is the estate size
+  // times the latency, and an operator watching a silent terminal for twenty
+  // minutes reasonably concludes it has hung.
+  concurrency?: number;
+  // Called as each repository settles, so a long run says something while it
+  // runs rather than only at the end.
+  onResult?: (result: SyncReport['results'][number], done: number, total: number) => void;
 }
 
 export const SYNC_BRANCH = 'redline/sync';
+
+// Eight, not "as many as there are". The ceiling here is the host's secondary
+// rate limit rather than local CPU, and tripping it makes an estate run slower
+// than serial once every worker is sitting in a backoff.
+export const DEFAULT_CONCURRENCY = 8;
 export const SYNC_LABEL = 'redline-sync';
 
 // How long a sync pull request may sit before its own gate starts failing it.
@@ -165,19 +179,42 @@ export async function runSync(
   opts: SyncRunOptions
 ): Promise<SyncReport> {
   const plan = planSync(registry, opts.standardsVersion, opts);
-  const results: SyncReport['results'] = [];
+  const total = plan.targets.length;
+  // Indexed rather than appended, so the report comes back in plan order however
+  // the workers interleave. An estate report whose order changes run to run
+  // cannot be diffed against the last one.
+  const results: SyncReport['results'] = new Array(total);
   let failures = 0;
+  let next = 0;
+  let done = 0;
 
-  for (const target of plan.targets) {
-    const repo = `${target.entry.org}/${target.entry.repo}`;
-    try {
-      results.push({ repo, outcome: await syncTarget(host, target, opts) });
-    } catch (error) {
-      failures += 1;
-      const detail = isRedlineError(error) ? error.message : String(error);
-      results.push({ repo, outcome: { kind: 'failed', detail } });
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      const target = plan.targets[index];
+      if (target === undefined) return;
+
+      const repo = `${target.entry.org}/${target.entry.repo}`;
+      let result: SyncReport['results'][number];
+      try {
+        result = { repo, outcome: await syncTarget(host, target, opts) };
+      } catch (error) {
+        failures += 1;
+        // One repository failing never stops the others: an estate-wide
+        // distribution that aborts on the first unreachable repository is a
+        // distribution that never completes.
+        const detail = isRedlineError(error) ? error.message : String(error);
+        result = { repo, outcome: { kind: 'failed', detail } };
+      }
+      results[index] = result;
+      done += 1;
+      opts.onResult?.(result, done, total);
     }
-  }
+  };
+
+  const width = Math.max(1, Math.min(opts.concurrency ?? DEFAULT_CONCURRENCY, total));
+  await Promise.all(Array.from({ length: width }, () => worker()));
 
   return { plan, results, failures };
 }
