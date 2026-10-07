@@ -7,6 +7,15 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — runs on Node 18 and later
+
+- **The floor was Node 22, and nothing needed it.** The CLI refused older runtimes outright, so
+  onboarding a repository pinned to Node 18 meant reaching for a version manager first. The
+  built CLI uses nothing past Node 18, and the test suite compiled to JavaScript passes on 18.13
+  and 20.11. `engines.node` and the runtime guard now say `>=18`; Node 16 is still refused, with
+  the same `volta` / `fnm` / `nvm` commands to run it under a newer Node. Developing Redline
+  itself still needs Node 22.6+, because the tests run TypeScript directly.
+
 ### CLI — finding your way around a tool with fifteen commands
 
 Everything below was found by using the CLI the way a first-time user does, not by reading it.

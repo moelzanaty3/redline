@@ -34,7 +34,7 @@ export default async function Page() {
       <h2 id="before">Before you start</h2>
       <PackageBadge state={state} />
       <ul>
-        <li>Node.js 22 or newer on the machine running the CLI.</li>
+        <li>Node.js 18 or newer on the machine running the CLI.</li>
         <li>
           A git repository whose remote points at GitHub — including GitHub
           Enterprise Server, if the hostname contains <code>github</code> — or

@@ -31,12 +31,12 @@ const withGh =
   };
 
 test('an old Node fails rather than warning', () => {
-  const report = doctor({ cwd: repo('git@github.com:acme/widget.git'), nodeVersion: 'v18.13.0', run: noGh });
+  const report = doctor({ cwd: repo('git@github.com:acme/widget.git'), nodeVersion: 'v16.20.2', run: noGh });
   const node = report.checks.find((c) => c.name === 'node');
   assert.equal(node?.status, 'fail');
   assert.equal(report.ok, false);
   // The escape hatches matter more than the diagnosis. A repository pinned to
-  // 18 on purpose cannot act on "upgrade Node", and a fix nobody can apply is
+  // 16 on purpose cannot act on "upgrade Node", and a fix nobody can apply is
   // indistinguishable from the tool refusing to work.
   assert.match(node?.fix ?? '', /volta run/);
   assert.match(node?.fix ?? '', /fnm exec/);
@@ -45,6 +45,13 @@ test('an old Node fails rather than warning', () => {
 
 test('a supported Node passes', () => {
   const report = doctor({ cwd: repo('git@github.com:acme/widget.git'), nodeVersion: 'v22.11.0', run: noGh });
+  assert.equal(report.checks.find((c) => c.name === 'node')?.status, 'ok');
+});
+
+// The floor is what the CLI needs, not what this repository builds on. A
+// repository pinned to 18 is the common case it was raised against.
+test('Node 18 is supported', () => {
+  const report = doctor({ cwd: repo('git@github.com:acme/widget.git'), nodeVersion: 'v18.13.0', run: noGh });
   assert.equal(report.checks.find((c) => c.name === 'node')?.status, 'ok');
 });
 
