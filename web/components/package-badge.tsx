@@ -12,10 +12,11 @@ import { latestFrom, PACKAGE_NAME, type Packument, type PackageState } from "@/l
 // badge naming the previous version. The browser asks the registry again after
 // the page loads. The pages stay prerendered, because they are build gates: they
 // throw when the repository no longer says what they claim.
-export function PackageBadge({ initial, registry }: { initial: PackageState; registry: string }) {
+export function PackageBadge({ initial, registry }: { initial: PackageState; registry: string | null }) {
   const [state, setState] = useState(initial);
 
   useEffect(() => {
+    if (registry === null) return;
     const controller = new AbortController();
     fetch(`${registry}/${PACKAGE_NAME}`, { signal: controller.signal })
       .then(async (response) => {

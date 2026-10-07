@@ -39,10 +39,19 @@ export function standardsVersion(): string {
   return (JSON.parse(readRepoFile("standards/manifest.json")) as { version: string }).version;
 }
 
-// An org publishing to a private mirror asks that mirror, not npmjs. Exported
-// because the badge asks the same registry again from the browser.
-export function npmRegistry(): string {
-  return (process.env["REDLINE_NPM_REGISTRY"] ?? "https://registry.npmjs.org").replace(/\/+$/, "");
+const PUBLIC_REGISTRY = "https://registry.npmjs.org";
+
+// An org publishing to a private mirror asks that mirror, not npmjs.
+function npmRegistry(): string {
+  return (process.env["REDLINE_NPM_REGISTRY"] ?? PUBLIC_REGISTRY).replace(/\/+$/, "");
+}
+
+// The registry the badge may ask again from the browser, or null for none. A
+// configured mirror is never handed to the client: its URL would be serialised
+// into public HTML, and a mirror URL can carry credentials or an internal
+// hostname. A reader's browser could not reach a private mirror anyway.
+export function browserRegistry(): string | null {
+  return process.env["REDLINE_NPM_REGISTRY"] === undefined ? PUBLIC_REGISTRY : null;
 }
 
 let cached: Promise<PackageState> | null = null;
