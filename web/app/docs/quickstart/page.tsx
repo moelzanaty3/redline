@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 import { PackageBadge } from "@/components/package-badge";
-import { installCommand, packageState } from "@/lib/package-version";
+import { installCommand, npmRegistry, packageState } from "@/lib/package-version";
 
 export const metadata: Metadata = { title: "Quickstart" };
 
@@ -21,7 +21,7 @@ export default async function Page() {
       intro="Onboard one repository, see what it changed, and understand what happens on its next pull request. Ten minutes, and nothing is blocked at the end of it."
       href="/docs/quickstart"
     >
-      <PackageBadge state={state} />
+      <PackageBadge initial={state} registry={npmRegistry()} />
 
       <h2>1. See the plan before anything is written</h2>
       <p>

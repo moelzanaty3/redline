@@ -1,5 +1,5 @@
 // What version of the CLI a reader should actually install, resolved at build
-// time from the registry.
+// time from the registry (the badge asks again in the browser; see package-badge.tsx).
 //
 // package.json here says "0.0.0-development": semantic-release computes the real
 // version at publish time and never commits it back, so the checked-in field is
@@ -14,13 +14,9 @@
 // (`npx redlinegate ...`), which still resolves — only the version we would have
 // named is missing.
 import { readRepoFile } from "./content";
+import { latestFrom, PACKAGE_NAME, type PackageState, type Packument } from "./npm-registry";
 
-export type PackageState =
-  | { status: "published"; version: string; publishedAt: string | null }
-  | { status: "unpublished" }
-  | { status: "unknown"; reason: string };
-
-export const PACKAGE_NAME = "redlinegate";
+export { PACKAGE_NAME, type PackageState };
 
 // The command a reader should run, given what is actually installable.
 //
@@ -41,6 +37,12 @@ export function installCommand(state: PackageState, args = "init"): string {
 
 export function standardsVersion(): string {
   return (JSON.parse(readRepoFile("standards/manifest.json")) as { version: string }).version;
+}
+
+// An org publishing to a private mirror asks that mirror, not npmjs. Exported
+// because the badge asks the same registry again from the browser.
+export function npmRegistry(): string {
+  return (process.env["REDLINE_NPM_REGISTRY"] ?? "https://registry.npmjs.org").replace(/\/+$/, "");
 }
 
 let cached: Promise<PackageState> | null = null;
@@ -66,11 +68,7 @@ async function resolve(): Promise<PackageState> {
   // build that cannot ask at all.
   const fallback = process.env["REDLINE_NPM_FALLBACK_VERSION"];
 
-  // An org publishing to a private mirror asks that mirror, not npmjs.
-  const registry = (process.env["REDLINE_NPM_REGISTRY"] ?? "https://registry.npmjs.org").replace(
-    /\/+$/,
-    "",
-  );
+  const registry = npmRegistry();
 
   // Next persists its build fetch cache between deployments and keys it on the
   // request, so the first build's answer was the only one the site ever gave:
@@ -88,18 +86,11 @@ async function resolve(): Promise<PackageState> {
       // A docs build must not hang on a slow registry, and a missed lookup
       // degrades to a visible "unknown" rather than a wrong number.
       signal: AbortSignal.timeout(8000),
-      headers: { accept: "application/vnd.npm.install-v1+json" },
     });
     if (response.status === 404) return unpublished(fallback);
     if (!response.ok) return { status: "unknown", reason: `registry returned ${response.status}` };
 
-    const body = (await response.json()) as {
-      "dist-tags"?: Record<string, string>;
-      time?: Record<string, string>;
-    };
-    const version = body["dist-tags"]?.["latest"];
-    if (!version) return unpublished(fallback);
-    return { status: "published", version, publishedAt: body.time?.[version] ?? null };
+    return latestFrom((await response.json()) as Packument) ?? unpublished(fallback);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return { status: "unknown", reason };
