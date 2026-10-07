@@ -4,7 +4,7 @@ import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 import { PackageBadge } from "@/components/package-badge";
 import { loadManifest } from "@/lib/manifest";
-import { PACKAGE_NAME, packageState, standardsVersion } from "@/lib/package-version";
+import { browserRegistry, PACKAGE_NAME, packageState, standardsVersion } from "@/lib/package-version";
 
 export const metadata: Metadata = { title: "Onboard a repository" };
 
@@ -32,9 +32,9 @@ export default async function Page() {
       </CodeWindow>
 
       <h2 id="before">Before you start</h2>
-      <PackageBadge state={state} />
+      <PackageBadge initial={state} registry={browserRegistry()} />
       <ul>
-        <li>Node.js 22 or newer on the machine running the CLI.</li>
+        <li>Node.js 18 or newer on the machine running the CLI.</li>
         <li>
           A git repository whose remote points at GitHub — including GitHub
           Enterprise Server, if the hostname contains <code>github</code> — or

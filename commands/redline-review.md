@@ -24,7 +24,7 @@ alongside them, so a React rule is never applied to a build script. Take the pro
 your instructions and review against exactly what it contains. `--staged`, `--base <ref>` and
 `--diff-file <path>` choose a different range.
 
-That command needs Node 22. Where it will not run — an older Node, no network to fetch the package,
+That command needs Node 18 or later. Where it will not run — an older Node, no network to fetch the package,
 an assistant with no shell — read the standards out of this repository instead. They are rendered
 into whichever of these files exists, between the `<!-- REDLINE:BEGIN -->` and
 `<!-- REDLINE:END -->` markers:

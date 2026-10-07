@@ -743,9 +743,9 @@ test('--gate and --repo together are refused rather than silently ignoring one',
 // that may already have written files.
 test('a Node below the floor is refused before the command runs', async () => {
   const { opts, lines } = deps(repo());
-  const code = await run(['status'], { ...opts, nodeVersion: 'v18.13.0' });
+  const code = await run(['status'], { ...opts, nodeVersion: 'v16.20.2' });
   assert.equal(code, 2);
-  assert.ok(lines.some((l) => l.includes('Node 22 or later')));
+  assert.ok(lines.some((l) => l.includes('Node 18 or later')));
   // The three ways to run one command under a newer Node without touching a
   // pin the repository set deliberately.
   assert.ok(lines.some((l) => l.includes('volta run')));
@@ -755,7 +755,7 @@ test('a Node below the floor is refused before the command runs', async () => {
 
 test('the Node refusal names the command that was actually typed', async () => {
   const { opts, lines } = deps(repo());
-  await run(['verify'], { ...opts, nodeVersion: 'v18.13.0' });
+  await run(['verify'], { ...opts, nodeVersion: 'v16.20.2' });
   assert.ok(lines.some((l) => l.includes('npx redlinegate verify')));
   assert.ok(!lines.some((l) => l.includes('npx redlinegate init')));
 });
@@ -764,8 +764,8 @@ test('the Node refusal names the command that was actually typed', async () => {
 // exact failure the guard exists to prevent.
 test('doctor is exempt from the Node guard', async () => {
   const { opts, lines } = deps(repo());
-  const code = await run(['doctor'], { ...opts, nodeVersion: 'v18.13.0' });
-  // It fails, because Node 18 is a real fault — but it fails having reported
+  const code = await run(['doctor'], { ...opts, nodeVersion: 'v16.20.2' });
+  // It fails, because Node 16 is a real fault — but it fails having reported
   // everything else it found rather than refusing at the door.
   assert.equal(code, 1);
   assert.ok(lines.some((l) => l.includes('node')));

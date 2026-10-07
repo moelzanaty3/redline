@@ -7,10 +7,18 @@
  * inside a dependency, on a repository the operator is in the middle of
  * changing, with an error that names neither Node nor Redline.
  *
- * So the number lives here, `scripts/validate.mjs` holds it to the manifest,
- * and `assertSupportedNode` turns the warning into a refusal.
+ * So the number lives here and the guard in `cli/bin/redline.ts` turns the
+ * warning into a refusal.
+ *
+ * 18, not the Node this repository builds and tests on. Onboarding runs inside
+ * whatever repository is being onboarded, and older ones are pinned to 18 on
+ * purpose; refusing them sent people off to a version manager for a CLI that
+ * never needed more. The built output uses nothing past 18 (global `fetch`,
+ * `node:util` `parseArgs` with defaults) and the test suite, compiled to
+ * JavaScript, passes on 18.13 and 20.11. Raise this only for an API that
+ * actually needs it, and re-run that check when you do.
  */
-export const REQUIRED_NODE_MAJOR = 22;
+export const REQUIRED_NODE_MAJOR = 18;
 
 export interface NodeSupport {
   readonly ok: boolean;
