@@ -85,7 +85,7 @@ export function JourneyTerminal({ lines, title }: { lines: Line[]; title: string
             type="button"
             className="jr-replay"
             onClick={play}
-            aria-label="Replay the redline init and redline verify transcript"
+            aria-label="Replay the redline init, review and verify transcript"
           >
             <span aria-hidden="true">▸</span> Replay
           </button>

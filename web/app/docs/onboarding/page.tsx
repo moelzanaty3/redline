@@ -18,17 +18,28 @@ export default async function Page() {
       intro="One command per repo. redline detects GitHub or Azure DevOps from your git remote, installs the floor, and opens a pull request — never a direct push."
       href="/docs/onboarding"
     >
-      <CodeWindow title="terminal" copyText="npx redlinegate init">
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate init</span>{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">profile</span>              web-react{"\n"}
-        <span className="tk-dim">  write  AGENTS.md</span>{"\n"}
-        <span className="tk-dim">  write  CLAUDE.md</span>{"\n"}
-        <span className="tk-dim">  write  .github/copilot-instructions.md</span>{"\n"}
-        <span className="tk-green">applied</span>     secret-scanning{"\n"}
-        <span className="tk-green">applied</span>     push-protection{"\n"}
-        <span className="tk-amber">denied</span>      dependency-alerts  needs admin{"\n"}
-        <span className="tk-amber">⚠</span> <span className="tk-dim">partially onboarded</span> — an administrator must still enable: dependency-alerts{"\n"}
-        <span className="tk-dim">pull request: https://github.com/acme/checkout-service/pull/42</span>
+      {/* Laid out as cli/ui/report.ts renders it, for a run whose token could not
+          enable one capability. With a flag, init asks nothing. */}
+      <CodeWindow title="terminal" copyText="npx redlinegate@latest init --profile web-react">
+        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate@latest init --profile web-react</span>{"\n"}
+        {"  "}profile <span className="tk-blue">web-react</span>{"\n"}
+        {"\n"}
+        {"  "}<span className="tk-bold">Files</span><span className="tk-dim">  3 written</span>{"\n"}
+        {"   "}<span className="tk-green">+</span> AGENTS.md{"\n"}
+        {"   "}<span className="tk-green">+</span> CLAUDE.md{"\n"}
+        {"   "}<span className="tk-green">+</span> .github/copilot-instructions.md{"\n"}
+        {"\n"}
+        {"  "}<span className="tk-bold">Repository settings</span><span className="tk-dim">  2 in place · 1 refused</span>{"\n"}
+        {"   "}<span className="tk-green">✓ applied    </span> <span className="tk-bold">secret-scanning  </span>  <span className="tk-dim">secret scanning</span>{"\n"}
+        {"   "}<span className="tk-green">✓ applied    </span> <span className="tk-bold">push-protection  </span>  <span className="tk-dim">secret scanning push protection</span>{"\n"}
+        {"   "}<span className="tk-red">✗ denied     </span> <span className="tk-bold">dependency-alerts</span>  <span className="tk-dim">dependabot alerts (vulnerability alerts) (needs repository admin)</span>{"\n"}
+        {"\n"}
+        {"  "}<span className="tk-bold">Pull request</span>{"\n"}
+        {"   "}<span className="tk-blue">https://github.com/acme/checkout-service/pull/42</span>{"\n"}
+        {"\n"}
+        {"  "}<span className="tk-bold">What&apos;s left</span><span className="tk-dim">  1 for an administrator</span>{"\n"}
+        {"   "}<span className="tk-red">1.</span> <span className="tk-bold">dependency-alerts</span> <span className="tk-dim">—</span> dependabot alerts (vulnerability alerts) (needs repository admin){"\n"}
+        {"      "}<span className="tk-dim">→ ask a repository administrator to grant admin on this repository, then re-run: redline init --repair</span>
       </CodeWindow>
 
       <h2 id="before">Before you start</h2>
@@ -121,7 +132,7 @@ export default async function Page() {
         <li><b><code>.redline.json</code></b> — profile, vendors, menu choices, pending-admin list, and the standards/CLI versions that produced it. This is what makes the repo visible to central telemetry — read-only, no secret is ever written to the repo.</li>
       </ul>
 
-      <h2>Menu — offered, defaulted, skippable</h2>
+      <h2 id="menu">Menu — offered, defaulted, skippable</h2>
       <div className="table-scroll">
         <table>
           <thead>

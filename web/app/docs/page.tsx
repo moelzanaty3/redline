@@ -10,9 +10,16 @@ export default function Page() {
     <DocsPage
       crumb="Introduction"
       title="Introduction"
-      intro="Redline is the standards and findings control plane for AI-assisted development. It governs the change while it is still a diff: versioned standards rendered into your repo's AI tooling, a merge-readiness gate, distribution across the estate, and telemetry that counts what was acted on."
+      intro="Redline is the review system your team doesn't have: one written standard that your AI follows while it writes, your machine checks before you push, and the pull request gate checks before merge — and it counts which rules actually catch bugs."
       href="/docs"
     >
+      <p>
+        It is not a linter — a linter checks syntax, and many of Redline&apos;s
+        rules are judgement a linter cannot express. It is not a reviewer either
+        — people and the AI tools you already use still review. Redline decides
+        what <i>reviewed</i> means, and holds every reviewer to the same
+        definition.
+      </p>
       <p>
         AI assistants write more of your code every quarter, and the review
         capacity to check it did not grow with them. The bar a team agreed on is
@@ -32,10 +39,23 @@ export default function Page() {
         Redline governs a change while it is still a diff. It does not build,
         deploy, promote or roll back anything, it has no opinion on cloud spend,
         and its data ends at merge — those are a delivery platform&apos;s job and
-        are well served. It increasingly does not even produce findings itself:
-        it governs the standard, <Link href="/docs/ingestion">normalises whoever
-        found what</Link>, and measures whether anyone acted.
+        are well served. Findings can come from Redline&apos;s own checker, your
+        AI reviewer or another tool: Redline{" "}
+        <Link href="/docs/ingestion">normalises whoever found what</Link>, and
+        measures whether anyone acted.
       </p>
+
+      <h2>Words this site uses</h2>
+      <table>
+        <tbody>
+          <tr><td><b>Standard</b></td><td>The rule set in <code>standards/</code>: core rules plus one file per stack, versioned. Every rule has a permanent id such as <code>core/unsafe-assertion</code>.</td></tr>
+          <tr><td><b>Profile</b></td><td>Which stacks apply to a repository, e.g. <code>web-react</code>. A file only meets the rules of the stacks it belongs to.</td></tr>
+          <tr><td><b>Gate</b></td><td>The <code>redline-gate / gate</code> check on every pull request. It starts advisory — it comments, it blocks nothing — until you promote it.</td></tr>
+          <tr><td><b>Deterministic check</b></td><td>A rule a checker decides without a model, so it can run in <code>redline review</code>, the pre-push hook and the gate with no false positives allowed.</td></tr>
+          <tr><td><b>Seed</b></td><td>A defect planted on purpose in the public corpus, marked with the rule that must catch it. Seeds are how a reviewer is scored.</td></tr>
+          <tr><td><b>Estate</b></td><td>Every repository an organisation has onboarded. <code>redline sync</code> and <code>redline metrics</code> work across it.</td></tr>
+        </tbody>
+      </table>
 
       <h2>The loop</h2>
       <CodeWindow title="the delivery loop">

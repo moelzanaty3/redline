@@ -3,10 +3,11 @@ import { CopyButton } from "@/components/copy-button";
 import { FindingPanel } from "@/components/finding";
 import { HeroFinding } from "@/components/hero-finding";
 import { Journey } from "@/components/journey";
-import { Choices } from "@/components/choices";
 import { Reveal } from "@/components/reveal";
 import { SEED_FILE, SEED_RULE_ID, seedDiff, seedMarkerExcerpt } from "@/components/seed-excerpt";
-import { ValueCase } from "@/components/value-case";
+import { LowEvidence } from "@/components/low-evidence";
+import { ReviewGap } from "@/components/review-gap";
+import { WhatItIs } from "@/components/what-it-is";
 import { SeverityFloor } from "@/components/value-viz";
 import { loadManifest } from "@/lib/manifest";
 import { installCommand, packageState } from "@/lib/package-version";
@@ -37,7 +38,7 @@ export default async function Home() {
   const manifest = loadManifest();
   const ruleCount = rules.length;
   const stackCount = Object.keys(manifest.stacks).length;
-  const vendorCount = Object.values(manifest.vendors).filter((v) => v.enabled).length;
+  const checkedCount = manifest.deterministic?.length ?? 0;
   const seedCount = seededFindingCount();
 
   // The finding in section 4 is a real rule at its real severity. A page that
@@ -89,17 +90,15 @@ export default async function Home() {
                 <span className="hero-mark">Redline</span> holds the line.
               </span>
             </h1>
-            {/* The outcome, not the mechanism. This used to end on "so you can
-                measure which rules are worth keeping" — a second-order benefit
-                for someone who already trusts their review process. The reason
-                anyone installs this is the first-order one: more code is
-                merging than anyone is really reading. Measurement is a real
-                claim and keeps its own panel further down the page. */}
+            {/* The definition, not a slogan. The headline above is the claim;
+                this is the one sentence a reader should be able to repeat —
+                what Redline is, where it acts, and what it measures. */}
             <p className="sub hm-hero-in" style={{ animationDelay: "140ms" }}>
-              Your team is merging more code than it is reading. Redline puts{" "}
-              <b>one versioned rule set</b> in front of every diff — checked by
-              the AI that wrote it, the reviewer, and the gate, all against the
-              same list.
+              Redline is the review system your team doesn&apos;t have:{" "}
+              <b>one written standard</b> that your AI follows while it writes,
+              your machine checks before you push, and the pull request gate
+              checks before merge — and it counts which rules actually catch
+              bugs.
             </p>
             <div className="hm-hero-cmd hm-hero-in" style={{ animationDelay: "220ms" }}>
               <code>
@@ -120,6 +119,7 @@ export default async function Home() {
                 to the section that is about the catalogue. */}
             <ul className="hero-proof hm-hero-in" style={{ animationDelay: "350ms" }}>
               <li>{ruleCount} rules with permanent ids</li>
+              <li>{checkedCount} checked without a model</li>
               <li>{stackCount} stacks</li>
               <li>GitHub &amp; Azure DevOps</li>
               <li>MIT</li>
@@ -137,13 +137,19 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ============ 2 — proof ============ */}
+      {/* ============ 2 — the problem ============ */}
+      <ReviewGap />
+
+      {/* ============ 3 — what it is, and is not ============ */}
+      <WhatItIs />
+
+      {/* ============ 4 — proof ============ */}
       <Journey initCmd={initCmd} />
 
-      {/* ============ 3 — the problem ============ */}
-      <ValueCase />
+      {/* ============ 5 — the thinking behind the rules ============ */}
+      <LowEvidence />
 
-      {/* ============ 4 — a finding ============ */}
+      {/* ============ 6 — a finding ============ */}
       <section className="hm-sec hm-finding" id="finding">
         <div className="container">
           <Reveal>
@@ -163,89 +169,32 @@ export default async function Home() {
             severity={demoRule.severity}
           />
           <SeverityFloor />
+          <p className="hm-split">
+            <b>{checkedCount} rules are decided by a checker, with no model</b> —
+            in <code>redline review</code>, the pre-push hook and the gate, where
+            a false positive is a bug. The other {ruleCount - checkedCount} are
+            judged by the AI reviewer you already use, against the same ids.{" "}
+            <Link href="/docs/deterministic">Which rules, and why →</Link>
+          </p>
           </Reveal>
         </div>
       </section>
 
-      {/* ============ 5 — where it sits ============ */}
-      <section className="hm-sec hm-flow" id="workflow">
-        <div className="container">
-          <Reveal>
-            <div className="hm-sec-head">
-              <h2 className="hm-h2">Where it sits in your day</h2>
-              <p className="hm-lead">
-                Three places, and you already stand in all three.
-              </p>
-            </div>
-            <ol className="hm-steps">
-              <li>
-                <span className="hm-step-n">01</span>
-                <h3>Write</h3>
-                <p>
-                  Your AI reads the same rules you do. <code>redline init</code>{" "}
-                  renders the standard into the {vendorCount} formats your tools
-                  already read, composed for the stacks this repository uses.
-                </p>
-              </li>
-              <li>
-                <span className="hm-step-n">02</span>
-                <h3>Review</h3>
-                <p>
-                  <code>redline review</code> checks the change on your machine
-                  against <b>only the rules that apply to the files you touched</b>{" "}
-                  — before you push. The same standard runs as the gate on the
-                  pull request.
-                </p>
-                <div className="hm-step-cmd">
-                  <span className="tk-prompt">$ </span>redline review --staged
-                </div>
-              </li>
-              <li>
-                <span className="hm-step-n">03</span>
-                <h3>Merge</h3>
-                <p>
-                  The gate reports <code>redline-gate / gate</code> on every pull
-                  request and is <b>advisory until you promote it</b>. One human
-                  approval is required either way.
-                </p>
-              </li>
-            </ol>
-            <div className="hm-local">
-              <p className="hm-local-h">
-                Point it at a local model and no code leaves your machine.
-              </p>
-              <p>
-                <code>redline review --engine api</code> speaks the
-                OpenAI-compatible dialect, so Ollama, LM Studio and vLLM all
-                work, and a local endpoint needs no key. The model returns JSON
-                against a published schema — the CLI writes the{" "}
-                <code>Redline/&lt;SEVERITY&gt; [rule-id]:</code> line itself, so a
-                model can never invent a severity or an id.{" "}
-                <Link href="/docs/local-review">
-                  How local review works →
-                </Link>
-              </p>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ============ 6 — why this is different ============ */}
+      {/* ============ 7 — why trust it ============ */}
       <section className="hm-sec hm-claims" id="different">
         <div className="container">
           <Reveal>
             <div className="hm-sec-head">
-              <h2 className="hm-h2">Why this is different</h2>
+              <h2 className="hm-h2">Why you can trust what it says</h2>
             </div>
             <div className="hm-claim">
               <div className="hm-claim-copy">
                 <h3>Every finding is countable</h3>
                 <p>
-                  Rule ids are permanent, so a comment is an aggregate row:{" "}
-                  <code>redline metrics</code> counts which rules were{" "}
-                  <b>acted on</b>, which were dismissed, and which nobody has
-                  ever fixed. A rule that only ever generates noise is named and
-                  cut on that evidence, not on argument.{" "}
+                  Every finding names a permanent rule id, so{" "}
+                  <code>redline metrics</code> can count which rules were{" "}
+                  <b>acted on</b> and which were dismissed. A rule that only
+                  makes noise is cut on that evidence, not on argument.{" "}
                   <Link href="/docs/telemetry">What gets measured →</Link>
                 </p>
               </div>
@@ -266,10 +215,9 @@ export default async function Home() {
               <div className="hm-claim-copy">
                 <h3>We publish what we&apos;re scored against</h3>
                 <p>
-                  {seedCount} defects are seeded into a corpus in the open, each
-                  marked with the severity and the rule id it must be caught at.
-                  Anyone can run a reviewer over it and check the number, and
-                  whatever has been scored against it so far is on{" "}
+                  {seedCount} defects are seeded into a public corpus, each marked
+                  with the rule that must catch it. Anyone can run a reviewer
+                  over it and check the number — results are on{" "}
                   <Link href="/scoreboard">the scoreboard</Link>.{" "}
                   <Link href="/docs/seeds">The corpus →</Link>
                 </p>
@@ -293,15 +241,11 @@ export default async function Home() {
 
             <div className="hm-claim">
               <div className="hm-claim-copy">
-                <h3>We govern the diff. Nothing after it</h3>
+                <h3>It stops at the diff</h3>
                 <p>
-                  Redline governs a change while it is still a diff. It does not
-                  build, deploy, promote or roll back anything, it has no opinion
-                  on cloud spend, and <b>its data ends at merge</b> — those are a
-                  delivery platform&apos;s job and are well served. It
-                  increasingly does not even produce findings itself: it governs
-                  the standard, normalises whoever found what, and measures
-                  whether anyone acted.{" "}
+                  Redline acts on a change while it is still a diff. It does not
+                  build, deploy or roll back anything, and <b>its data ends at
+                  merge</b>. No servers, no SaaS, no per-seat fee beyond the AI licences you already pay for.{" "}
                   <Link href="/docs">Where the line is →</Link>
                 </p>
               </div>
@@ -322,15 +266,6 @@ export default async function Home() {
           </Reveal>
         </div>
       </section>
-
-      {/* ============ 6b — the choices behind that run ============ */}
-      {/* Moved down from position 4, where it was the heaviest section on the
-          page — 1.8 screens, measured — and the one that only matters to a
-          reader who has already decided. It spent the evaluator's attention on
-          the install prompt before they had a reason to install. Here it is the
-          last thing before "try it", which is exactly the question it answers:
-          what will this ask me, and what will it change. */}
-      <Choices />
 
       {/* ============ 7 — try it ============ */}
       <section className="hm-sec hm-try" id="try">
