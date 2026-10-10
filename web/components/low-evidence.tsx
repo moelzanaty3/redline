@@ -68,11 +68,11 @@ export function LowEvidence() {
       <div className="container">
         <Reveal>
           <div className="hm-sec-head">
-            <span className="hm-eyebrow">The thinking behind the rules</span>
-            <h2 className="hm-h2">Code that looks finished is not proof that it is</h2>
+            <span className="hm-eyebrow">Anti-slop: the thinking behind the rules</span>
+            <h2 className="hm-h2">AI slop looks finished. Redline asks for proof.</h2>
             <p className="hm-lead">
-              AI writes <b>low-evidence code</b>: it compiles, it reads well, and
-              it proves nothing. 66% of developers surveyed name AI answers that are{" "}
+              AI writes <b>slop</b>: code that compiles, reads well, and proves
+              nothing. 66% of developers surveyed name AI answers that are{" "}
               <a href={SO_SURVEY} rel="noopener noreferrer" target="_blank">
                 &ldquo;almost right, but not quite&rdquo;
               </a>{" "}
