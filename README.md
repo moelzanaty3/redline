@@ -19,7 +19,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | Path | What | Where it lives in production |
 | --- | --- | --- |
 | `standards/core.md` | Core standards: security, type safety, error handling, scope, and the severity output contract | source of truth — **the only file a human edits** |
-| `standards/stacks/*.md` | Per-stack rules: javascript, typescript, react, react-native, nodejs, microservices, java, go, python, csharp, kotlin, swift, terraform, effect | source of truth |
+| `standards/stacks/*.md` | Per-stack rules: javascript, typescript, react, angular, vue, svelte, dom, react-native, nextjs, nodejs, express, microservices, java, go, python, csharp, kotlin, swift, terraform, effect | source of truth |
 | `standards/manifest.json` | Stack globs, profiles, vendor toggles, standards version | source of truth |
 | `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx redlinegate`, or `redline` once installed with `npm i -g redlinegate` |
 | `.github/pull_request_template.md` | Readiness checklist + ADR link | every onboarded repo |
@@ -39,7 +39,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | `scripts/validate.mjs` | Bundle self-check, run by this repo's CI | this repo |
 | `scripts/check-pins.mjs` | Re-resolves SHA-pinned actions against their upstream tag | this repo's CI |
 | `scripts/assign-rule-ids.mjs` | Assigns and verifies the stable `<stack>/<slug>` id on every rule | this repo |
-| `seeded/` | Recall corpus (16 stacks, 117 BLOCKER seeds) + precision corpus, scored by `scripts/score-seeds.mjs` | validation only, never merged |
+| `seeded/` | Recall corpus (20 stacks, 175 BLOCKER seeds) + precision corpus, scored by `scripts/score-seeds.mjs` | validation only, never merged |
 
 ## Language coverage vs org reality
 

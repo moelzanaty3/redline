@@ -126,7 +126,7 @@ export default function Page() {
 
       <h2>The seeded corpus</h2>
       <p>
-        <code>seeded/</code> holds 117 BLOCKER and 52 HIGH seeds across all 16
+        <code>seeded/</code> holds 175 BLOCKER and 154 HIGH seeds across all 20
         stacks, each marker citing the rule it violates — plus{" "}
         <code>seeded/clean/</code>, correct code that must produce{" "}
         <b>zero</b> findings. Recall alone is not enough: a reviewer that flags

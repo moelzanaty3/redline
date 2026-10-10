@@ -29,7 +29,9 @@ belongs. Do not flag `unknown` there, or on an error's `cause`.
   The name hides the top type, so readers and reviewers treat it as a contract it is not.
 - `typescript/open-dictionary-value` — An open dictionary whose value type is `unknown`, `any`, `object` or `{}`
   (`Record<string, unknown>`, `{ [key: string]: unknown }`). Every read needs an unchecked assertion. Not when it is a
-  generic constraint (`T extends Record<string, unknown>`) or a finite key set (`Record<Status, number>`).
+  generic constraint (`T extends Record<string, unknown>`), a finite key set (`Record<Status, number>`), the subject
+  of a type predicate or parser at the boundary (`value is Record<string, unknown>`), or a bag a specification
+  defines as open (SARIF `properties`, GraphQL `variables`).
 - `typescript/object-parameter` — A parameter typed `object`. It accepts arrays, functions and class instances, and
   allows no property access without an assertion. Accept a named type, or a generic `<T extends object>`.
 - `typescript/known-value-widening` — A literal or known-typed value assigned to an annotation that discards what is

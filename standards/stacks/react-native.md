@@ -21,6 +21,17 @@ All React rules apply. Additionally:
 - `react-native/measure-over-onlayout` — `measure()` calls where `onLayout` suffices.
 - `react-native/native-dep-in-shared-package` — Native dependencies added to shared monorepo packages instead of the app package.
 - `react-native/reanimated-shared-value-misuse` — Reanimated shared values read during render or mutated outside worklets/handlers.
+- `react-native/deep-import` — **An import from `react-native/Libraries/…` or another private deep path.** These
+  modules have no stability contract and move across upgrades, so the bundle stops resolving on every platform.
+  Import the public symbol from `'react-native'`. Not the documented secondary entry points
+  (`react-native/asset-registry`, `setup-env`) or jest preset paths.
+- `react-native/cached-window-dimensions` — **`Dimensions.get(...)` captured at module scope or in
+  `StyleSheet.create`.** It is read once at import, so after rotation, split-screen or unfolding the layout uses
+  the old size. Use `useWindowDimensions()` in the component.
+- `react-native/unguarded-platform-api` — **An iOS-only or Android-only API in a shared file without a
+  `.ios`/`.android` split or `Platform.OS` guard** — `ToastAndroid`, `ActionSheetIOS`, `*IOS`/`*Android`
+  components. On the other platform it is undefined or a no-op, so it crashes or silently does nothing. Split
+  the file or guard the call.
 
 ## SUGGESTION
 

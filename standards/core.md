@@ -82,7 +82,7 @@ Stop at the first three unless the diff is clean there.
   where a concrete or generic type works.
 - `core/type-checker-suppression` — No type-checker or linter suppression without an inline comment AND a ticket reference.
   Recognised in whichever dialect the stack uses: `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`,
-  `# type: ignore`, `# noqa`, `# pylint: disable`, `@SuppressWarnings("unchecked")`, `@Suppress("UNCHECKED_CAST")`,
+  `# type: ignore`, `# pyright: ignore`, `# noqa`, `# pylint: disable`, `@SuppressWarnings("unchecked")`, `@Suppress("UNCHECKED_CAST")`,
   `// swiftlint:disable`, `//nolint`, `#pragma warning disable`.
 - `core/unsafe-assertion` — No unsafe assertions (`as unknown as X`, force casts) used to silence an error. Where one
   is genuinely required, the justification is a `SAFETY:` comment on the same line or the line above, stating why

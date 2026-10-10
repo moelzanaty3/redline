@@ -7,7 +7,7 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
-### Standards 0.2.0 — the anti-slop rules, held to Redline's own bar
+### Standards 0.2.1 — anti-slop for every stack, held to Redline's own bar
 
 [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop) is a set of Oxlint rules against
 low-evidence TypeScript. Its 23 rules were ported as Redline rules: each one has a stable id,
@@ -34,9 +34,13 @@ single line can decide it. Two were not ported (see below).
   a Nest service on Effect proposes `service-node,lib-effect`. Rules: `manual-error-tag-in-catch`,
   `manual-tagged-construction`, `service-constructor-import` (HIGH), `manual-tag-comparison` and
   `prefer-match` (SUGGESTION).
-- **Seven more rules run without a model**, and `core/unsafe-assertion` joins them for TypeScript
-  double assertions only. The new checks are `typescript/module-mocking`, `unknown-return`,
-  `unknown-type-alias`, `open-dictionary-value`, `object-parameter` and `reflect-dynamic-access`.
+- **Six more TypeScript rules run without a model**, and `core/unsafe-assertion` joins them for
+  TypeScript double assertions only. The new checks are `typescript/module-mocking`, `unknown-return`,
+  `unknown-type-alias`, `object-parameter` and `reflect-dynamic-access`. `open-dictionary-value` was
+  checked deterministically at first and moved back to the model: run over Redline's own source, it
+  flagged 29 lines, most of them type predicates (`value is Record<string, unknown>`) and bags that a
+  specification defines as open (SARIF `properties`, GraphQL `variables`). Whether a dictionary sits
+  at a boundary is judgement, and the rule text now names those exceptions.
   Each matches only the direct spelling on one added line; aliases, multi-line signatures and values
   threaded through variables stay with the model. A double assertion whose line above is unchanged
   context is not reported, because the diff cannot show a `SAFETY:` comment there. The Effect rules
@@ -51,6 +55,40 @@ single line can decide it. Two were not ported (see below).
 
 Seed score: not yet measured. Run `scripts/score-seeds.mjs` against `seeded/typescript/`,
 `seeded/effect/` and `seeded/nodejs/` before release.
+
+#### The same treatment for the other 18 stacks
+
+Each stack's established community linter was read rule by rule: ruff and mypy, golangci-lint and
+staticcheck, Error Prone, SpotBugs and PMD, detekt, the .NET analyzers and Meziantou, SwiftLint, the
+React, Vue, Angular and Svelte ESLint plugins, eslint-plugin-unicorn, tflint. A rule was ported only
+when it names a concrete failure that no existing Redline rule covers. Most linter rules did not
+make it, because they are style, already covered, or a security scanner's job. 102 new rules:
+
+| Stack | New | Examples |
+| --- | --- | --- |
+| python | 9 | `datetime.now()` as a default, `return` in `finally`, loop-variable closures, `zip` without `strict=`, `pytest.raises(Exception)`, patching by import path |
+| go | 10 | error checked then returned as `nil`, typed nil in an interface, `sql.Rows` lifecycle, `%v` instead of `%w`, `t.Fatal` in a goroutine |
+| java | 8 | `==` on strings, `new BigDecimal(0.1)`, swallowed interrupts, unclosed resources, tests that cannot fail |
+| kotlin | 8 | `TODO()` stubs, read-only collections cast to `Mutable*`, `else` on an exhaustive `when`, suspending `finally` |
+| csharp | 9 | a task returned from inside `using`, `System.Random` for secrets, `throw ex;`, culture-implicit parsing, EF in-memory test doubles |
+| swift | 5 | `@unchecked Sendable` without a reason, `[unowned self]`, strong delegates, implicitly unwrapped declarations, copying `reduce` |
+| terraform | 9 | authoritative IAM resources, `== []`, `ignore_changes = all`, inline plus standalone security-group rules, providers in child modules |
+| react / react-native / nextjs | 8 / 3 / 4 | setters called during render, `javascript:` URLs, async effects, random keys; private deep imports; async client components, caught `redirect()` |
+| vue / angular / svelte / dom | 7 / 8 / 8 / 6 | refs used without `.value`, uncalled signals, async lifecycle hooks, async store start functions, `{{ x }}` in Svelte, fresh-function `removeEventListener` |
+
+- **43 of them are also checked without a model**, so `redline policy`, the pre-push hook and the CI
+  gate report them. As before, each checks only the direct single-line spelling and only in its own
+  file types, and test sources are exempt where a stub or a generic exception is the point. Every
+  check is tested against lines it must flag and near-misses it must not. Run over every new seed
+  file, all 43 fire. Run over `seeded/clean/`, none do. That pass caught a real defect: the
+  `throw ex;` pattern only matched at column 0, so it missed the usual indented form.
+- **`core/type-checker-suppression` recognises `# pyright: ignore`**, which it could never fire on.
+- **Seeds.** A new `anti-slop` seed file in every touched stack, with one marker per new rule.
+  The corpus is now 175 BLOCKER and 154 HIGH seeds across 20 stacks. The docs said 117 and 16,
+  which was already out of date before this change.
+
+Seed score: not yet measured. Run `scripts/score-seeds.mjs` against the touched corpora before
+release.
 
 ### CLI — runs on Node 18.11 and later, not only 22
 

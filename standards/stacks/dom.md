@@ -51,6 +51,25 @@ attack surface.
 - `dom/document-wide-query-in-loop` — `document.querySelectorAll` (or `getElementById`) re-run per iteration or per event. Hoist the lookup; the DOM is not a cache.
 - `dom/scroll-resize-unthrottled` — `scroll`, `resize`, `mousemove` or `pointermove` handlers doing layout or network work with no throttle and no `{ passive: true }` — this is jank you can measure.
 - `dom/form-submit-not-prevented` — An `submit`/`click` handler doing async work without `preventDefault`, or preventing it without ever re-enabling the control — double submits or a permanently dead button.
+- `dom/remove-listener-fresh-function` — **`removeEventListener` given an inline arrow, `function` expression or
+  fresh `.bind()` result.** That function was never added, so nothing is removed and the listener keeps firing
+  against torn-down state. Keep the bound reference in a field, or pass `{ signal }` from an `AbortController`.
+- `dom/on-property-clobbers-handler` — **`window.onload =`, `document.onkeydown =` or another `on*` property
+  assigned on a global target.** Assignment replaces the host page's or another script's handler — an embed
+  setting `window.onerror` disables the page's error tracking. Use `addEventListener`.
+- `dom/fetch-get-with-body` — **`fetch()` / `new Request()` with a `body` and no method, or with `GET`/`HEAD`.**
+  fetch throws a `TypeError` before sending, so the search never returns. Set the method the endpoint expects,
+  or move the data into the query string.
+- `dom/implicit-window-global` — **An undeclared `event`, `name`, `status`, `length`, `top`, `parent`, `open` or
+  `close` that resolves to a `window` property.** It runs without error and reads the wrong thing — `name` is
+  `window.name`, which the referring page controls. Declare the parameter or local; write `window.x` when the
+  global is meant.
+- `dom/unchecked-query-result` — **A `querySelector` / `getElementById` result dereferenced with no null
+  check.** A shared script on a page without that element throws on load and every later handler in the file
+  stops running. Check and return early, or scope the script to its page.
+- `dom/document-cookie-string` — **`document.cookie` assigned a string built from a variable.** An unencoded `;`
+  truncates the cookie or injects attributes (`; Max-Age=0`), and hand-built strings drop `Secure`/`SameSite`.
+  Use `cookieStore.set({…})` or a maintained library, and `encodeURIComponent` the value.
 
 ## SUGGESTION
 

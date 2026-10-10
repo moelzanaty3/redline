@@ -123,6 +123,7 @@ const SUPPRESSIONS: RegExp[] = [
   /@ts-nocheck/, // TypeScript, whole file
   /eslint-disable/, // ESLint
   /#\s*type:\s*ignore/, // mypy
+  /#\s*pyright:\s*ignore/, // pyright
   /#\s*noqa/, // flake8, ruff
   /#\s*pylint:\s*disable/, // pylint
   /@SuppressWarnings/, // Java
@@ -263,7 +264,7 @@ const patternCheck =
     files: RegExp,
     pattern: RegExp,
     problem: string,
-    exempt?: RegExp
+    { exempt, severity = 'HIGH' }: { exempt?: RegExp; severity?: Severity } = {}
   ): DeterministicCheck =>
   ({ added }) =>
     added
@@ -274,7 +275,7 @@ const patternCheck =
           pattern.test(l.text) &&
           !exempt?.test(l.text)
       )
-      .map((l) => finding(l, ruleId, 'HIGH', problem));
+      .map((l) => finding(l, ruleId, severity, problem));
 
 // `typescript/unknown-return` — a function declared to return `unknown`.
 // Only a declaration's own annotation, `): unknown` — not a callback type such
@@ -296,16 +297,10 @@ const unknownTypeAlias = patternCheck(
     '`unknown` visible at the boundary that parses it.'
 );
 
-// `typescript/open-dictionary-value` — `Record<string, unknown>` and the index
-// signature spelling. A generic constraint is exempt: `T extends Record<string,
-// unknown>` constrains a caller's type, it does not erase one.
-const openDictionaryValue = patternCheck(
-  'typescript/open-dictionary-value',
-  TS_ONLY,
-  /(?<!\bextends\s+)\bRecord<\s*(?:string|PropertyKey)\s*,\s*(?:unknown|any|object|\{\s*\})\s*>|\[\s*\w+\s*:\s*string\s*\]\s*:\s*(?:unknown|any|object)\b/,
-  'an open dictionary of `unknown`/`any`/`object` makes every read an unchecked assertion. Give the ' +
-    'values a type, or parse the payload into one before it is stored.'
-);
+// `typescript/open-dictionary-value` is deliberately NOT here. A type predicate
+// (`value is Record<string, unknown>`) is the boundary parser itself, and SARIF
+// `properties` or GraphQL `variables` are open by specification — whether a
+// dictionary sits at a boundary is judgement, so the model keeps the rule.
 
 // `typescript/object-parameter` — a parameter annotated `object`.
 const objectParameter = patternCheck(
@@ -336,6 +331,396 @@ const moduleMocking = patternCheck(
     'or its wiring breaks. Inject the dependency and pass a faithful test implementation.'
 );
 
+// --- The anti-slop rules for the other stacks -------------------------------
+//
+// Each pattern comes from the community linter that owns the rule (ruff,
+// Error Prone, detekt, SwiftLint, the .NET analyzers, golangci-lint, tflint)
+// and was tested against lines it must flag and near-misses it must not. As
+// above: the direct single-line spelling only; the model sees the whole rule.
+
+const PY = /\.pyi?$/;
+const PY_SOURCE = /\.py$/;
+const JAVA = /\.java$/;
+const KOTLIN = /\.kts?$/;
+const SWIFT = /\.swift$/;
+const CSHARP = /\.cs$/;
+const GO = /\.go$/;
+const HCL = /\.(tf|hcl)$/;
+
+// Source files outside test code, where a stub, a fixture or a deliberately
+// generic exception is the point rather than the defect.
+const nonTest = (ext: string): RegExp =>
+  new RegExp(
+    String.raw`^(?!.*(?:^|/)(?:tests?|androidTest|testFixtures|[^/]*\.tests?)/)(?!.*(?:Tests?|_test)\.\w+$).*\.(?:${ext})$`,
+    'i'
+  );
+
+const python: Record<string, DeterministicCheck> = {
+  'python/blanket-suppression': patternCheck(
+    'python/blanket-suppression',
+    PY,
+    /#\s*(?:type|pyright):\s*ignore(?!\s*\[)|#\s*noqa(?!\s*:\s*[A-Z]+\d)/i,
+    'a suppression with no error code silences every error on the line, including ones added later. ' +
+      'Name the code: `# type: ignore[import-untyped]`, `# noqa: F401`.'
+  ),
+  'python/broad-exception-assertion': patternCheck(
+    'python/broad-exception-assertion',
+    PY_SOURCE,
+    /\b(?:pytest\s*\.\s*raises|assertRaises)\s*\(\s*(?:builtins\.)?(?:Base)?Exception\s*[,)]/,
+    'this passes on any error, a typo included, so it proves nothing. Assert the specific exception ' +
+      'type, or add a `match=`.',
+    { exempt: /\bmatch\s*=\s*[rbuf]*(?:"[^"]+"|'[^']+')/ }
+  ),
+  'python/module-patching': patternCheck(
+    'python/module-patching',
+    PY_SOURCE,
+    /(?:(?:^|[^\w.])(?:mock\s*\.\s*)?patch|\bmocker\s*\.\s*patch|\bmonkeypatch\s*\.\s*setattr)\s*\(\s*[rf]?["']\w+(?:\.\w+)+["']/,
+    'patching by import path keeps this test green when the real wiring breaks. Inject the ' +
+      'dependency and pass a faithful test implementation.'
+  ),
+  'python/quadratic-accumulation': patternCheck(
+    'python/quadratic-accumulation',
+    PY,
+    /\bsum\s*\((?:[^()]|\([^()]*\))*,\s*(?:start\s*=\s*)?(?:\[\s*\]|\(\s*\)|list\(\s*\))\s*\)/,
+    '`sum(..., [])` copies the accumulated list at every step, so it is quadratic. Use ' +
+      '`itertools.chain.from_iterable` or a comprehension.'
+  ),
+};
+
+const java: Record<string, DeterministicCheck> = {
+  // The string-literal form only: the boxed-number form needs types.
+  'java/reference-equality': patternCheck(
+    'java/reference-equality',
+    JAVA,
+    /^(?:[^"'\\]|\\.|'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")*?(?:[\w)\]]\s*[!=]=\s*"|"(?:[^"\\]|\\.)*"\s*[!=]=\s*[\w(])/,
+    '`==` on a String compares identity, so it passes on interned literals and fails on a value read ' +
+      'at runtime. Use `equals` / `Objects.equals`.',
+    { exempt: /"""/, severity: 'BLOCKER' }
+  ),
+  'java/bigdecimal-value-semantics': patternCheck(
+    'java/bigdecimal-value-semantics',
+    JAVA,
+    /\bnew\s+BigDecimal\s*\(\s*[-+]?(?:\d+\.\d*|\.\d+|\d+(?:\.\d*)?[eE][-+]?\d+|\d+[dDfF])[dDfF]?\s*[,)]/,
+    '`new BigDecimal(double)` captures binary rounding error into the amount. Use ' +
+      '`new BigDecimal("0.1")` or `BigDecimal.valueOf(d)`.',
+    { severity: 'BLOCKER' }
+  ),
+  'java/dropped-exception-cause': patternCheck(
+    'java/dropped-exception-cause',
+    JAVA,
+    /\bthrow\s+new\s+[\w.]+\(\s*(?:"[^"]*"\s*\+\s*)?\w+\.get(?:Localized)?Message\(\)\s*\)/,
+    'only the message survives, so the original type and stack trace are lost. Pass the caught ' +
+      'exception as the cause: `throw new X("context", e)`.'
+  ),
+  'java/print-stack-trace': patternCheck(
+    'java/print-stack-trace',
+    JAVA,
+    /\.printStackTrace\s*\(\s*\)/,
+    '`printStackTrace()` writes to stderr, outside logging and alerting. Log it with context, then ' +
+      'rethrow or fail the operation.'
+  ),
+  // String methods only: BigDecimal and java.time names collide with mutators
+  // such as `list.add`, so those stay with the model.
+  'java/ignored-pure-result': patternCheck(
+    'java/ignored-pure-result',
+    JAVA,
+    /^\s*[A-Za-z_]\w*(?:\.\w+(?:\(\))?)*\.(?:trim|strip|toUpperCase|toLowerCase|concat)\([^;]*\)\s*;\s*$/,
+    'Strings are immutable, so this call does nothing and the unchanged value is used. Assign or ' +
+      'return the result.'
+  ),
+};
+
+const kotlin: Record<string, DeterministicCheck> = {
+  'kotlin/todo-stub': patternCheck(
+    'kotlin/todo-stub',
+    nonTest('kts?'),
+    /(?<![\w.])TODO\s*\(/,
+    '`TODO()` throws `NotImplementedError`, which `catch (e: Exception)` does not stop, so the first ' +
+      'call crashes. Implement it, or throw `UnsupportedOperationException("why")`.',
+    { severity: 'BLOCKER' }
+  ),
+  'kotlin/dropped-exception-cause': patternCheck(
+    'kotlin/dropped-exception-cause',
+    KOTLIN,
+    /\bthrow\s+[\w.]+\(\s*(?:"[^"]*"\s*\+\s*)?\w+\.(?:message|localizedMessage)\s*(?:\?:\s*"[^"]*"\s*)?\)/,
+    'only the message survives, so the original type and stack trace are lost. Pass the cause: ' +
+      '`throw X("context", e)`.'
+  ),
+  'kotlin/downcast-readonly-collection': patternCheck(
+    'kotlin/downcast-readonly-collection',
+    KOTLIN,
+    /\bas\??\s+Mutable(?:List|Set|Map|Collection|Iterable)\b/,
+    'casting a read-only collection to `Mutable*` throws on `listOf`/`emptyList`, or mutates state ' +
+      'the caller thinks is immutable. Copy with `toMutableList()`.'
+  ),
+  'kotlin/print-stack-trace': patternCheck(
+    'kotlin/print-stack-trace',
+    KOTLIN,
+    /\.printStackTrace\s*\(\s*\)/,
+    '`printStackTrace()` bypasses the logger and crash reporting. Log it with context, then rethrow ' +
+      'or surface the failure.'
+  ),
+};
+
+const swift: Record<string, DeterministicCheck> = {
+  // The justification often sits in a doc comment above, which a single line
+  // cannot see — so this is HIGH, and a ticket on the line is accepted.
+  'swift/concurrency-checking-opt-out': patternCheck(
+    'swift/concurrency-checking-opt-out',
+    SWIFT,
+    /@unchecked\s+Sendable\b|\bnonisolated\(unsafe\)|^\s*@preconcurrency\s+import\b/,
+    'this switches off data-race checking. Name the lock, queue or invariant that makes it safe, ' +
+      'inline, with a ticket.',
+    { exempt: /\/\/.*\b(?:[A-Z][A-Z0-9]+-\d+|#\d+)\b/ }
+  ),
+  'swift/unowned-capture': patternCheck(
+    'swift/unowned-capture',
+    SWIFT,
+    /\{\s*\[[^\]"]*\bunowned\b[^\]"]*\]/,
+    '`unowned` crashes if the closure outlives its owner. Capture `[weak self]` and ' +
+      '`guard let self else { return }`.',
+    { exempt: /\blazy\s+var\b/ }
+  ),
+  'swift/implicitly-unwrapped-declaration': patternCheck(
+    'swift/implicitly-unwrapped-declaration',
+    nonTest('swift'),
+    /\b(?:var|let)\s+[A-Za-z_]\w*\s*:\s*[A-Za-z_][\w.]*(?:<[^<>]*>)?!(?!=)/,
+    'an implicitly unwrapped optional force-unwraps on every read, far from where it was left nil. ' +
+      'Inject a non-optional through `init`, or handle a real optional.',
+    { exempt: /@IBOutlet/ }
+  ),
+  'swift/copying-reduce-accumulator': patternCheck(
+    'swift/copying-reduce-accumulator',
+    SWIFT,
+    /\breduce\(\s*(?:""|\[\]|\[:\]|\[[\w.]+(?:\s*:\s*[\w.]+)?\]\(\)|(?:Array|Set|Dictionary|String)(?:<[^<>]*>)?(?:\.init)?\(\))\s*[,)]/,
+    '`reduce` with a collection or string accumulator copies it for every element, so it is ' +
+      'quadratic. Use `reduce(into:)`, `flatMap` or `joined()`.'
+  ),
+};
+
+const csharp: Record<string, DeterministicCheck> = {
+  'csharp/rethrow-loses-stack': patternCheck(
+    'csharp/rethrow-loses-stack',
+    CSHARP,
+    /(?:^\s*|[;{]\s*)throw\s+(?:ex|e|exc|exception)\s*;/,
+    '`throw ex;` restarts the stack trace here, so the frames back to the fault are lost. Use `throw;`.'
+  ),
+  'csharp/reserved-exception-type': patternCheck(
+    'csharp/reserved-exception-type',
+    nonTest('cs'),
+    /\bthrow\s+new\s+(?:global::)?(?:System\.)?(?:Exception|ApplicationException|SystemException|NullReferenceException|IndexOutOfRangeException|AccessViolationException|OutOfMemoryException|StackOverflowException|ExecutionEngineException)\s*\(/,
+    'a caller can only handle this with `catch (Exception)`, which also swallows real bugs. Throw a ' +
+      'specific framework or domain exception.'
+  ),
+  // Single-argument Parse closed on the line; formatting and nested calls stay
+  // with the model.
+  'csharp/culture-implicit-parse-format': patternCheck(
+    'csharp/culture-implicit-parse-format',
+    CSHARP,
+    /\b(?:double|float|decimal|Double|Single|Decimal|DateTime|DateTimeOffset)\.Parse\(\s*[^,()]+\)/,
+    "this parses with the server's culture: on a de-DE host \"1.50\" is 150. Pass " +
+      '`CultureInfo.InvariantCulture` for machine-readable values.'
+  ),
+  'csharp/ef-inmemory-test-double': patternCheck(
+    'csharp/ef-inmemory-test-double',
+    CSHARP,
+    /\.UseInMemoryDatabase\s*[<(]/,
+    'the in-memory provider has no transactions, constraints or SQL translation, so tests pass on ' +
+      'queries that fail in production. Test against the real provider.'
+  ),
+};
+
+const go: Record<string, DeterministicCheck> = {
+  // Only when the wrapped value is named `err`, and a comment saying the error
+  // is deliberately opaque exempts the line.
+  'go/error-wrap-verb': patternCheck(
+    'go/error-wrap-verb',
+    GO,
+    /\bfmt\.Errorf\(\s*"(?:(?!%w)[^"\\]|\\.)*%[+#]?[vs](?:(?!%w)[^"\\]|\\.)*"\s*,(?:[^;]*,)?\s*err\s*\)/,
+    '`%v` flattens the error to text, so `errors.Is`/`errors.As` upstream stop matching. Wrap with `%w`.',
+    { exempt: /\/\/.*\b(?:nolint:errorlint|opaque)\b/ }
+  ),
+  // The package-level function always builds a server with no timeouts.
+  'go/missing-client-server-timeout': patternCheck(
+    'go/missing-client-server-timeout',
+    nonTest('go'),
+    /\bhttp\.ListenAndServe(?:TLS)?\(/,
+    '`http.ListenAndServe` runs a server with no read or write timeouts, so slow clients hold ' +
+      'connections forever. Build an `http.Server` with `ReadHeaderTimeout` and friends.'
+  ),
+};
+
+const terraform: Record<string, DeterministicCheck> = {
+  'terraform/empty-list-equality': patternCheck(
+    'terraform/empty-list-equality',
+    HCL,
+    /(?:[!=]=\s*\[\s*\](?![\w.[])|\[\s*\]\s*[!=]=)/,
+    '`== []` is always false in Terraform (`[]` is an empty tuple), so this condition never changes. ' +
+      'Use `length(x) == 0`.'
+  ),
+  'terraform/ignore-changes-all': patternCheck(
+    'terraform/ignore-changes-all',
+    HCL,
+    /^\s*ignore_changes\s*=\s*all\b/,
+    'Terraform will never apply another change to this resource. List only the attributes something ' +
+      'outside Terraform owns, with a comment naming it.'
+  ),
+};
+
+const JSX = /\.(jsx|tsx)$/;
+const JS_TS = /\.(jsx?|tsx?|mjs|cjs|mts|cts)$/;
+
+const react: Record<string, DeterministicCheck> = {
+  // The handler-prop form only; an unconditional call in the body needs scope.
+  'react/set-state-in-render': patternCheck(
+    'react/set-state-in-render',
+    JSX,
+    /\bon[A-Z]\w*\s*=\s*\{\s*set[A-Z]\w*\s*\(/,
+    'the setter runs during render instead of on the event, so this loops until React throws "Too many ' +
+      're-renders". Pass a function: `onClick={() => setOpen(true)}`.',
+    { severity: 'BLOCKER' }
+  ),
+  // The literal form only; a user-supplied URL needs the model.
+  'react/javascript-url': patternCheck(
+    'react/javascript-url',
+    JSX,
+    /\b(?:href|src|action|formAction|to)\s*=\s*\{?\s*["'`]\s*javascript:/i,
+    'React 19 blocks `javascript:` URLs and this throws on click; earlier versions execute it. Use a ' +
+      '`<button type="button" onClick>` for actions.',
+    { severity: 'BLOCKER' }
+  ),
+  'react/async-effect-callback': patternCheck(
+    'react/async-effect-callback',
+    JS_TS,
+    /\b(?:React\.)?use(?:Layout|Insertion)?Effect\s*\(\s*async\b/,
+    'an async effect returns a Promise where React expects a cleanup, so a slow response can land ' +
+      'after newer ones. Declare the async function inside and return a cleanup.'
+  ),
+  // The random-`key` form only.
+  'react/impure-render': patternCheck(
+    'react/impure-render',
+    JSX,
+    /\bkey\s*=\s*\{\s*(?:Math\.random\s*\(|Date\.now\s*\(|crypto\.randomUUID\s*\(|(?:uuid\.)?(?:uuid|uuidv4|nanoid|v4)\s*\(|performance\.now\s*\(|new Date\s*\()/,
+    'a key that changes every render remounts the element each time, dropping focus and local ' +
+      'state. Key on a stable id from the data.'
+  ),
+};
+
+const reactNative: Record<string, DeterministicCheck> = {
+  'react-native/deep-import': patternCheck(
+    'react-native/deep-import',
+    JS_TS,
+    /(?:\bfrom\s+|\brequire\s*\(\s*|\bimport\s*\(\s*|^\s*import\s+)['"]react-native\/(?!(?:asset-registry|react-private-interface|setup-env|unstable-internals-do-not-use|package\.json)['"]|jest\/)/,
+    "a private React Native path with no stability contract; an upgrade moves it and the bundle " +
+      "stops resolving. Import the public symbol from 'react-native'.",
+    { exempt: /\bjest\s*\.\s*(?:mock|requireActual)\s*\(/ }
+  ),
+  // Column-0 declarations only, which are module scope by construction.
+  'react-native/cached-window-dimensions': patternCheck(
+    'react-native/cached-window-dimensions',
+    JS_TS,
+    /^(?:export\s+)?(?:const|let|var)\b.*\bDimensions\s*\.\s*get\s*\(/,
+    'read once at import, so the layout keeps the old size after rotation or unfolding. Use ' +
+      '`useWindowDimensions()` in the component.'
+  ),
+};
+
+const vue: Record<string, DeterministicCheck> = {
+  // `.vue` only: Angular also has a `computed()`.
+  'vue/async-computed': patternCheck(
+    'vue/async-computed',
+    /\.vue$/,
+    /(?<![\w$.])computed\(\s*async\b/,
+    'an async computed holds the Promise, which is always truthy and never re-resolves. Use ' +
+      '`computedAsync`, or a ref filled by a watcher.'
+  ),
+  'vue/shared-mutable-default': patternCheck(
+    'vue/shared-mutable-default',
+    /\.vue$/,
+    /^\s*default\s*:\s*(\[[^\]]*\]|\{[^{}]*\})\s*,?\s*$/,
+    'one literal default is shared by every instance of the component. Use a factory: ' +
+      '`default: () => []`.'
+  ),
+};
+
+const angular: Record<string, DeterministicCheck> = {
+  'angular/async-lifecycle-hook': patternCheck(
+    'angular/async-lifecycle-hook',
+    /\.ts$/,
+    /\basync\s+ng(?:OnInit|OnChanges|DoCheck|AfterContentInit|AfterContentChecked|AfterViewInit|AfterViewChecked|OnDestroy)\s*\(/,
+    'Angular never awaits a lifecycle hook, so the template renders the unloaded state and a ' +
+      'rejection floats. Use the async pipe, a resolver or `resource()`.'
+  ),
+  'angular/output-native-event-name': patternCheck(
+    'angular/output-native-event-name',
+    /\.ts$/,
+    /@Output\(\s*['"](?:click|dblclick|change|input|submit|keydown|keyup|keypress|mousedown|mouseup|pointerdown|pointerup|select|reset|paste|copy|cut|contextmenu|drop|wheel)['"]\s*\)|@Output\(\s*\)\s*(?:(?:public|readonly)\s+)*(?:click|dblclick|change|input|submit|keydown|keyup|keypress|mousedown|mouseup|pointerdown|pointerup|select|reset|paste|copy|cut|contextmenu|drop|wheel)\b(?!\$)|(?<![\w$.])(?:click|dblclick|change|input|submit|keydown|keyup|keypress|mousedown|mouseup|pointerdown|pointerup|select|reset|paste|copy|cut|contextmenu|drop|wheel)\s*=\s*output(?:<[^>]*>)?\(/,
+    'an output named after a bubbling DOM event fires the parent handler twice, once with a native ' +
+      '`Event`. Name it for the domain event: `valueChange`.'
+  ),
+  'angular/banana-out-of-box': patternCheck(
+    'angular/banana-out-of-box',
+    /\.(html|ts)$/,
+    /\(\[[\w.$-]+\]\)\s*=(?![>=])/,
+    '`([x])` is parsed as an event binding, so the field never syncs. Two-way binding is `[(x)]`.'
+  ),
+  'angular/manual-lifecycle-call': patternCheck(
+    'angular/manual-lifecycle-call',
+    /^(?!.*\.(spec|test)\.ts$).*\.ts$/,
+    /\bthis\.ng(?:OnInit|OnChanges|DoCheck|AfterContentInit|AfterContentChecked|AfterViewInit|AfterViewChecked|OnDestroy)\s*\(/,
+    'calling a hook by hand re-runs every subscription it sets up. Extract the shared work into a ' +
+      'method.'
+  ),
+  'angular/impure-pipe': patternCheck(
+    'angular/impure-pipe',
+    /\.pipe\.ts$/,
+    /\bpure\s*:\s*false\b/,
+    'an impure pipe re-runs on every change-detection cycle for every binding. Use a pure pipe ' +
+      'over immutable inputs, or a `computed` signal.'
+  ),
+};
+
+const svelte: Record<string, DeterministicCheck> = {
+  'svelte/async-store-start': patternCheck(
+    'svelte/async-store-start',
+    /\.svelte(\.[jt]s)?$|(^|\/)stores?(\.[jt]s$|\/.*\.[jt]s$)/,
+    /(?<![\w$.])(?:readable|writable|derived)\((?:[^()]|\([^()]*\))*,\s*async\b/,
+    'Svelte calls the start function\'s return value to stop the store; a Promise is not callable, ' +
+      'so the last unsubscribe throws. Do the async work inside and `set` on resolve.',
+    { severity: 'BLOCKER' }
+  ),
+  'svelte/load-in-page-component': patternCheck(
+    'svelte/load-in-page-component',
+    /\+(page|layout)\.svelte$/,
+    /\bexport\s+(?:async\s+)?(?:function\s+(?:load|preload)\b|(?:const|let)\s+(?:load|preload)\b)/,
+    'SvelteKit never calls `load` from a `.svelte` file, so `data` is undefined. Move it to ' +
+      '`+page.js` or `+page.server.js`.'
+  ),
+  'svelte/double-brace-mustache': patternCheck(
+    'svelte/double-brace-mustache',
+    /\.svelte$/,
+    /(?<![=\w$])\{\{\s*[\w$.]+(?:\(\))?\s*\}\}/,
+    'Svelte reads `{{ x }}` as an object literal and renders `[object Object]`. Use `{x}`.',
+    { exempt: /(['"`])[^'"`]*\{\{[^'"`]*\1/ }
+  ),
+};
+
+const dom: Record<string, DeterministicCheck> = {
+  'dom/remove-listener-fresh-function': patternCheck(
+    'dom/remove-listener-fresh-function',
+    /\.(m|c)?[jt]sx?$|\.(vue|svelte)$/,
+    /\.removeEventListener\(\s*[^,]+,\s*(?:(?:async\s+)?(?:\([^)]*\)|[\w$]+)\s*=>|(?:async\s+)?function\b|[\w$.]+\.bind\()/,
+    'this is a new function, never the one that was added, so nothing is removed. Keep the ' +
+      'reference, or pass `{ signal }` from an `AbortController`.'
+  ),
+  'dom/on-property-clobbers-handler': patternCheck(
+    'dom/on-property-clobbers-handler',
+    /\.(m|c)?[jt]sx?$|\.html$/,
+    /(?<![\w$.])(?:window|document|document\.body)\.on[a-z]+\s*=(?!=)/,
+    'assigning an `on*` property replaces any handler another script set. Use `addEventListener`.'
+  ),
+};
+
 // `core/hardcoded-secrets` — deliberately NOT here. A regex over added lines is
 // how a secret scanner earns a reputation for false positives, and the gate
 // already runs a real one against verified secrets only. The model keeps the rule
@@ -350,9 +735,21 @@ export const CHECKS: Record<string, DeterministicCheck> = {
   'typescript/module-mocking': moduleMocking,
   'typescript/unknown-return': unknownReturn,
   'typescript/unknown-type-alias': unknownTypeAlias,
-  'typescript/open-dictionary-value': openDictionaryValue,
   'typescript/object-parameter': objectParameter,
   'typescript/reflect-dynamic-access': reflectDynamicAccess,
+  ...python,
+  ...java,
+  ...kotlin,
+  ...swift,
+  ...csharp,
+  ...go,
+  ...terraform,
+  ...react,
+  ...reactNative,
+  ...vue,
+  ...angular,
+  ...svelte,
+  ...dom,
 };
 
 export interface PolicyResult {

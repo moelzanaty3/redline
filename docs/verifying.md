@@ -96,21 +96,24 @@ granted the rights.
 
 This is the step people skip, and it is the one that catches the most.
 
-**Know what you are testing first.** Only eleven rules can be decided without a model:
+**Know what you are testing first.** 53 of the 496 rules can be decided without a model. Each is
+the direct, single-line spelling of a rule a community linter already enforces, limited to its own
+file types:
 
-| Rule | Severity |
+| Stack | Rules a checker decides |
 | --- | --- |
-| `core/type-checker-suppression` | BLOCKER |
-| `core/unsafe-assertion` (TypeScript double assertions only) | BLOCKER |
-| `core/untracked-todo` | HIGH |
-| `javascript/var-in-new-code` | HIGH |
-| `javascript/unsafe-numeric-coercion` | HIGH |
-| `typescript/module-mocking` | HIGH |
-| `typescript/unknown-return` | HIGH |
-| `typescript/unknown-type-alias` | HIGH |
-| `typescript/open-dictionary-value` | HIGH |
-| `typescript/object-parameter` | HIGH |
-| `typescript/reflect-dynamic-access` | HIGH |
+| core | `type-checker-suppression`, `unsafe-assertion` (TypeScript double assertions), `untracked-todo` |
+| javascript / typescript | `var-in-new-code`, radix-less `parseInt`, module mocking, `unknown` returns and aliases, `object` parameters, `Reflect.apply`/`get` |
+| python | blanket `# type: ignore`/`# noqa`, `pytest.raises(Exception)`, `patch("pkg.mod")`, `sum(..., [])` |
+| java / kotlin | `==` on strings, `new BigDecimal(0.1)`, cause dropped on rethrow, `printStackTrace()`, discarded `trim()`; `TODO()`, `as MutableList` |
+| swift | `@unchecked Sendable`, `[unowned self]`, implicitly unwrapped declarations, copying `reduce` |
+| csharp | `throw ex;`, `throw new Exception(...)`, culture-implicit `Parse`, `UseInMemoryDatabase` |
+| go / terraform | `fmt.Errorf("%v", err)`, `http.ListenAndServe`; `== []`, `ignore_changes = all` |
+| react / react-native | setter called in a handler prop, `javascript:` URL, async effect, random `key`; deep imports, module-scope `Dimensions.get` |
+| vue / angular / svelte / dom | async `computed`, literal prop defaults; async hooks, native-named outputs, `([x])`, manual hook calls, impure pipes; async store start, `load` in `+page.svelte`, `{{ x }}`; fresh-function `removeEventListener`, `window.on* =` |
+
+The exact list is `deterministic` in `standards/manifest.json`, and `redline explain <rule-id>` says
+how any one rule is decided.
 
 Everything else in the standard — hardcoded secrets, SQL built by concatenation, missing
 auth checks — is reviewed by a model, not by `redline policy`. **Testing the gate with a
@@ -144,7 +147,7 @@ probe.js:3
   Redline/HIGH [javascript/unsafe-numeric-coercion]: `parseInt` without a radix. Pass 10
   explicitly: an input like "08" or "0x10" is otherwise parsed by a rule most readers do
   not have in mind.
-3 finding(s) from 11 deterministic rule(s)
+3 finding(s) from 53 deterministic rule(s)
 ```
 
 **The exit code answers "may this proceed", not "was anything found".** `policy` exits 1
@@ -164,7 +167,7 @@ redline policy --diff-file /tmp/sup.patch   # Redline/BLOCKER, exits 1
 ```
 
 The trailing count line is the important one. `4 rule(s) evaluated` means the checks ran;
-`0 finding(s) from 11 deterministic rule(s)` means they ran and found nothing. If you ever
+`0 finding(s) from 53 deterministic rule(s)` means they ran and found nothing. If you ever
 see findings you did not expect against files you did not write, see
 [Redline's own files](#why-arent-redlines-own-files-flagged) below.
 
@@ -267,7 +270,7 @@ Then close the PR without merging.
 
 ## 4. Does your assistant read the standards?
 
-The deterministic half is eleven rules. The model half is the rest of the standard, and it
+The deterministic half is 53 rules. The model half is the rest of the standard, and it
 is where most of the value is. Open the repository in your assistant and run:
 
 ```
@@ -429,7 +432,7 @@ git rm probe.js sup.ts && git commit -m "remove redline verification probes"
 
 ### "no deterministic findings" on a file I know is bad
 
-Almost always correct. Only the eleven rules in step 2 are decided without a model — a
+Almost always correct. Only the 53 rules in step 2 are decided without a model — a
 hardcoded secret or a concatenated SQL string is a real BLOCKER in the standard and is
 reviewed by the model half, not by `redline policy`. Test the deterministic half with a
 `var`, a ticketless `TODO`, a radix-less `parseInt`, or a bare `@ts-ignore`.
@@ -437,7 +440,7 @@ reviewed by the model half, not by `redline policy`. Test the deterministic half
 `redline policy` now says this itself, on every run:
 
 ```
-383 of the 394 rule(s) in the catalogue cannot be decided without a model and
+443 of the 496 rule(s) in the catalogue cannot be decided without a model and
 were not checked here — run `redline review` for those
 ```
 

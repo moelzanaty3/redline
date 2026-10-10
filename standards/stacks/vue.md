@@ -45,6 +45,29 @@ the screen simply stops matching the data.
 - `vue/async-setup-without-suspense` — `async setup()` in a component not wrapped in `<Suspense>` — it renders nothing, with no error, until the promise settles.
 - `vue/composable-called-conditionally` — A composable called inside a condition, a loop or a callback. Like hooks, they bind to the active instance at call time.
 - `vue/unvalidated-route-param` — `route.params` / `route.query` consumed as a typed value with no validation — external input, whatever the router's types claim.
+- `vue/ref-used-as-value` — **A `ref` used as an operand without `.value`** — `if (isAdmin)`, `count++`, `ok ? a
+  : b`, `emit('change', count)`. The `Ref` object is always truthy and never equals its value, so the branch is
+  fixed and the payload is the wrapper: `if (isAdmin) showDelete()` always runs. Read `.value` in script.
+- `vue/async-computed` — **A `computed` with an `async` getter, or returning a Promise chain.** Its value is the
+  Promise, so `v-if="allowed"` is always true and the result never re-resolves. Use VueUse `computedAsync`, or a
+  `ref` filled by a watcher with cleanup.
+- `vue/side-effect-in-computed` — **A computed getter that writes state** — assigning a ref or `this.x`, or
+  in-place `sort()`/`reverse()`/`splice()` on reactive arrays. It runs lazily and cached, so the write happens
+  unpredictably, and `items.value.sort()` reorders the source for every other consumer. Copy first
+  (`toSorted()`) and move writes to a watcher or action.
+- `vue/shared-mutable-default` — **An `Array`/`Object` prop default, or the `data` option, given as a literal
+  instead of a factory.** One literal is shared by every instance, so adding a tag in one `<TagList>` shows it
+  in all. Use `default: () => []` and `data() { return {…} }`.
+- `vue/untyped-empty-ref` — **`ref()` / `shallowRef()` with no argument and no type parameter in a TypeScript
+  component.** It is `Ref<any>`, so `user.value.nmae.trim()` compiles and throws at runtime — `any` without
+  anyone writing it. Use `ref<User | null>(null)`.
+- `vue/undeclared-emit` — **`emit('x')` / `$emit('x')` for an event missing from `defineEmits`/`emits`.** In Vue
+  3 the parent listener also falls through to the root element, so for a native name like `click` the handler
+  fires twice, once with an `Event` instead of the payload. Declare every emitted event.
+- `vue/vue2-api-in-vue3` — **Vue 2 APIs in a Vue 3 codebase.** Without the compat build
+  `beforeDestroy`/`destroyed` never run, so their cleanup never happens; `this.$on`/`$off`/`$set`/`Vue.set`
+  throw; filters and `.native` do nothing. Use `beforeUnmount`/`unmounted`, plain assignment, an event library,
+  and functions for filters.
 
 ## SUGGESTION
 

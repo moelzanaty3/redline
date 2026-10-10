@@ -47,6 +47,34 @@ injection sinks and dead subscriptions actually become visible.
 - `angular/missing-trackby` — `*ngFor` / `@for` over a list that reorders or re-fetches without `trackBy` (or `track`) — Angular destroys and rebuilds every row, losing focus and element state.
 - `angular/interceptor-swallows-error` — An `HttpInterceptor` or `catchError` returning `of(null)` / `EMPTY` so the caller sees a successful empty response. The failure is now indistinguishable from no data.
 - `angular/unvalidated-route-param` — A route param or query param consumed as a typed value (`+id`, `as Status`) with no validation — it is external input and a user types what they like.
+- `angular/uncalled-signal` — **A signal used in a condition, comparison or logical expression without being
+  called** — `if (this.loading)`, `@if (isAdmin)`, `a === this.id`. A signal is a function, always truthy and
+  never equal to a value, so `if (this.isAdmin)` shows admin actions to everyone. Call it: `this.isAdmin()`.
+- `angular/computed-reads-no-signal` — **A `computed()`, `linkedSignal()` or `effect()` that reads no signal, or
+  a `computed` with no `return`.** With no reactive dependency it runs once and never updates — `computed(() =>
+  this.first + ' ' + this.last)` over plain fields never reflects an edit. Read the signals it depends on, or
+  make it a constant.
+- `angular/async-lifecycle-hook` — **`async ngOnInit` / `ngOnDestroy` / another lifecycle hook.** Angular never
+  awaits it, so the template renders the unloaded state (`Cannot read properties of undefined`), a rejection
+  floats, and awaited teardown runs after the view is gone. Load through the `async` pipe, a resolver or
+  `resource()`, or call a handled async method from a synchronous hook.
+- `angular/injection-context-api-outside-context` — **`takeUntilDestroyed()` with no argument, `inject()`,
+  `toSignal()` or an injector-less `effect()` called from a lifecycle hook, method or callback.** These need an
+  injection context and throw `NG0203` elsewhere, so the component fails to initialise. Pass
+  `inject(DestroyRef)` / `{ injector }` captured in a field.
+- `angular/output-native-event-name` — **An `@Output()` / `output()` named after a bubbling DOM event** —
+  `click`, `change`, `input`, `submit`. The parent's `(change)` binds both the output and the native event
+  bubbling out of the component, so the handler fires twice, once with an `Event`. Name it for the domain:
+  `itemSelected`, `valueChange`.
+- `angular/banana-out-of-box` — **Two-way binding written `([x])="v"` instead of `[(x)]="v"`.** The inverted
+  form parses as an event binding named `[x]`, so the field never syncs from what the user types. Use
+  `[(ngModel)]`.
+- `angular/manual-lifecycle-call` — **`this.ngOnInit()` or another hook called by hand to "refresh".** Each call
+  re-runs every subscription the hook sets up, so polling multiplies per click, and an early `ngOnDestroy` tears
+  down a live view. Extract the shared work into a method. `super.ngOnInit()` is fine.
+- `angular/impure-pipe` — **A pipe declared `pure: false`.** It re-runs on every change-detection cycle for
+  every binding using it — hundreds of calls per keystroke in a 100-row table. Use a pure pipe over immutable
+  inputs, or a `computed` signal.
 
 ## SUGGESTION
 

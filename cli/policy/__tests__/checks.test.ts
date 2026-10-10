@@ -107,6 +107,7 @@ test('a suppression with a ticket is allowed — the rule asks for both', () => 
 test('every suppression dialect is covered, not just TypeScript', () => {
   const dialects = [
     ['# type: ignore', 'src/a.py'],
+    ['# pyright: ignore', 'src/a.py'],
     ['# noqa', 'src/a.py'],
     ['# pylint: disable=no-member', 'src/a.py'],
     ['@SuppressWarnings("unchecked")', 'src/A.java'],
@@ -117,9 +118,10 @@ test('every suppression dialect is covered, not just TypeScript', () => {
     ['#pragma warning disable CS0168', 'src/A.cs'],
   ] as const;
 
+  // Scoped to the one rule: a bare `# type: ignore` is also python/blanket-suppression.
   for (const [s, file] of dialects) {
     assert.deepEqual(
-      ids(runChecks(ctx([line(`code ${s}`, file)]))),
+      ids(runChecks(ctx([line(`code ${s}`, file)]), ['core/type-checker-suppression'])),
       ['core/type-checker-suppression'],
       s
     );
@@ -257,20 +259,6 @@ test('typescript/unknown-type-alias: the alias is unknown, not something contain
   ]);
 });
 
-test('typescript/open-dictionary-value: open value types, but not a generic constraint', () => {
-  flags('typescript/open-dictionary-value', [
-    'const bag: Record<string, unknown> = {};',
-    'type Bag = Record<PropertyKey, any>;',
-    'type Bag = Record<string, {}>;',
-    'interface Bag { [key: string]: unknown }',
-  ]);
-  passes('typescript/open-dictionary-value', [
-    'function f<T extends Record<string, unknown>>(value: T) {',
-    'const counts: Record<Status, number> = { open: 0, closed: 0 };',
-    'type Index = Record<string, User>;',
-  ]);
-});
-
 test('typescript/object-parameter: a parameter typed object', () => {
   flags('typescript/object-parameter', [
     'function save(value: object) {',
@@ -307,7 +295,6 @@ test('typescript/module-mocking: vi and jest module mocks in TypeScript tests', 
 test('the type-evidence checks ignore comments, prose and other languages', () => {
   for (const id of [
     'typescript/unknown-return',
-    'typescript/open-dictionary-value',
     'typescript/module-mocking',
   ]) {
     passes(id, ['// e.g. function load(): unknown { or Record<string, unknown> or vi.mock(x)']);
