@@ -80,11 +80,14 @@ test('a directory that is not a repository fails on the repository check', () =>
 // unclassifiable-host branch and report "origin is not a remote Redline can
 // classify: this repository has no git remote" — two contradictory statements
 // in one line, with the fix for the wrong one.
+// A warning, not a failure: init installs the rules and the local review with no
+// remote, and only the host-bound half waits for one.
 test('a repository with no remote says so, and not that the host is unknown', () => {
   const report = doctor({ cwd: repo(), nodeVersion: 'v22.11.0', run: noGh });
   const remote = report.checks.find((c) => c.name === 'remote');
-  assert.equal(remote?.status, 'fail');
+  assert.equal(remote?.status, 'warn');
   assert.match(remote?.detail ?? '', /no origin remote/);
+  assert.match(remote?.detail ?? '', /rules and the local review/);
   assert.doesNotMatch(remote?.detail ?? '', /classify|host Redline does not know/);
   assert.match(remote?.fix ?? '', /git remote add origin/);
 });

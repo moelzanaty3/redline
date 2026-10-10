@@ -395,6 +395,10 @@ export interface InitReport {
   // report has to be able to say "these files are on disk and uncommitted",
   // which is neither of the two answers it could give before.
   noCommit?: boolean;
+  // The repository has no git remote, so there was no host to onboard against.
+  // The run wrote what needs none — the rules, the commands, the record — and
+  // implies `noCommit`.
+  local?: boolean;
   // The menu this run resolved, and the host settings it would change. Both
   // exist so `--dry-run` can print a plan the operator can act on.
   menu: MenuSelections;
@@ -437,7 +441,13 @@ export interface InitReport {
 // out — it is what `redline verify`'s pending-admin finding points at — and
 // the already-onboarded output qualifies the list as recorded at the last run.
 
-export async function init(platform: Platform, opts: InitOptions): Promise<InitReport> {
+// `platform` is null when the repository has no git remote. Everything this
+// command renders needs only the checkout; the gate, the ownership file and every
+// host setting need a host, and a guessed one would be written into files and
+// recorded as if it were known. So those are not attempted, nothing about them is
+// recorded as chosen or declined, and the first run after a remote exists installs
+// them exactly as a normal onboarding would.
+export async function init(platform: Platform | null, opts: InitOptions): Promise<InitReport> {
   const { cwd, root } = opts;
   const dryRun = opts.dryRun === true;
   const repair = opts.repair === true;
@@ -542,7 +552,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // the pipeline's own check name on the host, which is a name this run cannot
   // read out of the checkout.
   if (
-    platform.host === 'github' &&
+    platform?.host === 'github' &&
     pipeline === 'azure-pipelines' &&
     capabilities.mergePolicy &&
     menu.blockingGate
@@ -581,14 +591,15 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // `--no-commit` is under the same rule and for the same reason — it is
   // documented as contacting no host, and this read is a host contact whatever
   // else the run goes on to skip.
-  const offline = dryRun || opts.noCommit === true;
-  step(offline ? 'reading the repository' : `reading ${platform.host}`);
+  const offline = dryRun || opts.noCommit === true || platform === null;
+  step(platform === null || offline ? 'reading the repository' : `reading ${platform.host}`);
   // A caller that already read the repository hands the answer back rather
   // than paying for it twice — the wizard's reachability check is the only
   // one that does, and it read exactly this. An offline run still uses the local
   // clone: --no-commit is documented as contacting no host, and a ref that
   // arrived from one would make that untrue.
-  const ref = offline ? platform.localRef(cwd) : (opts.ref ?? (await platform.repoRef(cwd)));
+  const ref =
+    platform === null ? null : offline ? platform.localRef(cwd) : (opts.ref ?? (await platform.repoRef(cwd)));
   // detected <- what this repository already recorded <- what the caller
   // typed, the same precedence the menu resolves under. The org ceiling is
   // deliberately not applied to the RECORD: render() enforces it on every call
@@ -654,7 +665,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     // to the rung recorded here rather than needing a second source of truth.
     rung,
   };
-  const ownershipRules = sensitivePathRules(ref.org, opts.reviewOwners);
+  const ownershipRules = ref === null ? [] : sensitivePathRules(ref.org, opts.reviewOwners);
 
   // The gate and ownership file diffs are computed in check mode FIRST, before
   // a single host setting is touched. Without it there was no way to know a
@@ -672,24 +683,34 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // exists, and must, because the answer decides which paths it will stage. A
   // dry run may not — it contacts no host and needs no credential.
   step('planning the change');
-  let gatePlan = capabilities.gate
-    ? await platform.installGate(ref, cwd, { ...gateOptions, preflight: !dryRun }, true)
-    : { files: [], outcomes: [] };
+  let gatePlan =
+    platform !== null && ref !== null && capabilities.gate
+      ? await platform.installGate(ref, cwd, { ...gateOptions, preflight: !dryRun }, true)
+      : { files: [], outcomes: [] };
 
-  const ownershipPlan = menu.sensitivePathReviewers
-    ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules, true)
-    : { files: [], outcomes: [] };
+  const ownershipPlan =
+    platform !== null && ref !== null && menu.sensitivePathReviewers
+      ? await platform.ensureReviewOwnership(ref, cwd, ownershipRules, true)
+      : { files: [], outcomes: [] };
 
   // Everything this run observed and thinks the operator should know, without
   // acting on any of it. Detection informs; it does not decide.
-  const machinery = observeGateMachinery(platform, cwd, pipeline);
+  const machinery = platform === null ? null : observeGateMachinery(platform, cwd, pipeline);
   const notes: string[] = [...rungNotes];
+
+  if (platform === null) {
+    notes.push(
+      'this repository has no git remote, so Redline installed the rules and the local review ' +
+        'only. The merge gate, branch policy, labels and security floor need a host: add a remote ' +
+        '(git remote add origin <url>) and run redline init again to install them'
+    );
+  }
 
   // The organisation publishes no gate, and this run has written nothing yet.
   // Offer the repository the one that fits in it, and re-plan so both passes
   // agree on the paths — planning one gate source and installing another is
   // exactly how a run stages a file nothing wrote.
-  if (gatePlan.vendorableGate === true && opts.onGateFallback !== undefined) {
+  if (platform !== null && ref !== null && gatePlan.vendorableGate === true && opts.onGateFallback !== undefined) {
     const detail = `${ref.org}/.github publishes no Redline gate`;
     if (await opts.onGateFallback(detail)) {
       gateSource = 'local';
@@ -703,7 +724,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // that recorded `local` three runs ago carries the same property and the same
   // exposure, and a note that appears once at onboarding and never again is a
   // note nobody reads at the moment it matters.
-  if (capabilities.gate && gateSource === 'local') {
+  if (ref !== null && capabilities.gate && gateSource === 'local') {
     notes.push(
       `the gate is vendored at ${VENDORED_GATE_PATH} rather than referenced from ` +
         `${ref.org}/.github. It runs from the pull request's own head commit, so a pull ` +
@@ -823,9 +844,13 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // because they are plain repository files on any host that supports them, and
   // they ride in the same pull request as everything else this run writes.
   const wanted = new Set(opts.setup ?? []);
-  const chosen = offerable(cwd, platform.host, stacks).filter(({ integration }) =>
-    wanted.has(integration.id)
-  );
+  const chosen =
+    platform === null
+      ? []
+      : offerable(cwd, platform.host, stacks).filter(({ integration }) => wanted.has(integration.id));
+  if (platform === null && wanted.size > 0) {
+    notes.push(`--setup ${[...wanted].join(',')} writes host-specific files, so it waits for a remote too`);
+  }
   const setupResult = applySetup(cwd, chosen, dryRun);
   for (const path of setupResult.skipped) {
     // Never overwritten: a repository with its own renovate.json has a
@@ -950,7 +975,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // settled repository issued GET /rulesets — and on a repository whose token
   // cannot list rulesets it exited 4 after writing the files, from a command
   // whose whole promise is that it works offline.
-  if (existing !== null && settledOnFiles && !offline && !repair) {
+  if (platform !== null && ref !== null && existing !== null && settledOnFiles && !offline && !repair) {
     // Not read at all when the repository manages its own merge policy: what
     // is on the host then is a human's, and comparing Redline's menu against
     // it would report the repository's own deliberate configuration as drift.
@@ -978,15 +1003,18 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   const alreadyOnboarded = !repair && !rungRequested && settledOnFiles && settledOnHost;
 
   const optedOut = deselectedCapabilities(menu, capabilities);
-  const hostPlan = [
-    ...(capabilities.gate ? [`merge gate machinery on ${platform.host}`] : []),
-    ...(menu.sensitivePathReviewers ? ['review ownership for the sensitive paths'] : []),
-    'security floor: secret scanning, push protection, dependency alerts',
-    ...(capabilities.mergePolicy
-      ? [`branch policy: 1 approval, gate ${menu.blockingGate ? 'blocking' : 'advisory'}`]
-      : []),
-    `pull request on ${ONBOARD_BRANCH}`,
-  ];
+  const hostPlan =
+    platform === null
+      ? []
+      : [
+          ...(capabilities.gate ? [`merge gate machinery on ${platform.host}`] : []),
+          ...(menu.sensitivePathReviewers ? ['review ownership for the sensitive paths'] : []),
+          'security floor: secret scanning, push protection, dependency alerts',
+          ...(capabilities.mergePolicy
+            ? [`branch policy: 1 approval, gate ${menu.blockingGate ? 'blocking' : 'advisory'}`]
+            : []),
+          `pull request on ${ONBOARD_BRANCH}`,
+        ];
 
   if (alreadyOnboarded) {
     return {
@@ -1036,9 +1064,10 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   }
 
   step('installing the merge gate');
-  const gate = capabilities.gate
-    ? await platform.installGate(ref, cwd, gateOptions)
-    : { files: [], outcomes: [] };
+  const gate =
+    platform !== null && ref !== null && capabilities.gate
+      ? await platform.installGate(ref, cwd, gateOptions)
+      : { files: [], outcomes: [] };
 
   // Files written, nothing else attempted. Everything below this point either
   // changes a setting on the host or puts a commit in the repository's history,
@@ -1048,12 +1077,12 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
   // path records what it actually did: a repository whose settings were never
   // applied must not carry a pendingAdmin list computed from outcomes that
   // never happened, and must not read back as fully onboarded on the next run.
-  if (opts.noCommit === true) {
+  if (opts.noCommit === true || platform === null || ref === null) {
     // Only the Actions caller references a workflow in another repository. An
     // Azure pipeline definition is standalone and a pre-push hook contacts
     // nothing at all, so on those the note describes a file the run did not
     // write and sends the operator to check a reference that does not exist.
-    if (capabilities.gate && gateSource === 'org' && pipeline === 'github-actions') {
+    if (ref !== null && capabilities.gate && gateSource === 'org' && pipeline === 'github-actions') {
       notes.push(
         `the caller workflow references ${ref.org}/.github and nothing checked that it publishes ` +
           'the gate, because --no-commit contacts no host. Run redline verify after you commit, ' +
@@ -1084,7 +1113,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
     writeConfig(cwd, {
       standardsVersion: manifest.version,
       cliVersion: CLI_VERSION,
-      host: platform.host,
+      host: platform?.host ?? null,
       pipeline,
       profile,
       vendors,
@@ -1122,6 +1151,7 @@ export async function init(platform: Platform, opts: InitOptions): Promise<InitR
       alreadyOnboarded: false,
       dryRun: false,
       noCommit: true,
+      ...(platform === null ? { local: true } : {}),
       menu,
       capabilities,
       optedOut,

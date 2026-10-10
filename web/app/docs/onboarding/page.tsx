@@ -50,7 +50,9 @@ export default async function Page() {
           A git repository whose remote points at GitHub — including GitHub
           Enterprise Server, if the hostname contains <code>github</code> — or
           Azure DevOps. A self-hosted host on a hostname that carries neither is
-          not auto-detected.
+          not auto-detected. No remote yet? <code>init</code> still installs the
+          rules and the local review; the gate and host settings follow when you
+          add one and run it again.
         </li>
         <li>
           Nothing to install: <code>npx {PACKAGE_NAME}</code> fetches the CLI on

@@ -73,7 +73,10 @@ export interface RecordedEvidence {
 export interface RedlineConfig {
   standardsVersion: string;
   cliVersion: string;
-  host: Host;
+  // null when the repository was onboarded with no git remote: there was no host
+  // to read, and recording a guessed one would be read back as fact. The next run
+  // that has a remote records the real one.
+  host: Host | null;
   // What actually runs this repository's pull request checks. Recorded because
   // it decides which file IS the gate here, and nothing else can recover it: a
   // GitHub-hosted repository built by Azure Pipelines gets a pipeline
@@ -304,8 +307,10 @@ export function parseConfig(raw: unknown): RedlineConfig {
   const str = (key: string): string =>
     typeof o[key] === 'string' && o[key] !== '' ? (o[key] as string) : bad(`${key} must be a non-empty string`);
 
-  const host = str('host');
-  if (!(HOSTS as readonly string[]).includes(host)) bad(`host must be one of ${HOSTS.join(', ')}`);
+  const host = o['host'] === null ? null : str('host');
+  if (host !== null && !(HOSTS as readonly string[]).includes(host)) {
+    bad(`host must be null or one of ${HOSTS.join(', ')}`);
+  }
 
   const vendors = o['vendors'];
   if (!Array.isArray(vendors) || !vendors.every((v) => typeof v === 'string')) {
@@ -379,7 +384,7 @@ export function parseConfig(raw: unknown): RedlineConfig {
   return {
     standardsVersion: str('standardsVersion'),
     cliVersion: str('cliVersion'),
-    host: host as Host,
+    host: host as Host | null,
     // Anything unrecognised reads back as the host default rather than failing
     // the parse, for the same reason an unknown menu key does: a hand edit or
     // an older CLI must not invalidate the config of every repository at once.

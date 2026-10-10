@@ -2116,3 +2116,69 @@ test('the already-wired note looks in the directory this repository gates from',
   assert.match(note, /pr-validation\.yml/);
   assert.ok(!note.includes('linked-work-item.yml'), `named an Actions workflow: ${note}`);
 });
+
+// --- a repository with no remote yet -----------------------------------------
+//
+// `null` is what the CLI passes when the repository has no git remote: there is
+// no host to classify, so there is no platform. The rules and the local review
+// need none, and a developer who starts locally gets them on the first run.
+
+test('with no remote, init installs the rules and the local review and nothing that needs a host', async () => {
+  const cwd = repo({ 'package.json': '{"devDependencies":{"typescript":"5"}}' });
+  const report = await init(null, { cwd, root, now });
+
+  assert.equal(report.local, true);
+  assert.equal(report.noCommit, true);
+  assert.ok(report.files.includes('AGENTS.md'));
+  assert.ok(report.files.includes('.claude/commands/redline-review.md'));
+  assert.ok(report.files.includes('.redline.json'));
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false);
+  assert.deepEqual(report.hostPlan, []);
+  assert.ok(report.notes.some((note) => /no git remote/.test(note)));
+});
+
+// The record is what a later run trusts. A gate recorded as deselected, or as
+// vendored, would survive the remote being added and leave the repository on
+// less than a normal onboarding gives it.
+test('with no remote, the record names no host and keeps the gate selected at the organisation source', async () => {
+  const cwd = repo();
+  await init(null, { cwd, root, now });
+
+  const config = readConfig(cwd);
+  assert.equal(config?.host, null);
+  assert.equal(config?.capabilities.gate, true);
+  assert.equal(config?.gateSource, 'org');
+  assert.deepEqual(config?.pendingAdmin, []);
+});
+
+test('a repository onboarded with no remote gets the normal gate once it has one', async () => {
+  const cwd = repo();
+  await init(null, { cwd, root, now });
+
+  const platform = fakePlatform();
+  const report = await init(platform, { cwd, root, now: laterNow });
+
+  assert.equal(report.alreadyOnboarded, false);
+  assert.ok(platform.applied.includes('installGate'));
+  assert.ok(platform.applied.includes('openPullRequest'));
+  const config = readConfig(cwd);
+  assert.equal(config?.host, 'github');
+  assert.equal(config?.gateSource, 'org');
+});
+
+test('with no remote, a dry run writes nothing and plans no host change', async () => {
+  const cwd = repo();
+  const report = await init(null, { cwd, root, now, dryRun: true });
+
+  assert.equal(report.dryRun, true);
+  assert.deepEqual(report.hostPlan, []);
+  assert.equal(existsSync(join(cwd, '.redline.json')), false);
+});
+
+test('with no remote, a second run has nothing to change', async () => {
+  const cwd = repo();
+  await init(null, { cwd, root, now });
+  const report = await init(null, { cwd, root, now: laterNow });
+
+  assert.equal(report.alreadyOnboarded, true);
+});
