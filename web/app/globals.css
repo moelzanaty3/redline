@@ -1523,6 +1523,20 @@ main section[id] {
   color: var(--text);
   font-weight: 550;
 }
+/* The global reset strips colour and underline from every anchor, which in
+   running text leaves a link indistinguishable from the words around it. */
+.prose p a,
+.prose li a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--red-soft);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.prose p a:hover,
+.prose li a:hover {
+  color: var(--red-soft);
+}
 .prose ul,
 .prose ol {
   margin: 0 0 16px 20px;
