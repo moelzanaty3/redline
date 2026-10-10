@@ -1,6 +1,6 @@
 {
   "$comment": "Single source of truth for Redline. scripts/render.mjs turns this into vendor-specific artifacts. Never hand-edit generated output.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "core": {
     "title": "Redline Core Engineering Standards",
     "source": "standards/core.md"
@@ -16,6 +16,16 @@
         "**/*.cjs",
         "**/*.vue",
         "**/*.svelte"
+      ]
+    },
+    "typescript": {
+      "title": "TypeScript",
+      "source": "standards/stacks/typescript.md",
+      "globs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts"
       ]
     },
     "react": {
@@ -213,40 +223,61 @@
         "**/*.tfvars",
         "**/*.hcl"
       ]
+    },
+    "effect": {
+      "title": "Effect",
+      "source": "standards/stacks/effect.md",
+      "extends": [
+        "typescript"
+      ],
+      "globs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts"
+      ]
     }
   },
   "$profileComment": "A repo installs exactly one profile. Profiles are the disambiguation mechanism: glob negation is not portable across vendors, so we never install two rule sets that would contradict each other in the same repo.",
   "profiles": {
     "tooling": [
-      "javascript"
+      "javascript",
+      "typescript"
     ],
     "web-react": [
       "javascript",
+      "typescript",
       "react"
     ],
     "web-next": [
       "javascript",
+      "typescript",
       "react",
       "nextjs"
     ],
     "web-angular": [
       "javascript",
+      "typescript",
       "angular"
     ],
     "web-vue": [
       "javascript",
+      "typescript",
       "vue"
     ],
     "web-svelte": [
       "javascript",
+      "typescript",
       "svelte"
     ],
     "web-vanilla": [
       "javascript",
+      "typescript",
       "dom"
     ],
     "mobile-rn": [
       "javascript",
+      "typescript",
       "react",
       "react-native"
     ],
@@ -266,11 +297,13 @@
     ],
     "service-node": [
       "javascript",
+      "typescript",
       "microservices",
       "nodejs"
     ],
     "service-express": [
       "javascript",
+      "typescript",
       "microservices",
       "express"
     ],
@@ -287,9 +320,13 @@
     ],
     "fullstack-node": [
       "javascript",
+      "typescript",
       "react",
       "microservices",
       "nodejs"
+    ],
+    "lib-effect": [
+      "effect"
     ]
   },
   "$aliasComment": "Legacy profile names accepted by sync-targets.txt for backwards compatibility.",
@@ -329,7 +366,14 @@
   "deterministic": [
     "core/untracked-todo",
     "core/type-checker-suppression",
+    "core/unsafe-assertion",
     "javascript/var-in-new-code",
-    "javascript/unsafe-numeric-coercion"
+    "javascript/unsafe-numeric-coercion",
+    "typescript/module-mocking",
+    "typescript/unknown-return",
+    "typescript/unknown-type-alias",
+    "typescript/open-dictionary-value",
+    "typescript/object-parameter",
+    "typescript/reflect-dynamic-access"
   ]
 }

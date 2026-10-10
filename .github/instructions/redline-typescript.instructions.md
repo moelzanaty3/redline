@@ -1,0 +1,64 @@
+---
+applyTo: "**/*.ts,**/*.tsx,**/*.mts,**/*.cts"
+---
+
+<!-- Redline v0.2.0 · profile: tooling · stacks: typescript -->
+
+# TypeScript Review Rules
+
+**Scope:** every `.ts`, `.tsx`, `.mts` and `.cts` file, alongside whichever framework stack
+also applies. These rules are about type evidence: a value whose type the code already knows
+should keep that type from where it is created to where it is used, and a value whose type it
+does not know should be parsed once, at the boundary it arrived through. The core standard's
+type-safety rules (`core/escape-hatch-types`, `core/unsafe-assertion`) still apply and are not
+repeated here.
+
+A function whose whole job is to parse external input — a schema `parse`, a type predicate
+`(value: unknown): value is T`, a decoder at an HTTP or queue boundary — is where `unknown`
+belongs. Do not flag `unknown` there, or on an error's `cause`.
+
+## BLOCKER — request changes
+
+- `typescript/widen-then-assert` — **Widen, then assert back.** A value with a known type is bound to `unknown`,
+  `any`, `object` or an open record (`const raw: unknown = user`, `const raw = user as unknown`) and later asserted
+  to a narrower type (`raw as Account`). It is a double assertion split across lines: the compiler checks neither
+  half, so a wrong target type reaches runtime unchecked. Keep the original type, or parse.
+
+## HIGH
+
+- `typescript/unknown-parameter` — A parameter typed `unknown` (or a union containing it) on a function that is not
+  the boundary parser or a type predicate's subject. Every caller already holds a typed value, and the function
+  re-checks or asserts it — parse at the boundary and accept the domain type.
+- `typescript/unknown-return` — An explicit return type of `unknown`, `Promise<unknown>` or `PromiseLike<unknown>`.
+  Every caller now has to parse or assert the result; parse it once inside the function and return the domain type.
+- `typescript/unknown-type-alias` — A type alias that is `unknown` or a union containing it (`type Payload = unknown`).
+  The name hides the top type, so readers and reviewers treat it as a contract it is not.
+- `typescript/open-dictionary-value` — An open dictionary whose value type is `unknown`, `any`, `object` or `{}`
+  (`Record<string, unknown>`, `{ [key: string]: unknown }`). Every read needs an unchecked assertion. Not when it is a
+  generic constraint (`T extends Record<string, unknown>`) or a finite key set (`Record<Status, number>`).
+- `typescript/object-parameter` — A parameter typed `object`. It accepts arrays, functions and class instances, and
+  allows no property access without an assertion. Accept a named type, or a generic `<T extends object>`.
+- `typescript/known-value-widening` — A literal or known-typed value assigned to an annotation that discards what is
+  known: `const routes: Record<string, Handler> = { home, about }` makes `routes.contact` type-check as a `Handler`
+  that is `undefined` at runtime. Drop the annotation, or use `satisfies`.
+- `typescript/reflect-dynamic-access` — `Reflect.apply` or `Reflect.get` in application code. Both take untyped
+  arguments and return `any`, so the call and its result escape type checking. Use a typed call or property access;
+  dynamic dispatch goes behind a named interface.
+- `typescript/module-mocking` — Module mocking in tests (`vi.mock`, `vi.doMock`, `jest.mock`, `jest.doMock`,
+  `unstable_mockModule`). The test replaces the import graph, so it keeps passing when the real module's contract
+  changes or its wiring breaks. Inject the dependency through a real interface and pass a faithful test
+  implementation; `vi.spyOn` on an injected object is fine.
+- `typescript/reduce-accumulator-copy` — A `reduce` callback that copies its accumulator on every iteration
+  (`Object.assign({}, acc, …)`, `acc.concat(…)`, `[...acc, x]`, `{ ...acc, [k]: v }`). The work grows quadratically
+  with the input. Mutate an accumulator the reducer owns and return it, or use `flatMap`/`Object.fromEntries`.
+
+## SUGGESTION
+
+- `typescript/ad-hoc-typeof-narrowing` — `typeof` checks scattered through domain logic to work out what a value is
+  (`typeof input === 'string'`), when the value should have arrived already parsed. Not in a type predicate, a
+  boundary parser, or an existence probe (`typeof window === 'undefined'`).
+- `typescript/filter-map-double-pass` — Adjacent `.filter(…).map(…)` or `.map(…).filter(…)` on a large or hot array —
+  two passes and an intermediate array. `flatMap`, or iterator helpers (`.values().filter().map().toArray()`) where the
+  runtime supports them. Not on small fixed arrays, where the readable version wins.
+- `typescript/conditional-empty-spread` — `{ ...(cond ? { key } : {}) }` to add a property conditionally. Build the
+  object, then assign the property in an `if` — the intent is visible and the key's absence is explicit.

@@ -27,6 +27,7 @@ test('copilot writes a merged core file and one generated file per stack', () =>
     '.github/copilot-instructions.md',
     '.github/instructions/redline-javascript.instructions.md',
     '.github/instructions/redline-react.instructions.md',
+    '.github/instructions/redline-typescript.instructions.md',
   ]);
   assert.equal(out.files.get('.github/copilot-instructions.md')?.merge, true);
   assert.equal(out.files.get('.github/instructions/redline-react.instructions.md')?.merge, undefined);

@@ -36,9 +36,10 @@ warn  onboarded              no .redline.json here yet
 Every line that is not `ok` prints the fix under it. The one worth knowing about in
 advance:
 
-**Node.** `npx redlinegate init` under Node 18 used to print npm's `EBADENGINE`
-*warning* and then run anyway, so the first real symptom was a failure from inside a
-dependency, partway through a command that had already written files. It now refuses,
+**Node.** Redline needs Node 18.11 or later — whatever Node the repository itself is
+pinned to. Below that, npm only prints an `EBADENGINE` *warning* and runs anyway, so the
+first real symptom would be a failure partway through a command that had already written
+files. It refuses instead,
 and names three ways to run one command under a newer Node without touching a pin the
 repository set deliberately:
 
@@ -95,14 +96,21 @@ granted the rights.
 
 This is the step people skip, and it is the one that catches the most.
 
-**Know what you are testing first.** Only four rules can be decided without a model:
+**Know what you are testing first.** Only eleven rules can be decided without a model:
 
 | Rule | Severity |
 | --- | --- |
 | `core/type-checker-suppression` | BLOCKER |
+| `core/unsafe-assertion` (TypeScript double assertions only) | BLOCKER |
 | `core/untracked-todo` | HIGH |
 | `javascript/var-in-new-code` | HIGH |
 | `javascript/unsafe-numeric-coercion` | HIGH |
+| `typescript/module-mocking` | HIGH |
+| `typescript/unknown-return` | HIGH |
+| `typescript/unknown-type-alias` | HIGH |
+| `typescript/open-dictionary-value` | HIGH |
+| `typescript/object-parameter` | HIGH |
+| `typescript/reflect-dynamic-access` | HIGH |
 
 Everything else in the standard — hardcoded secrets, SQL built by concatenation, missing
 auth checks — is reviewed by a model, not by `redline policy`. **Testing the gate with a
@@ -136,7 +144,7 @@ probe.js:3
   Redline/HIGH [javascript/unsafe-numeric-coercion]: `parseInt` without a radix. Pass 10
   explicitly: an input like "08" or "0x10" is otherwise parsed by a rule most readers do
   not have in mind.
-3 finding(s) from 4 deterministic rule(s)
+3 finding(s) from 11 deterministic rule(s)
 ```
 
 **The exit code answers "may this proceed", not "was anything found".** `policy` exits 1
@@ -156,7 +164,7 @@ redline policy --diff-file /tmp/sup.patch   # Redline/BLOCKER, exits 1
 ```
 
 The trailing count line is the important one. `4 rule(s) evaluated` means the checks ran;
-`0 finding(s) from 4 deterministic rule(s)` means they ran and found nothing. If you ever
+`0 finding(s) from 11 deterministic rule(s)` means they ran and found nothing. If you ever
 see findings you did not expect against files you did not write, see
 [Redline's own files](#why-arent-redlines-own-files-flagged) below.
 
@@ -259,7 +267,7 @@ Then close the PR without merging.
 
 ## 4. Does your assistant read the standards?
 
-The deterministic half is four rules. The model half is the rest of the standard, and it
+The deterministic half is eleven rules. The model half is the rest of the standard, and it
 is where most of the value is. Open the repository in your assistant and run:
 
 ```
@@ -276,10 +284,11 @@ watch for:
   exactly that; if it is happening, the artifacts may be stale — `redline status` will say
   `standards — behind` if so.
 
-You can see the exact prompt it is given, offline, with:
+At a terminal, `redline review` prints only the findings the checker decides without a model. To see
+the exact prompt the assistant is given, offline:
 
 ```sh
-redline review --base main
+redline review --base main --engine embedded
 ```
 
 **If your assistant is not in this terminal** — a browser tab, a chat window, an IDE
@@ -420,7 +429,7 @@ git rm probe.js sup.ts && git commit -m "remove redline verification probes"
 
 ### "no deterministic findings" on a file I know is bad
 
-Almost always correct. Only the four rules in step 2 are decided without a model — a
+Almost always correct. Only the eleven rules in step 2 are decided without a model — a
 hardcoded secret or a concatenated SQL string is a real BLOCKER in the standard and is
 reviewed by the model half, not by `redline policy`. Test the deterministic half with a
 `var`, a ticketless `TODO`, a radix-less `parseInt`, or a bare `@ts-ignore`.
@@ -428,11 +437,11 @@ reviewed by the model half, not by `redline policy`. Test the deterministic half
 `redline policy` now says this itself, on every run:
 
 ```
-372 of the 376 rule(s) in the catalogue cannot be decided without a model and
+383 of the 394 rule(s) in the catalogue cannot be decided without a model and
 were not checked here — run `redline review` for those
 ```
 
-A clean `policy` means the four checkable rules found nothing. It does not mean the
+A clean `policy` means the checkable rules found nothing. It does not mean the
 standard found nothing, and the gap between those two readings is the single most common
 way Redline gets mistaken for broken.
 

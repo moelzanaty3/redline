@@ -55,7 +55,7 @@ test('an onboarded repository reports what is installed and what is owed', () =>
   const report = status(repo(CONFIG), ROOT);
   assert.equal(report.onboarded, true);
   assert.equal(report.rung, 'block-blocker');
-  assert.deepEqual(report.stacks, ['javascript', 'react']);
+  assert.deepEqual(report.stacks, ['javascript', 'typescript', 'react']);
   assert.deepEqual(report.pendingAdmin, ['secret-scanning']);
   assert.deepEqual(report.integrations, ['sonarqube']);
 });

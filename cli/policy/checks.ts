@@ -162,15 +162,54 @@ const typeCheckerSuppression: DeterministicCheck = ({ added }) =>
       )
     );
 
-// `javascript/var-in-new-code` — `var` on a line this change added.
-//
-// Added lines only. Flagging `var` in a legacy file the author merely moved is
-// exactly the noise the standard's "what NOT to flag" section forbids.
 // A line whose content begins a comment. Not a parser — a checker that reported
 // "use const" on the sentence "avoid var declarations here" is worse than one
 // that misses a `var` on the same line as a trailing comment, and this is the
 // cheap way to avoid the embarrassing half.
 const COMMENT_LINE = /^\s*(\/\/|\/\*|\*|#)/;
+
+// `core/unsafe-assertion` — a TypeScript double assertion with no `SAFETY:` comment.
+//
+// Only the double assertion. `as unknown as X` and `as any as X` exist for one
+// purpose — to make the compiler accept a conversion it has refused — so the
+// pattern is the violation and no judgement is needed. A single `as X`, Swift's
+// `as!` and Kotlin's `!!` are often legitimate; the model still sees the rule.
+//
+// The justification may sit on the line above, which a diff only shows when that
+// line was added too. When it was not, the check cannot see it and says nothing:
+// a BLOCKER on a fact the author can disprove by scrolling up is the false
+// positive this tier exists to avoid.
+const DOUBLE_ASSERTION = /\bas\s+(unknown|any)\s+as\s+[A-Za-z_$({[]/;
+// A marker with nothing after it is not a justification.
+const SAFETY = /\bSAFETY:\s*\S/;
+
+const unsafeAssertion: DeterministicCheck = ({ added }) => {
+  const byPosition = new Map(added.map((l) => [`${l.file}:${l.line}`, l]));
+  return added
+    .filter((l) => {
+      if (!JS_LIKE.test(l.file) || COMMENT_LINE.test(l.text) || !DOUBLE_ASSERTION.test(l.text)) {
+        return false;
+      }
+      if (SAFETY.test(l.text)) return false;
+      if (l.line === 1) return true;
+      const above = byPosition.get(`${l.file}:${l.line - 1}`);
+      return above !== undefined && !SAFETY.test(above.text);
+    })
+    .map((l) =>
+      finding(
+        l,
+        'core/unsafe-assertion',
+        'BLOCKER',
+        'a double assertion overrides the type checker with no stated reason. Fix the types, or ' +
+          'add a `// SAFETY: <why this holds>` comment on this line or the line above.'
+      )
+    );
+};
+
+// `javascript/var-in-new-code` — `var` on a line this change added.
+//
+// Added lines only. Flagging `var` in a legacy file the author merely moved is
+// exactly the noise the standard's "what NOT to flag" section forbids.
 
 const varInNewCode: DeterministicCheck = ({ added }) =>
   added
@@ -213,6 +252,90 @@ const parseIntWithoutRadix: DeterministicCheck = ({ added }) =>
       )
     );
 
+// The anti-slop rules a single line can decide. Each pattern is the direct
+// spelling only — an alias, a multi-line signature or a value threaded through
+// a variable needs a parser, and the model still sees the whole rule for those.
+const TS_ONLY = /\.(ts|tsx|mts|cts)$/;
+
+const patternCheck =
+  (
+    ruleId: string,
+    files: RegExp,
+    pattern: RegExp,
+    problem: string,
+    exempt?: RegExp
+  ): DeterministicCheck =>
+  ({ added }) =>
+    added
+      .filter(
+        (l) =>
+          files.test(l.file) &&
+          !COMMENT_LINE.test(l.text) &&
+          pattern.test(l.text) &&
+          !exempt?.test(l.text)
+      )
+      .map((l) => finding(l, ruleId, 'HIGH', problem));
+
+// `typescript/unknown-return` — a function declared to return `unknown`.
+// Only a declaration's own annotation, `): unknown` — not a callback type such
+// as `() => unknown`, which is the idiomatic way to say "the result is ignored".
+const unknownReturn = patternCheck(
+  'typescript/unknown-return',
+  TS_ONLY,
+  /\)\s*:\s*(?:Promise(?:Like)?<\s*unknown\s*>|unknown)\s*(?:\{|=>|;|$)/,
+  'this function hands `unknown` to every caller, so each one has to parse or assert the result. ' +
+    'Parse it once here and return the domain type.'
+);
+
+// `typescript/unknown-type-alias` — `type X = unknown`, or a union carrying it.
+const unknownTypeAlias = patternCheck(
+  'typescript/unknown-type-alias',
+  TS_ONLY,
+  /^\s*(?:export\s+)?(?:declare\s+)?type\s+\w+(?:<[^=]*>)?\s*=\s*(?:[^;]*\|\s*)?unknown\s*(?:\|[^;]*)?;?\s*$/,
+  'this alias names `unknown`, so it reads as a contract it is not. Use the parsed type, or keep ' +
+    '`unknown` visible at the boundary that parses it.'
+);
+
+// `typescript/open-dictionary-value` — `Record<string, unknown>` and the index
+// signature spelling. A generic constraint is exempt: `T extends Record<string,
+// unknown>` constrains a caller's type, it does not erase one.
+const openDictionaryValue = patternCheck(
+  'typescript/open-dictionary-value',
+  TS_ONLY,
+  /(?<!\bextends\s+)\bRecord<\s*(?:string|PropertyKey)\s*,\s*(?:unknown|any|object|\{\s*\})\s*>|\[\s*\w+\s*:\s*string\s*\]\s*:\s*(?:unknown|any|object)\b/,
+  'an open dictionary of `unknown`/`any`/`object` makes every read an unchecked assertion. Give the ' +
+    'values a type, or parse the payload into one before it is stored.'
+);
+
+// `typescript/object-parameter` — a parameter annotated `object`.
+const objectParameter = patternCheck(
+  'typescript/object-parameter',
+  TS_ONLY,
+  /[(,]\s*\w+\??\s*:\s*object\s*[,)=]/,
+  '`object` accepts arrays, functions and class instances and allows no property access without an ' +
+    'assertion. Accept a named type, or a generic `<T extends object>`.'
+);
+
+// `typescript/reflect-dynamic-access` — `Reflect.apply` / `Reflect.get`.
+const reflectDynamicAccess = patternCheck(
+  'typescript/reflect-dynamic-access',
+  TS_ONLY,
+  /\bReflect\s*(?:\.\s*(?:apply|get)|\[\s*['"](?:apply|get)['"]\s*\])\s*\(/,
+  '`Reflect.apply`/`Reflect.get` take untyped arguments and return `any`, so the call escapes type ' +
+    'checking. Use a typed call or property access.'
+);
+
+// `typescript/module-mocking` — `vi.mock`, `jest.mock` and their variants. The
+// direct global only: an aliased import (`import { vi as t }`) needs scope
+// analysis, and the model still sees the rule.
+const moduleMocking = patternCheck(
+  'typescript/module-mocking',
+  TS_ONLY,
+  /\b(?:vi|jest)\s*\.\s*(?:mock|doMock|unstable_mockModule)\s*\(/,
+  'module mocking replaces the import graph, so this test keeps passing when the real module changes ' +
+    'or its wiring breaks. Inject the dependency and pass a faithful test implementation.'
+);
+
 // `core/hardcoded-secrets` — deliberately NOT here. A regex over added lines is
 // how a secret scanner earns a reputation for false positives, and the gate
 // already runs a real one against verified secrets only. The model keeps the rule
@@ -221,8 +344,15 @@ const parseIntWithoutRadix: DeterministicCheck = ({ added }) =>
 export const CHECKS: Record<string, DeterministicCheck> = {
   'core/untracked-todo': untrackedTodo,
   'core/type-checker-suppression': typeCheckerSuppression,
+  'core/unsafe-assertion': unsafeAssertion,
   'javascript/var-in-new-code': varInNewCode,
   'javascript/unsafe-numeric-coercion': parseIntWithoutRadix,
+  'typescript/module-mocking': moduleMocking,
+  'typescript/unknown-return': unknownReturn,
+  'typescript/unknown-type-alias': unknownTypeAlias,
+  'typescript/open-dictionary-value': openDictionaryValue,
+  'typescript/object-parameter': objectParameter,
+  'typescript/reflect-dynamic-access': reflectDynamicAccess,
 };
 
 export interface PolicyResult {

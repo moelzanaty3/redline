@@ -58,6 +58,7 @@ import { review } from '../commands/review.ts';
 import { renderFinding } from '../review/schema.ts';
 import { embedded } from '../review/engines/embedded.ts';
 import { createApiEngine } from '../review/engines/api.ts';
+import type { ReviewEngine } from '../review/engines/types.ts';
 import { detectModel, detectProvider, MODEL_ENV, PROVIDER_ENV } from '../review/detect.ts';
 import { METRICS_COMMANDS, REGISTRY_COMMAND, helpFor } from '../metrics/options.ts';
 import { runMetrics, specFor } from '../metrics/run.ts';
@@ -264,8 +265,9 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
 
   // Before anything else, and after --version/--help so a broken runtime can
   // still be identified. npm's engines field only warns, so without this the
-  // first symptom of Node 18 is a parse error inside a dependency, raised
-  // partway through a command that may already have written files.
+  // first symptom of an old Node is `fetch is not defined` or a flag default
+  // silently dropped, partway through a command that may already have written
+  // files.
   //
   // `doctor` is exempt: it exists to say this out loud, in a list, with the
   // three ways out. Refusing to run the diagnostic on the machine that needs
@@ -765,7 +767,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       // rather than an API key needs `redline review --print-prompt | pbcopy`
       // to put exactly the prompt on the clipboard and nothing else.
       const printPrompt = values['print-prompt'] === true;
-      if (printPrompt && values.engine !== 'embedded') {
+      if (printPrompt && values.engine === 'api') {
         throw new RedlineError(
           'usage',
           '--print-prompt has nothing to print with --engine api',
@@ -773,7 +775,15 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         );
       }
 
-      let engine = embedded;
+      // No --engine at a terminal means a person is waiting for an answer, not a
+      // prompt: give them what the checker decides without a model, and say how
+      // to get the rest. Sending the diff to a model stays something they ask
+      // for by name. Anywhere else — an assistant's shell, a pipe — the caller is
+      // a model that wants the embedded prompt, as before.
+      let engine: ReviewEngine | null =
+        values.engine === undefined && !printPrompt && values.json !== true && interactive()
+          ? null
+          : embedded;
       if (values.engine === 'api') {
         // The engine stays something you asked for; only its configuration is
         // inferred. `--engine api` used to need --provider and --model on every
@@ -820,7 +830,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
           model,
           ...(values['base-url'] ? { baseUrl: values['base-url'] } : {}),
         });
-      } else if (values.engine !== 'embedded') {
+      } else if (values.engine !== undefined && values.engine !== 'embedded') {
         throw new RedlineError('usage', `unknown engine "${values.engine}" — use embedded or api`);
       }
 
@@ -846,7 +856,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         process.stderr.write(
           `profile ${report.scope.profile} — rules in scope: core` +
             (report.scope.stacks.length ? `, ${report.scope.stacks.join(', ')}` : '') +
-            '. Paste the prompt into any assistant; it asks for JSON back.\n'
+            '. Paste the prompt into any assistant; it replies with the list of issues.\n'
         );
         process.stdout.write(`${report.prompt ?? ''}\n`);
         return 0;
@@ -855,7 +865,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values.json === true) {
         log.info(
           JSON.stringify(
-            { scope: report.scope, prompt: report.prompt, findings: report.findings },
+            { scope: report.scope, checked: report.checked, prompt: report.prompt, findings: report.findings },
             null,
             2
           )
@@ -891,20 +901,27 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       // here rather than threaded through the review: `redline review` runs
       // against the working tree, so the config beside it is the authority.
       const reviewDocsUrl = readConfig(cwd)?.docsBaseUrl ?? '';
-      for (const finding of report.findings) {
+      const seen = new Set(report.checked.map((f) => `${f.file}:${f.line}:${f.ruleId}`));
+      const fromModel = report.findings.filter((f) => !seen.has(`${f.file}:${f.line}:${f.rule}`));
+      for (const finding of report.checked) {
+        log.info(out.bold(`${finding.file}:${finding.line}`));
+        log.info(`  ${paintSeverity(formatFinding(finding, reviewDocsUrl), out)}`);
+      }
+      for (const finding of fromModel) {
         log.info(out.bold(`${finding.file}:${finding.line}`));
         log.info(`  ${paintSeverity(renderFinding(finding, reviewDocsUrl), out)}`);
       }
       for (const { reason } of report.rejected) {
         log.warn(`discarded a finding from the model: ${reason}`);
       }
-      log.info(
-        report.findings.length === 0
-          ? 'no findings — an empty review is a valid review'
-          : `${report.findings.length} finding(s)`
-      );
-      // Said out loud on every run. A local review is opt-in and enforces
-      // nothing; the pull request review remains the system of record.
+      const total = report.checked.length + fromModel.length;
+      log.info(total === 0 ? 'no findings' : `${total} finding(s)`);
+      if (engine === null) {
+        log.info(
+          'that is every rule a checker can decide; the rest of the standard needs a model — ' +
+            'run /redline-review in your assistant, or `redline review --engine api`'
+        );
+      }
       log.info('local review — not recorded, and not counted in rule-tuning telemetry');
 
       // Always 0. This is a pre-flight convenience, and a non-zero exit would

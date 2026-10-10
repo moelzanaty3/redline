@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createGit } from '../core/git.ts';
 import { parseRemote } from '../platforms/detect.ts';
 import { readConfig } from '../config/redline-json.ts';
-import { REQUIRED_NODE_MAJOR, nodeSupport, unsupportedNodeHint } from '../core/runtime.ts';
+import { REQUIRED_NODE_LABEL, nodeSupport, unsupportedNodeHint } from '../core/runtime.ts';
 
 /**
  * `redline doctor` — can this machine run Redline against this repository?
@@ -10,9 +10,9 @@ import { REQUIRED_NODE_MAJOR, nodeSupport, unsupportedNodeHint } from '../core/r
  * Every question here is one that otherwise gets answered by a failure partway
  * through a run that has already asked ten questions or already written files.
  * The Node check is the reason the command exists: `npx redlinegate init` on a
- * repository pinned to Node 18 prints an npm EBADENGINE *warning* and then runs
- * anyway, so the first sign of trouble is a syntax error from inside a
- * dependency, on a repository the operator now has to inspect.
+ * machine below the floor prints an npm EBADENGINE *warning* and then runs
+ * anyway, so the first sign of trouble is an error like `fetch is not defined`,
+ * partway through a run, on a repository the operator now has to inspect.
  *
  * It contacts no host and needs no credential. Reading a token's scopes is the
  * one thing that shells out, and only to `gh`, which already holds it.
@@ -58,13 +58,13 @@ function checkNode(version: string): DoctorCheck {
     return {
       name: 'node',
       status: 'ok',
-      detail: `${version} — at or above the required ${REQUIRED_NODE_MAJOR}`,
+      detail: `${version} — at or above the required ${REQUIRED_NODE_LABEL}`,
     };
   }
   return {
     name: 'node',
     status: 'fail',
-    detail: `${version} — Redline needs ${REQUIRED_NODE_MAJOR} or later`,
+    detail: `${version} — Redline needs ${REQUIRED_NODE_LABEL} or later`,
     // The same three ways out the guard prints, from the same function rather
     // than a second copy: two sets of instructions for one problem drift, and
     // the one that drifts is always the one the reader happens to hit.

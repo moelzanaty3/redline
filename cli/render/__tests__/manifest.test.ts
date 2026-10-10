@@ -16,8 +16,8 @@ test('loads the real manifest', () => {
   assert.equal(m.core.source, 'standards/core.md');
   assert.ok(m.stacks['react']);
   assert.deepEqual(m.stacks['react-native']?.extends, ['react']);
-  assert.deepEqual(m.profiles['web-react'], ['javascript', 'react']);
-  assert.deepEqual(m.profiles['web-angular'], ['javascript', 'angular']);
+  assert.deepEqual(m.profiles['web-react'], ['javascript', 'typescript', 'react']);
+  assert.deepEqual(m.profiles['web-angular'], ['javascript', 'typescript', 'angular']);
   assert.equal(m.profileAliases['web'], 'web-react');
   assert.equal(m.profileAliases['mobile'], 'mobile-rn');
   assert.equal(m.vendors['cursor']?.enabled, true);

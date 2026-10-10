@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Manifest } from '../render/manifest.ts';
 import { SCHEMA_DESCRIPTION } from './schema.ts';
 import type { Scope } from './scope.ts';
+import { formatFinding, type PolicyFinding } from '../policy/checks.ts';
 
 // The bounded prompt: the applicable rules, the diff, and the output schema.
 //
@@ -15,6 +16,10 @@ export interface PromptOptions {
   manifest: Manifest;
   scope: Scope;
   diff: string;
+  // Set when a person reads the answer rather than the CLI parsing it: the
+  // assistant replies with the issue list, carrying forward what the
+  // deterministic checks already found on this diff.
+  reply?: { checked: PolicyFinding[] };
 }
 
 const read = (root: string, relPath: string): string =>
@@ -47,9 +52,7 @@ export function buildPrompt(opts: PromptOptions): string {
     '',
     '--- WHAT TO RETURN ---',
     '',
-    'Return JSON and nothing else, against this schema:',
-    '',
-    SCHEMA_DESCRIPTION,
+    ...(opts.reply ? replyFormat(opts.reply.checked) : jsonFormat()),
     '',
     'Rules for what you return:',
     '- Only lines this change ADDED. An existing pattern the change merely touches is',
@@ -57,7 +60,40 @@ export function buildPrompt(opts: PromptOptions): string {
     '- One finding per problem. If the same rule is broken in several places, report the',
     '  first and say "and N similar" in the problem.',
     '- If you cannot describe the input that breaks it, it is not a finding. Return fewer.',
-    '- If nothing qualifies, return {"findings": []}. An empty review is a valid review and',
-    '  is a better answer than a manufactured one.',
-  ].join('\n');
+    opts.reply
+      ? `- If nothing qualifies, reply with exactly: ${NO_ISSUES}`
+      : '- If nothing qualifies, return {"findings": []}. An empty review is a valid review and',
+    opts.reply ? '' : '  is a better answer than a manufactured one.',
+  ]
+    .join('\n')
+    .trimEnd();
+}
+
+export const NO_ISSUES = 'No Redline issues in this change.';
+
+function jsonFormat(): string[] {
+  return ['Return JSON and nothing else, against this schema:', '', SCHEMA_DESCRIPTION];
+}
+
+function replyFormat(checked: PolicyFinding[]): string[] {
+  return [
+    'Reply to the engineer with the findings and nothing else — no preamble, no summary of',
+    'the change. One block per finding:',
+    '',
+    '<file>:<line>',
+    '  Redline/<BLOCKER|HIGH|SUGGESTION> [<rule-id>]: <one-line problem>',
+    '  <one or two sentences: why it breaks, and the concrete fix>',
+    '',
+    'Order them BLOCKER, then HIGH, then SUGGESTION, and end with one line counting each:',
+    '`<n> BLOCKER · <n> HIGH · <n> SUGGESTION`.',
+    '',
+    ...(checked.length === 0
+      ? ['A checker already ran the rules it can decide without a model and found nothing.']
+      : [
+          'A checker already found these without a model. They are facts, not opinions —',
+          'include each one in your reply as written, and do not report them a second time:',
+          '',
+          ...checked.map((f) => `${f.file}:${f.line}\n  ${formatFinding(f)}`),
+        ]),
+  ];
 }

@@ -1,95 +1,54 @@
 ---
-description: Review the current change against this repository's Redline standards
+description: Review the current change against this repository's Redline standards and list the issues
 ---
 
-Review the engineer's change against the standards this repository already carries, and report
-findings in Redline's output contract. This is the review the merge gate performs, run locally by
-whatever assistant the engineer has. It needs no CI, no credential and no network: everything it
-judges against is committed in this repository.
+Review the engineer's change against the standards this repository carries, and reply with the
+list of issues, or with `No Redline issues in this change.` Nothing else: no preamble, no summary
+of the change, no JSON.
 
-Run it when asked to review a change, before raising a pull request, or in a repository that
-installed the standards without a gate — `redline init` can be answered "nothing" when asked what
-runs the pull request checks, and this command is then the whole of the review.
+## 1. Get the rules and the change
 
-## The rules to apply
-
-If `redline` is on this machine, ask it rather than assembling the rules yourself:
+If `redline` runs on this machine (it needs Node 18.11 or later), let it do the work:
 
 ```
 redline review --engine embedded
 ```
 
-It narrows the standard to the stacks the changed files actually belong to and emits the diff
-alongside them, so a React rule is never applied to a build script. Take the prompt it prints as
-your instructions and review against exactly what it contains. `--staged`, `--base <ref>` and
-`--diff-file <path>` choose a different range.
+It works out which stacks the changed files belong to, so a React rule never lands on a build
+script. It also runs the rules a checker decides without a model, and it prints one prompt
+carrying the applicable rules, the diff, the checker's findings and the reply format. Follow that
+prompt exactly. Add `--staged`, `--base <ref>` or `--diff-file <path>` only when the engineer named
+a different range.
 
-That command needs Node 22. Where it will not run — an older Node, no network to fetch the package,
-an assistant with no shell — read the standards out of this repository instead. They are rendered
-into whichever of these files exists, between the `<!-- REDLINE:BEGIN -->` and
-`<!-- REDLINE:END -->` markers:
+Where it will not run (an older Node, no network to fetch the package, no shell), assemble the same
+thing yourself:
 
-- `AGENTS.md`
-- `.github/copilot-instructions.md`
-- `CLAUDE.md`
-- `.cursor/rules/redline.mdc`
+- **The rules:** the block between `<!-- REDLINE:BEGIN -->` and `<!-- REDLINE:END -->` in whichever of
+  `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` or `.cursor/rules/redline-core.mdc`
+  exists. Each one carries the whole standard for this repository's profile. Do not apply rules you
+  remember from elsewhere; if a rule is not in that block, it does not apply here.
+- **The change:** `git --no-pager diff --merge-base HEAD @{upstream} 2>/dev/null || git --no-pager diff HEAD`.
+  Review only the lines it adds or changes, and read the surrounding file only when you need it to
+  judge a line.
 
-Any one of them carries the whole standard — core rules, the stack rules for this repository's
-profile, and any repository-local rules from `.redline/local.md`. Read one; they are renderings of
-the same source. Per-stack files under `.github/instructions/redline-*.instructions.md` carry the
-same stack rules with the globs they apply to, and are worth reading when the diff spans languages.
+## 2. Reply
 
-Do not review against rules you remember from elsewhere. If a rule is not in those files, it does
-not apply here, and the repository's own version of a rule wins over the general one.
-
-## The change to review
-
-Unless the engineer named a different range, review the working change:
+One block per finding, BLOCKER first, then HIGH, then SUGGESTION:
 
 ```
-git --no-pager diff --merge-base HEAD @{upstream} 2>/dev/null || git --no-pager diff HEAD
+src/billing/load.ts:4
+  Redline/BLOCKER [core/unsafe-assertion]: a double assertion overrides the type checker.
+  Parse the response into an Invoice, or state why the cast holds in a `// SAFETY:` comment.
 ```
 
-Fall back to `git --no-pager diff` plus `git --no-pager diff --cached` when there is no upstream.
-Review **only the lines the diff adds or changes**. Read the surrounding file when you need the
-context to judge a line — a rule about a missing auth check cannot be decided from the diff alone —
-but do not report what the change merely sits next to.
+Quote the rule id exactly as the standard writes it. One rule per finding. Where something is
+clearly wrong and no rule covers it, use `core/uncatalogued` and name the principle. End with one
+line counting each severity: `1 BLOCKER · 0 HIGH · 0 SUGGESTION`.
 
-## How to report
+If nothing qualifies, reply with exactly `No Redline issues in this change.` An invented finding
+costs more trust than a missed one. The standard's "What NOT to flag" section binds this review:
+no formatting, no naming preferences, nothing you cannot describe a breaking input for.
 
-Every finding starts with the machine-readable prefix on its own first line, exactly as the
-standard specifies:
-
-```
-Redline/BLOCKER [rule-id]: <one-line problem>
-Redline/HIGH [rule-id]: <one-line problem>
-Redline/SUGGESTION [rule-id]: <one-line problem>
-```
-
-Then one or two sentences: why it breaks, and the concrete fix. Quote the rule id exactly as the
-standards file writes it — `core/query-string-concatenation`, `react/effect-derived-state`. One rule
-per finding; a line that breaks two rules gets two findings. Where you are confident something is
-wrong and no rule covers it, use `core/uncatalogued` and name the principle it offends.
-
-Give each finding its file and line. Order them BLOCKER, then HIGH, then SUGGESTION. Finish with a
-one-line verdict: the count at each severity, and whether anything blocks.
-
-If nothing qualifies, say so in one line. Do not pad the report to look thorough — an invented
-finding costs more trust than a missed one.
-
-## What not to report
-
-The standard's own noise rules bind this command. Do not report formatting, import order, or
-anything a linter or formatter already enforces; existing patterns the change only touches; missing
-tests for code outside the diff; alternative libraries where the current one works; or naming
-preferences where the name is unambiguous. Report the first instance of a repeated problem and say
-"and N similar". If you cannot describe the input that breaks it, it is not a finding.
-
-## What this command is not
-
-It is a review, not an enforcement point. It changes no file, applies no fix unless the engineer
-asks for one, and its verdict gates nothing on the host. Where this repository also runs the Redline
-gate, that gate is what decides a merge; where it does not, this report is advice a human acts on.
-
-`redline verify` is the other question and a different command: it checks that the repository's
-own guardrails are still in place, not that a change is any good.
+This is advice to the engineer. It changes no file unless they ask for a fix, and it decides
+nothing. Where the repository runs the Redline gate, the gate's own deterministic checks decide the
+merge.

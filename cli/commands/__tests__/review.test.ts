@@ -328,3 +328,50 @@ test('an endpoint that never answers fails with a host error instead of hanging'
     (error: unknown) => isRedlineError(error) && error.kind === 'host' && /did not answer within/.test(error.message)
   );
 });
+
+const ASSERTION_DIFF = `--- /dev/null
++++ b/src/a.ts
+@@ -0,0 +1,1 @@
++export const user = data as unknown as User;
+`;
+
+test('every review carries what the deterministic checks found on the same diff', async () => {
+  const { cwd, diffFile } = fixture(ASSERTION_DIFF);
+  try {
+    const report = await review(null, opts(cwd, diffFile));
+
+    assert.deepEqual(
+      report.checked.map((f) => f.ruleId),
+      ['core/unsafe-assertion']
+    );
+    assert.equal(report.prompt, null, 'no engine, so no prompt');
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+// The embedded answer is read by a person; the api answer is parsed. Each gets
+// the format its reader can use.
+test('the embedded prompt asks for the issue list; an api engine still gets JSON', async () => {
+  const { cwd, diffFile } = fixture(ASSERTION_DIFF);
+  try {
+    const embeddedReport = await review(embedded, opts(cwd, diffFile));
+    assert.match(embeddedReport.prompt ?? '', /Reply to the engineer with the findings/);
+    assert.match(embeddedReport.prompt ?? '', /No Redline issues in this change\./);
+    assert.match(embeddedReport.prompt ?? '', /\[core\/unsafe-assertion\]/);
+    assert.doesNotMatch(embeddedReport.prompt ?? '', /Return JSON/);
+
+    let sent = '';
+    const capture: ReviewEngine = {
+      name: 'capture',
+      async review(request) {
+        sent = request.prompt;
+        return { kind: 'output', raw: '{"findings": []}' };
+      },
+    };
+    await review(capture, opts(cwd, diffFile));
+    assert.match(sent, /Return JSON and nothing else/);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});

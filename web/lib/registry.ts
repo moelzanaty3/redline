@@ -9,6 +9,7 @@ export const STANDARDS: RegistryEntry[] = [
   { slug: "core", title: "Core standards", file: "standards/core.md", description: "Security, type safety, error handling, scope discipline and the severity output contract." },
   { slug: "manifest", title: "manifest.json", file: "standards/manifest.json", description: "Stack globs, profiles, vendor toggles and the standards version." },
   { slug: "javascript", title: "JavaScript", file: "standards/stacks/javascript.md", description: "Untyped and loosely-typed JS: build scripts, config, serverless handlers, legacy app code." },
+  { slug: "typescript", title: "TypeScript", file: "standards/stacks/typescript.md", description: "Type evidence in every .ts/.tsx file: unknown at the boundary only, no widening, no reflective escapes." },
   { slug: "react", title: "React (web)", file: "standards/stacks/react.md", description: "React web applications." },
   { slug: "react-native", title: "React Native", file: "standards/stacks/react-native.md", description: "React Native apps — extends the React rules." },
   { slug: "angular", title: "Angular", file: "standards/stacks/angular.md", description: "Angular applications — subscription teardown, change detection, injection sinks, guards." },
@@ -24,6 +25,7 @@ export const STANDARDS: RegistryEntry[] = [
   { slug: "kotlin", title: "Kotlin", file: "standards/stacks/kotlin.md", description: "Kotlin / Android." },
   { slug: "swift", title: "Swift (iOS)", file: "standards/stacks/swift.md", description: "iOS applications." },
   { slug: "terraform", title: "Terraform / HCL", file: "standards/stacks/terraform.md", description: "Infrastructure as code." },
+  { slug: "effect", title: "Effect", file: "standards/stacks/effect.md", description: "Repositories built on the effect library — typed error handling, tagged constructors, Layers." },
 ];
 
 export const SCRIPTS: RegistryEntry[] = [

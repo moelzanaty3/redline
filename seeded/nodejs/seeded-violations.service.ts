@@ -68,3 +68,13 @@ export class SeededController {
 export function coerce(value: unknown): string {
   return value.toString();
 }
+
+interface Charge {
+  userId: string;
+  amount: number;
+}
+
+// SEED 11 [BLOCKER] (core/unsafe-assertion) double assertion overrides the checker with no SAFETY justification
+export function asCharge(payload: Record<string, string>): Charge {
+  return payload as unknown as Charge;
+}

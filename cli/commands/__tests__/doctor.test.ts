@@ -31,12 +31,12 @@ const withGh =
   };
 
 test('an old Node fails rather than warning', () => {
-  const report = doctor({ cwd: repo('git@github.com:acme/widget.git'), nodeVersion: 'v18.13.0', run: noGh });
+  const report = doctor({ cwd: repo('git@github.com:acme/widget.git'), nodeVersion: 'v16.20.2', run: noGh });
   const node = report.checks.find((c) => c.name === 'node');
   assert.equal(node?.status, 'fail');
   assert.equal(report.ok, false);
   // The escape hatches matter more than the diagnosis. A repository pinned to
-  // 18 on purpose cannot act on "upgrade Node", and a fix nobody can apply is
+  // 16 on purpose cannot act on "upgrade Node", and a fix nobody can apply is
   // indistinguishable from the tool refusing to work.
   assert.match(node?.fix ?? '', /volta run/);
   assert.match(node?.fix ?? '', /fnm exec/);
@@ -189,4 +189,14 @@ test('an unreadable .redline.json is reported, not thrown', () => {
 test('the hint names the command that was actually run', () => {
   assert.match(unsupportedNodeHint('verify'), /npx redlinegate verify/);
   assert.doesNotMatch(unsupportedNodeHint('verify'), /npx redlinegate init/);
+});
+
+// The floor is a minor, not a major: `util.parseArgs` ignores its `default`
+// option before 18.11, so every flag default would silently vanish on 18.10.
+test('Node 18.11 is the floor, and 18.10 is below it', () => {
+  assert.equal(nodeSupport('v18.11.0').ok, true);
+  assert.equal(nodeSupport('v18.20.8').ok, true);
+  assert.equal(nodeSupport('v20.11.0').ok, true);
+  assert.equal(nodeSupport('v18.10.0').ok, false);
+  assert.equal(nodeSupport('v16.20.2').ok, false);
 });

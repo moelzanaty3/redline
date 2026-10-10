@@ -84,7 +84,9 @@ Stop at the first three unless the diff is clean there.
   Recognised in whichever dialect the stack uses: `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`,
   `# type: ignore`, `# noqa`, `# pylint: disable`, `@SuppressWarnings("unchecked")`, `@Suppress("UNCHECKED_CAST")`,
   `// swiftlint:disable`, `//nolint`, `#pragma warning disable`.
-- `core/unsafe-assertion` — No unsafe assertions (`as unknown as X`, force casts) used to silence an error.
+- `core/unsafe-assertion` — No unsafe assertions (`as unknown as X`, force casts) used to silence an error. Where one
+  is genuinely required, the justification is a `SAFETY:` comment on the same line or the line above, stating why
+  the assertion holds (`// SAFETY: payload parsed by the schema above`). Any other comment does not count.
 - `core/prefer-discriminated-unions` — Discriminated unions / sealed types over optional-field grab-bags for variant state.
 - `core/unchecked-indexed-access` — Assume the strictest project setting is on (TS `strict` + `noUncheckedIndexedAccess`,
   Kotlin/Swift null-safety, mypy strict): indexed access may be absent — require the check.

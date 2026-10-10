@@ -42,6 +42,25 @@ jobs:
       - name: Rendered artifacts are current
         run: node scripts/render-self.mjs --check
 
+      # The CLI's floor is Node 18.11 (cli/core/runtime.ts) so repositories pinned
+      # to an older LTS can run it. Everything above runs on 24, so this is what
+      # notices a newer-Node API reaching the published output.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18.11'
+
+      - name: The published output runs on the oldest supported Node
+        run: |
+          set -euo pipefail
+          node --version
+          node dist/bin/redline.js explain core/unsafe-assertion > /dev/null
+          printf -- '--- /dev/null\n+++ b/a.ts\n@@ -0,0 +1,1 @@\n+export const u = d as unknown as U;\n' > "$RUNNER_TEMP/smoke.diff"
+          if node dist/bin/redline.js policy --diff-file "$RUNNER_TEMP/smoke.diff"; then
+            echo "::error::policy found nothing in a diff carrying a BLOCKER"
+            exit 1
+          fi
+          node dist/bin/redline.js review --engine embedded --profile tooling --diff-file "$RUNNER_TEMP/smoke.diff" > /dev/null
+
   lint:
     runs-on: ubuntu-latest
     steps:
