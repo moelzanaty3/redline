@@ -7,6 +7,8 @@ import { loadRuleIds } from '../review/rules.ts';
 import { buildPrompt } from '../review/prompt.ts';
 import { resolveScope, type Scope } from '../review/scope.ts';
 import { parseReview, renderFinding, type ReviewFinding } from '../review/schema.ts';
+import { parseDiff } from '../policy/diff.ts';
+import { runChecks, type PolicyFinding } from '../policy/checks.ts';
 import type { ReviewEngine } from '../review/engines/types.ts';
 
 export interface ReviewOptions {
@@ -20,6 +22,9 @@ export interface ReviewOptions {
 
 export interface ReviewReport {
   scope: Scope;
+  // What the deterministic checks found on the same diff — the findings the gate
+  // would report, available without a model and without a second command.
+  checked: PolicyFinding[];
   // Set when the engine handed the prompt back for the caller's own model.
   prompt: string | null;
   note: string | null;
@@ -64,7 +69,9 @@ function readDiff(opts: ReviewOptions): string {
   return git.diff(git.mergeBase(base));
 }
 
-export async function review(engine: ReviewEngine, opts: ReviewOptions): Promise<ReviewReport> {
+// `engine` is null when nobody asked for a model: the report then carries the
+// deterministic findings alone, and no prompt.
+export async function review(engine: ReviewEngine | null, opts: ReviewOptions): Promise<ReviewReport> {
   const diff = readDiff(opts);
   if (diff.trim() === '') {
     throw new RedlineError(
@@ -89,12 +96,40 @@ export async function review(engine: ReviewEngine, opts: ReviewOptions): Promise
     (f) => f !== '/dev/null'
   );
   const scope = resolveScope(manifest, profile, files);
-  const prompt = buildPrompt({ root: opts.root, manifest, scope, diff });
+  const added = parseDiff(diff);
+  const checked = runChecks(
+    { added, files: [...new Set(added.map((a) => a.file))], body: '' },
+    manifest.deterministic ?? []
+  ).findings;
+
+  if (engine === null) {
+    return {
+      scope,
+      checked,
+      prompt: null,
+      note: null,
+      findings: [],
+      rejected: [],
+      rendered: [],
+      excludedFromTelemetry: true,
+    };
+  }
+
+  // The embedded engine's answer is read by a person, not parsed, so it asks for
+  // the issue list itself rather than JSON.
+  const prompt = buildPrompt({
+    root: opts.root,
+    manifest,
+    scope,
+    diff,
+    ...(engine.name === 'embedded' ? { reply: { checked } } : {}),
+  });
 
   const response = await engine.review({ prompt });
   if (response.kind === 'prompt') {
     return {
       scope,
+      checked,
       prompt: response.prompt,
       note: response.note,
       findings: [],
@@ -114,6 +149,7 @@ export async function review(engine: ReviewEngine, opts: ReviewOptions): Promise
 
   return {
     scope,
+    checked,
     prompt: null,
     note: null,
     findings,

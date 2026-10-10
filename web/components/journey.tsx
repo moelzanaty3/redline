@@ -62,7 +62,13 @@ const MENU: [string, string][] = [
 const dim = (t: string): Tok => ({ t, c: "tk-dim" });
 const white = (t: string): Tok => ({ t, c: "tk-white" });
 const green = (t: string): Tok => ({ t, c: "tk-green" });
-const blue = (t: string): Tok => ({ t, c: "tk-blue" });
+const red = (t: string): Tok => ({ t, c: "tk-red" });
+const amber = (t: string): Tok => ({ t, c: "tk-amber" });
+// The CLI paints answers and URLs cyan; the site has one blue, and a terminal
+// panel is not the place to introduce a second accent.
+const cyan = (t: string): Tok => ({ t, c: "tk-blue" });
+const bold = (t: string): Tok => ({ t, c: "tk-bold" });
+const plain = (t: string): Tok => ({ t });
 
 const cmd = (text: string): Line => ({
   cmd: true,
@@ -148,6 +154,72 @@ function assertMenuMatchesWizard(): void {
   }
 }
 
+// A terminal folds a line longer than its width onto the next row, with no
+// indent. The CLI prints these long lines whole, so the panel does what a
+// TERM_COLUMNS-wide terminal would, at a word boundary.
+const TERM_COLUMNS = 100;
+function softWrap(toks: Tok[]): Line[] {
+  const lines: Line[] = [];
+  let line: Tok[] = [];
+  let width = 0;
+  for (const tok of toks) {
+    for (const word of tok.t.split(/(?<= )/)) {
+      if (width + word.trimEnd().length > TERM_COLUMNS && width > 0) {
+        lines.push({ toks: line });
+        line = [];
+        width = 0;
+      }
+      const last = line.at(-1);
+      if (last !== undefined && last.c === tok.c) last.t += word;
+      else line.push({ t: word, c: tok.c });
+      width += word.length;
+    }
+  }
+  if (line.length > 0) lines.push({ toks: line });
+  return lines;
+}
+
+// The file and line the review below reports, in the diff the example change
+// adds: a fetch whose JSON is double-asserted to the domain type.
+const REVIEW_FILE = "src/billing/load.ts";
+const REVIEW_LINE = 3;
+
+// cli/ui/tty.ts FACE and WORDMARK, read from the source for the same reason the
+// menu is: a block-letter logo copied into this file would go on printing after
+// the CLI's own had changed.
+function wordmark(): string[] {
+  const source = readFileSync(join(repoRoot(), "cli/ui/tty.ts"), "utf8");
+  const word = /const WORDMARK = '([A-Z]+)'/.exec(source)?.[1];
+  const face = /const FACE[^=]*=\s*\{([\s\S]*?)\n\};/.exec(source)?.[1];
+  const glyphs = new Map<string, string[]>();
+  for (const m of (face ?? "").matchAll(/([A-Z]):\s*\[([^\]]*)\]/g)) {
+    glyphs.set(m[1]!, [...m[2]!.matchAll(/'([^']*)'/g)].map((r) => r[1]!));
+  }
+  const letters = [...(word ?? "")].map((ch) => glyphs.get(ch));
+  if (word === undefined || letters.length === 0 || letters.some((l) => l?.length !== 5)) {
+    throw new Error(
+      "could not read the wordmark out of cli/ui/tty.ts; the home page draws it"
+    );
+  }
+  return Array.from({ length: 5 }, (_, row) => letters.map((l) => l![row]).join(" "));
+}
+
+// cli/policy/checks.ts — the problem text the deterministic unsafe-assertion
+// check prints, read from the source so the transcript cannot quote a message
+// the checker no longer writes.
+function demoReviewProblem(): string {
+  const source = readFileSync(join(repoRoot(), "cli/policy/checks.ts"), "utf8");
+  const chunk =
+    /'a double assertion overrides the type checker[^']*'(?:\s*\+\s*'[^']*')*/.exec(source)?.[0] ?? "";
+  const text = [...chunk.matchAll(/'([^']*)'/g)].map((m) => m[1]).join("");
+  if (text === "") {
+    throw new Error(
+      "cli/policy/checks.ts no longer prints the double-assertion problem the home page quotes"
+    );
+  }
+  return text;
+}
+
 // Mirrors cli/render/commands.ts loadCommands: one slash command per .md file in
 // commands/, rendered once per vendor host. Read at build time so the page
 // cannot count files that are not on disk — and throws rather than degrading.
@@ -198,18 +270,20 @@ export function Journey({ initCmd }: { initCmd: string }) {
 
   // cli/commands/init.ts — [...gate.outcomes, ...ownership.outcomes,
   // ...security.outcomes, ...policy.outcomes], in that order.
-  const outcomes: [string, string, string][] = [
-    ["applied", "labels", 'label "no-adr"'],
-    ["applied", "gate", `wrote ${PR_TEMPLATE}`],
+  const outcomes: [string, string][] = [
+    ["labels", 'label "no-adr"'],
+    ["gate", `wrote ${PR_TEMPLATE}`],
     // review-ownership is deliberately absent: it is opt-in behind
     // `--with review-ownership`, so a default run never seeds CODEOWNERS and a
     // transcript of a default run must not show it doing so.
-    ["applied", "secret-scanning", "secret scanning"],
-    ["applied", "push-protection", "secret scanning push protection"],
-    ["applied", "dependency-alerts", "dependabot alerts (vulnerability alerts)"],
-    ["applied", "merge-policy", "branch ruleset"],
-    ["applied", "repo-property", 'repository property "redline=onboarded"'],
+    ["secret-scanning", "secret scanning"],
+    ["push-protection", "secret scanning push protection"],
+    ["dependency-alerts", "dependabot alerts (vulnerability alerts)"],
+    ["merge-policy", "branch ruleset"],
+    ["repo-property", 'repository property "redline=onboarded"'],
   ];
+  // cli/ui/report.ts — the capability column is padded to the longest name.
+  const nameWidth = Math.max(...outcomes.map(([name]) => name.length));
 
   // cli/commands/verify.ts, in the order it calls add() — four of the eight
   // checks that run. Details are the healthy branch of each, for a repository
@@ -221,45 +295,76 @@ export function Journey({ initCmd }: { initCmd: string }) {
     ["artifacts-current", `rendered artifacts match standards v${version}`],
   ];
 
+  const reviewProblem = demoReviewProblem();
+
+  // Every line below is laid out the way cli/ui/tty.ts and cli/ui/report.ts lay
+  // it out — the glyphs, the two-space gutters, the padded status column — and
+  // painted in the colours those functions use.
   const lines: Line[] = [
     cmd(initCmd),
-    // The menu, as it looks once answered. `redline init` with no flags at a
-    // terminal asks these before it writes anything, and each row here is the
-    // line the CLI leaves behind when the question is confirmed — cli/ui/tty.ts
-    // `answered()`, which is `◇  <title> · <answer>`.
-    //
-    // Showing the questions collapsed rather than expanded is a choice about
-    // space, not about honesty: the expanded list is in the section directly
-    // below this one. What must not happen is this transcript continuing to
-    // open with a command that silently produces the writes, because that is
-    // no longer what typing it does.
-    ...MENU.map(([question, answer]) => ({
-      toks: [green("◇  "), white(question), dim(" · "), blue(answer)],
-    })),
+    // tty.ts intro(): the wordmark, a blank row, the chip, then a bare bar.
+    // One block rather than five lines: the transcript's line height would
+    // open gaps between the rows of block glyphs that a terminal does not draw.
+    { toks: [{ t: wordmark().join("\n"), c: "tk-wordmark" }] },
     { toks: [] },
-    { toks: [dim("profile "), white(PROFILE)] },
-    // cli/bin/redline.ts:130 — `write ` is padded to the width of `remove`, so
-    // three spaces separate it from the path, not two.
-    ...shownWrites.map((f) => ({ toks: [dim("  write   "), white(f)] })),
-    ...outcomes.map(([status, capability, detail]) => ({
+    { toks: [red("┌"), plain("  "), { t: " Redline ", c: "tk-chip" }] },
+    { toks: [dim("│")] },
+    // wizard.ts ORIENTATION, through tty.ts note(): only the first line carries
+    // the bar and the marker; the rest print as they are.
+    { toks: [dim("│"), plain("  "), amber("▲"), plain(" Around ten questions, most already answered.")] },
+    { toks: [plain("Whatever was detected is preselected, so enter accepts it.")] },
+    { toks: [plain("The last question can still be a preview that writes nothing.")] },
+    // tty.ts answered() — `◇  <title> · <answer>` — the line each question
+    // leaves behind once it is confirmed. The expanded lists are further down
+    // the page.
+    ...MENU.map(([question, answer]) => ({
+      toks: [dim("◇"), plain(`  ${question} `), dim("·"), plain(" "), cyan(answer)],
+    })),
+    // prompt.ts task() → tty.ts spinnerDone(), once the run finishes.
+    { toks: [dim("│"), plain("  "), green("✓"), plain(" onboarding this repository")] },
+    // report.ts renderReport().
+    { toks: [plain("  profile "), cyan(PROFILE)] },
+    { toks: [] },
+    { toks: [bold("  Files"), dim(`  ${totalWrites} written`)] },
+    ...shownWrites.map((f) => ({ toks: [plain("   "), green("+"), plain(` ${f}`)] })),
+    { toks: [] },
+    { toks: [bold("  Repository settings"), dim(`  ${outcomes.length} in place`)] },
+    ...outcomes.map(([capability, detail]) => ({
       toks: [
-        green(`  ${status.padEnd(11)} `),
-        blue(capability),
-        dim("  "),
+        plain("   "),
+        green(`✓ ${"applied".padEnd(11)}`),
+        plain(" "),
+        bold(capability.padEnd(nameWidth)),
+        plain("  "),
         dim(detail),
       ],
     })),
-    {
-      toks: [
-        dim("pull request: "),
-        blue(`https://github.com/${EXAMPLE_REPO}/pull/${EXAMPLE_PR}`),
-      ],
-    },
+    { toks: [] },
+    { toks: [bold("  Pull request")] },
+    { toks: [plain("   "), cyan(`https://github.com/${EXAMPLE_REPO}/pull/${EXAMPLE_PR}`)] },
+    { toks: [] },
+    // The second `#` line, like the first, is ours: the time between runs.
+    { toks: [dim("# later, on a feature branch, before pushing")] },
+    cmd("redline review"),
+    { toks: [plain(`profile ${PROFILE} — rules in scope: core, typescript, react`)] },
+    { toks: [bold(`${REVIEW_FILE}:${REVIEW_LINE}`)] },
+    ...softWrap([
+      plain("  Redline/"),
+      red("BLOCKER"),
+      plain(` [core/unsafe-assertion]: ${reviewProblem}`),
+    ]),
+    { toks: [plain("1 finding(s)")] },
+    ...softWrap([
+      dim(
+        "that is every rule a checker can decide; the rest of the standard needs a model — " +
+          "run /redline-review in your assistant, or `redline review --engine api`"
+      ),
+    ]),
     { toks: [] },
     { toks: [dim(`# the gate workflow has since run on PR #${EXAMPLE_PR}`)] },
     cmd("redline verify"),
     ...findings.map(([check, detail]) => ({
-      toks: [green("ok  "), dim("  "), white(check.padEnd(22)), dim(` ${detail}`)],
+      toks: [green("ok  "), plain("  "), white(check.padEnd(22)), dim(` ${detail}`)],
     })),
   ];
 
@@ -269,15 +374,12 @@ export function Journey({ initCmd }: { initCmd: string }) {
         <div className="hm-sec-head">
           <h2 className="hm-h2">One repository, start to finish</h2>
           <p className="hm-lead">
-            <b>
-              Every command and every line of output below is a string the CLI
-              actually prints
-            </b>{" "}
-            — the file names are the ones it writes, the findings are the ones it
-            reports. The <code>◇</code> rows are the menu after you answer it;
-            each is a real list you pick from, shown{" "}
-            <a href="#choices">expanded below</a>. The one <code>#</code> line is
-            ours, marking the gap between the two runs.
+            <b>Every line below is one the CLI prints</b>, laid out and coloured
+            the way it draws them: onboarding, a review before you push, then
+            the check that it all held. The <code>◇</code> rows are the
+            questions after you answer them —{" "}
+            <Link href="/docs/onboarding#menu">each one explained in the docs</Link>. The two{" "}
+            <code>#</code> lines are ours, marking time between runs.
           </p>
         </div>
 

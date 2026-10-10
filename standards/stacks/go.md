@@ -10,6 +10,20 @@
 - `go/copying-sync-primitive` — **Copying a struct containing `sync.Mutex`/`sync.WaitGroup`** (passing by value, range over slice of them).
 - `go/defer-in-loop` — **`defer` in a loop for per-iteration resources** (files, rows, locks) — defers pile up until function exit; extract loop body into a function.
 - `go/panic-for-expected-failure` — **Panics for expected failures** — panic only for programmer errors; return errors otherwise.
+- `go/error-laundered-to-nil` — **An error checked, then laundered to success** — `if err != nil { return nil }`
+  (or `return x, nil`), or the inverse `if err == nil { return err }`. The caller sees success and carries on
+  with a zero or partial result: the write failed and the handler answers 200. Return the error wrapped, or say
+  in a comment why this failure is success.
+- `go/typed-nil-in-interface` — **A typed nil returned as an interface.** A nil `*MyError` returned through
+  `error` is a non-nil interface, so every `err != nil` upstream fires and a successful request fails. Return
+  the literal `nil` on success and declare the variable as `error`, not `*MyError`.
+- `go/sql-rows-lifecycle` — **`sql.Rows` not closed, or `rows.Err()` not checked.** `rows.Next()` returns false
+  on a mid-iteration failure too, so without `rows.Err()` 40 of 1000 rows are returned as complete; without
+  `defer rows.Close()` the connection is never released and the pool runs dry. Defer `Close` after the error
+  check and check `rows.Err()` after the loop.
+- `go/nil-check-after-deref` — **A pointer dereferenced before its own nil check.** The check shows the author
+  expected nil, and the earlier dereference panics in exactly that case. Check first and return early; in tests
+  use `t.Fatalf`, since `t.Errorf` does not stop the test.
 
 ## HIGH
 
@@ -21,6 +35,25 @@
 - `go/unbuffered-channel-blocks-producer` — Unbuffered channel used where the producer must never block, or buffer sizes chosen arbitrarily without comment.
 - `go/time-after-in-loop` — `time.After` in a loop (leaks timers until fire) — use `time.NewTimer`/`Ticker` with Stop.
 - `go/package-level-mutable-state` — Package-level mutable state in new code.
+- `go/nil-nil-return` — **`return nil, nil` from a `(pointer, error)` function.** Callers assume no error means
+  a usable value, so `u.Name` panics when the user is missing. Return a sentinel (`ErrNotFound`) checked with
+  `errors.Is`. Not when the contract documents nil as valid and every caller checks it.
+- `go/error-wrap-verb` — **An error formatted with `%v`/`%s` instead of `%w`.** `fmt.Errorf("find: %v", err)`
+  flattens the cause to text, so `errors.Is(err, sql.ErrNoRows)` upstream is false and a 404 becomes a 500. Use
+  `%w`. Not when deliberately hiding an internal error from the API contract — say so on the line.
+- `go/fatal-in-test-goroutine` — **`t.Fatal`/`t.FailNow`/`t.Skip` from a goroutine the test started.** `FailNow`
+  exits only the calling goroutine, so the test keeps running and can pass or hang on `wg.Wait()` until the run
+  times out. Send the error back on a channel or use `errgroup`, and fail from the test goroutine.
+- `go/context-grown-in-loop` — **A context reassigned to a child of itself in a loop.** `ctx =
+  context.WithValue(ctx, …)` per iteration chains contexts, so lookups walk every parent and
+  `WithCancel`/`WithTimeout` keep every cancel func and timer alive. Derive a loop-scoped `ctx :=` and
+  `cancel()` each iteration.
+- `go/non-exhaustive-enum-switch` — **A `switch` over an enum-like const type that misses members and has no
+  `default`.** A value added later falls through silently — refunds restore no stock. List every member, or add
+  a `default` that returns an error. Not when a comment says the subset is deliberate.
+- `go/untagged-wire-struct` — **A struct (un)marshalled to JSON/YAML/XML without field tags.** The wire contract
+  follows the Go field names, so renaming `UserID` to `UserId` silently changes the key and consumers decode a
+  zero value. Tag every exported field.
 
 ## SUGGESTION
 

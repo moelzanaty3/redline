@@ -1,6 +1,6 @@
 {
   "$comment": "Single source of truth for Redline. scripts/render.mjs turns this into vendor-specific artifacts. Never hand-edit generated output.",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "core": {
     "title": "Redline Core Engineering Standards",
     "source": "standards/core.md"
@@ -16,6 +16,16 @@
         "**/*.cjs",
         "**/*.vue",
         "**/*.svelte"
+      ]
+    },
+    "typescript": {
+      "title": "TypeScript",
+      "source": "standards/stacks/typescript.md",
+      "globs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts"
       ]
     },
     "react": {
@@ -213,40 +223,61 @@
         "**/*.tfvars",
         "**/*.hcl"
       ]
+    },
+    "effect": {
+      "title": "Effect",
+      "source": "standards/stacks/effect.md",
+      "extends": [
+        "typescript"
+      ],
+      "globs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts"
+      ]
     }
   },
   "$profileComment": "A repo installs exactly one profile. Profiles are the disambiguation mechanism: glob negation is not portable across vendors, so we never install two rule sets that would contradict each other in the same repo.",
   "profiles": {
     "tooling": [
-      "javascript"
+      "javascript",
+      "typescript"
     ],
     "web-react": [
       "javascript",
+      "typescript",
       "react"
     ],
     "web-next": [
       "javascript",
+      "typescript",
       "react",
       "nextjs"
     ],
     "web-angular": [
       "javascript",
+      "typescript",
       "angular"
     ],
     "web-vue": [
       "javascript",
+      "typescript",
       "vue"
     ],
     "web-svelte": [
       "javascript",
+      "typescript",
       "svelte"
     ],
     "web-vanilla": [
       "javascript",
+      "typescript",
       "dom"
     ],
     "mobile-rn": [
       "javascript",
+      "typescript",
       "react",
       "react-native"
     ],
@@ -266,11 +297,13 @@
     ],
     "service-node": [
       "javascript",
+      "typescript",
       "microservices",
       "nodejs"
     ],
     "service-express": [
       "javascript",
+      "typescript",
       "microservices",
       "express"
     ],
@@ -287,9 +320,13 @@
     ],
     "fullstack-node": [
       "javascript",
+      "typescript",
       "react",
       "microservices",
       "nodejs"
+    ],
+    "lib-effect": [
+      "effect"
     ]
   },
   "$aliasComment": "Legacy profile names accepted by sync-targets.txt for backwards compatibility.",
@@ -329,7 +366,56 @@
   "deterministic": [
     "core/untracked-todo",
     "core/type-checker-suppression",
+    "core/unsafe-assertion",
     "javascript/var-in-new-code",
-    "javascript/unsafe-numeric-coercion"
+    "javascript/unsafe-numeric-coercion",
+    "typescript/module-mocking",
+    "typescript/unknown-return",
+    "typescript/unknown-type-alias",
+    "typescript/object-parameter",
+    "typescript/reflect-dynamic-access",
+    "python/blanket-suppression",
+    "python/broad-exception-assertion",
+    "python/module-patching",
+    "python/quadratic-accumulation",
+    "java/reference-equality",
+    "java/bigdecimal-value-semantics",
+    "java/dropped-exception-cause",
+    "java/print-stack-trace",
+    "java/ignored-pure-result",
+    "kotlin/todo-stub",
+    "kotlin/dropped-exception-cause",
+    "kotlin/downcast-readonly-collection",
+    "kotlin/print-stack-trace",
+    "swift/concurrency-checking-opt-out",
+    "swift/unowned-capture",
+    "swift/implicitly-unwrapped-declaration",
+    "swift/copying-reduce-accumulator",
+    "csharp/rethrow-loses-stack",
+    "csharp/reserved-exception-type",
+    "csharp/culture-implicit-parse-format",
+    "csharp/ef-inmemory-test-double",
+    "go/error-wrap-verb",
+    "go/missing-client-server-timeout",
+    "terraform/empty-list-equality",
+    "terraform/ignore-changes-all",
+    "react/set-state-in-render",
+    "react/javascript-url",
+    "react/async-effect-callback",
+    "react/impure-render",
+    "react-native/deep-import",
+    "react-native/cached-window-dimensions",
+    "vue/async-computed",
+    "vue/shared-mutable-default",
+    "angular/async-lifecycle-hook",
+    "angular/output-native-event-name",
+    "angular/banana-out-of-box",
+    "angular/manual-lifecycle-call",
+    "angular/impure-pipe",
+    "svelte/async-store-start",
+    "svelte/load-in-page-component",
+    "svelte/double-brace-mustache",
+    "dom/remove-listener-fresh-function",
+    "dom/on-property-clobbers-handler"
   ]
 }

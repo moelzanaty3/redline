@@ -737,15 +737,14 @@ test('--gate and --repo together are refused rather than silently ignoring one',
   assert.match(lines.join('\n'), /cannot target another repository/);
 });
 
-// npm's `engines` field only warns. Onboarding a repository pinned to Node 18
-// printed EBADENGINE and then ran the tool anyway, so the first real symptom
-// was a failure from inside a dependency, raised partway through a command
-// that may already have written files.
+// npm's `engines` field only warns. Under a Node below the floor the tool
+// would print EBADENGINE and then run anyway, so the first real symptom would
+// be a failure partway through a command that may already have written files.
 test('a Node below the floor is refused before the command runs', async () => {
   const { opts, lines } = deps(repo());
   const code = await run(['status'], { ...opts, nodeVersion: 'v16.20.2' });
   assert.equal(code, 2);
-  assert.ok(lines.some((l) => l.includes('Node 18 or later')));
+  assert.ok(lines.some((l) => l.includes('Node 18.11 or later')));
   // The three ways to run one command under a newer Node without touching a
   // pin the repository set deliberately.
   assert.ok(lines.some((l) => l.includes('volta run')));
@@ -796,8 +795,8 @@ function withDiffFile(body: string): string {
 const CLEAN_DIFF = '--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,1 +1,2 @@\n x\n+const ok = 1;\n';
 
 // A clean `redline policy` used to read as "the standards found nothing". Only
-// four rules in the catalogue can be decided without a model, so what it
-// actually meant was "the four checkable rules found nothing" — and a
+// a handful of rules in the catalogue can be decided without a model, so what it
+// actually meant was "the checkable rules found nothing" — and a
 // repository full of violations passing silently is how that gap gets
 // mistaken for a broken tool.
 test('policy says how much of the catalogue it could not decide', async () => {
@@ -1040,4 +1039,38 @@ test('review --json exits 0 with findings, the same as the human output', async 
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+const ASSERTION_DIFF =
+  '--- /dev/null\n+++ b/src/a.ts\n@@ -0,0 +1,1 @@\n+export const user = data as unknown as User;\n';
+
+// A person who types `redline review` wants the issues, not a prompt addressed
+// to a model. At a terminal with no --engine they get what the checker decides,
+// and the command says where the rest comes from — it does not send the diff
+// anywhere because nobody asked it to.
+test('review at a terminal with no engine prints the findings, not a prompt', async () => {
+  const { opts, lines } = deps(repo());
+  const code = await run(['review', '--profile', 'web-react', '--diff-file', withDiffFile(ASSERTION_DIFF)], {
+    ...opts,
+    isInteractive: () => true,
+  });
+  const text = lines.join('\n');
+  assert.equal(code, 0);
+  assert.match(text, /Redline\/BLOCKER \[core\/unsafe-assertion\]/);
+  assert.match(text, /1 finding\(s\)/);
+  assert.match(text, /\/redline-review/);
+  assert.doesNotMatch(text, /You are reviewing a change/);
+});
+
+test('review in a pipe or an assistant still hands back the embedded prompt', async () => {
+  const { opts, lines } = deps(repo());
+  await run(['review', '--profile', 'web-react', '--diff-file', withDiffFile(ASSERTION_DIFF)], {
+    ...opts,
+    isInteractive: () => false,
+  });
+  const text = lines.join('\n');
+  assert.match(text, /You are reviewing a change/);
+  // The checker's finding is carried into the prompt, so the assistant reports it.
+  assert.match(text, /include each one in your reply/);
+  assert.match(text, /\[core\/unsafe-assertion\]/);
 });

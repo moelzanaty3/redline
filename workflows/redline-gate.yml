@@ -144,7 +144,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           RUNG: ${{ inputs.rung }}
-          REDLINE_CLI_VERSION: '0.0.3'
+          REDLINE_CLI_VERSION: 'latest'
         run: |
           set -euo pipefail
           # Three dots: the diff against the merge base, not against the tip of
@@ -219,9 +219,12 @@ jobs:
           # `${{ github.event.pull_request.body }}` inline is a script injection
           # anyone who can open a pull request can use.
           PR_BODY: ${{ github.event.pull_request.body }}
-          # Pinned, not @latest: the gate's behaviour must not change under a
-          # repository because a release happened overnight.
-          REDLINE_CLI_VERSION: '0.0.3'
+          # `latest`, deliberately: the gate tracks every release so new checks
+          # reach every repository without a pin bump. The cost is that a publish
+          # changes gate behaviour with no pull request here — a vendored copy
+          # (`redline init --gate-source local`) is stamped with a fixed version
+          # instead and is the option for a repository that needs that control.
+          REDLINE_CLI_VERSION: 'latest'
         run: |
           set -euo pipefail
 

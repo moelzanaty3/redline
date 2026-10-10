@@ -9,7 +9,7 @@ const manifest = loadManifest(fileURLToPath(new URL('../../../', import.meta.url
 test('resolves a plain profile in manifest order', () => {
   assert.deepEqual(resolveProfile(manifest, 'web-react'), {
     profile: 'web-react',
-    stacks: ['javascript', 'react'],
+    stacks: ['javascript', 'typescript', 'react'],
   });
 });
 
@@ -19,18 +19,18 @@ test('resolves a plain profile in manifest order', () => {
 test('the legacy web alias still resolves to react', () => {
   assert.deepEqual(resolveProfile(manifest, 'web'), {
     profile: 'web-react',
-    stacks: ['javascript', 'react'],
+    stacks: ['javascript', 'typescript', 'react'],
   });
 });
 
-test('each framework profile carries javascript plus its own stack', () => {
+test('each framework profile carries javascript, typescript and its own stack', () => {
   for (const [name, stack] of [
     ['web-angular', 'angular'],
     ['web-vue', 'vue'],
     ['web-svelte', 'svelte'],
     ['web-vanilla', 'dom'],
   ] as const) {
-    assert.deepEqual(resolveProfile(manifest, name).stacks, ['javascript', stack]);
+    assert.deepEqual(resolveProfile(manifest, name).stacks, ['javascript', 'typescript', stack]);
   }
 });
 
@@ -41,7 +41,7 @@ test('resolves an alias to its target key', () => {
 
 test('a parent stack always precedes the child that extends it', () => {
   const { stacks } = resolveProfile(manifest, 'mobile-rn');
-  assert.deepEqual(stacks, ['javascript', 'react', 'react-native']);
+  assert.deepEqual(stacks, ['javascript', 'typescript', 'react', 'react-native']);
 });
 
 test('a stack is listed once even when reached twice', () => {
@@ -61,7 +61,7 @@ test('an unknown profile names the known ones', () => {
 // fitted worst.
 test('several profiles resolve to the union of their stacks', () => {
   const { stacks } = resolveProfile(manifest, 'web,infra');
-  assert.deepEqual(stacks, ['terraform', 'javascript', 'react']);
+  assert.deepEqual(stacks, ['terraform', 'javascript', 'typescript', 'react']);
 });
 
 // `.redline.json` records one string and every reader hands it straight back
@@ -84,7 +84,7 @@ test('a profile named twice is resolved once', () => {
 test('an alias and its target collapse to one profile', () => {
   assert.deepEqual(resolveProfile(manifest, 'web,web-react'), {
     profile: 'web-react',
-    stacks: ['javascript', 'react'],
+    stacks: ['javascript', 'typescript', 'react'],
   });
 });
 
@@ -108,4 +108,13 @@ test('one bad name in a list names that name, not the whole list', () => {
 test('whitespace and empty segments are tolerated, an empty list is not', () => {
   assert.deepEqual(resolveProfile(manifest, ' web , infra ,'), resolveProfile(manifest, 'infra,web'));
   assert.throws(() => resolveProfile(manifest, ' , '), /no profile given/);
+});
+
+// lib-effect is added on top of a base profile, and effect extends typescript,
+// so the TypeScript rules arrive once and before the Effect rules that build on them.
+test('lib-effect layers on a base profile without repeating typescript', () => {
+  const { stacks } = resolveProfile(manifest, 'service-node,lib-effect');
+  assert.equal(stacks.filter((s) => s === 'typescript').length, 1);
+  assert.ok(stacks.indexOf('typescript') < stacks.indexOf('effect'));
+  assert.ok(stacks.includes('nodejs'));
 });

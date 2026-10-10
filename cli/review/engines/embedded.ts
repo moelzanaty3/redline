@@ -15,7 +15,7 @@ export const embedded: ReviewEngine = {
       kind: 'prompt',
       prompt: request.prompt,
       note:
-        'embedded engine: apply the prompt above and return the JSON it asks for. ' +
+        'embedded engine: apply the prompt above and reply with the issue list it asks for. ' +
         'Run `redline review --engine api` to have the CLI call a model itself.',
     };
   },

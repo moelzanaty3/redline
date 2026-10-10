@@ -170,11 +170,18 @@ export function proposeProfile(input: DetectInput): Proposal {
     dep: (name) => name in deps,
   };
 
+  let base: Proposal = { profile: 'tooling', confidence: 'low', evidence: ['no recognised stack signal'] };
   for (const rule of RULES) {
     const match = rule.when(signals);
     if (match) {
-      return { profile: rule.profile, confidence: match.confidence, evidence: match.evidence };
+      base = { profile: rule.profile, confidence: match.confidence, evidence: match.evidence };
+      break;
     }
   }
-  return { profile: 'tooling', confidence: 'low', evidence: ['no recognised stack signal'] };
+
+  // Effect is a library, not an application shape, so it rides on top of
+  // whatever profile the repository already is rather than competing with it.
+  return signals.dep('effect')
+    ? { ...base, profile: `${base.profile},lib-effect`, evidence: [...base.evidence, 'effect dependency'] }
+    : base;
 }

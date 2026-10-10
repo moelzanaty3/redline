@@ -38,10 +38,16 @@ export default function Page() {
       </CodeWindow>
 
       <h2>Two engines, and the default calls no model</h2>
+      <p>
+        Typed at a terminal with no <code>--engine</code>, <code>redline review</code>{" "}
+        prints the findings the checker decides without a model and says where
+        the rest come from — it never sends the diff anywhere unasked.
+      </p>
       <ul>
         <li>
-          <b>embedded</b> (default) — emits the bounded prompt for the assistant
-          already running the command. That is the design, not a stub: the CLI is
+          <b>embedded</b> (the default inside an assistant or a pipe) — emits the
+          bounded prompt for the assistant already running the command, which
+          replies with the list of issues. That is the design, not a stub: the CLI is
           usually being run <i>by</i> an assistant that already has a model and a
           context, and calling a second one from inside that session pays twice
           for a worse answer.
@@ -58,7 +64,7 @@ export default function Page() {
 
       <h2>The model returns data, not comments</h2>
       <p>
-        The model returns JSON against a published schema. The CLI validates it
+        With <code>--engine api</code> the model returns JSON against a published schema. The CLI validates it
         and writes the <code>Redline/&lt;SEVERITY&gt; [rule-id]:</code> line
         itself. A model that writes that prefix will eventually write a severity
         that does not exist or an id it invented, and{" "}

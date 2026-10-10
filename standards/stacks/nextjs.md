@@ -37,6 +37,13 @@ are on. Most rules below are that boundary, seen from a different angle.
 - `nextjs/user-data-in-cached-render` — **Request-specific data rendered in a cached path.** A segment that is statically rendered or wrapped in `unstable_cache` serves one response to everybody. Rendering the signed-in user's name, balance or permissions into it hands the first visitor's data to the second. Opt the segment out, or move the per-user part behind its own dynamic boundary.
 - `nextjs/unsanitised-redirect` — **`redirect()` given a user-controlled destination.** A `?next=` or `?returnTo=` parameter passed through unchecked is an open redirect, and in an auth callback it is a token-forwarding gadget. Allow-list the path, or accept a relative path only.
 - `nextjs/client-side-authorisation` — **Authorisation decided in client code.** Hiding a control with `session?.role === 'admin'` in a client component is presentation. The same check belongs in the action or handler behind it; without it the bundle simply documents which request to forge.
+- `nextjs/async-client-component` — **An `async` component in a `'use client'` module.** Client Components
+  cannot be async, so the route errors at render — typical when `'use client'` is added for a `useState` to a
+  page that still `await`s. Fetch in a Server Component and pass the data down, or pass a promise and unwrap it
+  with `use()`.
+- `nextjs/cookie-write-in-render` — **`cookies().set`/`.delete` while a Server Component renders.** Headers are
+  already streaming, so the call throws and every visitor gets a 500. Write cookies in a Server Action, Route
+  Handler or middleware/proxy.
 
 ## HIGH
 
@@ -49,6 +56,14 @@ are on. Most rules below are that boundary, seen from a different angle.
 - `nextjs/raw-img-element` — `<img>` where `next/image` applies — no sizing, no format negotiation, and a layout shift on every load.
 - `nextjs/route-handler-no-cache-intent` — A `GET` route handler with neither an explicit `dynamic` nor a cache directive, whose behaviour then changes silently between Next versions.
 - `nextjs/action-returns-internal-error` — A Server Action returning a caught error's `message` or `stack` to the client, putting the query, path or driver detail on the page.
+- `nextjs/navigation-throw-caught` — **`redirect()`, `notFound()`, `forbidden()` or `unauthorized()` inside a
+  `try` whose `catch` does not rethrow.** They work by throwing, so the catch swallows them: the redirect never
+  happens and the action reports failure for a write that succeeded, inviting a duplicate retry. Call them after
+  the `try`, or `unstable_rethrow(err)` first in the catch.
+- `nextjs/mutation-without-revalidation` — **A Server Action that writes without `revalidatePath`,
+  `revalidateTag`/`updateTag` or `refresh()`.** The cached payload still holds the old state, so the user sees
+  the old name after renaming and renames again. Revalidate what the write affects. Not when the action
+  redirects to a dynamic route that refetches.
 
 ## SUGGESTION
 

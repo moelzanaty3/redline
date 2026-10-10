@@ -19,7 +19,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | Path | What | Where it lives in production |
 | --- | --- | --- |
 | `standards/core.md` | Core standards: security, type safety, error handling, scope, and the severity output contract | source of truth — **the only file a human edits** |
-| `standards/stacks/*.md` | Per-stack rules: javascript, react, react-native, nodejs, microservices, java, go, python, csharp, kotlin, swift, terraform | source of truth |
+| `standards/stacks/*.md` | Per-stack rules: javascript, typescript, react, angular, vue, svelte, dom, react-native, nextjs, nodejs, express, microservices, java, go, python, csharp, kotlin, swift, terraform, effect | source of truth |
 | `standards/manifest.json` | Stack globs, profiles, vendor toggles, standards version | source of truth |
 | `cli/` | The `redline` CLI (`redline init`, `redline verify`) — detects the platform, renders standards, installs the gate | run via `npx redlinegate`, or `redline` once installed with `npm i -g redlinegate` |
 | `.github/pull_request_template.md` | Readiness checklist + ADR link | every onboarded repo |
@@ -39,7 +39,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | `scripts/validate.mjs` | Bundle self-check, run by this repo's CI | this repo |
 | `scripts/check-pins.mjs` | Re-resolves SHA-pinned actions against their upstream tag | this repo's CI |
 | `scripts/assign-rule-ids.mjs` | Assigns and verifies the stable `<stack>/<slug>` id on every rule | this repo |
-| `seeded/` | Recall corpus (16 stacks, 117 BLOCKER seeds) + precision corpus, scored by `scripts/score-seeds.mjs` | validation only, never merged |
+| `seeded/` | Recall corpus (20 stacks, 175 BLOCKER seeds) + precision corpus, scored by `scripts/score-seeds.mjs` | validation only, never merged |
 
 ## Language coverage vs org reality
 
@@ -150,7 +150,7 @@ command names the one you probably meant. This is the map.
 | `redline init` | Onboard: render standards, apply the security floor, install the gate (advisory), register. Idempotent — a re-run reconciles |
 | `redline status` | What is installed here, how hard it bites, what an administrator still owes you, and whether the standards have moved on. Reads the checkout only — no credential, no host |
 | `redline verify` | Check the repository still matches what `.redline.json` claims. `--repo owner/name` checks over the API with no checkout; `--json` for a wrapper |
-| `redline review` | Review a change against **only** the rules its files touch. `--engine embedded` (default) hands the bounded prompt to the assistant running it; `--engine api` calls a configured endpoint, local or hosted. Findings never reach rule-tuning telemetry |
+| `redline review` | Review a change against **only** the rules its files touch. At a terminal it prints the findings the checker decides without a model, straight away. In an assistant's shell or a pipe it hands the bounded prompt to the assistant running it (`--engine embedded`); `--engine api` calls a configured endpoint, local or hosted. Findings never reach rule-tuning telemetry |
 | `redline explain <rule-id>` | What a rule means, who decided it, which files it scopes to, which profiles receive it. `--list` prints every id with its severity |
 | `redline doctor` | Can this machine run Redline against this repository — runtime, git, remote, credential, onboarded? Every failing line carries its fix. The one command that still runs on a Node too old for the rest |
 | `redline evidence` | The measurement behind this repository's rung, and what the next one asks for. `evidence record --source <where>` writes one. Nothing else can raise enforcement |
@@ -252,9 +252,10 @@ inside the assistant rather than only from a shell. They are rendered per vendor
 | `/redline-review` | Review the change in front of you against the rules its files touch, in Redline's output contract |
 
 `/redline-review` is the one to know. It runs `redline review --engine embedded`, which
-narrows the standards to the rules the changed files actually scope to and hands that
-bounded prompt to whichever assistant you are already using — so the review needs no CI,
-no credential and no network. It is the same review the `local-agent` gate points at after
+narrows the standards to the rules the changed files actually scope to, runs the checks
+that need no model, and hands both to whichever assistant you are already using. The
+assistant replies with the list of issues, or `No Redline issues in this change.`, so the
+review needs no CI, no credential and no network. It is the same review the `local-agent` gate points at after
 the deterministic half has run, and it is worth running in a repository with a CI gate too:
 it is the cheapest way to see the findings before a reviewer does.
 
@@ -272,7 +273,7 @@ the bypass, and how to get back out.
 
 | Question | Command | Quiet failure it rules out |
 | --- | --- | --- |
-| Can this machine run it? | `redline doctor` | Node 18 running the tool anyway on npm's `EBADENGINE` *warning*, failing later from inside a dependency with a message that names neither Node nor Redline |
+| Can this machine run it? | `redline doctor` | A Node older than 18.11 running the tool anyway on npm's `EBADENGINE` *warning*, failing later with a message that names neither Node nor Redline |
 | What is installed here? | `redline status` | A non-empty `pendingAdmin` nobody read — the files landed, the merge policy never applied. Fix with `--repair` once an admin grants the rights |
 | Does the host agree? | `redline verify` | A required check whose name nothing reports: every PR stuck on "Expected — waiting for status" forever |
 | What does this finding mean? | `redline explain <id>` | An id `explain --list` does not know was invented by the model, and every aggregate keyed on it is fiction |

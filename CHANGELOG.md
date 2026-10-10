@@ -7,14 +7,131 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
-### CLI — runs on Node 18 and later
+### Standards 0.2.1 — anti-slop for every stack, held to Redline's own bar
 
-- **The floor was Node 22, and nothing needed it.** The CLI refused older runtimes outright, so
-  onboarding a repository pinned to Node 18 meant reaching for a version manager first. The
-  built CLI uses nothing past Node 18, and the test suite compiled to JavaScript passes on 18.13
-  and 20.11. `engines.node` and the runtime guard now say `>=18`; Node 16 is still refused, with
-  the same `volta` / `fnm` / `nvm` commands to run it under a newer Node. Developing Redline
-  itself still needs Node 22.6+, because the tests run TypeScript directly.
+[dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop) is a set of Oxlint rules against
+low-evidence TypeScript. Its 23 rules were ported as Redline rules: each one has a stable id,
+a severity earned by the failure it prevents, a seed, and is decided without a model wherever a
+single line can decide it. Two were not ported (see below).
+
+- **`core/unsafe-assertion` says what "justified inline" means.** The Type safety heading has always
+  read "BLOCKER unless justified inline" without defining it, so `// trust me` above
+  `as unknown as User` counted as a justification. The justification is now a `SAFETY:` comment with
+  text after the colon, on the assertion's line or the line above. **This tightens a live rule:** a
+  free-form comment on a double assertion becomes a BLOCKER the next time a diff touches that line.
+  Existing code is unaffected until then.
+- **New `typescript` stack** (`**/*.ts`, `**/*.tsx`, `**/*.mts`, `**/*.cts`), added to every profile
+  that carries `javascript`. Until now a `.ts` file matched no stack in `tooling` and was reviewed
+  against core alone. Rules: `widen-then-assert` (BLOCKER: a double assertion split across lines),
+  and at HIGH `unknown-parameter`, `unknown-return`, `unknown-type-alias`, `open-dictionary-value`,
+  `object-parameter`, `known-value-widening`, `reflect-dynamic-access`, `module-mocking` (a test that
+  passes after the real wiring breaks) and `reduce-accumulator-copy` (quadratic work).
+  `ad-hoc-typeof-narrowing`, `filter-map-double-pass` and `conditional-empty-spread` are SUGGESTIONs;
+  anti-slop admits the filter/map rule is not reliably faster. The `javascript` stack is unchanged. Anti-slop flags every `unknown` parameter. Redline exempts the boundary parser and
+  type predicates, because the core standard requires parsing there.
+- **New `effect` stack and `lib-effect` profile**, for repositories on the `effect` library. It extends
+  `typescript`. `redline init` adds it to whatever profile it detects when `effect` is a dependency, so
+  a Nest service on Effect proposes `service-node,lib-effect`. Rules: `manual-error-tag-in-catch`,
+  `manual-tagged-construction`, `service-constructor-import` (HIGH), `manual-tag-comparison` and
+  `prefer-match` (SUGGESTION).
+- **Six more TypeScript rules run without a model**, and `core/unsafe-assertion` joins them for
+  TypeScript double assertions only. The new checks are `typescript/module-mocking`, `unknown-return`,
+  `unknown-type-alias`, `object-parameter` and `reflect-dynamic-access`. `open-dictionary-value` was
+  checked deterministically at first and moved back to the model: run over Redline's own source, it
+  flagged 29 lines, most of them type predicates (`value is Record<string, unknown>`) and bags that a
+  specification defines as open (SARIF `properties`, GraphQL `variables`). Whether a dictionary sits
+  at a boundary is judgement, and the rule text now names those exceptions.
+  Each matches only the direct spelling on one added line; aliases, multi-line signatures and values
+  threaded through variables stay with the model. A double assertion whose line above is unchanged
+  context is not reported, because the diff cannot show a `SAFETY:` comment there. The Effect rules
+  stay with the model, because `redline policy` runs every check whatever the profile and a relative
+  `makeX` import means nothing outside Effect.
+- **Not ported:** `require-readable-spacing` is formatting and `no-shape-in-symbol-names` is a naming
+  preference. The core standard's "What NOT to flag" excludes both, and a rule contradicting it
+  would leave the reviewer with two instructions it cannot both follow. A repository that wants them
+  can run anti-slop's Oxlint plugin next to Redline.
+- **Seeds.** New `seeded/typescript/` (16 seeds) and `seeded/effect/` (9 seeds), plus
+  `seeded/nodejs/` SEED 11.
+
+Seed score: not yet measured. Run `scripts/score-seeds.mjs` against `seeded/typescript/`,
+`seeded/effect/` and `seeded/nodejs/` before release.
+
+#### The same treatment for the other 18 stacks
+
+Each stack's established community linter was read rule by rule: ruff and mypy, golangci-lint and
+staticcheck, Error Prone, SpotBugs and PMD, detekt, the .NET analyzers and Meziantou, SwiftLint, the
+React, Vue, Angular and Svelte ESLint plugins, eslint-plugin-unicorn, tflint. A rule was ported only
+when it names a concrete failure that no existing Redline rule covers. Most linter rules did not
+make it, because they are style, already covered, or a security scanner's job. 102 new rules:
+
+| Stack | New | Examples |
+| --- | --- | --- |
+| python | 9 | `datetime.now()` as a default, `return` in `finally`, loop-variable closures, `zip` without `strict=`, `pytest.raises(Exception)`, patching by import path |
+| go | 10 | error checked then returned as `nil`, typed nil in an interface, `sql.Rows` lifecycle, `%v` instead of `%w`, `t.Fatal` in a goroutine |
+| java | 8 | `==` on strings, `new BigDecimal(0.1)`, swallowed interrupts, unclosed resources, tests that cannot fail |
+| kotlin | 8 | `TODO()` stubs, read-only collections cast to `Mutable*`, `else` on an exhaustive `when`, suspending `finally` |
+| csharp | 9 | a task returned from inside `using`, `System.Random` for secrets, `throw ex;`, culture-implicit parsing, EF in-memory test doubles |
+| swift | 5 | `@unchecked Sendable` without a reason, `[unowned self]`, strong delegates, implicitly unwrapped declarations, copying `reduce` |
+| terraform | 9 | authoritative IAM resources, `== []`, `ignore_changes = all`, inline plus standalone security-group rules, providers in child modules |
+| react / react-native / nextjs | 8 / 3 / 4 | setters called during render, `javascript:` URLs, async effects, random keys; private deep imports; async client components, caught `redirect()` |
+| vue / angular / svelte / dom | 7 / 8 / 8 / 6 | refs used without `.value`, uncalled signals, async lifecycle hooks, async store start functions, `{{ x }}` in Svelte, fresh-function `removeEventListener` |
+
+- **43 of them are also checked without a model**, so `redline policy`, the pre-push hook and the CI
+  gate report them. As before, each checks only the direct single-line spelling and only in its own
+  file types, and test sources are exempt where a stub or a generic exception is the point. Every
+  check is tested against lines it must flag and near-misses it must not. Run over every new seed
+  file, all 43 fire. Run over `seeded/clean/`, none do. That pass caught a real defect: the
+  `throw ex;` pattern only matched at column 0, so it missed the usual indented form.
+- **`core/type-checker-suppression` recognises `# pyright: ignore`**, which it could never fire on.
+- **Seeds.** A new `anti-slop` seed file in every touched stack, with one marker per new rule.
+  The corpus is now 175 BLOCKER and 154 HIGH seeds across 20 stacks. The docs said 117 and 16,
+  which was already out of date before this change.
+
+Seed score: not yet measured. Run `scripts/score-seeds.mjs` against the touched corpora before
+release.
+
+### CLI — runs on Node 18.11 and later, not only 22
+
+The CLI refused anything below Node 22, but nothing in it needs 22. It has no runtime dependencies,
+and what it uses from Node is global `fetch` (18), `util.parseArgs` and that function's `default`
+option (18.11). Its full output for `explain`, `policy`, `review`, `status`, `init --dry-run` and both
+help screens was compared on Node 18.13, 20.11 and 22.13 and is byte-identical. Node 16 and older
+are still refused, with the same three ways to run one command under a newer Node without
+touching the repository's pin.
+
+- `engines.node` is `>=18.11`. The guard compares the minor too: on 18.10 every flag default would
+  be silently dropped.
+- CI runs the built package on Node 18.11 after the main job, so a newer-Node API reaching the
+  published output fails the build instead of the oldest supported user.
+- The CI gate still runs on its own Node (`setup-node` 22), whatever the repository pins.
+
+### CLI — `redline review` answers with issues, not a prompt
+
+`redline review` with no flags printed a prompt addressed to a model, several hundred lines long and
+asking for JSON. That is the right output for an assistant and a useless one for the person who typed
+it. The deterministic checks were a separate command that needed a diff written to a file first.
+
+- **At a terminal, with no `--engine`,** `redline review` now prints the findings the checker
+  decides without a model, scoped to the working change, and names the two ways to get the rest
+  (`/redline-review`, or `--engine api`). It still sends the diff nowhere unasked.
+- **Every review runs the deterministic checks** on the same diff. The human output lists them,
+  `--json` carries them as `checked`, and the embedded prompt hands them to the assistant to report
+  as written.
+- **The embedded prompt asks for the issue list,** in the output contract and ending with a count
+  per severity, or exactly `No Redline issues in this change.` Only `--engine api`, whose answer
+  the CLI parses, still asks for JSON. `/redline-review` was rewritten to match. It also stopped
+  claiming to be "the review the merge gate performs" (the gate runs no model) and now names
+  `.cursor/rules/redline-core.mdc`, the file the renderer actually writes.
+- In an assistant's shell, a pipe or CI nothing changes: no `--engine` still means `embedded`.
+
+### Gate — the org-hosted gate runs `redlinegate@latest`
+
+`workflows/redline-gate.yml` pinned `REDLINE_CLI_VERSION: '0.0.3'` while npm was at 0.2.0, and nothing
+bumped it, so every check added since 0.0.3 never ran in CI. It now runs `latest`, so a new check
+reaches every repository on the org-hosted gate at the next release. **Trade-off, accepted
+deliberately:** a publish now changes gate behaviour with no pull request, and a broken release fails
+pull requests everywhere at once. Vendored gates (`--gate-source local`) still record the version that
+wrote them, and `verify` still reports them when they fall behind.
 
 ### CLI — finding your way around a tool with fifteen commands
 

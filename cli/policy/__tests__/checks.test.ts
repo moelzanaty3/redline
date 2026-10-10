@@ -107,6 +107,7 @@ test('a suppression with a ticket is allowed — the rule asks for both', () => 
 test('every suppression dialect is covered, not just TypeScript', () => {
   const dialects = [
     ['# type: ignore', 'src/a.py'],
+    ['# pyright: ignore', 'src/a.py'],
     ['# noqa', 'src/a.py'],
     ['# pylint: disable=no-member', 'src/a.py'],
     ['@SuppressWarnings("unchecked")', 'src/A.java'],
@@ -117,9 +118,10 @@ test('every suppression dialect is covered, not just TypeScript', () => {
     ['#pragma warning disable CS0168', 'src/A.cs'],
   ] as const;
 
+  // Scoped to the one rule: a bare `# type: ignore` is also python/blanket-suppression.
   for (const [s, file] of dialects) {
     assert.deepEqual(
-      ids(runChecks(ctx([line(`code ${s}`, file)]))),
+      ids(runChecks(ctx([line(`code ${s}`, file)]), ['core/type-checker-suppression'])),
       ['core/type-checker-suppression'],
       s
     );
@@ -145,6 +147,159 @@ test('a suppression in any dialect is allowed once it carries a ticket', () => {
     '#pragma warning disable CS0168 // ENG-812',
   ]) {
     assert.deepEqual(ids(runChecks(ctx([line(s, 'src/a.kt')]))), [], s);
+  }
+});
+
+// --- core/unsafe-assertion ---------------------------------------------------
+
+test('a double assertion with no SAFETY comment is a BLOCKER', () => {
+  for (const text of [
+    'const user = data as unknown as User;',
+    'const user = data as any as User;',
+    'const rows = data as unknown as Array<Row>;',
+  ]) {
+    const result = runChecks(ctx([line(text)]));
+    assert.deepEqual(ids(result), ['core/unsafe-assertion'], text);
+    assert.equal(result.findings[0]?.severity, 'BLOCKER');
+  }
+});
+
+test('a SAFETY comment on the same line or the added line above justifies it', () => {
+  assert.deepEqual(
+    ids(runChecks(ctx([line('const u = data as unknown as User; // SAFETY: parsed by schema')]))),
+    []
+  );
+  assert.deepEqual(
+    ids(
+      runChecks(
+        ctx([
+          line('// SAFETY: parsed by the schema above', 'src/a.ts', 4),
+          line('const u = data as unknown as User;', 'src/a.ts', 5),
+        ])
+      )
+    ),
+    []
+  );
+});
+
+test('any other comment is not a justification', () => {
+  const result = runChecks(
+    ctx([
+      line('// trust me', 'src/a.ts', 4),
+      line('const u = data as unknown as User; // the API guarantees it', 'src/a.ts', 5),
+    ])
+  );
+  assert.deepEqual(ids(result), ['core/unsafe-assertion']);
+});
+
+// The line above an added line is only in the diff when it was added too. When
+// it is unchanged context, a SAFETY comment may be sitting there unseen.
+test('an assertion whose line above the diff cannot show is not reported', () => {
+  assert.deepEqual(ids(runChecks(ctx([line('const u = data as unknown as User;', 'src/a.ts', 5)]))), []);
+});
+
+test('single assertions, const assertions and prose are left to the model', () => {
+  for (const [text, file] of [
+    ['const u = data as User;', 'src/a.ts'],
+    ['const xs = [1, 2] as const;', 'src/a.ts'],
+    ['// never write `as unknown as User`', 'src/a.ts'],
+    ['Avoid `x as unknown as T`.', 'docs/guide.md'],
+    ['user = data as unknown as User', 'app/models.py'],
+  ] as const) {
+    assert.deepEqual(ids(runChecks(ctx([line(text, file)]))), [], text);
+  }
+});
+
+test('an empty SAFETY marker is not a justification', () => {
+  assert.deepEqual(
+    ids(runChecks(ctx([line('const u = data as unknown as User; // SAFETY:')]))),
+    ['core/unsafe-assertion']
+  );
+});
+
+// --- the anti-slop type-evidence rules ----------------------------------------
+
+const flags = (ruleId: string, cases: string[], file = 'src/a.ts') => {
+  for (const text of cases) {
+    assert.deepEqual(ids(runChecks(ctx([line(text, file)]), [ruleId])), [ruleId], text);
+  }
+};
+const passes = (ruleId: string, cases: string[], file = 'src/a.ts') => {
+  for (const text of cases) {
+    assert.deepEqual(ids(runChecks(ctx([line(text, file)]), [ruleId])), [], text);
+  }
+};
+
+test('typescript/unknown-return: a declared unknown return, not a callback type', () => {
+  flags('typescript/unknown-return', [
+    'export function load(): unknown {',
+    'async function load(id: string): Promise<unknown> {',
+    'const load = (): unknown => read();',
+    'declare function load(): unknown;',
+    '  load(): PromiseLike<unknown>;',
+  ]);
+  passes('typescript/unknown-return', [
+    'function run(task: () => unknown): void {',
+    'function isUser(value: unknown): value is User {',
+    'catch (error: unknown) {',
+    'function load(): Result<unknown> {',
+  ]);
+});
+
+test('typescript/unknown-type-alias: the alias is unknown, not something containing it', () => {
+  flags('typescript/unknown-type-alias', [
+    'type Payload = unknown;',
+    'export type Payload = string | unknown;',
+    'type Box<T> = unknown',
+  ]);
+  passes('typescript/unknown-type-alias', [
+    'type Envelope = { payload: unknown };',
+    'type Boxed = Box<unknown>;',
+    'type Known = string;',
+  ]);
+});
+
+test('typescript/object-parameter: a parameter typed object', () => {
+  flags('typescript/object-parameter', [
+    'function save(value: object) {',
+    'const save = (id: string, extra?: object) => {',
+    'function save(value: object = {}) {',
+  ]);
+  passes('typescript/object-parameter', [
+    'function save<T extends object>(value: T) {',
+    'interface Bag { value: object; }',
+    'function save(value: User) {',
+  ]);
+});
+
+test('typescript/reflect-dynamic-access: Reflect.apply and Reflect.get only', () => {
+  flags('typescript/reflect-dynamic-access', [
+    'const result = Reflect.apply(fn, self, args);',
+    "const value = Reflect['get'](owner, key);",
+  ]);
+  passes('typescript/reflect-dynamic-access', ['Reflect.set(owner, key, value);', 'fn.apply(self, args);']);
+  // A plain .js file is outside the TypeScript stack.
+  passes('typescript/reflect-dynamic-access', ['Reflect.get(owner, key);'], 'src/a.js');
+});
+
+test('typescript/module-mocking: vi and jest module mocks in TypeScript tests', () => {
+  flags(
+    'typescript/module-mocking',
+    ["vi.mock('./user-store');", "jest.mock('../db', () => ({}));", "await vi.doMock('./x');"],
+    'src/a.test.ts'
+  );
+  passes('typescript/module-mocking', ["vi.spyOn(store, 'save');", 'jest.fn();'], 'src/a.test.ts');
+  passes('typescript/module-mocking', ["jest.mock('../db');"], 'src/a.test.js');
+});
+
+test('the type-evidence checks ignore comments, prose and other languages', () => {
+  for (const id of [
+    'typescript/unknown-return',
+    'typescript/module-mocking',
+  ]) {
+    passes(id, ['// e.g. function load(): unknown { or Record<string, unknown> or vi.mock(x)']);
+    passes(id, ['function load(): unknown { Record<string, unknown>; vi.mock(x) }'], 'docs/a.md');
+    passes(id, ['def load() -> object: pass'], 'app/a.py');
   }
 });
 
@@ -221,7 +376,7 @@ test('every check reports the rule id it implements, unchanged', () => {
   // Rule ids are permanent. A reclassification that renamed one would orphan
   // every historical telemetry record keyed on it.
   for (const [id, check] of Object.entries(CHECKS)) {
-    const findings = check(ctx([line('// TODO x'), line('var a = parseInt(b);'), line('// @ts-ignore')]));
+    const findings = check(ctx([line('// TODO x'), line('var a = parseInt(b);'), line('// @ts-ignore'), line('x as unknown as T;')]));
     for (const f of findings) assert.equal(f.ruleId, id);
   }
 });

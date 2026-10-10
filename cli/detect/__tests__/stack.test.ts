@@ -242,3 +242,23 @@ test('a nest service that also depends on express stays service-node', () => {
     'service-node'
   );
 });
+
+// Effect is a library a repository of any shape can use, so it is added to the
+// detected profile rather than replacing it — a Nest service on Effect still
+// needs the Nest rules.
+test('an effect dependency adds lib-effect on top of the detected profile', () => {
+  const p = proposeProfile({
+    paths: ['package.json', 'nest-cli.json'],
+    packageJson: { dependencies: { '@nestjs/core': '11', effect: '3' } },
+  });
+  assert.equal(p.profile, 'service-node,lib-effect');
+  assert.ok(p.evidence.includes('effect dependency'));
+  for (const name of p.profile.split(',')) {
+    assert.ok(manifest.profiles[name], `proposed unknown profile "${name}"`);
+  }
+});
+
+test('effect alone still proposes a base profile', () => {
+  const p = proposeProfile({ paths: ['package.json'], packageJson: { devDependencies: { effect: '3' } } });
+  assert.equal(p.profile, 'tooling,lib-effect');
+});

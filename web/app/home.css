@@ -129,84 +129,6 @@
   color: var(--faint);
 }
 
-/* ================= 2 · the problem ================= */
-.hm-prob-cols,
-.hm-prob-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 40px;
-}
-.hm-prob-cols {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--faint);
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-}
-.hm-prob-col-fix {
-  color: var(--red-soft);
-}
-.hm-prob-row {
-  padding: 26px 0;
-}
-.hm-prob-row + .hm-prob-row {
-  border-top: 1px solid var(--border);
-}
-.hm-prob-n {
-  display: block;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--faint);
-  margin-bottom: 8px;
-}
-.hm-prob-today h3 {
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  margin-bottom: 8px;
-}
-.hm-prob-today p {
-  color: var(--muted);
-  font-size: 14.5px;
-  max-width: 460px;
-}
-/* the answer column carries the accent as a spine, not as a fill */
-.hm-prob-fix {
-  border-left: 2px solid var(--vc-spine);
-  padding-left: 22px;
-}
-.hm-prob-fix p {
-  font-size: 14.5px;
-  color: var(--muted);
-}
-.hm-prob-fix p b {
-  color: var(--text);
-  font-weight: 600;
-}
-.hm-prob-fix code {
-  font-size: 12.5px;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-.hm-facts {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 0;
-  margin-top: 14px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.hm-facts li:not(:last-child)::after {
-  content: "·";
-  margin: 0 10px;
-  color: var(--faint);
-}
-
 /* ================= 3 · a finding ================= */
 .hm-find {
   display: grid;
@@ -477,25 +399,6 @@
   overflow-x: auto;
   white-space: nowrap;
 }
-/* the differentiated claim gets its own strip, not a fourth card */
-.hm-local {
-  margin-top: 18px;
-  padding: 20px 24px;
-  border: 1px solid rgba(230, 0, 0, 0.35);
-  background: var(--vc-wash);
-  border-radius: 12px;
-}
-.hm-local-h {
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  margin-bottom: 6px;
-}
-.hm-local p {
-  font-size: 14px;
-  color: var(--muted);
-  max-width: 760px;
-}
 
 /* ================= 5 · why this is different ================= */
 .hm-claim {
@@ -699,8 +602,7 @@
 [data-theme="light"] .hm-try-list code,
 [data-theme="light"] .hm-not-list code,
 [data-theme="light"] .hm-steps code,
-[data-theme="light"] .hm-claim-copy code,
-[data-theme="light"] .hm-prob-fix code {
+[data-theme="light"] .hm-claim-copy code {
   background: rgba(0, 0, 0, 0.05);
 }
 [data-theme="light"] .hm-out-sev,
@@ -709,10 +611,6 @@
 }
 [data-theme="light"] .hm-out-id a {
   color: #6fbaff;
-}
-[data-theme="light"] .hm-local {
-  background: rgba(189, 0, 0, 0.04);
-  border-color: rgba(189, 0, 0, 0.28);
 }
 [data-theme="light"] .hm-dl-add .hm-dl-g {
   color: #4ec97a;
@@ -771,10 +669,6 @@
   .hm-not {
     padding: 46px 0;
   }
-  .hm-prob-cols,
-  .hm-prob-row {
-    gap: 0 24px;
-  }
   .hm-hero-cmd code {
     font-size: 14px;
   }
@@ -786,18 +680,6 @@
   }
   .hm-sec-head {
     margin-bottom: 26px;
-  }
-  /* Today / With Redline stack, so the two-column header would label nothing */
-  .hm-prob-cols {
-    display: none;
-  }
-  .hm-prob-row {
-    grid-template-columns: 1fr;
-    gap: 18px;
-    padding: 22px 0;
-  }
-  .hm-prob-fix {
-    padding-left: 16px;
   }
   .hm-hero-cmd {
     width: 100%;
@@ -823,9 +705,6 @@
   }
   .hm-sevfloor {
     padding: 16px;
-  }
-  .hm-local {
-    padding: 18px 16px;
   }
   .hm-try-card {
     padding: 24px 18px 26px;
@@ -907,274 +786,358 @@
   background: #4a4a4a;
 }
 
-/* ================= the init choices ================= */
-
-/* Sits directly under the transcript, which shows one run with its defaults.
-   The grid is the correction to that: three groups, each a real decision the
-   command offers. Tokens only — no colour is introduced here. */
-.hm-choices {
-  padding: 88px 0;
-  border-top: 1px solid var(--border);
-}
-/* Centred, like every other section header on the page. Left-aligned and
-   full-width it was the only one of eleven that was, and it left 560px of the
-   row empty beside a 68ch paragraph. */
-.hm-choices h2 {
-  font-size: clamp(26px, 4vw, 38px);
-  letter-spacing: -0.02em;
-  margin-bottom: 14px;
-  text-align: center;
-}
-.hm-choices-lead {
-  max-width: 68ch;
-  margin: 0 auto;
-  color: var(--muted);
-  font-size: 15.5px;
-  line-height: 1.65;
-  text-align: center;
-  text-wrap: pretty;
-}
-.hm-choices-foot {
-  text-align: center;
-}
-.hm-choices-lead code,
-.hm-choices-foot code {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
-}
-
-/* A vertical timeline rather than a card grid: it mirrors the copy above it
-   ("walks these one at a time") instead of fighting it, and a single column
-   with an internal wrap-grid per step means an uneven choice count (2 here,
-   3 there) never produces a stranded card or a slab of empty padding — the
-   failure mode the grid version had. */
-.hm-choices-steps {
-  position: relative;
-  margin-top: 48px;
-}
-.hm-step {
-  position: relative;
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  column-gap: 26px;
-  padding-bottom: 48px;
-}
-.hm-step:last-child {
-  padding-bottom: 0;
-}
-.hm-step-marker {
-  position: relative;
-  display: flex;
-  justify-content: center;
-}
-.hm-step-marker::after {
-  /* The connecting line lives on the marker, not the container, so it never
-     has to guess the container's total height. */
-  content: "";
-  position: absolute;
-  top: 48px;
-  bottom: -48px;
-  width: 1px;
-  background: var(--border);
-}
-.hm-step:last-child .hm-step-marker::after {
-  display: none;
-}
-.hm-step-node {
-  position: relative;
-  z-index: 1;
-  width: 48px;
-  height: 48px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--bg);
-  color: var(--muted);
-  transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.hm-step-node svg {
-  width: 20px;
-  height: 20px;
-}
-.hm-step:hover .hm-step-node {
-  color: var(--red-soft);
-  border-color: var(--red-soft);
-  box-shadow: 0 0 0 5px rgba(255, 77, 77, 0.08);
-}
-.hm-step-body {
-  padding-top: 6px;
-}
-.hm-step-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-.hm-step-body h3 {
-  font-size: 19px;
-  letter-spacing: -0.015em;
-  margin-bottom: 0;
-}
-/* One word, distinguishing the category the CLI resolves for you from the
-   ones it asks you to decide — the two red states below share the accent
-   already spent on the flag, at a fraction of its weight. */
-.hm-step-mode {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--faint);
-}
-.hm-step-mode-detected {
-  color: var(--red-soft);
-  border-color: rgba(230, 0, 0, 0.35);
-  background: rgba(230, 0, 0, 0.08);
-}
-.hm-choice-lead {
-  color: var(--faint);
-  font-size: 13.5px;
-  line-height: 1.6;
-  max-width: 62ch;
-  text-wrap: pretty;
-}
-.hm-step-choices {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 14px;
-  margin-top: 20px;
-}
-.hm-step-choice {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
-  padding: 16px 18px;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-.hm-step-choice:hover {
-  border-color: var(--red-soft);
-  transform: translateY(-2px);
-}
-.hm-choice-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  /* Wraps rather than breaking at a breakpoint: the flag is nowrap and as long
-     as `--pipeline github-actions`, so whenever the card is narrow enough that
-     the two cannot share a line — a phone, or two steps side by side on a
-     tablet — the label is the one that loses, and "GitHub Actions" splits
-     across two lines beside it. Wrapping gives the label the full width and
-     puts the flag underneath. */
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  margin-bottom: 3px;
-}
-.hm-choice-head b {
-  font-size: 14.5px;
-  font-weight: 600;
-}
-.hm-choice-head code {
-  flex: none;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--red-soft);
-  white-space: nowrap;
-}
-.hm-choice-default {
-  display: block;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--faint);
-  margin-bottom: 8px;
-}
-.hm-step-choice p {
-  color: var(--muted);
-  font-size: 13.5px;
-  line-height: 1.6;
-  text-wrap: pretty;
-}
-
-.hm-choices-foot {
-  margin-top: 40px;
-  color: var(--faint);
-  font-size: 13.5px;
-  line-height: 1.65;
-  text-wrap: pretty;
-  text-align: center;
-}
-
 @media (max-width: 640px) {
-  .hm-choices {
-    padding: 60px 0;
-  }
   /* Centred, this paragraph runs to eight lines on a phone and both edges go
      ragged. The heading above it stays centred; the prose does not. */
-  .hm-try-lead,
-  .hm-choices-lead {
+  .hm-try-lead {
     text-align: left;
   }
-  .hm-step {
-    grid-template-columns: 36px 1fr;
-    column-gap: 16px;
-    padding-bottom: 36px;
-  }
-  .hm-step-marker::after {
-    top: 36px;
-    bottom: -36px;
-  }
-  .hm-step-node {
-    width: 36px;
-    height: 36px;
-  }
-  .hm-step-node svg {
-    width: 16px;
-    height: 16px;
-  }
 }
 
-
-/* The story that opens the problem section. Set as one quiet block rather than
-   a card: it is an admission, and a bordered panel would style it as a boast. */
-.hm-prob-story {
-  /* Left, not centred: the two-column grid below starts at the container edge,
-     and a centred block above it reads as a different page element. */
-  max-width: 780px;
-  margin: 0 0 44px;
-  padding-left: 18px;
-  border-left: 2px solid var(--vc-line);
+/* ================= the review gap ================= */
+.hm-sec-head .hm-eyebrow {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--red-soft);
 }
-.hm-prob-story p {
-  margin: 0 0 12px;
-  font-size: 15px;
-  line-height: 1.72;
+.hm-gap .hm-h2 {
+  max-width: 860px;
+  margin: 0 auto;
+}
+.hm-gap-chart {
+  max-width: 860px;
+  margin: 8px auto 0;
+  padding: 26px 28px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.hm-gap-cap {
+  font-size: 13.5px;
   color: var(--muted);
+  margin-bottom: 20px;
 }
-.hm-prob-story p:last-child {
-  margin-bottom: 0;
+.hm-gap-cap b {
+  color: var(--text);
+  font-weight: 600;
 }
-.hm-prob-story-lead b {
+.hm-gap-bars {
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+.hm-gap-row {
+  display: grid;
+  grid-template-columns: 220px 1fr 64px;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+}
+.hm-gap-label {
   color: var(--text);
 }
-.hm-prob-story code {
+.hm-gap-track {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+.hm-gap-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.25s;
+}
+/* The bars grow when the section scrolls in, not at page load, when nobody
+   is looking at them. */
+.reveal.in .hm-gap-track i {
+  transform: none;
+}
+.hm-gap-write .hm-gap-track i {
+  background: linear-gradient(90deg, #3a3a3a, #8a8a8a);
+}
+.hm-gap-review .hm-gap-track i {
+  background: linear-gradient(90deg, rgba(230, 0, 0, 0.55), var(--red-soft));
+}
+.hm-gap-pct {
   font-family: var(--mono);
-  font-size: 13px;
-  color: var(--vc-ink);
+  font-weight: 700;
+  text-align: right;
+}
+.hm-gap-review .hm-gap-pct {
+  color: var(--red-soft);
+}
+.hm-gap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.hm-gap-legend a {
+  margin-left: auto;
+  font-size: 12px;
+}
+.hm-gap-key::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+.hm-gap-key.hm-gap-write::before {
+  background: #8a8a8a;
+}
+.hm-gap-key.hm-gap-review::before {
+  background: var(--red-soft);
+}
+.hm-gap-stats {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  max-width: 860px;
+  margin: 16px auto 0;
+}
+.hm-gap-stats li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.hm-gap-fig {
+  font-size: 30px;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+.hm-gap-stats p {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.hm-gap-stats a {
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: 11.5px;
+}
+.hm-gap-close {
+  max-width: 640px;
+  margin: 34px auto 0;
+  text-align: center;
+  font-size: clamp(18px, 2.2vw, 22px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--muted);
+}
+.hm-gap-close b {
+  color: var(--red-soft);
+  font-weight: 700;
+}
+
+/* ================= what it is ================= */
+.hm-is-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.hm-is-card {
+  padding: 22px 22px 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.hm-is-card p,
+.hm-is-card li {
+  font-size: 14px;
+  color: var(--muted);
+}
+.hm-is-tag {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.hm-is-card:not(.hm-is-yes) .hm-is-tag {
+  color: var(--muted);
+}
+.hm-is-yes {
+  border-color: rgba(230, 0, 0, 0.4);
+  background: linear-gradient(180deg, var(--vc-wash), transparent 70%), var(--card);
+}
+.hm-is-yes .hm-is-tag {
+  color: var(--red-soft);
+}
+.hm-is-yes ul {
+  list-style: none;
+  display: grid;
+  gap: 9px;
+}
+.hm-is-yes li b {
+  color: var(--text);
+  font-weight: 600;
+}
+.hm-is-steps {
+  margin-top: 16px;
+}
+
+/* ================= low-evidence code ================= */
+.hm-slop-table {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--card);
+}
+.hm-slop-head,
+.hm-slop-row {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1.15fr;
+  gap: 24px;
+  padding: 16px 22px;
+  align-items: start;
+}
+.hm-slop-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border-bottom: 1px solid var(--border);
+}
+.hm-slop-row + .hm-slop-row {
+  border-top: 1px solid var(--border);
+}
+.hm-slop-row p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.hm-slop-row p:last-child {
+  color: var(--text);
+}
+.hm-slop-code {
+  justify-self: start;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: #e6e6e6;
+  background: #0c0c0c;
+  border: 1px solid #262626;
+  border-left: 2px solid var(--red);
+  border-radius: 6px;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.hm-prob-story a {
-  color: var(--vc-ink);
+.hm-sec a.hm-slop-id {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--blue);
 }
-@media (max-width: 700px) {
-  .hm-prob-story {
-    padding-left: 14px;
-    margin-bottom: 32px;
+.hm-slop-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.hm-slop-more span {
+  flex-basis: 100%;
+  text-align: center;
+  margin-bottom: 2px;
+}
+.hm-sec a.hm-slop-chip {
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: border-color 0.15s;
+}
+.hm-sec a.hm-slop-chip:hover {
+  border-color: var(--border-strong);
+  text-decoration: none;
+}
+
+/* ================= checked vs judged ================= */
+.hm-split {
+  max-width: 760px;
+  margin: 18px auto 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+.hm-split b {
+  color: var(--text);
+  font-weight: 600;
+}
+.hm-split code {
+  font-size: 0.92em;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+[data-theme="light"] .hm-gap-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .hm-gap-write .hm-gap-track i {
+  background: linear-gradient(90deg, #c4c4c4, #6f6f6f);
+}
+[data-theme="light"] .hm-split code {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hm-gap-track i {
+    transform: none;
+    transition: none;
+  }
+}
+@media (max-width: 1000px) {
+  .hm-is-grid {
+    grid-template-columns: 1fr;
+  }
+  .hm-slop-head {
+    display: none;
+  }
+  .hm-slop-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+@media (max-width: 760px) {
+  .hm-gap-stats {
+    grid-template-columns: 1fr;
+  }
+  .hm-gap-row {
+    grid-template-columns: 1fr 52px;
+    gap: 6px 12px;
+  }
+  .hm-gap-label {
+    grid-column: 1 / -1;
+  }
+  .hm-gap-chart {
+    padding: 20px 18px 16px;
+  }
+  .hm-gap-legend a {
+    margin-left: 0;
   }
 }

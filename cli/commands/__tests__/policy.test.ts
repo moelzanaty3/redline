@@ -110,9 +110,9 @@ test('findings carry the file and line a reviewer can open', () => {
   });
 });
 
-// Only four rules in the catalogue can be decided without a model. A clean
+// Only a handful of rules in the catalogue can be decided without a model. A clean
 // `redline policy` therefore reads as "the standards found nothing", when what
-// it means is "the four checkable rules found nothing" — and the gap between
+// it means is "the checkable rules found nothing" — and the gap between
 // those two readings cost a full debugging session, because a repository full
 // of violations passed and nobody could see why.
 test('the report carries the size of the catalogue it did not check', () => {

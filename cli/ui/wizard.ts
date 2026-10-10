@@ -154,7 +154,7 @@ function profileChoices(
       label: id,
       hint:
         stacks.join(', ') +
-        (id === detected
+        (detected.split(',').includes(id)
           ? confidence === 'high'
             ? '   — looks like this repository, but pick it yourself'
             : '   — a guess; nothing here names this framework'
