@@ -139,3 +139,16 @@ test('owners are qualified only where the shape is ambiguous', () => {
   assert.deepEqual(owners(['@other-org/platform']), ['@other-org/platform']);
   assert.deepEqual(owners(['team@acme.com']), ['team@acme.com']);
 });
+
+// Onboarded with no git remote: the gate was selected but never installed,
+// because there was no host to install it on. Listing it under `installed`, or
+// printing a rung for it, describes a check that does not exist.
+test('a repository onboarded with no remote says what is installed and what waits for one', () => {
+  const lines = formatStatus(status(repo({ ...CONFIG, host: null, pendingAdmin: [] }), ROOT));
+
+  assert.ok(lines.includes('host         none yet — this repository has no git remote'));
+  assert.ok(lines.some((line) => /^installed {4}the rules and the local review$/.test(line)));
+  assert.ok(lines.some((line) => /^waiting on {3}a remote, for: gate, merge-policy/.test(line)));
+  assert.ok(!lines.some((line) => line.startsWith('rung ')));
+  assert.ok(!lines.some((line) => line.startsWith('checks ')));
+});

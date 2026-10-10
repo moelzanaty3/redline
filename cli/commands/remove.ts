@@ -525,7 +525,7 @@ export async function remove(
   }
 
   const hostPlan = [
-    `withdraw Redline's own state on ${config.host}: the merge policy it applied, the labels it ` +
+    `withdraw Redline's own state on ${config.host ?? platform.host}: the merge policy it applied, the labels it ` +
       'created, and the repository property it set where the host has them',
     `pull request on ${REMOVE_BRANCH}`,
   ];
@@ -536,7 +536,7 @@ export async function remove(
     // someone evaluating whether they can back Redline out can find out before
     // going to get an admin token.
     return {
-      host: config.host,
+      host: config.host ?? platform.host,
       dryRun: true,
       actions,
       files,
@@ -593,7 +593,7 @@ export async function remove(
   if (pullRequest?.outcomes) outcomes.push(...pullRequest.outcomes);
 
   return {
-    host: config.host,
+    host: config.host ?? platform.host,
     dryRun: false,
     actions,
     files,

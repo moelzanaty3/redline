@@ -7,6 +7,35 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — a repository with no remote can be onboarded
+
+`redline init` refused to run without a git remote, even with `--no-commit`, because every command
+resolved a host before doing anything else. Only the gate, the ownership file and the host settings
+need one; the rules, the assistant commands and the local review need nothing but the checkout. A
+developer who starts a project locally was turned away before seeing a single rule.
+
+- With no remote, `init` writes the rules, the `/redline-*` commands and `.redline.json`, and says
+  the gate and host settings wait for a remote. It contacts no host, asks for no credential, commits
+  nothing. It runs without the interactive menu, which opens by reading the repository from the host
+  and ends by choosing what to do on it; `--profile` and `--vendors` still apply.
+- `.redline.json` records `host: null` rather than a guess. The gate stays selected and its source
+  stays `org`, so the first `init` after a remote is added installs exactly what a normal onboarding
+  does. Recording a deselected or vendored gate here would have carried into that run and left the
+  repository on less than it should get.
+- `status` says the repository has no remote and lists what is waiting for one, instead of a gate
+  and a rung that do not exist. `doctor` reports a missing remote as a warning, not a failure.
+- `verify` and `remove` still need a remote; they read and change host state.
+
+### CLI — `/redline-review` assumed Redline was installed globally
+
+`/redline-init` and `/redline-verify` tell the assistant to run `npx redlinegate`; `/redline-review`
+told it to run `redline review --engine embedded`, which only exists after `npm i -g redlinegate`.
+On a machine without the global install the assistant fell back to assembling the rules and the
+diff by hand, so the review lost its scoping and the checker's findings. It now runs
+`npx redlinegate review --engine embedded`, with the same warning as its siblings against plain
+`npx redline`, an unrelated package. The standards version is unchanged: repositories onboarded from
+the next release get the new command, and existing ones receive it with their next standards sync.
+
 ### Standards 0.2.1 — anti-slop for every stack, held to Redline's own bar
 
 [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop) is a set of Oxlint rules against

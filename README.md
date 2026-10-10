@@ -134,7 +134,7 @@ init` / `redline verify` once it is installed rather than `redlinegate init`.
 Estate-wide re-verification runs on a schedule from `workflows/verify-onboarding.yml`
 (weekly, Tuesday 06:00 UTC) against the register, and opens one tracking issue on drift.
 
-Both GitHub and Azure DevOps are supported. Redline detects which from your git remote.
+Both GitHub and Azure DevOps are supported. Redline detects which from your git remote. A repository with no remote yet gets the rules and the local review; the gate and host settings install once it has one and `init` runs again.
 
 ## The whole command surface
 
@@ -251,7 +251,7 @@ inside the assistant rather than only from a shell. They are rendered per vendor
 | `/redline-verify` | Check the repository still matches what it claims, and report the findings table |
 | `/redline-review` | Review the change in front of you against the rules its files touch, in Redline's output contract |
 
-`/redline-review` is the one to know. It runs `redline review --engine embedded`, which
+`/redline-review` is the one to know. It runs `npx redlinegate review --engine embedded`, which
 narrows the standards to the rules the changed files actually scope to, runs the checks
 that need no model, and hands both to whichever assistant you are already using. The
 assistant replies with the list of issues, or `No Redline issues in this change.`, so the

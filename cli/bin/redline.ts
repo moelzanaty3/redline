@@ -320,7 +320,13 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       // all means the caller has already decided, and the menu would be in the
       // way; CI and pipes never see it (isInteractive), so the scripted path is
       // byte-identical to what it was before the menu existed.
-      const checked = rest.length === 0 && interactive() ? await checkReachable(cwd) : null;
+      // No remote, no host: the run installs only what needs none — see init().
+      // The menu is skipped because it opens by reading the repository from the
+      // host and ends by choosing what to do on it. Read locally, before any
+      // platform is resolved, because resolving one is what fails without a remote.
+      const git = createGit(cwd);
+      const local = git.isRepo() && git.remoteUrl() === '';
+      const checked = !local && rest.length === 0 && interactive() ? await checkReachable(cwd) : null;
       const wizard = checked ? await runInitWizard(cwd, root, checked.unreachable) : null;
 
       const names = (list: string | undefined): string[] =>
@@ -406,8 +412,9 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       // no extra request: its client is lazy, which is what every wizard
       // action needs — the two preview actions must not demand a credential,
       // and `apply` resolves one on its first request as it always did.
-      const platform =
-        checked?.platform ?? (await resolve(cwd, dryRun || noCommit ? { lazyCredentials: true } : {}));
+      const platform = local
+        ? null
+        : (checked?.platform ?? (await resolve(cwd, dryRun || noCommit ? { lazyCredentials: true } : {})));
       const profileChoice = wizard?.answers.profile ?? values.profile;
       const vendorChoice = wizard ? [...wizard.answers.vendors] : vendors;
       const rungChoice = wizard?.answers.rung ?? values.rung;
@@ -560,6 +567,10 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         const here = createGit(cwd);
         const branch = here.currentBranch();
         const onDefault = branch !== 'HEAD' && branch === here.defaultBranch();
+        if (report.local === true) {
+          log.info('  not committed — the files are in your working tree; commit them when you are ready');
+          return 0;
+        }
         log.info(
           onDefault
             ? `  not committed — the files are in your working tree, and you are on ${branch}, the ` +
