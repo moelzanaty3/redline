@@ -1,9 +1,35 @@
-import { PACKAGE_NAME, type PackageState } from "@/lib/package-version";
+"use client";
+
+import { useEffect, useState } from "react";
+import { latestFrom, PACKAGE_NAME, type Packument, type PackageState } from "@/lib/npm-registry";
 
 // The three states are deliberately worded differently. "Not published yet" is a
 // fact about the package; "could not check" is a fact about this build. Collapsing
 // them would let a network blip read as a missing release.
-export function PackageBadge({ state }: { state: PackageState }) {
+//
+// `initial` is what the build saw, and the page is static, so on its own it is
+// only as fresh as the last deploy — a release that lands without one left the
+// badge naming the previous version. The browser asks the registry again after
+// the page loads. The pages stay prerendered, because they are build gates: they
+// throw when the repository no longer says what they claim.
+export function PackageBadge({ initial, registry }: { initial: PackageState; registry: string | null }) {
+  const [state, setState] = useState(initial);
+
+  useEffect(() => {
+    if (registry === null) return;
+    const controller = new AbortController();
+    fetch(`${registry}/${PACKAGE_NAME}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const latest = latestFrom((await response.json()) as Packument);
+        if (latest) setState(latest);
+      })
+      // Deliberately quiet: a reader whose browser cannot reach the registry
+      // still has the build's answer on screen, and that is all this can offer.
+      .catch(() => {});
+    return () => controller.abort();
+  }, [registry]);
+
   if (state.status === "published") {
     return (
       <div className="callout ok">

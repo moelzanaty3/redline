@@ -48,6 +48,13 @@ test('a supported Node passes', () => {
   assert.equal(report.checks.find((c) => c.name === 'node')?.status, 'ok');
 });
 
+// The floor is what the CLI needs, not what this repository builds on. A
+// repository pinned to 18 is the common case it was raised against.
+test('Node 18 is supported', () => {
+  const report = doctor({ cwd: repo('git@github.com:acme/widget.git'), nodeVersion: 'v18.13.0', run: noGh });
+  assert.equal(report.checks.find((c) => c.name === 'node')?.status, 'ok');
+});
+
 // A version string this predates must not brick every command. Redline is not
 // the tool that gets to stop someone's work over a runtime format it did not
 // recognise.
