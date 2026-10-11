@@ -2228,3 +2228,22 @@ test('a repository onboarded before the count was recorded moves to no required 
   assert.equal(rerun.lastPolicy?.requiredApprovals, 0);
   assert.equal(readConfig(cwd)?.requiredApprovals, 0);
 });
+
+// The run that found this: a repository with a vendored gate, onboarded, then
+// `init` again. The vendored gate's own trufflehog step read as a tool the
+// repository runs, and the second run stood down the gate's secrets job.
+test('a re-run over a vendored gate does not stand down the secrets job it carries', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, gateSource: 'local' });
+  mkdirSync(join(cwd, '.github/workflows'), { recursive: true });
+  writeFileSync(
+    join(cwd, '.github/workflows/redline-gate.yml'),
+    '# Managed by Redline. Regenerate with `redline init --repair`; edits here are overwritten.\n' +
+      'jobs:\n  secrets:\n    steps:\n      - uses: trufflesecurity/trufflehog@abc\n'
+  );
+
+  const again = fakePlatform();
+  await init(again, { cwd, root, now: laterNow, repair: true });
+  assert.equal(again.gateOptions.at(-1)?.standDown, undefined);
+  assert.deepEqual(readConfig(cwd)?.integrations, []);
+});

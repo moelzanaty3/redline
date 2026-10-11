@@ -7,6 +7,23 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — a re-run stood down the vendored gate's own secret scan
+
+`redline init` looks through a repository's CI definitions for tools it already runs, and stands
+down the gate job a tool covers. It read Redline's own files too. A vendored gate
+(`--gate-source local`) runs trufflehog, so on the next `init`, whether a re-run, `--repair` or a
+sync, Redline concluded the repository already ran trufflehog. It then wrote `stand-down: 'secrets'`
+into the caller and recorded `integrations: ["trufflehog"]`, switching off the one security job no
+label can waive.
+
+- Any CI file that opens with Redline's `# Managed by Redline` header is no longer read as evidence.
+  This fails safe: a hand-written pipeline that copies the header goes undetected, and the gate runs
+  its own job beside it.
+- **Repositories already affected** have `"integrations": ["trufflehog"]` in `.redline.json` and
+  `stand-down: 'secrets'` in `.github/workflows/redline.yml`, without running trufflehog themselves.
+  The recorded list wins over detection, so this release alone does not undo it. Run
+  `redline init --integrations ''` (or list only the tools you really run) to restore the job.
+
 ### CLI — approvals are the team's choice; Redline fails the pipeline
 
 The branch policy `redline init` applies required one approving review, with no bypass. GitHub does

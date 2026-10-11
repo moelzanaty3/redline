@@ -109,3 +109,29 @@ test('an oversized CI file is skipped rather than read', () => {
   write(cwd, 'cicd/generated.yaml', `# ${'x'.repeat(300 * 1024)}\ngitleaks`);
   assert.deepEqual(surveyRepo(cwd).tools, []);
 });
+
+// Redline's own gate runs trufflehog. Read back as "this repository already
+// runs a secret scanner", it stood down the gate's own secrets job: on every
+// repository with a vendored gate, the second `redline init` switched off the
+// one security job no label can waive.
+test("Redline's own vendored gate is not evidence of a tool the repository runs", () => {
+  const cwd = tmp();
+  write(
+    cwd,
+    '.github/workflows/redline-gate.yml',
+    '# Managed by Redline. Regenerate with `redline init --repair`; edits here are overwritten.\n' +
+      'jobs:\n  secrets:\n    steps:\n      - uses: trufflesecurity/trufflehog@abc\n'
+  );
+  write(cwd, '.azuredevops/redline-gate.yml', '# Managed by Redline; regenerate with `redline init`\n- script: trufflehog\n');
+  const survey = surveyRepo(cwd);
+  assert.deepEqual(survey.tools, []);
+  assert.deepEqual(survey.standDown, []);
+});
+
+test("a repository's own pipeline beside Redline's gate is still detected", () => {
+  const cwd = tmp();
+  write(cwd, '.github/workflows/redline-gate.yml', '# Managed by Redline.\n- uses: trufflesecurity/trufflehog@abc\n');
+  write(cwd, '.github/workflows/security.yml', 'jobs:\n  scan:\n    steps:\n      - uses: trufflesecurity/trufflehog@def\n');
+  const survey = surveyRepo(cwd);
+  assert.deepEqual(survey.tools.map((t) => t.id), ['trufflehog']);
+});

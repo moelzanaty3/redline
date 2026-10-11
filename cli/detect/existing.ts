@@ -120,12 +120,22 @@ const CI_ROOT_FILES = ['azure-pipelines.yml', 'azure-pipelines.yaml', '.gitlab-c
 // onboarding into a full-tree read.
 const MAX_CI_BYTES = 256 * 1024;
 
+// Files Redline wrote itself — the caller, a vendored gate, an Azure pipeline
+// definition — open with this header. They describe Redline, not the
+// repository: the vendored gate runs trufflehog, and reading it as evidence
+// stood down the gate's own secrets job on the next run. Skipping on the header
+// fails safe: a hand-written pipeline that copied it is merely not detected,
+// and the gate then runs its own job beside it.
+const MANAGED_HEADER = /^#\s*Managed by Redline\b/;
+
 function readCiText(cwd: string): string {
   const parts: string[] = [];
   const readFile = (abs: string): void => {
     try {
       if (statSync(abs).size > MAX_CI_BYTES) return;
-      parts.push(readFileSync(abs, 'utf8').toLowerCase());
+      const text = readFileSync(abs, 'utf8');
+      if (MANAGED_HEADER.test(text)) return;
+      parts.push(text.toLowerCase());
     } catch {
       // Unreadable is not a finding about the repository: a probe that cannot
       // read a file reports nothing rather than claiming the tool is absent.
