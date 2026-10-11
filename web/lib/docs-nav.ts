@@ -82,6 +82,38 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "quickstart quick start get started first repo onboard dry run ten minutes try it",
       },
       {
+        title: "Tutorial",
+        href: "/docs/tutorial",
+        description: "Write code Redline rejects, see the finding, understand it, fix it, and keep the rules current. Starts from an empty folder; about fifteen minutes.",
+        keywords: "tutorial walkthrough workshop demo first finding try it hands on learn review explain fix playground sandbox new repo",
+        children: [
+          {
+            title: "1. Your first finding",
+            href: "/docs/tutorial/first-finding",
+            description: "Plant four violations in a TypeScript file and watch redline review catch them with no model call.",
+            keywords: "tutorial first finding review staged git add untracked as unknown as ts-ignore todo blocker high",
+          },
+          {
+            title: "2. Ask your assistant",
+            href: "/docs/tutorial/assistant",
+            description: "Run the same review inside Claude Code, Copilot or Cursor with /redline-review, or paste the prompt into any chat.",
+            keywords: "tutorial assistant llm claude copilot cursor slash command redline-review print-prompt pbcopy chat",
+          },
+          {
+            title: "3. Explain and fix",
+            href: "/docs/tutorial/explain-and-fix",
+            description: "Ask Redline what a rule means and who decided it, fix the code, and re-run until it is clean.",
+            keywords: "tutorial explain rule id fix safety comment type predicate no findings clean",
+          },
+          {
+            title: "4. Push and stay current",
+            href: "/docs/tutorial/stay-current",
+            description: "What the gate does on the pull request, and how new standards reach your repository.",
+            keywords: "tutorial push pull request gate observe status drift behind sync verify standards version resync",
+          },
+        ],
+      },
+      {
         title: "Onboard a repository",
         href: "/docs/onboarding",
         description: "One command per repo, on GitHub or Azure DevOps, then verify the gate is real.",

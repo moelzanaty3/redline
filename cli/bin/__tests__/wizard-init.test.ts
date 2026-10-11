@@ -1,6 +1,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -265,4 +266,39 @@ test('a usage failure still aborts instead of opening the menu', async () => {
   const { opts } = deps(repo(), prompter);
   assert.equal(await run(['init'], { ...opts, resolvePlatform: async () => broken }), 2);
   assert.deepEqual(seen, []);
+});
+
+// --- a repository with no remote ---------------------------------------------
+
+function gitRepoWithoutRemote(): string {
+  const dir = repo();
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+  return dir;
+}
+
+const noHost = async (): Promise<never> => {
+  throw new Error('a repository with no remote must not resolve a host');
+};
+
+test('with no remote, init installs the rules without asking for a host', async () => {
+  const { prompter } = defaults();
+  const cwd = gitRepoWithoutRemote();
+  const { opts, lines } = deps(cwd, prompter, false);
+  assert.equal(await run(['init', '--no-commit'], { ...opts, resolvePlatform: noHost }), 0);
+  assert.ok(existsSync(join(cwd, 'AGENTS.md')));
+  assert.ok(existsSync(join(cwd, '.redline.json')));
+  assert.equal(existsSync(join(cwd, '.github/workflows/redline.yml')), false);
+  assert.ok(lines.some((line) => /no git remote/.test(line)));
+  assert.ok(!lines.some((line) => /open the pull request/.test(line)));
+});
+
+// The menu opens by reading the repository from the host and ends by choosing
+// what to do on it; with no remote, neither is possible.
+test('with no remote, bare init at a terminal skips the menu and installs the rules', async () => {
+  const { prompter, seen } = defaults();
+  const cwd = gitRepoWithoutRemote();
+  const { opts } = deps(cwd, prompter);
+  assert.equal(await run(['init'], { ...opts, resolvePlatform: noHost }), 0);
+  assert.deepEqual(seen, []);
+  assert.ok(existsSync(join(cwd, 'AGENTS.md')));
 });

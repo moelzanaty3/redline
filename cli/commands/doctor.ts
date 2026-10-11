@@ -114,9 +114,11 @@ function checkGit(run: DoctorOptions['run'], cwd: string): DoctorCheck[] {
   if (remote === '') {
     checks.push({
       name: 'remote',
-      status: 'fail',
-      detail: 'no origin remote, so there is no host to onboard against',
-      fix: 'git remote add origin <url>, or preview the files alone with redline init --dry-run',
+      status: 'warn',
+      detail:
+        'no origin remote yet — init installs the rules and the local review; the gate and host ' +
+        'settings wait for one',
+      fix: 'git remote add origin <url>, then run redline init again to install them',
     });
     return checks;
   }

@@ -18,7 +18,8 @@ export interface StatusReport {
   readonly onboarded: boolean;
   readonly profile: string;
   readonly stacks: readonly string[];
-  readonly host: string;
+  /** null when the repository was onboarded with no git remote. */
+  readonly host: string | null;
   /** What runs the pull request checks. Only meaningful when a gate is installed. */
   readonly pipeline: GatePipeline;
   readonly rung: Rung;
@@ -107,11 +108,14 @@ export function formatStatus(report: StatusReport): string[] {
   // and the pipeline decides which file that is. On a repository that opted out
   // of a gate, printing them describes a check that will never run — and "the
   // check is always green" reads as reassurance about machinery that is absent.
-  const gated = report.capabilities.includes(capabilityName('gate'));
+  // With no host, nothing the capabilities name was installed: they are waiting
+  // for the remote the next run will find. Only the rendered files are here.
+  const local = report.host === null;
+  const gated = !local && report.capabilities.includes(capabilityName('gate'));
 
   const lines = [
     `profile      ${report.profile}${report.stacks.length > 0 ? ` (${report.stacks.join(', ')})` : ''}`,
-    `host         ${report.host}`,
+    `host         ${local ? 'none yet — this repository has no git remote' : report.host}`,
     ...(gated
       ? [
           `checks       ${PIPELINE_LABEL[report.pipeline]}`,
@@ -123,10 +127,18 @@ export function formatStatus(report: StatusReport): string[] {
         ]
       : []),
     `assistants   ${report.vendors.join(', ')}`,
-    `installed    ${report.capabilities.length > 0 ? report.capabilities.join(', ') : 'nothing'}`,
+    local
+      ? 'installed    the rules and the local review'
+      : `installed    ${report.capabilities.length > 0 ? report.capabilities.join(', ') : 'nothing'}`,
   ];
 
-  if (!gated) {
+  if (local && report.capabilities.length > 0) {
+    lines.push(
+      `waiting on   a remote, for: ${report.capabilities.join(', ')} — add one and run redline init again`
+    );
+  }
+
+  if (!gated && !local) {
     lines.push('checks       none — the standards are rendered for assistants to read');
   }
 
