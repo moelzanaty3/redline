@@ -179,15 +179,14 @@ export async function verify(
   // Every setting `redline init` applies, not just the blocking flag: an
   // administrator who turns off code-owner review or approvals leaves the gate
   // reporting green while the review requirements it was installed for are
-  // gone. CONTRACT with cli/commands/init.ts's applyPolicy call: it applies
-  // requiredApprovals 1, dismissStaleReviews true, requireCodeOwnerReview from
-  // the menu and requireThreadResolution true. Those are literals there and
-  // cannot be imported, so raising init's approval count without raising
-  // MINIMUM_APPROVALS here would leave a repository sitting at the old count
-  // reporting clean. Compared as a floor, not for equality: a team that
-  // requires three approvals is stricter than the standard, and failing them
-  // would fail their own gate on every pull request.
-  const MINIMUM_APPROVALS = 1;
+  // gone. CONTRACT with cli/commands/init.ts's applyPolicy call: it applies the
+  // recorded requiredApprovals, dismissStaleReviews true, requireCodeOwnerReview
+  // from the menu and requireThreadResolution true. The approval count is read
+  // back from the same record, so the two cannot disagree; absent is the default
+  // of none. Compared as a
+  // floor, not for equality: a team that requires three approvals is stricter
+  // than it chose, and failing them would fail their own gate on every pull request.
+  const MINIMUM_APPROVALS = config.requiredApprovals ?? 0;
   const weakened: string[] = [];
   // Settings the host says it cannot attribute to Redline are reported and
   // never compared — see MergePolicy.unownedSettings.

@@ -195,7 +195,12 @@ export default function Page() {
 
       <h2>Policy invariants</h2>
       <ul>
-        <li>One human approval, always — automated review is advisory input, never the approver.</li>
+        <li>
+          Approvals are the team&apos;s choice. Redline fails the pipeline; a new
+          onboarding requires no approving review, and{" "}
+          <code>redline init --approvals &lt;n&gt;</code> requires n. Automated
+          review is advisory input and never approves.
+        </li>
         <li>Review threads must be resolved before merge.</li>
         <li>Applied per repo by <code>redline init</code>, as a GitHub ruleset named <code>Redline</code> or an Azure DevOps branch policy — no manual per-repo setup, no drift from a hand-edited setting.</li>
         <li>Advisory by default in Phase 1 on both hosts. Promotion to blocking is a deliberate second step, after a soak period, not an onboarding default.</li>

@@ -169,6 +169,11 @@ export interface RedlineConfig {
   // written before the field existed, which is every repository onboarded so
   // far: they keep printing findings exactly as they did.
   docsBaseUrl: string;
+  // How many approving reviews the branch policy requires before a merge. Redline
+  // fails the pipeline; whether a person must also approve is the team's choice,
+  // so the default is 0 and `--approvals <n>` sets it. Absent in configs written
+  // before the field existed; it reads as 0, and the next init records it.
+  requiredApprovals?: number;
 }
 
 // What each menu key means when a repository has not recorded one. Lives here
@@ -412,7 +417,14 @@ export function parseConfig(raw: unknown): RedlineConfig {
     // anything that is not http(s), so a hand edit cannot put an arbitrary
     // scheme into a comment on someone else's pull request.
     docsBaseUrl: typeof o['docsBaseUrl'] === 'string' ? o['docsBaseUrl'].trim() : '',
+    // Anything but a whole number from 0 to 10 reads back as absent, which is the
+    // default of none.
+    ...(isApprovalCount(o['requiredApprovals']) ? { requiredApprovals: o['requiredApprovals'] } : {}),
   };
+}
+
+export function isApprovalCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 10;
 }
 
 /**
@@ -488,6 +500,8 @@ const EXPLAINER: readonly string[] = [
   '  file is the gate here, so verify reads it back rather than assuming. `--pipeline`.',
   'docsBaseUrl — where your copy of the standard is published. Set it and every finding carries',
   '  the address of the rule it cites: <docsBaseUrl>/r/<rule-id>. Empty prints no link.',
+  'requiredApprovals — approving reviews a merge needs, 0 to 10. 0 leaves the merge to the pipeline.',
+  '  `redline init --approvals <n>`, or edit it and run `redline init --repair` to apply it.',
   'commandFiles, standardsVersion, cliVersion, onboardedAt, lastRunAt — Redline\'s own bookkeeping.',
 ];
 

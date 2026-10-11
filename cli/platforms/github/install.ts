@@ -537,7 +537,9 @@ function buildRules(policy: MergePolicy): unknown[] {
         required_approving_review_count: policy.requiredApprovals,
         dismiss_stale_reviews_on_push: policy.dismissStaleReviews,
         require_code_owner_review: policy.requireCodeOwnerReview,
-        require_last_push_approval: true,
+        // An approval requirement of its own, so it follows the count: on with
+        // any required review, off when the team requires none.
+        require_last_push_approval: policy.requiredApprovals > 0,
         required_review_thread_resolution: policy.requireThreadResolution,
         automatic_copilot_code_review_enabled: true,
         allowed_merge_methods: ['squash', 'merge'],

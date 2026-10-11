@@ -348,17 +348,13 @@ export default async function Page() {
       </p>
       <div className="callout">
         <p>
-          <b>The approval trap.</b> The ruleset requires one approving review, and
-          GitHub does not let you approve your own pull request. On a repository
-          with one active maintainer, the ruleset you just applied will block your
-          next pull request with no way forward from inside the repository.
-        </p>
-        <p>
-          That is the policy working as designed — one human approval, always —
-          but decide it deliberately rather than discovering it. If you work
-          solo, add yourself as a bypass actor on the <code>Redline</code>{" "}
-          ruleset. It is a real weakening and it is visible in the ruleset, which
-          is the right place for it to be visible.
+          <b>Approvals are your choice.</b> Redline&apos;s job is to fail the
+          pipeline, so a new onboarding requires no approving review: a solo
+          engineer can merge their own pull request once the checks pass. To
+          require reviews, run <code>redline init --approvals 1</code> (or any
+          number up to 10). The count is recorded as{" "}
+          <code>requiredApprovals</code> in <code>.redline.json</code>; edit it
+          and run <code>redline init --repair</code> to apply a new one.
         </p>
       </div>
       <p>

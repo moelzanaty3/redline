@@ -109,6 +109,19 @@ test('readPolicy maps branch policies back to a MergePolicy', async () => {
   assert.deepEqual(policy?.requiredChecks, ['redline/gate']);
 });
 
+// How applyPolicy writes zero required approvals: the reviewer policy is off.
+test('a disabled reviewer policy reads back as no approval required', async () => {
+  const routes = configurations(true);
+  const body = routes['GET /Payments/_apis/policy/configurations'].body as {
+    value: { type: { id: string }; isEnabled: boolean }[];
+  };
+  const reviewers = body.value.find((c) => c.type.id === 'min-rev-id');
+  assert.ok(reviewers);
+  reviewers.isEnabled = false;
+  const policy = await createAzureVerify(fakeAzure(routes)).readPolicy(ref);
+  assert.equal(policy?.requiredApprovals, 0);
+});
+
 test('a non-blocking status policy reads back as advisory', async () => {
   const policy = await createAzureVerify(fakeAzure(configurations(false))).readPolicy(ref);
   assert.equal(policy?.blocking, false);

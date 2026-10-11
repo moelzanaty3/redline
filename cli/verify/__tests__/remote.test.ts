@@ -166,9 +166,12 @@ test('a policy that exists but is not in force is drift, not a pass', async () =
   assert.match(policy?.detail ?? '', /not in force/);
 });
 
-test('zero required approvals is drift', async () => {
+test('zero required approvals is drift where the repository chose one', async () => {
   const report = await verifyRemote(
     host({
+      async readRemoteConfig() {
+        return { config: { ...config, requiredApprovals: 1 } };
+      },
       async readPolicy() {
         return {
           requiredApprovals: 0,
@@ -399,4 +402,27 @@ test('a deselected gate is not asked about its vendored copy either', async () =
     opts
   );
   assert.equal(find(report, 'gate-vendored'), undefined);
+});
+
+test('zero required approvals is not drift where init recorded zero', async () => {
+  const report = await verifyRemote(
+    host({
+      async readRemoteConfig() {
+        return { config: { ...config, requiredApprovals: 0 } };
+      },
+      async readPolicy() {
+        return {
+          requiredApprovals: 0,
+          dismissStaleReviews: true,
+          requireCodeOwnerReview: true,
+          requireThreadResolution: true,
+          requiredChecks: [],
+          blocking: false,
+        };
+      },
+    }),
+    ref,
+    opts
+  );
+  assert.equal(find(report, 'merge-policy')?.ok, true);
 });

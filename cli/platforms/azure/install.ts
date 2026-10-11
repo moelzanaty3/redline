@@ -804,12 +804,16 @@ export function createAzureInstall(
           mine: isRedlineOwned,
           oneSettingPerBranch: true,
           what: 'the minimum reviewer count',
+          // Zero approvals is the policy switched off, not a count of zero: Azure
+          // Repos offers 1 to 10 reviewers, and a disabled policy is how its own
+          // UI says "no reviewer required". The count stays valid so the policy
+          // can be re-enabled as it is.
           config: () => ({
             type: { id: minimumReviewersTypeId },
-            isEnabled: true,
-            isBlocking: true,
+            isEnabled: policy.requiredApprovals > 0,
+            isBlocking: policy.requiredApprovals > 0,
             settings: {
-              minimumApproverCount: policy.requiredApprovals,
+              minimumApproverCount: Math.max(policy.requiredApprovals, 1),
               creatorVoteCounts: false,
               resetOnSourcePush: policy.dismissStaleReviews,
               blockLastPusherVote: true,

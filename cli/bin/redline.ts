@@ -43,6 +43,7 @@ import { gatherFacts } from '../ui/facts.ts';
 import { runWizard, type Host as WizardHost, type WizardAnswers } from '../ui/wizard.ts';
 import {
   capabilitySelection,
+  isApprovalCount,
   OPTIONAL_CAPABILITIES,
   readConfig,
   type MenuSelections,
@@ -396,6 +397,16 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
             'copy into this repository, which means a pull request can edit the gate judging it'
         );
       }
+      // A whole number, read as a number: `--approvals 1.5` or `--approvals two`
+      // must fail here, before anything is written, not become NaN in a ruleset.
+      const approvals = values.approvals === undefined ? undefined : Number(values.approvals);
+      if (approvals !== undefined && (values.approvals?.trim() === '' || !isApprovalCount(approvals))) {
+        throw new RedlineError(
+          'usage',
+          `--approvals must be a whole number from 0 to 10, not "${values.approvals}"`,
+          '0 leaves the merge to the pipeline; 1 or more also requires that many approving reviews'
+        );
+      }
       const pipelineChoice = wizard?.answers.pipeline ?? values.pipeline;
       const gateSourceChoice = wizard?.answers.gateSource ?? values['gate-source'];
 
@@ -469,6 +480,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         // is how a repository clears a link it no longer wants, and a truthy
         // check would silently keep the old one.
         ...(values['docs-url'] !== undefined ? { docsUrl: values['docs-url'] } : {}),
+        ...(approvals !== undefined ? { approvals } : {}),
         ...(gateSourceChoice ? { gateSource: gateSourceChoice } : {}),
         // Offered only at a terminal, and only when the planning pass finds the
         // organisation publishes no gate. A scripted run gets the denial it has

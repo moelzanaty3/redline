@@ -124,6 +124,19 @@ test('policy type ids come from the live lookup when it succeeds', async () => {
   assert.ok(typeIds.includes('min-rev-id'));
 });
 
+// Azure Repos offers 1 to 10 reviewers; "none" is the policy switched off.
+test('zero required approvals writes the reviewer policy disabled, with a count Azure accepts', async () => {
+  const client = fakeAzure({ ...typesRoute, 'GET /Payments/_apis/policy/configurations': { status: 200, body: { value: [] } } });
+  await createAzureInstall(client, gitFor).applyPolicy(ref, { ...advisory, requiredApprovals: 0 });
+  const reviewers = client.calls
+    .filter((c) => c.method === 'POST' && c.path === '/Payments/_apis/policy/configurations')
+    .map((c) => c.body as { type: { id: string }; isEnabled: boolean; isBlocking: boolean; settings: { minimumApproverCount: number } })
+    .find((body) => body.type.id === 'min-rev-id');
+  assert.equal(reviewers?.isEnabled, false);
+  assert.equal(reviewers?.isBlocking, false);
+  assert.equal(reviewers?.settings.minimumApproverCount, 1);
+});
+
 test('a failed type lookup falls back to the well-known guids', async () => {
   const client = fakeAzure({
     'GET /Payments/_apis/policy/types': { status: 403 },

@@ -7,6 +7,29 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — approvals are the team's choice; Redline fails the pipeline
+
+The branch policy `redline init` applies required one approving review, with no bypass. GitHub does
+not let an author approve their own pull request, so on a repository with one engineer nothing could
+ever merge — not even the onboarding pull request. Redline's job is to make the pipeline fail; how a
+team reviews is the team's decision.
+
+- **New default: no required approving review.** The policy still requires a pull request, resolved
+  threads and, once blocking, a passing `redline-gate / gate`. This deliberately lowers a control.
+- **`redline init --approvals <n>`** (0 to 10) sets the count. It is recorded as `requiredApprovals`
+  in `.redline.json`; a later run keeps it, and editing it then running `init --repair` applies it.
+- **Existing repositories move to the default on their next `init`.** A record written before this
+  field existed has no count, so its next run applies none and records it. A team that wants to keep
+  requiring a review passes `--approvals 1` on that run.
+- `verify` holds the repository to the recorded count instead of a fixed 1, so zero is not drift
+  where it was chosen, and a count lowered by hand on the host still is.
+- With no approval required, the GitHub ruleset also stops requiring the latest push to be approved,
+  which would otherwise ask for the same review by another route. On Azure DevOps, zero is the
+  Redline reviewer policy switched off, since Azure accepts 1 to 10 reviewers.
+- `scripts/validate.mjs` checks the reference ruleset's count is a whole number from 0 to 10 rather
+  than at least 1, and `rulesets/redline-ruleset.json` shows the new default. The org reference
+  ruleset is unchanged.
+
 ### CLI — a repository with no remote can be onboarded
 
 `redline init` refused to run without a git remote, even with `--no-commit`, because every command

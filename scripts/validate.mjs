@@ -114,9 +114,15 @@ for (const file of ['rulesets/redline-ruleset.json', 'rulesets/redline-org-rules
     fail(`${file}: required status check is ${JSON.stringify(checks)}, expected "${REQUIRED_CHECK}"`);
   }
   const pr = ruleset.rules.find((r) => r.type === 'pull_request');
-  if (!pr) fail(`${file}: no pull_request rule — human approval is not enforced`);
-  else if ((pr.parameters.required_approving_review_count ?? 0) < 1) {
-    fail(`${file}: required_approving_review_count must be at least 1 — automated review never approves`);
+  if (!pr) fail(`${file}: no pull_request rule — a change could reach the branch without a pull request`);
+  else {
+    // The count is the team's choice — Redline fails the pipeline, and whether a
+    // person must also approve is decided per repository with --approvals. What
+    // is checked is that it is a count GitHub and Azure DevOps both accept.
+    const count = pr.parameters.required_approving_review_count ?? 0;
+    if (!Number.isInteger(count) || count < 0 || count > 10) {
+      fail(`${file}: required_approving_review_count must be a whole number from 0 to 10, not ${count}`);
+    }
   }
   if (ruleset.bypass_actors?.length) warn(`${file}: has ${ruleset.bypass_actors.length} bypass actor(s)`);
 }
