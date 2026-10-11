@@ -441,8 +441,10 @@ test('a policy that no longer blocks on unresolved threads is drift', async () =
 // The approval count is a floor, not an equality: a team that requires three
 // approvals is stricter than the standard, and failing them would fail their
 // gate on every pull request.
-test('a policy dropped to zero required approvals is drift, while a stricter one is not', async () => {
-  const cwd = await onboarded();
+test('a policy dropped below the recorded approvals is drift, while a stricter one is not', async () => {
+  const cwd = tempRepo('redline-verify-one-');
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  await init(fakePlatform(), { cwd, root, now, approvals: 1 });
   const dropped = await withPolicy(cwd, policyOf({ requiredApprovals: 0 }));
   const finding = find(await verify(() => dropped, { cwd, root }), 'merge-policy');
   assert.equal(finding?.ok, false, finding?.detail);
@@ -450,6 +452,18 @@ test('a policy dropped to zero required approvals is drift, while a stricter one
 
   const stricter = await withPolicy(cwd, policyOf({ requiredApprovals: 3 }));
   assert.equal(find(await verify(() => stricter, { cwd, root }), 'merge-policy')?.ok, true);
+});
+
+// The floor is what init applied and recorded, not a constant: a repository
+// that chose no approving review is not drifting at zero.
+test('a repository that chose no approving review verifies clean at zero', async () => {
+  const cwd = tempRepo('redline-verify-zero-');
+  writeFileSync(join(cwd, 'package.json'), '{"dependencies":{"react":"19"}}');
+  await init(fakePlatform(), { cwd, root, now, approvals: 0 });
+
+  const platform = await withPolicy(cwd, policyOf({ requiredApprovals: 0 }));
+  const finding = find(await verify(() => platform, { cwd, root }), 'merge-policy');
+  assert.equal(finding?.ok, true, finding?.detail);
 });
 
 // --- the pull request template the host actually serves ---------------------
@@ -856,7 +870,9 @@ test('the merge policy init applies is the one verify holds a repository to', as
   const platform = fakePlatform();
   await init(platform, { cwd, root, now });
 
-  assert.equal(platform.lastPolicy?.requiredApprovals, 1, 'raise MINIMUM_APPROVALS in verify.ts with it');
+  // The approval count verify holds the repository to is the one init recorded,
+  // so the applied count and the record must be the same number.
+  assert.equal(platform.lastPolicy?.requiredApprovals, readConfig(cwd)?.requiredApprovals);
   assert.equal(platform.lastPolicy?.dismissStaleReviews, true);
   assert.equal(platform.lastPolicy?.requireThreadResolution, true);
   // Never required by default: the CODEOWNERS that would satisfy it is not

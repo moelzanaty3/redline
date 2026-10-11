@@ -2182,3 +2182,49 @@ test('with no remote, a second run has nothing to change', async () => {
 
   assert.equal(report.alreadyOnboarded, true);
 });
+
+// --- who has to approve a pull request --------------------------------------
+//
+// Redline's job is to make the pipeline fail. Whether a person must also approve
+// is the team's call: a new onboarding asks for no approving review, a team that
+// wants one says so with --approvals, and the count is recorded so every later
+// run — and verify — holds the repository to what was chosen.
+
+test('a new onboarding asks for no approving review and records that', async () => {
+  const platform = fakePlatform();
+  const cwd = repo();
+  await init(platform, { cwd, root, now });
+
+  assert.equal(platform.lastPolicy?.requiredApprovals, 0);
+  assert.equal(readConfig(cwd)?.requiredApprovals, 0);
+});
+
+test('--approvals sets the count, and a later run keeps it without being told again', async () => {
+  const cwd = repo();
+  const first = fakePlatform();
+  await init(first, { cwd, root, now, approvals: 2 });
+  assert.equal(first.lastPolicy?.requiredApprovals, 2);
+  assert.equal(readConfig(cwd)?.requiredApprovals, 2);
+
+  const again = fakePlatform();
+  await init(again, { cwd, root, now: laterNow, repair: true });
+  assert.equal(again.lastPolicy?.requiredApprovals, 2);
+});
+
+// A record from before the count existed has none; its host still carries the
+// one approval every onboarding used to get. The next run moves it to the
+// default and records it, unless the team says otherwise on that run.
+test('a repository onboarded before the count was recorded moves to no required approval', async () => {
+  const cwd = repo();
+  await init(fakePlatform(), { cwd, root, now, approvals: 1 });
+  const path = join(cwd, '.redline.json');
+  const recorded = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  delete recorded['requiredApprovals'];
+  writeFileSync(path, JSON.stringify(recorded));
+
+  const rerun = fakePlatform();
+  const report = await init(rerun, { cwd, root, now: laterNow });
+  assert.equal(report.alreadyOnboarded, false);
+  assert.equal(rerun.lastPolicy?.requiredApprovals, 0);
+  assert.equal(readConfig(cwd)?.requiredApprovals, 0);
+});

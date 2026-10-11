@@ -235,7 +235,10 @@ export function createAzureVerify(client: AzureClient): PlatformVerify {
           : null;
 
       return {
-        requiredApprovals: typeof minimumApproverCount === 'number' ? minimumApproverCount : 0,
+        // A disabled reviewer policy requires nobody, whatever count it carries —
+        // which is how applyPolicy writes zero.
+        requiredApprovals:
+          reviewers?.isEnabled !== false && typeof minimumApproverCount === 'number' ? minimumApproverCount : 0,
         dismissStaleReviews: reviewers?.settings['resetOnSourcePush'] === true,
         requireCodeOwnerReview: byType(POLICY_TYPE_NAMES.requiredReviewers) !== undefined,
         requireThreadResolution: comments?.isEnabled === true,

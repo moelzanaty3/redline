@@ -581,6 +581,27 @@ test('a blocking ruleset requires the gate check even when the caller names none
   assert.deepEqual(checks?.parameters?.['required_status_checks'], [{ context: REQUIRED_CHECK }]);
 });
 
+// With no approving review required, nothing may ask for one by another route:
+// "the latest push must be approved by someone else" is an approval requirement,
+// and on a one-person repository it is the same wall as a count of one.
+test('a ruleset requiring no approval does not require the latest push to be approved either', async () => {
+  const client = fakeGitHubClient({ 'GET /repos/acme/web/rulesets': { status: 200, body: [] } });
+  await createGitHubInstall(client, gitFor).applyPolicy(ref, {
+    requiredApprovals: 0,
+    dismissStaleReviews: true,
+    requireCodeOwnerReview: false,
+    requireThreadResolution: true,
+    requiredChecks: [],
+    blocking: true,
+  });
+  const create = client.calls.find((c) => c.method === 'POST' && c.path === '/repos/acme/web/rulesets');
+  const rules = (create?.body as { rules: { type: string; parameters?: Record<string, unknown> }[] }).rules;
+  const pr = rules.find((r) => r.type === 'pull_request');
+  assert.equal(pr?.parameters?.['required_approving_review_count'], 0);
+  assert.equal(pr?.parameters?.['require_last_push_approval'], false);
+  assert.ok(rules.some((r) => r.type === 'required_status_checks'));
+});
+
 // A re-run must leave a matching file alone. `redline init` folds installGate's
 // file list into its already-onboarded decision, so a file reported as written
 // when its bytes did not change means a modified tracked file left behind with

@@ -332,6 +332,9 @@ export interface InitOptions {
   // An empty string is how it is cleared, which is why this is distinguished
   // from absent rather than falsy-checked.
   docsUrl?: string;
+  // `--approvals <n>`: approving reviews the branch policy requires. Absent keeps
+  // what the repository recorded; see `requiredApprovals` in init().
+  approvals?: number;
   // `--no-commit`. Write the artifacts into the working tree and stop: no host
   // request, no branch, no commit, no push, no pull request.
   //
@@ -500,6 +503,10 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
   // an Actions caller into a repository whose checks are Azure Pipelines —
   // undoing the correct install of the run before it. Inert on Azure DevOps.
   const pipeline: GatePipeline = opts.pipeline ?? existing?.pipeline ?? 'github-actions';
+
+  // Redline fails the pipeline; whether a person must also approve is the team's
+  // call, so unless the repository chose a count it requires none.
+  const requiredApprovals = opts.approvals ?? existing?.requiredApprovals ?? 0;
 
   const currentRung: Rung = existing?.rung ?? 'observe';
   const rungNotes: string[] = [];
@@ -942,6 +949,13 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
   // and `verify` reads the record.
   const pipelineChanged = existing !== null && existing.pipeline !== pipeline;
 
+  // And the approval count, which moves no file at all: `--approvals` on a
+  // settled repository is exactly the run that has a host setting to change. A
+  // record with no count at all predates it, and its host still carries the one
+  // approval every onboarding used to get — so that is work too, not settled.
+  const approvalsChanged =
+    existing !== null && (existing.requiredApprovals === undefined || existing.requiredApprovals !== requiredApprovals);
+
   // "Zero host calls on a settled repository" means zero host *mutations*.
   // Reading is how the run finds out whether the repository is settled at all:
   // without it, an operator who loosened the ruleset by hand got "already
@@ -967,7 +981,8 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
     !menuChanged &&
     !vendorsChanged &&
     !capabilitiesChanged &&
-    !pipelineChanged;
+    !pipelineChanged &&
+    !approvalsChanged;
   let settledOnHost = true;
   // `offline`, not `!dryRun`: --no-commit is documented as contacting no host and
   // is held to it everywhere else (see the ref read above, which says so in as
@@ -1011,7 +1026,10 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
           ...(menu.sensitivePathReviewers ? ['review ownership for the sensitive paths'] : []),
           'security floor: secret scanning, push protection, dependency alerts',
           ...(capabilities.mergePolicy
-            ? [`branch policy: 1 approval, gate ${menu.blockingGate ? 'blocking' : 'advisory'}`]
+            ? [
+                `branch policy: ${requiredApprovals === 0 ? 'no approving review' : `${requiredApprovals} approval(s)`}, ` +
+                  `gate ${menu.blockingGate ? 'blocking' : 'advisory'}`,
+              ]
             : []),
           `pull request on ${ONBOARD_BRANCH}`,
         ];
@@ -1138,6 +1156,7 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
       gateVersion:
         gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
       docsBaseUrl: opts.docsUrl ?? existing?.docsBaseUrl ?? '',
+      requiredApprovals,
     });
     return {
       profile,
@@ -1170,7 +1189,7 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
   step('applying the branch policy');
   const policy = capabilities.mergePolicy
     ? await platform.applyPolicy(ref, {
-        requiredApprovals: 1,
+        requiredApprovals,
         dismissStaleReviews: true,
         requireCodeOwnerReview: menu.sensitivePathReviewers,
         requireThreadResolution: true,
@@ -1243,6 +1262,7 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
     gateVersion:
       gateSource === 'local' && CLI_VERSION !== UNPUBLISHED_VERSION ? CLI_VERSION : '',
     docsBaseUrl: opts.docsUrl ?? existing?.docsBaseUrl ?? '',
+    requiredApprovals,
   });
 
   step('committing and opening the pull request');

@@ -201,8 +201,12 @@ export async function verifyRemote(
     add('merge-policy', false, 'no merge policy found on the host — one was applied at onboarding');
   } else {
     const weakened: string[] = [];
-    if (policy.requiredApprovals < 1) {
-      weakened.push('human approval is no longer required — automated review never approves');
+    // Held to what init applied and recorded; absent is the default of none.
+    const recordedApprovals = config.requiredApprovals ?? 0;
+    if (policy.requiredApprovals < recordedApprovals) {
+      weakened.push(
+        `it requires ${policy.requiredApprovals} approval(s), below the ${recordedApprovals} redline init applied`
+      );
     }
     if (policy.notEnforcedReason) {
       // The cheapest loosening on GitHub: a ruleset switched out of active

@@ -26,7 +26,7 @@ OpenAI Codex / `AGENTS.md`, and Claude. A Cursor adapter exists but ships disabl
 | `templates/repo-context.md` | Per-repo context template | reference only — a human copies it above the generated block in `AGENTS.md`; `redline init` never installs it |
 | `templates/CODEOWNERS` | Reference shape of the CODEOWNERS pattern that makes `require_code_owner_review` real and protects the enforcement surface | `redline init` writes `.github/CODEOWNERS` on GitHub repos with equivalent content built in code — it does not read this file |
 | `templates/redline.yml` | Thin caller installed as `.github/workflows/redline.yml` | every onboarded repo |
-| `rulesets/redline-ruleset.json` | Reference shape of the per-repo branch ruleset: 1 human approval, thread resolution, automatic review, required `redline-gate / gate` check | nothing reads this file — `redline init` builds the equivalent ruleset at runtime |
+| `rulesets/redline-ruleset.json` | Reference shape of the per-repo branch ruleset: pull request required, approvals as the team sets them (none by default), thread resolution, automatic review, required `redline-gate / gate` check | nothing reads this file — `redline init` builds the equivalent ruleset at runtime |
 | `rulesets/redline-org-ruleset.json` | Same rules applied org-wide by custom repository property — no per-repo drift | applied once at org level |
 | `workflows/redline-gate.yml` | Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation | org `.github` repo |
 | `workflows/redline-sync.yml` | Distributes standards, gate caller and template to onboarded repos as PRs. **Live** — runs `redline sync` on a push to `main` touching `standards/**`, `cli/render/**` or `templates/**`, and on `workflow_dispatch` | this (source) repo |
@@ -383,14 +383,17 @@ exact semantic-release version pinned in the lockfile.
   [CHANGELOG.md](CHANGELOG.md) for what Azure DevOps does not yet get at the gate.
 - **Least privilege.** Telemetry is pulled centrally with a read-only token. Onboarding a
   repo grants Redline no write access to it.
-- **Enterprise shape.** Per-stack rule composition, human approval always required, full
+- **Enterprise shape.** Per-stack rule composition, the approval count each team chooses, full
   audit trail native to GitHub.
 
 ## Design decisions
 
-- Automated review is **advisory input to a human**, never the approver. The ruleset
-  requires one human approval regardless, and `validate.mjs` fails if that is ever
-  lowered to zero.
+- Redline's job is to **fail the pipeline**, not to decide how a team reviews. Automated
+  review is advisory input and never approves anything. Whether a person must also approve
+  is the team's call: a new onboarding requires no approving review, `redline init
+  --approvals <n>` requires n, and the count is recorded in `.redline.json` so `verify`
+  holds the repository to it. A solo engineer is never left with a pull request nobody
+  can approve.
 - Standards carry an explicit **output contract** (`Redline/BLOCKER:` …). Without it,
   severity is unparseable and every metric downstream is a guess.
 - Standards carry explicit **What NOT to flag** sections — AI review dies by nitpick
