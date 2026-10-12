@@ -70,6 +70,7 @@ import { standardsVersion } from '../commands/sync.ts';
 import { doctor } from '../commands/doctor.ts';
 import { evidenceReport, formatEvidence, recordEvidence } from '../commands/evidence.ts';
 import { nodeSupport, unsupportedNodeHint, unsupportedNodeMessage } from '../core/runtime.ts';
+import { redlineCommandIn } from '../core/package-manager.ts';
 import { GATE_PIPELINES, isGatePipeline, isGateSource } from '../platforms/types.ts';
 import type { Platform, RepoRef } from '../platforms/types.ts';
 import type { SyncHost } from '../sync/run.ts';
@@ -279,7 +280,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
     const support = nodeSupport(deps.nodeVersion ?? process.version);
     if (!support.ok) {
       log.error(unsupportedNodeMessage(deps.nodeVersion ?? process.version));
-      log.info(unsupportedNodeHint(command));
+      log.info(unsupportedNodeHint(command, redlineCommandIn(cwd, '')));
       log.info('');
       log.info('`redline doctor` runs on any Node and reports the rest of what it finds.');
       return exitCodeFor('usage');
@@ -490,6 +491,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(values['docs-url'] !== undefined ? { docsUrl: values['docs-url'] } : {}),
         ...(approvals !== undefined ? { approvals } : {}),
         ...(gateSourceChoice ? { gateSource: gateSourceChoice } : {}),
+        ...(wizard?.answers.pinCli === true || values['pin-cli'] === true ? { pinCli: true } : {}),
         // Offered only at a terminal, and only when the planning pass finds the
         // organisation publishes no gate. A scripted run gets the denial it has
         // always got: vendoring the gate is a weaker control, and nothing

@@ -2,10 +2,21 @@
 description: Check this repository still matches the standards and guardrails it claims
 ---
 
-Run `npx redlinegate verify` in the repository root and report the findings table. Do not run
-plain `npx redline` — that resolves to an unrelated package on the public registry; the
-published package is `redlinegate`. If the engineer already has it installed
-(`npm i -g redlinegate`), the everyday command is just `redline verify`. Add `--gate` if the
+Run Redline the way this repository does, from its root:
+
+- `package.json` lists `redlinegate`: use the project's own copy, so you run the version the team
+  pinned — `pnpm redline verify` with a `pnpm-lock.yaml`, `yarn redline verify` with a `yarn.lock`,
+  `bun run redline verify` with a `bun.lock`, otherwise `npx redlinegate verify`.
+- It does not, and `package.json` has a `devEngines.packageManager` naming pnpm, yarn or bun: npm
+  refuses to run in that project, so use `pnpm dlx redlinegate verify`, `yarn dlx redlinegate verify`
+  or `bunx redlinegate verify`.
+- Anything else: `npx redlinegate verify`.
+
+Never plain `npx redline` — that resolves to an unrelated package on the public registry; the
+published package is `redlinegate`. Below, `redline <command>` means that command run the same
+way.
+
+Report the findings table. Add `--gate` if the
 engineer wants an explicit pass/fail summary line printed after the table, such as when
 running this by hand to mirror what CI's gate check sees.
 

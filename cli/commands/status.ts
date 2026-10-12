@@ -1,3 +1,4 @@
+import { redlineCommandIn } from '../core/package-manager.ts';
 import { capabilityName, readConfig } from '../config/redline-json.ts';
 import { standardsVersion } from './sync.ts';
 import { resolveProfile } from '../render/profile.ts';
@@ -34,6 +35,8 @@ export interface StatusReport {
   readonly drifted: boolean;
   readonly onboardedAt: string;
   readonly lastRunAt: string;
+  /** How this repository runs Redline, for the next-step hints. `redline` when absent. */
+  readonly run?: string;
 }
 
 export function status(cwd: string, root: string): StatusReport {
@@ -57,6 +60,7 @@ export function status(cwd: string, root: string): StatusReport {
       drifted: false,
       onboardedAt: '',
       lastRunAt: '',
+      run: redlineCommandIn(cwd, ''),
     };
   }
 
@@ -90,6 +94,7 @@ export function status(cwd: string, root: string): StatusReport {
     drifted: config.standardsVersion !== current,
     onboardedAt: config.onboardedAt,
     lastRunAt: config.lastRunAt,
+    run: redlineCommandIn(cwd, ''),
   };
 }
 
@@ -99,7 +104,7 @@ export function formatStatus(report: StatusReport): string[] {
     return [
       'not onboarded — no .redline.json here',
       `the standards in this CLI are at ${report.currentStandards}`,
-      'start with: redline init --dry-run',
+      `start with: ${report.run ?? 'redline'} init --dry-run`,
     ];
   }
 
@@ -134,7 +139,7 @@ export function formatStatus(report: StatusReport): string[] {
 
   if (local && report.capabilities.length > 0) {
     lines.push(
-      `waiting on   a remote, for: ${report.capabilities.join(', ')} — add one and run redline init again`
+      `waiting on   a remote, for: ${report.capabilities.join(', ')} — add one and run ${report.run ?? 'redline'} init again`
     );
   }
 

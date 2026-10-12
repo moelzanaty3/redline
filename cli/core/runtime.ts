@@ -58,14 +58,15 @@ export function unsupportedNodeMessage(version: string): string {
   );
 }
 
-export function unsupportedNodeHint(command = 'init'): string {
+export function unsupportedNodeHint(command = 'init', run = 'npx redlinegate'): string {
   // The command the operator actually typed, not a generic `init`. Advice that
   // silently swaps out the verb reads as boilerplate and gets skipped; the
-  // point is that it can be pasted.
+  // point is that it can be pasted. `run` is how this repository runs Redline
+  // (see redlineCommandIn), so a project that pins it is told to use its own copy.
   return (
     'run it under a newer Node without changing your pin:\n' +
-    `  volta run --node ${SUGGESTED_NODE_MAJOR} -- npx redlinegate ${command}\n` +
-    `  fnm exec --using ${SUGGESTED_NODE_MAJOR} npx redlinegate ${command}\n` +
-    `  nvm exec ${SUGGESTED_NODE_MAJOR} npx redlinegate ${command}`
+    `  volta run --node ${SUGGESTED_NODE_MAJOR} -- ${run} ${command}\n` +
+    `  fnm exec --using ${SUGGESTED_NODE_MAJOR} ${run} ${command}\n` +
+    `  nvm exec ${SUGGESTED_NODE_MAJOR} ${run} ${command}`
   );
 }
