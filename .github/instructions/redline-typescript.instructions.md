@@ -2,7 +2,7 @@
 applyTo: "**/*.ts,**/*.tsx,**/*.mts,**/*.cts"
 ---
 
-<!-- Redline v0.2.1 · profile: tooling · stacks: typescript -->
+<!-- Redline v0.2.2 · profile: typescript · stacks: typescript -->
 
 # TypeScript Review Rules
 

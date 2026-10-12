@@ -5,12 +5,12 @@ export const metadata: Metadata = { title: "Profiles & stacks" };
 
 const PROFILES: ReadonlyArray<readonly [string, string]> = [
   ["web-react", "javascript · react"],
-  ["web-next", "javascript · react · nextjs (App Router)"],
+  ["web-nextjs", "javascript · react · nextjs (App Router)"],
   ["web-angular", "javascript · angular"],
   ["web-vue", "javascript · vue"],
   ["web-svelte", "javascript · svelte / sveltekit"],
-  ["web-vanilla", "javascript · browser / dom"],
-  ["mobile-rn", "javascript · react · react-native"],
+  ["web-typescript", "javascript · browser / dom, no framework"],
+  ["mobile-react-native", "javascript · react · react-native"],
   ["mobile-android", "kotlin"],
   ["mobile-ios", "swift"],
   ["service-java", "microservices · java (Spring Boot)"],
@@ -19,9 +19,21 @@ const PROFILES: ReadonlyArray<readonly [string, string]> = [
   ["service-express", "javascript · microservices · express"],
   ["service-python", "microservices · python"],
   ["service-dotnet", "microservices · csharp"],
-  ["fullstack-node", "javascript · react · microservices · nodejs"],
-  ["infra", "terraform / hcl"],
-  ["tooling", "javascript"],
+  ["fullstack-react-node", "javascript · react · microservices · nodejs"],
+  ["infra-terraform", "terraform / hcl"],
+  ["typescript", "javascript · typescript, no framework: CLIs, libraries, scripts"],
+  ["typescript-effect", "effect, added on top of another profile"],
+];
+
+// standards/manifest.json profileAliases — the names standards 0.2.2 replaced.
+const RENAMED: ReadonlyArray<readonly [string, string]> = [
+  ["tooling", "typescript"],
+  ["web-vanilla", "web-typescript"],
+  ["web-next", "web-nextjs"],
+  ["mobile-rn", "mobile-react-native"],
+  ["infra", "infra-terraform"],
+  ["fullstack-node", "fullstack-react-node"],
+  ["lib-effect", "typescript-effect"],
 ];
 
 export default function Page() {
@@ -60,11 +72,39 @@ export default function Page() {
         </table>
       </div>
       <p>
-        The one deliberate overlap — <code>mobile-rn</code> installing both
-        React and React Native — is additive by design, and each file says so
-        in its own text. Legacy names (<code>mobile</code>, <code>node</code>,{" "}
+        The one deliberate overlap — <code>mobile-react-native</code> installing
+        both React and React Native — is additive by design, and each file says
+        so in its own text. Short names (<code>mobile</code>, <code>node</code>,{" "}
         <code>java</code>…) are accepted as aliases.
       </p>
+      <h3>How profiles are named</h3>
+      <p>
+        <code>&lt;kind&gt;-&lt;technology&gt;</code>, in full words:{" "}
+        <code>web-react</code>, <code>service-go</code>, <code>infra-terraform</code>. With
+        no framework, the language alone: <code>typescript</code>. No abbreviations and no
+        slang, because the name is all a reader has when picking one.
+      </p>
+      <p>
+        Standards 0.2.2 renamed the profiles that broke that rule. The old names still work
+        everywhere a profile is named (<code>--profile</code>, <code>.redline.json</code>,{" "}
+        <code>sync-targets.txt</code>), and a repository is recorded under the new name on its
+        next <code>init</code> or sync.
+      </p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Was</th><th>Now</th></tr>
+          </thead>
+          <tbody>
+            {RENAMED.map(([was, now]) => (
+              <tr key={was}>
+                <td>{was}</td>
+                <td>{now}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p>
         <code>web</code> is one of those aliases. It used to mean React, because
         React was the only web framework Redline carried; it now resolves to{" "}
@@ -75,9 +115,9 @@ export default function Page() {
         <code>.redline.json</code> is still clearer for whoever reads it next.
       </p>
       <p>
-        <code>web-next</code> and <code>service-express</code> are both cases
+        <code>web-nextjs</code> and <code>service-express</code> are both cases
         where a broader profile would otherwise claim the repo. Every Next.js
-        repo also depends on React, and detection tries <code>web-next</code>
+        repo also depends on React, and detection tries <code>web-nextjs</code>
         first so a Next codebase is not reviewed with nothing covering Server
         Actions, the client boundary or <code>NEXT_PUBLIC_</code>. Express runs
         the other way: it is a dev dependency in a great many front-end repos,
@@ -87,7 +127,7 @@ export default function Page() {
         rules say in their own scope section that they do not apply to Nest.
       </p>
       <p>
-        <code>web-vanilla</code> is never proposed by detection, only chosen.
+        <code>web-typescript</code> is never proposed by detection, only chosen.
         Plain browser JavaScript and a build script are indistinguishable from
         the outside, and guessing wrong installs DOM rules on a repo with no DOM.
         Its rule set covers what a framework normally hides:{" "}

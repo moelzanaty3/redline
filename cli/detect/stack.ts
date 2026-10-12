@@ -41,14 +41,14 @@ const guess = (...evidence: string[]): Match => ({ evidence, confidence: 'low' }
 
 const RULES: Rule[] = [
   {
-    profile: 'mobile-rn',
+    profile: 'mobile-react-native',
     when: (s) =>
       s.dep('react-native') || s.has('metro.config.js') || s.has('metro.config.cjs')
         ? sure('react-native dependency or metro config')
         : null,
   },
   {
-    profile: 'fullstack-node',
+    profile: 'fullstack-react-node',
     when: (s) =>
       (s.dep('@nestjs/core') || s.has('nest-cli.json')) && (s.dep('react') || s.ext('.tsx'))
         ? sure('nest and react in one repository')
@@ -125,7 +125,7 @@ const RULES: Rule[] = [
   // a Next codebase would be reviewed with no rule covering server actions,
   // the client boundary, or NEXT_PUBLIC_.
   {
-    profile: 'web-next',
+    profile: 'web-nextjs',
     when: (s) =>
       s.dep('next') ||
       s.has('next.config.js') ||
@@ -155,7 +155,15 @@ const RULES: Rule[] = [
     profile: 'service-express',
     when: (s) => (s.dep('express') ? sure('express dependency') : null),
   },
-  { profile: 'infra', when: (s) => (s.ext('.tf') ? sure('terraform sources') : null) },
+  { profile: 'infra-terraform', when: (s) => (s.ext('.tf') ? sure('terraform sources') : null) },
+  // Last of all: TypeScript with no framework above it — a CLI, a library, a
+  // script, a small service. Without this the repository fell through to the
+  // fallback below and the menu called a plain TypeScript project a guess.
+  {
+    profile: 'typescript',
+    when: (s) =>
+      s.has('tsconfig.json') || s.dep('typescript') ? sure('tsconfig.json or typescript dependency') : null,
+  },
 ];
 
 export function proposeProfile(input: DetectInput): Proposal {
@@ -170,7 +178,7 @@ export function proposeProfile(input: DetectInput): Proposal {
     dep: (name) => name in deps,
   };
 
-  let base: Proposal = { profile: 'tooling', confidence: 'low', evidence: ['no recognised stack signal'] };
+  let base: Proposal = { profile: 'typescript', confidence: 'low', evidence: ['no recognised stack signal'] };
   for (const rule of RULES) {
     const match = rule.when(signals);
     if (match) {
@@ -182,6 +190,6 @@ export function proposeProfile(input: DetectInput): Proposal {
   // Effect is a library, not an application shape, so it rides on top of
   // whatever profile the repository already is rather than competing with it.
   return signals.dep('effect')
-    ? { ...base, profile: `${base.profile},lib-effect`, evidence: [...base.evidence, 'effect dependency'] }
+    ? { ...base, profile: `${base.profile},typescript-effect`, evidence: [...base.evidence, 'effect dependency'] }
     : base;
 }

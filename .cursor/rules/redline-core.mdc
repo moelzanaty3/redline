@@ -3,7 +3,7 @@ description: Redline core standards
 alwaysApply: true
 ---
 
-<!-- Redline v0.2.1 · profile: tooling · stacks: javascript, typescript -->
+<!-- Redline v0.2.2 · profile: typescript · stacks: javascript, typescript -->
 
 # Redline — Core Engineering Standards
 

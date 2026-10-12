@@ -7,6 +7,28 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### Standards 0.2.2 — profiles are named for what they are
+
+Some profile names said nothing to someone choosing one: `tooling` for a plain TypeScript project,
+`vanilla`, `rn`, a bare `infra`. Profiles now follow one rule, `<kind>-<technology>` in full
+words, or the language alone when there is no framework.
+
+| Was | Now |
+|---|---|
+| `tooling` | `typescript` |
+| `web-vanilla` | `web-typescript` |
+| `web-next` | `web-nextjs` |
+| `mobile-rn` | `mobile-react-native` |
+| `infra` | `infra-terraform` |
+| `fullstack-node` | `fullstack-react-node` |
+| `lib-effect` | `typescript-effect` |
+
+- Every old name is kept as an alias and keeps working wherever a profile is named: `--profile`,
+  `.redline.json`, `sync-targets.txt`. A repository is recorded under the new name on its next
+  `init` or sync; until then nothing changes but the marker line in its artifacts.
+- Detection now recognises TypeScript with no framework (`tsconfig.json`, or a `typescript`
+  dependency) as `typescript` with confidence. The menu used to call such a repository a guess.
+
 ### Gate — a repository whose package.json names pnpm no longer fails the policy job
 
 `pnpm init` writes a `devEngines.packageManager` block naming pnpm, and npm 10.9 and later refuse

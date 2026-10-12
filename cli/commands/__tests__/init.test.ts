@@ -76,7 +76,8 @@ test('the detected profile is used and recorded', async () => {
 test('an explicit profile overrides detection', async () => {
   const cwd = repo();
   const report = await init(fakePlatform(), { cwd, root, now, profile: 'infra' });
-  assert.equal(report.profile, 'infra');
+  // An old name is accepted and recorded as the profile it now points to.
+  assert.equal(report.profile, 'infra-terraform');
 });
 
 test('an unknown explicit profile fails before anything is written', async () => {

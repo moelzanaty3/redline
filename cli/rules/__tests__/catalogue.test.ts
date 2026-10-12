@@ -39,7 +39,7 @@ test('a rule carries where it is defined and who receives it', () => {
 test('a core rule reaches every profile and is scoped to no globs', () => {
   const found = explain(ROOT, 'core/hardcoded-secrets');
   assert.equal(found.globs.length, 0);
-  assert.ok(found.profiles.includes('infra'));
+  assert.ok(found.profiles.includes('infra-terraform'));
   assert.ok(found.profiles.includes('web-react'));
 });
 

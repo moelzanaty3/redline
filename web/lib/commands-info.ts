@@ -46,7 +46,7 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       {
         flag: "--profile <list>",
         detail:
-          "One profile, or several separated by commas, whose stacks render together: a React application with its own Terraform beside it is web,infra, and a single choice made it pick the half that fitted worst. The recorded name is sorted and de-duplicated, so the order you type cannot change the artifacts. Omitted, the stack is detected from the checkout.",
+          "One profile, or several separated by commas, whose stacks render together: a React application with its own Terraform beside it is web-react,infra-terraform, and a single choice made it pick the half that fitted worst. The recorded name is sorted and de-duplicated, so the order you type cannot change the artifacts. Omitted, the stack is detected from the checkout.",
       },
       {
         flag: "--pipeline <name>",

@@ -19,7 +19,7 @@ test('loads the real manifest', () => {
   assert.deepEqual(m.profiles['web-react'], ['javascript', 'typescript', 'react']);
   assert.deepEqual(m.profiles['web-angular'], ['javascript', 'typescript', 'angular']);
   assert.equal(m.profileAliases['web'], 'web-react');
-  assert.equal(m.profileAliases['mobile'], 'mobile-rn');
+  assert.equal(m.profileAliases['mobile'], 'mobile-react-native');
   assert.equal(m.vendors['cursor']?.enabled, true);
   assert.equal(m.vendors['codex']?.enabled, true);
   assert.equal(m.vendors['skills'], undefined);
