@@ -109,7 +109,7 @@ export default async function Page() {
             </tr>
             <tr>
               <td>6</td>
-              <td>Soak at <code>observe</code>, then promote: <code>redline init --rung warn</code>, later <code>block-blocker</code>. A promotion the recorded evidence does not support is refused.</td>
+              <td>Soak at <code>observe</code>, then promote: <code>redline init --rung block-blocker</code> once the evidence supports it. A promotion the recorded evidence does not support is refused.</td>
               <td>the team</td>
             </tr>
           </tbody>
@@ -153,7 +153,7 @@ export default async function Page() {
             <tr><td><code>--tmf</code> / <code>--no-tmf</code></td><td>off</td><td>Renders the TM Forum context section — resource naming, <code>@type</code>/<code>@baseType</code>, offset/limit paging, the TMF error body. Ask for it only in a repository that actually implements TMF interfaces.</td></tr>
             <tr><td><code>--with review-ownership</code></td><td>off</td><td>Seeds <code>.github/CODEOWNERS</code> and lets the ruleset require code-owner review. Off by default — see <a href="#owners">Name an owner that exists</a>.</td></tr>
             <tr><td><code>--review-owners &lt;list&gt;</code></td><td><code>@&lt;org&gt;/platform-engineering</code></td><td>Who owns the paths seeded into <code>CODEOWNERS</code> — a team, a user or an email, comma-separated. <b>Set this:</b> the default is a guess, and a wrong owner fails silently.</td></tr>
-            <tr><td><code>--rung &lt;name&gt;</code></td><td><code>observe</code></td><td><code>observe</code>, <code>warn</code>, <code>block-blocker</code>, <code>block-high</code> — the <Link href="/docs/enforcement">enforcement ladder</Link>.</td></tr>
+            <tr><td><code>--rung &lt;name&gt;</code></td><td><code>observe</code></td><td><code>observe</code>, <code>block-blocker</code>, <code>block-high</code> — the <Link href="/docs/enforcement">enforcement ladder</Link>.</td></tr>
             <tr><td><code>--skip &lt;list&gt;</code> / <code>--with &lt;list&gt;</code></td><td>—</td><td>Capabilities this repository does not want Redline to install, because it has its own. A deselected capability is not attempted, not written and not reported as missing. The security floor is refused by name rather than deselected.</td></tr>
             <tr><td><code>--integrations &lt;list&gt;</code></td><td>detected</td><td>Controls you already run (<code>sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql</code>). This is what writes <code>stand-down:</code> into the caller — from what you declared, never from detection alone, because detection reads a checkout and cannot see a scanner wired through a shared pipeline template.</td></tr>
             <tr><td><code>--setup &lt;list&gt;</code></td><td>off</td><td>Controls to install alongside Redline: <code>dependabot</code>, <code>renovate</code>, <code>codeql</code>. Only what works with no account and no token. An existing file is never overwritten.</td></tr>

@@ -26,7 +26,7 @@ import {
 } from '../core/telemetry.ts';
 import { exitCodeFor, isRedlineError, RedlineError } from '../core/errors.ts';
 import { isSeverity } from '../core/severity.ts';
-import { isRung, RUNGS } from '../enforce/ladder.ts';
+import { isRung, LEGACY_RUNGS, RUNGS } from '../enforce/ladder.ts';
 import {
   resolvePlatform as defaultResolvePlatform,
   type ResolvePlatformOptions,
@@ -375,6 +375,14 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
           : undefined;
 
       if (values.rung !== undefined && !isRung(values.rung)) {
+        const legacy = LEGACY_RUNGS[values.rung];
+        if (legacy !== undefined) {
+          throw new RedlineError(
+            'usage',
+            `the "${values.rung}" rung was merged into "${legacy}" — it reported exactly what ${legacy} does and blocked nothing`,
+            `use --rung ${legacy}, or --rung block-blocker to start blocking on recorded evidence`
+          );
+        }
         throw new RedlineError(
           'usage',
           `--rung must be one of ${RUNGS.join(', ')}, not "${values.rung}"`,
@@ -611,7 +619,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (report.pullRequestError !== null) {
         log.error(
           `could not open the pull request: ${report.pullRequestError}`,
-          `the Redline changes are on branch ${ONBOARD_BRANCH} — push it if it is not already on origin, then open the pull request manually`
+          `if the error names a ${ONBOARD_BRANCH} branch, the Redline changes are committed there — push it if it is not already on origin, then open the pull request manually`
         );
         return exitCodeFor('failed');
       }
@@ -624,7 +632,7 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         // second time and being told "already onboarded" by a repository they
         // believed was not.
         log.info(
-          `  the changes are committed on ${ONBOARD_BRANCH} and pushed, not in your working tree —`
+          `  the changes are committed on ${report.pullRequest.branch} and pushed, not in your working tree —`
         );
         log.info('  `git status` here stays clean. Review and merge the pull request above.');
         // The exit, named at the moment somebody might want it. `redline

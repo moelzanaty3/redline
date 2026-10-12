@@ -915,9 +915,9 @@ test('a recorded measurement lets a repository climb a rung', async () => {
   await run(['init', '--no-commit', '--profile', 'web-react'], opts);
   assert.equal(readConfig(cwd)?.rung, 'observe');
 
-  await run(['evidence', 'record', '--sample-size', '12', '--source', 'metrics run 1'], deps(cwd).opts);
-  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
-  assert.equal(readConfig(cwd)?.rung, 'warn');
+  await run(['evidence', 'record', '--sample-size', '30', '--seed-recall', '1', '--acted-on-rate', '0.9', '--false-positives', '0', '--source', 'metrics run 1'], deps(cwd).opts);
+  await run(['init', '--no-commit', '--rung', 'block-blocker'], deps(cwd).opts);
+  assert.equal(readConfig(cwd)?.rung, 'block-blocker');
 });
 
 // Promotion used to erase the measurement that justified it: init rebuilt
@@ -928,10 +928,10 @@ test('a promotion does not destroy the evidence that justified it', async () => 
   const cwd = gitRepo('feat/keep');
   await run(['init', '--no-commit', '--profile', 'web-react'], deps(cwd).opts);
   await run(
-    ['evidence', 'record', '--sample-size', '30', '--seed-recall', '1', '--source', 'canary 7'],
+    ['evidence', 'record', '--sample-size', '30', '--seed-recall', '1', '--acted-on-rate', '0.9', '--false-positives', '0', '--source', 'canary 7'],
     deps(cwd).opts
   );
-  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+  await run(['init', '--no-commit', '--rung', 'block-blocker'], deps(cwd).opts);
 
   const kept = readConfig(cwd)?.evidence;
   assert.equal(kept?.sampleSize, 30, 'the record was dropped by the run that used it');
@@ -941,7 +941,24 @@ test('a promotion does not destroy the evidence that justified it', async () => 
 test('a repository with no evidence is still refused', async () => {
   const cwd = gitRepo('feat/norung');
   await run(['init', '--no-commit', '--profile', 'web-react'], deps(cwd).opts);
-  await run(['init', '--no-commit', '--rung', 'warn'], deps(cwd).opts);
+  await run(['init', '--no-commit', '--rung', 'block-blocker'], deps(cwd).opts);
+  assert.equal(readConfig(cwd)?.rung, 'observe');
+});
+
+// `warn` was merged into observe: it blocked nothing and reported what observe
+// reports. Asking for it says so and names the rungs that exist, and a
+// repository that recorded it reads back as observe.
+test('the retired warn rung is refused by name, and a recorded one reads as observe', async () => {
+  const cwd = gitRepo('feat/warn');
+  await run(['init', '--no-commit', '--profile', 'web-react'], deps(cwd).opts);
+  const { opts, lines } = deps(cwd);
+  const code = await run(['init', '--no-commit', '--rung', 'warn'], opts);
+  assert.notEqual(code, 0);
+  assert.ok(lines.some((l) => /merged into "observe"/.test(l)), lines.join('\n'));
+
+  const path = join(cwd, '.redline.json');
+  const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  writeFileSync(path, JSON.stringify({ ...raw, rung: 'warn' }));
   assert.equal(readConfig(cwd)?.rung, 'observe');
 });
 

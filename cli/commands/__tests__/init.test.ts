@@ -1670,7 +1670,7 @@ test('a promotion without evidence is refused, and the run still succeeds', asyn
   const cwd = repo();
   await init(fakePlatform(), { cwd, root });
 
-  const report = await init(fakePlatform(), { cwd, root, rung: 'warn' });
+  const report = await init(fakePlatform(), { cwd, root, rung: 'block-blocker' });
 
   const config = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
   assert.equal(config.rung, 'observe');
@@ -1685,13 +1685,13 @@ test('a promotion with evidence is applied and reported', async () => {
   const report = await init(fakePlatform(), {
     cwd,
     root,
-    rung: 'warn',
+    rung: 'block-blocker',
     evidence: { seedRecall: 1, actedOnRate: 0.9, sampleSize: 40, falsePositives: 0 },
   });
 
   const config = JSON.parse(readFileSync(join(cwd, '.redline.json'), 'utf8')) as { rung: string };
-  assert.equal(config.rung, 'warn');
-  assert.ok(report.notes.some((n) => /observe -> warn/.test(n)));
+  assert.equal(config.rung, 'block-blocker');
+  assert.ok(report.notes.some((n) => /observe -> block-blocker/.test(n)));
 });
 
 test('a demotion needs no evidence at all', async () => {

@@ -102,8 +102,7 @@ export interface WizardAnswers {
 // Plain-English, at the moment of choosing. Every one of these was a term the
 // operator met for the first time in output that assumed they knew it.
 const RUNG_HINTS: Record<Rung, string> = {
-  observe: 'comments only — the check is always green. Start here',
-  warn: 'comments and labels the PR — still never blocks a merge',
+  observe: 'findings are reported, nothing is blocked but the security floor. Start here',
   'block-blocker': 'a BLOCKER finding fails the check and stops the merge',
   'block-high': 'BLOCKER and HIGH both stop the merge — the strictest rung',
 };

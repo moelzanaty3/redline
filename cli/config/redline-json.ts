@@ -10,7 +10,7 @@ import {
   type GateSource,
   type Host,
 } from '../platforms/types.ts';
-import { isRung, type Rung } from '../enforce/ladder.ts';
+import { isRung, LEGACY_RUNGS, type Rung } from '../enforce/ladder.ts';
 
 export const CONFIG_FILE = '.redline.json';
 
@@ -374,7 +374,11 @@ export function parseConfig(raw: unknown): RedlineConfig {
   // able to raise enforcement on a repository, and the failure direction for an
   // unreadable value is the one that blocks nobody.
   const rungRaw = o['rung'];
-  const rung: Rung = isRung(rungRaw) ? rungRaw : 'observe';
+  const rung: Rung = isRung(rungRaw)
+    ? rungRaw
+    : typeof rungRaw === 'string'
+      ? (LEGACY_RUNGS[rungRaw] ?? 'observe')
+      : 'observe';
 
   // Every field has to be the right shape or the whole record is discarded.
   // A partially-readable measurement is worse than none: it would promote on
@@ -491,7 +495,7 @@ const EXPLAINER: readonly string[] = [
   'menu.tmf — renders the TM Forum context. `redline init --tmf` / `--no-tmf`.',
   'menu.sensitivePathReviewers — writes CODEOWNERS and requires code-owner review on those paths.',
   'capabilities.* — false means "this repository has its own"; Redline does not install or report it.',
-  'rung — how hard the gate bites: observe, warn, block-blocker, block-high. Promotion needs evidence.',
+  'rung — how hard the gate bites: observe, block-blocker, block-high. Promotion needs evidence.',
   'pendingAdmin — capabilities an administrator still has to grant. Not a failure, a to-do list.',
   'gateSource — org: the gate lives in the organisation .github repo. local: vendored into this',
   '  repository, which means a pull request can edit the gate judging it. `--gate-source`.',

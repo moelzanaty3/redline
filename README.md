@@ -97,7 +97,7 @@ The last two are both answers from a repository with no CI, and they are not the
 answer. **Nothing** renders the standards for your assistants to read and installs no gate.
 **`local-agent`** installs a real one that runs before `git push`: the deterministic rules
 run as `redline policy`, and whether a finding refuses the push is decided by the same
-enforcement rung as in CI — `observe` and `warn` report, `block-blocker` and `block-high`
+enforcement rung as in CI — `observe` reports, `block-blocker` and `block-high`
 refuse. The rest is handed to whichever assistant you already use. It is a gate you can
 bypass with `git push --no-verify`, which is the honest trade for one that needs no CI, no
 credential and no host.
@@ -218,8 +218,8 @@ prompt on the clipboard and nothing else.
 
 ### Earning a rung
 
-Enforcement climbs `observe → warn → block-blocker → block-high`, and a rung is *earned on
-a recorded measurement*, never asserted:
+Enforcement climbs `observe → block-blocker → block-high`, and a rung is *earned on a
+recorded measurement*, never asserted:
 
 ```
 redline evidence                       # what the next rung asks for
@@ -227,7 +227,7 @@ redline evidence record \
   --sample-size 40 --seed-recall 1 \
   --acted-on-rate 0.85 --false-positives 0 \
   --source "canary cohort, weeks 1-6"  # --source is required
-redline init --rung warn               # now permitted
+redline init --rung block-blocker      # now permitted
 ```
 
 The numbers come from the metrics plane, which sees the estate over a window; the CLI
@@ -292,7 +292,7 @@ why rather than defaulting to zero, because filling gaps with zeros reports a st
 collector as a quiet week.
 
 **Where this honestly stands:** no seed scores have been recorded yet. Until a recall
-number exists, every repository is legitimately at `observe` or `warn`, and a blocking
+number exists, every repository is legitimately at `observe`, and a blocking
 rung is not something to reach for. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Verify before you trust
