@@ -40,7 +40,9 @@ Redline it fetched a second copy, possibly a different version from the one the 
 - `redline init --pin-cli`, or yes to the menu's new question, adds `redlinegate` to the project's
   devDependencies at exactly the running version, with the project's own package manager. Install
   scripts, pnpm's `.pnpmfile.cjs` and yarn's `yarnPath` are switched off, so onboarding runs none
-  of the repository's own code through them; yarn plugins committed to the repository still load. `package.json` and the lockfile ride in the onboarding pull request.
+  of the repository's own code through them; yarn plugins committed to the repository still load.
+  It uses the first copy of that package manager on `PATH` that starts, so a broken install a
+  version manager puts first (Volta's pnpm 12.6.0 image has no `bin/pnpm.cjs`) does not fail it. `package.json` and the lockfile ride in the onboarding pull request.
   It is offered only in a Node project that does not depend on Redline yet, and a package
   manager that fails leaves a note with the command to run, not a failed onboarding.
 

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 /**
  * How this repository runs Redline.
@@ -258,8 +258,43 @@ function snapshot(cwd: string): Map<string, string | null> {
 
 export type RunInstall = (cwd: string, add: AddCommand) => void;
 
+/**
+ * The first copy of `command` on PATH that starts, or the bare name when none
+ * is found and the shell's own lookup should report the failure.
+ *
+ * Not simply the first one: a version manager can put a broken install ahead
+ * of a working one. Volta does exactly that for any Node it starts — its pnpm
+ * 12.6.0 image ships without the `bin/pnpm.cjs` its shim launches — so a pin
+ * failed on a machine whose own terminal ran pnpm perfectly well.
+ */
+export function workingExecutable(
+  command: string,
+  path: string = process.env.PATH ?? '',
+  starts: (file: string) => boolean = (file) => {
+    try {
+      execFileSync(file, ['--version'], { stdio: 'pipe', env: { ...process.env, ...INSTALL_ENV } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+): string {
+  // Windows resolves .cmd shims through PATHEXT, which a plain directory scan
+  // would have to reimplement; leave it to the shell there.
+  if (process.platform === 'win32') return command;
+  const seen = new Set<string>();
+  for (const dir of path.split(delimiter)) {
+    if (dir === '') continue;
+    const file = join(dir, command);
+    if (seen.has(file) || !existsSync(file)) continue;
+    seen.add(file);
+    if (starts(file)) return file;
+  }
+  return command;
+}
+
 const runInstall: RunInstall = (cwd, add) => {
-  execFileSync(add.command, [...add.args], {
+  execFileSync(workingExecutable(add.command), [...add.args], {
     cwd,
     stdio: 'pipe',
     env: { ...process.env, ...INSTALL_ENV },

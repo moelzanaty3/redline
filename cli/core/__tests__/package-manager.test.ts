@@ -3,7 +3,14 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { addCommand, detectRunner, pinRedline, redlineCommand, redlineCommandIn } from '../package-manager.ts';
+import {
+  addCommand,
+  detectRunner,
+  pinRedline,
+  redlineCommand,
+  redlineCommandIn,
+  workingExecutable,
+} from '../package-manager.ts';
 
 function project(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'redline-pm-'));
@@ -158,4 +165,28 @@ test('a crashed package manager is reported by its error line, not the Node vers
     });
     assert.equal(result.status === 'failed' ? result.reason : '', "Error: Cannot find module '/x/pnpm.cjs'");
   });
+});
+
+// A version manager can put a broken install ahead of a working one on PATH:
+// Volta's pnpm 12.6.0 image has no bin/pnpm.cjs. The pin must use the copy
+// that starts, not the first one it finds.
+test('the first copy of a package manager that starts is used, not merely the first on PATH', () => {
+  const broken = mkdtempSync(join(tmpdir(), 'redline-pm-broken-'));
+  const working = mkdtempSync(join(tmpdir(), 'redline-pm-working-'));
+  try {
+    writeFileSync(join(broken, 'pnpm'), '');
+    writeFileSync(join(working, 'pnpm'), '');
+    const tried: string[] = [];
+    const found = workingExecutable('pnpm', [broken, working].join(':'), (file) => {
+      tried.push(file);
+      return file.startsWith(working);
+    });
+    assert.equal(found, join(working, 'pnpm'));
+    assert.deepEqual(tried, [join(broken, 'pnpm'), join(working, 'pnpm')]);
+    // None starts: the bare name, so the failure is reported the usual way.
+    assert.equal(workingExecutable('pnpm', broken, () => false), 'pnpm');
+  } finally {
+    rmSync(broken, { recursive: true, force: true });
+    rmSync(working, { recursive: true, force: true });
+  }
 });
