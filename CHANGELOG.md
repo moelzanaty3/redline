@@ -7,6 +7,19 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### Gate — the ADR check no longer passes on the template's own placeholder
+
+The ADR job counted any `docs/adr/` in the pull request description as a link to a decision
+record. The pull request template prompts with `` ADR: `docs/adr/NNNN-*.md` ``, so every pull
+request opened from the template passed the check without a record, and the job never fired on
+the large changes it exists for. It now counts only a link to a record file, as a path or inside
+a URL: `docs/adr/0001-use-postgres.md`, `docs/adr/use-postgres.md`. The placeholder, with its
+`*`, does not match. A test runs the job's real script against the template.
+
+The check stays a choice. A single pull request skips it with the `no-adr` label, as before, and
+`redline init --no-adr` now turns it off for a repository that does not keep decision records;
+`--adr` turns it back on. It was only reachable before by hand-editing `.redline.json`.
+
 ### Standards 0.2.2 — profiles are named for what they are
 
 Some profile names said nothing to someone choosing one: `tooling` for a plain TypeScript project,

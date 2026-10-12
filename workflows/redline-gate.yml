@@ -113,7 +113,12 @@ jobs:
           set -euo pipefail
           pr=$(gh pr view "$PR" --repo "$REPO" --json additions,deletions,body,labels)
           changed=$(jq '.additions + .deletions' <<<"$pr")
-          has_adr=$(jq -r '.body // ""' <<<"$pr" | grep -c 'docs/adr/' || true)
+          # A link to a record file, as a path or inside a URL. Any `docs/adr/`
+          # counted before, and the pull request template's own
+          # `docs/adr/NNNN-*.md` prompt is one, so every pull request opened from
+          # the template passed this check without a record. The `*` is what
+          # keeps the prompt out: a real file name has none.
+          has_adr=$(jq -r '.body // ""' <<<"$pr" | grep -cE 'docs/adr/[A-Za-z0-9][A-Za-z0-9._-]*\.md' || true)
           exempt=$(jq -r '.labels[].name' <<<"$pr" | grep -cx 'no-adr' || true)
           echo "changed=$changed threshold=$THRESHOLD adr-links=$has_adr no-adr-label=$exempt"
           if [[ "$changed" -gt "$THRESHOLD" && "$has_adr" -eq 0 && "$exempt" -eq 0 ]]; then
