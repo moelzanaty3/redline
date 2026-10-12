@@ -218,6 +218,9 @@ export interface Change {
 export interface PullRequestRef {
   number: number;
   url: string;
+  // The branch the pull request was opened from. `Change.branch` is where the
+  // name starts; a run that finds it already taken uses the next free one.
+  branch: string;
   // Work that happens after the pull request exists and can be refused on its
   // own — applying the sync labels. It degrades into an outcome rather than
   // costing the pull request, and the caller folds it into its report. It

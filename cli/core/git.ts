@@ -49,7 +49,10 @@ export interface Git {
   remoteUrl(remote?: string): string;
   defaultBranch(): string;
   currentBranch(): string;
-  checkoutNewBranch(name: string): void;
+  // Creates and checks out the first of `base`, `base-2`, `base-3`… that exists
+  // neither here nor on origin, and returns the name it used. An existing
+  // branch is never moved: it may hold a merged onboarding, or someone's work.
+  checkoutFreshBranch(base: string): string;
   checkoutBranch(name: string): void;
   stagePaths(paths: string[]): void;
   hasStagedChanges(): boolean;
@@ -164,9 +167,41 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
         throw new RedlineError('usage', `cannot read the staged diff: ${stderrText(error)}`);
       }
     },
-    checkoutNewBranch(name) {
+    checkoutFreshBranch(base) {
+      // A sha on stdout means the ref exists; `--quiet` absence exits non-zero.
+      const local = (name: string): boolean => {
+        try {
+          return g('rev-parse', '--verify', '--quiet', `refs/heads/${name}`) !== '';
+        } catch {
+          return false;
+        }
+      };
+      // The full ref as the pattern: ls-remote matches patterns against the
+      // tail of each ref, so a bare name would also match `x/redline/onboard`.
+      // An origin that cannot be reached is not evidence the name is taken;
+      // the push that follows reports that failure in its own words.
+      const remote = (name: string): boolean => {
+        try {
+          return g('ls-remote', '--heads', 'origin', `refs/heads/${name}`) !== '';
+        } catch {
+          return false;
+        }
+      };
+      const MAX_SUFFIX = 50;
+      let name: string | null = null;
+      for (let n = 1; n <= MAX_SUFFIX && name === null; n++) {
+        const candidate = n === 1 ? base : `${base}-${n}`;
+        if (!local(candidate) && !remote(candidate)) name = candidate;
+      }
+      if (name === null) {
+        throw new RedlineError(
+          'usage',
+          `every branch name from ${base} to ${base}-${MAX_SUFFIX} is already taken here or on origin`,
+          `delete the ${base}* branches you no longer need, then re-run`
+        );
+      }
       try {
-        g('checkout', '-B', name);
+        g('checkout', '-b', name);
       } catch (error) {
         throw new RedlineError(
           'host',
@@ -174,6 +209,7 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
           `you are still on "${currentBranch()}" and nothing was committed — resolve the git error and re-run`
         );
       }
+      return name;
     },
     checkoutBranch(name) {
       try {

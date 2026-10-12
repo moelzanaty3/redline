@@ -139,7 +139,7 @@ function parseRulesetSummaries(body: unknown): RulesetSummary[] | null {
   return summaries;
 }
 
-function parseCreatedPullRequest(body: unknown): PullRequestRef | null {
+function parseCreatedPullRequest(body: unknown): { number: number; url: string } | null {
   if (!isNonNullObject(body) || typeof body['number'] !== 'number' || typeof body['html_url'] !== 'string') {
     return null;
   }
@@ -862,7 +862,7 @@ export function createGitHubInstall(
         );
       }
       const originalBranch = git.currentBranch();
-      git.checkoutNewBranch(change.branch);
+      const branch = git.checkoutFreshBranch(change.branch);
       let gitFailed = false;
       try {
         // Stage only what Redline itself wrote — never sweep in pre-existing
@@ -875,7 +875,7 @@ export function createGitHubInstall(
           return null;
         }
         git.commit(change.title);
-        git.push(change.branch);
+        git.push(branch);
       } catch (error) {
         gitFailed = true;
         throw error;
@@ -893,7 +893,7 @@ export function createGitHubInstall(
       const created = await client.rest<unknown>(
         'POST',
         `${repoPath(ref)}/pulls`,
-        { title: change.title, body: change.body, head: change.branch, base: ref.defaultBranch }
+        { title: change.title, body: change.body, head: branch, base: ref.defaultBranch }
       );
       const pr = isSuccess(created.status) ? parseCreatedPullRequest(created.body) : null;
       if (!pr) {
@@ -904,7 +904,7 @@ export function createGitHubInstall(
           labels: change.labels,
         });
       }
-      return pr;
+      return { ...pr, branch };
     },
   };
 }
