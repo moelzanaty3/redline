@@ -7,6 +7,18 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — the review prompt left out the repository's own rules
+
+`.redline/local.md` is rendered into every assistant file, but `redline review` built its prompt
+from the org standard alone, then told the model those were the ONLY rules in scope. `/redline-review`
+and `--engine api` therefore ignored a team's own rules, and the api engine discarded any finding
+that cited one as an invented rule id.
+
+- The prompt now ends with the same `# Repository-local rules` section, and the same precedence
+  statement, that the assistant files carry.
+- Rule ids in `.redline/local.md` (`local/<slug>`) are accepted from the model alongside the
+  org's.
+
 ### CLI — a re-run stood down the vendored gate's own secret scan
 
 `redline init` looks through a repository's CI definitions for tools it already runs, and stands

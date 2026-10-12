@@ -4,6 +4,7 @@ import type { Manifest } from '../render/manifest.ts';
 import { SCHEMA_DESCRIPTION } from './schema.ts';
 import type { Scope } from './scope.ts';
 import { formatFinding, type PolicyFinding } from '../policy/checks.ts';
+import { localSection } from '../render/vendors.ts';
 
 // The bounded prompt: the applicable rules, the diff, and the output schema.
 //
@@ -16,6 +17,11 @@ export interface PromptOptions {
   manifest: Manifest;
   scope: Scope;
   diff: string;
+  // The repository's own `.redline/local.md`, or null. It goes in with the
+  // precedence the assistant files state, because the prompt calls what it
+  // carries the ONLY rules in scope: leaving it out told the model to ignore
+  // the team's rules.
+  local: string | null;
   // Set when a person reads the answer rather than the CLI parsing it: the
   // assistant replies with the issue list, carrying forward what the
   // deterministic checks already found on this diff.
@@ -31,6 +37,7 @@ export function buildPrompt(opts: PromptOptions): string {
     read(opts.root, manifest.core.source),
     ...scope.stacks.map((id) => read(opts.root, manifest.stacks[id]!.source)),
   ];
+  if (opts.local !== null) sections.push(localSection(opts.local));
 
   return [
     'You are reviewing a change against this organisation\'s engineering standard.',

@@ -10,11 +10,17 @@ import type { Manifest } from '../render/manifest.ts';
 // along — which is the kind of bug that gets blamed on the model for a year.
 const RULE_ID = /^-\s+`([a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*)`/gm;
 
-export function loadRuleIds(root: string, manifest: Manifest, stacks: string[]): Set<string> {
+export function loadRuleIds(
+  root: string,
+  manifest: Manifest,
+  stacks: string[],
+  local: string | null
+): Set<string> {
   const ids = new Set<string>();
   const sources = [manifest.core.source, ...stacks.map((id) => manifest.stacks[id]!.source)];
-  for (const source of sources) {
-    const body = readFileSync(join(root, source), 'utf8');
+  const bodies = sources.map((source) => readFileSync(join(root, source), 'utf8'));
+  if (local !== null) bodies.push(local);
+  for (const body of bodies) {
     for (const match of body.matchAll(RULE_ID)) ids.add(match[1]!);
   }
   // Reserved by the standard for a real problem no rule covers. It is in the
