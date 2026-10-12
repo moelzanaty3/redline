@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -114,6 +114,52 @@ test('a finding citing a rule outside the scope is discarded', async () => {
 
     assert.deepEqual(report.findings, []);
     assert.equal(report.rejected.length, 1);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+const LOCAL_RULES = `## Errors are returned, not logged
+
+- \`local/no-console\` — No \`console.*\` calls in \`src/\`.
+`;
+
+test('the prompt carries the repository-local rules, with their precedence', async () => {
+  // The prompt tells the model these are the ONLY rules in scope. Leaving
+  // .redline/local.md out told it to ignore the team's own rules — the ones
+  // every assistant file already carries.
+  const { cwd, diffFile } = fixture();
+  try {
+    mkdirSync(join(cwd, '.redline'));
+    writeFileSync(join(cwd, '.redline', 'local.md'), LOCAL_RULES);
+    const report = await review(embedded, opts(cwd, diffFile));
+
+    const rules = report.prompt?.split('--- THE CHANGE ---')[0] ?? '';
+    assert.match(rules, /# Repository-local rules/);
+    assert.match(rules, /`local\/no-console`/);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a finding citing a repository-local rule is accepted', async () => {
+  const { cwd, diffFile } = fixture();
+  try {
+    mkdirSync(join(cwd, '.redline'));
+    writeFileSync(join(cwd, '.redline', 'local.md'), LOCAL_RULES);
+    const report = await review(
+      stub(
+        JSON.stringify({
+          findings: [
+            { rule: 'local/no-console', severity: 'HIGH', file: 'src/App.tsx', line: 2, problem: 'x', fix: 'y' },
+          ],
+        })
+      ),
+      opts(cwd, diffFile)
+    );
+
+    assert.equal(report.findings.length, 1);
+    assert.deepEqual(report.rejected, []);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

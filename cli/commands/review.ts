@@ -3,6 +3,7 @@ import { RedlineError } from '../core/errors.ts';
 import { createGit } from '../core/git.ts';
 import { readConfig } from '../config/redline-json.ts';
 import { loadManifest } from '../render/manifest.ts';
+import { readLocalRules } from '../render/vendors.ts';
 import { loadRuleIds } from '../review/rules.ts';
 import { buildPrompt } from '../review/prompt.ts';
 import { resolveScope, type Scope } from '../review/scope.ts';
@@ -115,6 +116,8 @@ export async function review(engine: ReviewEngine | null, opts: ReviewOptions): 
     };
   }
 
+  const local = readLocalRules(opts.cwd);
+
   // The embedded engine's answer is read by a person, not parsed, so it asks for
   // the issue list itself rather than JSON.
   const prompt = buildPrompt({
@@ -122,6 +125,7 @@ export async function review(engine: ReviewEngine | null, opts: ReviewOptions): 
     manifest,
     scope,
     diff,
+    local,
     ...(engine.name === 'embedded' ? { reply: { checked } } : {}),
   });
 
@@ -139,7 +143,7 @@ export async function review(engine: ReviewEngine | null, opts: ReviewOptions): 
     };
   }
 
-  const known = loadRuleIds(opts.root, manifest, scope.stacks);
+  const known = loadRuleIds(opts.root, manifest, scope.stacks, local);
   const { findings, rejected } = parseReview(response.raw, known);
 
   // Where this repository publishes the standard, so a rendered finding carries
