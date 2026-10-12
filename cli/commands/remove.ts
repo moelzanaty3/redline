@@ -56,7 +56,9 @@ export interface RemoveOptions {
 }
 
 export interface RemoveReport {
-  host: Host;
+  // null for a repository onboarded with no git remote: nothing was ever
+  // installed on a host, so there is nothing there to withdraw.
+  host: Host | null;
   dryRun: boolean;
   // Every path this run looked at, in the order it acted on them. `.redline.json`
   // is always last — see the comment on `plan` below.
@@ -72,6 +74,9 @@ export interface RemoveReport {
   pullRequestError: string | null;
   // What a dry run prints instead of contacting the host.
   hostPlan: string[];
+  // Set when the repository has no git remote: the files were removed from the
+  // working tree and nothing else was touched.
+  local?: true;
   notes: string[];
   // Split out of `notes` deliberately. These are the things an operator has to
   // know after the command succeeds — what did NOT get removed, and what breaks
@@ -417,7 +422,7 @@ function planCodeowners(cwd: string, actions: FileAction[]): void {
  * forgotten and cannot be verified or repaired.
  */
 function plan(
-  platform: Platform,
+  platform: Platform | null,
   opts: RemoveOptions,
   profile: string,
   pipeline: GatePipeline,
@@ -446,8 +451,12 @@ function plan(
 
   for (const relPath of surface.merged) planMergedFile(cwd, relPath, actions);
   planCommandFiles(cwd, root, commandFiles, actions);
-  planGateMachinery(platform, cwd, pipeline, actions);
-  planPullRequestTemplates(platform, cwd, actions);
+  // With no host, init installed neither a gate nor a pull request template,
+  // and there is no host to say which paths those would have been.
+  if (platform !== null) {
+    planGateMachinery(platform, cwd, pipeline, actions);
+    planPullRequestTemplates(platform, cwd, actions);
+  }
   planCodeowners(cwd, actions);
 
   actions.push({
@@ -471,7 +480,7 @@ function apply(cwd: string, action: FileAction): void {
 }
 
 export async function remove(
-  platform: Platform,
+  platform: Platform | null,
   hostFor: () => HostWithdrawal | Promise<HostWithdrawal>,
   opts: RemoveOptions
 ): Promise<RemoveReport> {
@@ -524,8 +533,33 @@ export async function remove(
     );
   }
 
+  // No remote: nothing was ever applied on a host and there is nowhere to open
+  // a pull request, so the removal is the working tree alone — the same answer
+  // `redline init` gives a repository with no remote. The security-floor caveat
+  // does not apply: nothing on a host was switched on.
+  if (platform === null) {
+    const localCaveats = caveats.filter((caveat) => !caveat.startsWith('the security floor'));
+    if (!dryRun) for (const action of actions) apply(cwd, action);
+    if (!dryRun && config.pipeline === 'local-agent') unsetHooksPath(cwd);
+    return {
+      host: null,
+      dryRun,
+      actions,
+      files,
+      outcomes: [],
+      pendingAdmin: [],
+      pullRequest: null,
+      pullRequestError: null,
+      hostPlan: [],
+      notes,
+      caveats: localCaveats,
+      local: true,
+    };
+  }
+
+  const host = config.host ?? platform.host;
   const hostPlan = [
-    `withdraw Redline's own state on ${config.host ?? platform.host}: the merge policy it applied, the labels it ` +
+    `withdraw Redline's own state on ${host}: the merge policy it applied, the labels it ` +
       'created, and the repository property it set where the host has them',
     `pull request on ${REMOVE_BRANCH}`,
   ];
@@ -536,7 +570,7 @@ export async function remove(
     // someone evaluating whether they can back Redline out can find out before
     // going to get an admin token.
     return {
-      host: config.host ?? platform.host,
+      host,
       dryRun: true,
       actions,
       files,
@@ -593,7 +627,7 @@ export async function remove(
   if (pullRequest?.outcomes) outcomes.push(...pullRequest.outcomes);
 
   return {
-    host: config.host ?? platform.host,
+    host,
     dryRun: false,
     actions,
     files,

@@ -1091,3 +1091,33 @@ test('review in a pipe or an assistant still hands back the embedded prompt', as
   assert.match(text, /include each one in your reply/);
   assert.match(text, /\[core\/unsafe-assertion\]/);
 });
+
+// A repository onboarded with no remote could not be taken back out: remove
+// resolved a host first, and resolving one is what fails without a remote. It
+// now removes from the working tree alone, the same answer init gives.
+test('remove works on a repository that has no git remote', async () => {
+  const cwd = gitRepo('main');
+  spawnSync('git', ['remote', 'remove', 'origin'], { cwd });
+  const noHost = (d: string) => {
+    const { opts, lines } = deps(d);
+    return {
+      lines,
+      opts: {
+        ...opts,
+        resolvePlatform: async (): Promise<never> => {
+          throw new Error('no host may be resolved without a remote');
+        },
+      },
+    };
+  };
+
+  assert.equal(await run(['init', '--profile', 'web-react'], noHost(cwd).opts), 0);
+  assert.ok(existsSync(join(cwd, 'AGENTS.md')) && existsSync(join(cwd, '.redline.json')));
+
+  const { opts, lines } = noHost(cwd);
+  assert.equal(await run(['remove'], opts), 0, lines.join('\n'));
+  assert.ok(!existsSync(join(cwd, '.redline.json')), 'the record is removed');
+  assert.ok(!existsSync(join(cwd, 'AGENTS.md')), 'the rendered rules are removed');
+  assert.ok(lines.some((l) => /no git remote/.test(l)), lines.join('\n'));
+  assert.ok(!lines.some((l) => /security floor stays on/.test(l)), 'nothing on a host was switched on');
+});
