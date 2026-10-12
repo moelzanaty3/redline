@@ -86,10 +86,15 @@ steps:
     env:
       TRUFFLEHOG_IMAGE: $(TRUFFLEHOG_IMAGE)
 
-  # --package pins npx to the redlinegate package explicitly. `redline` alone
-  # names a different, unrelated package on the public registry — `redline`
-  # is only this package's bin name, never resolve npx against it directly.
-  - script: npx --yes --package=redlinegate@latest redline verify --gate
+  # Installed into a directory of its own and run from there, never with npx
+  # from the checkout: npm reads the checkout's package.json first, and one whose
+  # devEngines names pnpm, yarn or bun (which `pnpm init` writes) makes npm 10.9+
+  # refuse to run npx at all. It also keeps the pull request's own lockfile and
+  # node_modules out of the tool that judges it. Always the redlinegate package:
+  # `redline` alone names a different, unrelated package on the public registry.
+  - script: |
+      npm install --prefix "$(Agent.TempDirectory)/redline" --no-save --no-audit --no-fund --ignore-scripts redlinegate@latest > /dev/null
+      "$(Agent.TempDirectory)/redline/node_modules/.bin/redline" verify --gate
     displayName: Redline gate
     name: gate
     # A failed secret scan must not hide the configuration findings: the author

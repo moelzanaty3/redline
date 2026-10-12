@@ -432,6 +432,29 @@ test('findExistingPipeline reports nothing for a repository with no pipelines', 
   assert.equal(findExistingPipeline(tmp()), null);
 });
 
+// --- pinning Redline in the project -------------------------------------------
+
+const PIN_QUESTION = "Add Redline to this project's devDependencies?";
+
+test('a Node project is offered the pin, and pressing enter takes it', async () => {
+  const { prompter, asked } = acceptDefaults();
+  const answers = await runWizard(prompter, { ...FACTS, pinnable: 'pnpm' });
+
+  assert.equal(answers.pinCli, true);
+  const pin = asked.find((q) => q.title === PIN_QUESTION);
+  assert.match(String(pin?.hints[0]), /runs pnpm here to add redlinegate at this exact version/);
+});
+
+// No package.json, or Redline already a dependency: there is nothing to add,
+// and a question with no consequence is noise.
+test('a repository with nothing to pin is never asked', async () => {
+  const { prompter, asked } = acceptDefaults();
+  const answers = await runWizard(prompter, { ...FACTS, pinnable: null });
+
+  assert.equal(answers.pinCli, false);
+  assert.ok(!asked.some((q) => q.title === PIN_QUESTION));
+});
+
 // --- gate source -------------------------------------------------------------
 
 const GATE_QUESTION = 'Where should the merge gate live?';

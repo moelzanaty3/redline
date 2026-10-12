@@ -48,7 +48,18 @@ test('a repository that was never onboarded reports that, calmly', () => {
   const report = status(repo(), ROOT);
   assert.equal(report.onboarded, false);
   assert.match(formatStatus(report).join('\n'), /not onboarded/);
-  assert.match(formatStatus(report).join('\n'), /redline init --dry-run/);
+  // No package.json and no global install assumed: the hint has to be one that
+  // runs as pasted, which here is npx.
+  assert.match(formatStatus(report).join('\n'), /start with: npx redlinegate init --dry-run/);
+});
+
+// A project that pins Redline is told to run its own copy, through its own
+// package manager — not npx, which npm refuses outright when devEngines names pnpm.
+test('a project that pins Redline is pointed at its own copy', () => {
+  const dir = repo();
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ devDependencies: { redlinegate: '0.2.8' } }));
+  writeFileSync(join(dir, 'pnpm-lock.yaml'), '');
+  assert.match(formatStatus(status(dir, ROOT)).join('\n'), /start with: pnpm redline init --dry-run/);
 });
 
 test('an onboarded repository reports what is installed and what is owed', () => {

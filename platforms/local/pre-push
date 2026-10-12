@@ -35,14 +35,35 @@ set -eu
 # that makes pushing feel slow is a gate whose bypass becomes a habit, and a
 # bypass nobody thinks about is indistinguishable from no gate at all. So the
 # run is timed, and a slow one says how to stop paying it.
+#
+# The project's own copy comes first: a repository that pins redlinegate in its
+# devDependencies has said which version its team runs, and that is the one
+# this hook should judge with. The fallback is `npm exec` against a prefix of
+# its own rather than npx from here — npm reads this repository's package.json
+# first, and one whose devEngines names pnpm, yarn or bun makes npm 10.9+
+# refuse to run npx at all. The command still runs in this directory, so it
+# reads this repository's .redline.json.
 VIA_NPX="false"
-if command -v redline >/dev/null 2>&1; then
+redline_prefix=""
+if [ -x ./node_modules/.bin/redline ]; then
+  REDLINE="./node_modules/.bin/redline"
+  REDLINE_HINT="$REDLINE"
+elif command -v redline >/dev/null 2>&1; then
   REDLINE="redline"
-elif command -v npx >/dev/null 2>&1; then
-  REDLINE="npx --yes --package=redlinegate@REDLINE_CLI_VERSION redline"
+  REDLINE_HINT="$REDLINE"
+elif command -v npm >/dev/null 2>&1; then
+  # A private directory made for this push, never a fixed path: in a shared
+  # /tmp another account could create that first and put its own redlinegate
+  # there, and npm exec would run it as whoever is pushing. npm's own cache
+  # still keeps the download, so the cost is a link, not a fetch.
+  redline_prefix=$(mktemp -d)
+  trap 'rm -rf "$redline_prefix"' EXIT
+  REDLINE="npm exec --prefix $redline_prefix --yes --package=redlinegate@REDLINE_CLI_VERSION -- redline"
+  # Printed for later, when this push's directory is gone, so it makes its own.
+  REDLINE_HINT="npm exec --prefix \"\$(mktemp -d)\" --yes --package=redlinegate@REDLINE_CLI_VERSION -- redline"
   VIA_NPX="true"
 else
-  echo "redline: no redline and no npx on PATH — skipping the local gate" >&2
+  echo "redline: no redline and no npm on PATH — skipping the local gate" >&2
   exit 0
 fi
 
@@ -57,7 +78,7 @@ EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 patch=$(mktemp)
 # `trap` rather than a delete at the end: the script runs under `set -e`, so any
 # failure below would otherwise leave the file behind on every blocked push.
-trap 'rm -f "$patch"' EXIT
+trap 'rm -f "$patch"; if [ -n "$redline_prefix" ]; then rm -rf "$redline_prefix"; fi' EXIT
 
 # Every ref's range goes into the one patch. Keeping only the last line's range
 # meant `git push origin main feature` reviewed `feature` alone and pushed
@@ -134,8 +155,9 @@ elapsed=$(( $(date +%s) - started ))
 # a push stops feeling like a command and starts feeling like a wait.
 if [ "$VIA_NPX" = "true" ] && [ "$elapsed" -ge 5 ]; then
   echo "" >&2
-  echo "redline: that took ${elapsed}s, most of it npx resolving the package on this push." >&2
-  echo "         Install it once and the hook uses it directly:" >&2
+  echo "redline: that took ${elapsed}s, most of it npm resolving the package on this push." >&2
+  echo "         Install it once and the hook uses it directly — in this project's" >&2
+  echo "         devDependencies (redline init --pin-cli), or globally:" >&2
   echo "         npm install -g redlinegate@REDLINE_CLI_VERSION" >&2
 fi
 
@@ -172,5 +194,5 @@ fi
 # a SUGGESTION and prints them immediately above this line, so claiming a clean
 # run here contradicted output the engineer could still see on screen.
 echo "redline: for the rules a checker cannot decide, ask your assistant:"
-echo "         $REDLINE review --base $base"
+echo "         $REDLINE_HINT review --base $base"
 echo "         or run /redline-review in an assistant that reads this repository."

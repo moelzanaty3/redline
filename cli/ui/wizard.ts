@@ -1,3 +1,4 @@
+import type { PackageManager } from '../core/package-manager.ts';
 import type { Manifest } from '../render/manifest.ts';
 import { RedlineError } from '../core/errors.ts';
 import { TOOL_PROBES, type RepoSurvey } from '../detect/existing.ts';
@@ -63,6 +64,10 @@ export interface WizardFacts {
   // that nothing asked. Phrased as the reason a reader can act on, because it
   // is shown to them verbatim.
   readonly unreachable: string | null;
+  // The package manager that would add Redline to this project, when it can be
+  // added: a Node project that does not depend on it yet. Absent or null and the
+  // question is not asked — a Go repository has no package.json to pin it in.
+  readonly pinnable?: PackageManager | null;
   // What `.redline.json` already recorded, when this is a re-run.
   readonly recorded: {
     readonly profile?: string;
@@ -96,6 +101,9 @@ export interface WizardAnswers {
   // a repository that deselected it has no gate for the question to be about.
   // `org` when it was not asked, which is the answer that changes nothing.
   readonly gateSource: GateSource;
+  // Add redlinegate to the project's devDependencies at the version running
+  // now. False when the question was not asked.
+  readonly pinCli: boolean;
   readonly action: 'apply' | 'dry-run' | 'no-commit';
 }
 
@@ -498,6 +506,29 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
       )
     : (recorded?.rung ?? 'observe');
 
+  // Recommended because it is what makes every later command predictable: the
+  // team, its assistants and its hooks all run the version in the lockfile, and
+  // an upgrade is a reviewed pull request rather than whatever @latest is today.
+  const pinCli =
+    facts.pinnable === undefined || facts.pinnable === null
+      ? false
+      : await p.select<boolean>(
+          "Add Redline to this project's devDependencies?",
+          [
+            {
+              value: true,
+              label: 'yes, pin it',
+              hint: `runs ${facts.pinnable} here to add redlinegate at this exact version; everyone runs the same Redline`,
+            },
+            {
+              value: false,
+              label: 'no',
+              hint: 'run it with npx each time, at whatever version is latest',
+            },
+          ],
+          true
+        );
+
   const action = await p.select(
     'Ready?',
     [
@@ -551,6 +582,7 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     reviewOwners,
     rung,
     gateSource,
+    pinCli,
     action,
   };
 }

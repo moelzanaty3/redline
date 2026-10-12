@@ -1,3 +1,4 @@
+import { redlineCommandIn } from '../core/package-manager.ts';
 import { execFileSync } from 'node:child_process';
 import { createGit } from '../core/git.ts';
 import { parseRemote } from '../platforms/detect.ts';
@@ -49,7 +50,7 @@ const defaultRun = (file: string, args: readonly string[]): string =>
 // in CODEOWNERS, without which the file installs and enforces nothing.
 const WANTED_SCOPES = ['repo', 'read:org'] as const;
 
-function checkNode(version: string): DoctorCheck {
+function checkNode(version: string, cwd: string): DoctorCheck {
   const support = nodeSupport(version);
   if (support.major === null) {
     return { name: 'node', status: 'warn', detail: `could not read a version number from "${version}"` };
@@ -72,7 +73,7 @@ function checkNode(version: string): DoctorCheck {
     // Named tools rather than "upgrade Node", because the repository is
     // usually pinned deliberately and the operator is not free to change it
     // globally. A fix nobody can apply reads as a refusal to work at all.
-    fix: unsupportedNodeHint()
+    fix: unsupportedNodeHint('init', redlineCommandIn(cwd, ''))
       .split('\n')
       .map((line) => line.replace(/^ {2}/, ''))
       .join('\n'),
@@ -189,7 +190,7 @@ function checkCredential(run: DoctorOptions['run'], hostname?: string): DoctorCh
 }
 
 export function doctor(opts: DoctorOptions): DoctorReport {
-  const checks: DoctorCheck[] = [checkNode(opts.nodeVersion ?? process.version)];
+  const checks: DoctorCheck[] = [checkNode(opts.nodeVersion ?? process.version, opts.cwd)];
 
   const gitChecks = checkGit(opts.run, opts.cwd);
   checks.push(...gitChecks);
@@ -219,14 +220,14 @@ export function doctor(opts: DoctorOptions): DoctorReport {
       name: 'onboarded',
       status: 'fail',
       detail: `.redline.json is here but unreadable: ${error instanceof Error ? error.message : String(error)}`,
-      fix: 'npx redlinegate init rewrites it — the file is written by the command, not edited by hand',
+      fix: `${redlineCommandIn(opts.cwd, 'init')} rewrites it — the file is written by the command, not edited by hand`,
     });
     return { checks, ok: false };
   }
 
   checks.push(
     config === null
-      ? { name: 'onboarded', status: 'warn', detail: 'no .redline.json here yet', fix: 'npx redlinegate init' }
+      ? { name: 'onboarded', status: 'warn', detail: 'no .redline.json here yet', fix: redlineCommandIn(opts.cwd, 'init') }
       : {
           name: 'onboarded',
           status: 'ok',

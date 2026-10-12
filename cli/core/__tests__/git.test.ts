@@ -233,3 +233,23 @@ test('the rest of the environment is carried through untouched', () => {
   assert.equal(env['PATH'], '/usr/bin');
   assert.equal(env['HOME'], '/home/x');
 });
+
+// Asked before Redline adds itself to package.json: a file that already has
+// someone's uncommitted edits must not be committed under Redline's name.
+test('uncommitted lists changed, untracked and staged paths once each', () => {
+  const { run } = recorder({
+    'ls-files --modified --others --exclude-standard -- package.json pnpm-lock.yaml': 'package.json\npnpm-lock.yaml',
+    'diff --cached --name-only -- package.json pnpm-lock.yaml': 'package.json',
+  });
+  assert.deepEqual(createGit('/repo', run).uncommitted(['package.json', 'pnpm-lock.yaml']), [
+    'package.json',
+    'pnpm-lock.yaml',
+  ]);
+});
+
+test('uncommitted is empty outside a repository rather than throwing', () => {
+  const run: GitRunner = () => {
+    throw new Error('not a git repository');
+  };
+  assert.deepEqual(createGit('/repo', run).uncommitted(['package.json']), []);
+});

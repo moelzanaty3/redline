@@ -17,6 +17,46 @@ to check understanding. Progress is ticked off per step and kept in the browser 
 Tutorial's unique parts moved in: the no-GitHub path, `/redline-review` in an assistant, and
 how new rules arrive. The old URLs redirect. The home page and the header link to Learn.
 
+### Gate — a repository whose package.json names pnpm no longer fails the policy job
+
+`pnpm init` writes a `devEngines.packageManager` block naming pnpm, and npm 10.9 and later refuse
+to run any command in a folder whose `package.json` names another package manager there, `npx`
+included. The gate ran `npx redlinegate … policy` from the checkout, so in such a repository the
+`policy` job failed with `EBADDEVENGINES` on every pull request, before Redline was downloaded.
+
+- The GitHub gate and both Azure Pipelines templates now install the CLI into a directory of
+  their own and run it from the checkout. The pinned version is unchanged, and so is
+  `REDLINE_CLI_VERSION`. The pull request's own lockfile and `node_modules` also stay out of the
+  tool that judges it.
+- The pre-push hook uses the project's own `node_modules/.bin/redline` first, then a global
+  install, then `npm exec` against a private directory made for that push, never a fixed path
+  another account on the machine could create first. It no longer runs `npx` from the
+  repository.
+- A vendored gate (`--gate-source local`), an Azure pipeline and a pre-push hook pick this up on
+  the next `redline init`. An organisation's own copy of the gate, in its `.github` repository,
+  needs the same change made there.
+
+### CLI — Redline runs the way the repository does, and can be pinned in it
+
+Every hint said `npx redlinegate …`, and every assistant command told the assistant the same. In
+a repository with that `devEngines` block the command was refused; in one that depends on
+Redline it fetched a second copy, possibly a different version from the one the team pinned.
+
+- Hints now name the command that works in this repository: `pnpm redline …`, `yarn redline …` or
+  `bun run redline …` when the project depends on `redlinegate`; `pnpm dlx`, `yarn dlx` or `bunx`
+  when its `devEngines` rules npm out; `npx redlinegate …` otherwise, including every repository
+  with no `package.json`.
+- `/redline-init`, `/redline-review` and `/redline-verify` give an assistant the same rule.
+- `redline init --pin-cli`, or yes to the menu's new question, adds `redlinegate` to the project's
+  devDependencies at exactly the running version, with the project's own package manager. Install
+  scripts, pnpm's `.pnpmfile.cjs` and yarn's `yarnPath` are switched off, so onboarding runs none
+  of the repository's own code through them; yarn plugins committed to the repository still load.
+  It uses the first copy of that package manager on `PATH` that starts, so a broken install a
+  version manager puts first (Volta's pnpm 12.6.0 image has no `bin/pnpm.cjs`) does not fail it.
+  `package.json` and the lockfile ride in the onboarding pull request.
+  It is offered only in a Node project that does not depend on Redline yet, and a package
+  manager that fails leaves a note with the command to run, not a failed onboarding.
+
 ### CLI — the onboarding pull request passes the gate it installs
 
 `redline init`'s pull request failed two of the checks it adds: it had no `## Launch readiness`

@@ -56,6 +56,7 @@ const MENU: [string, string][] = [
   ["What should Redline install?", "gate, merge-policy, labels"],
   ["Where should the merge gate live?", "in the organisation"],
   ["How hard should the check bite?", "observe"],
+  ["Add Redline to this project's devDependencies?", "yes, pin it"],
   ["Ready?", "Write, commit and open a pull request"],
 ];
 
@@ -255,9 +256,10 @@ export function Journey({ initCmd }: { initCmd: string }) {
   );
   // The full write list of the run: the three merged standards files, the
   // per-stack instructions, the slash commands rendered once per vendor host,
-  // and the four host files.
+  // the four host files, and package.json with its lockfile from pinning
+  // Redline in the project (cli/core/package-manager.ts pinRedline).
   const totalWrites =
-    3 + instructionFiles.length + commands * 2 + 4;
+    3 + instructionFiles.length + commands * 2 + 4 + 2;
 
   // Four of the paths the run prints — the three files an AI tool opens, and
   // the workflow that publishes the check.

@@ -8,15 +8,26 @@ of the change, no JSON.
 
 ## 1. Get the rules and the change
 
-Let Redline do the work. Run this in the repository root (it needs Node 18.11 or later):
+Let Redline do the work (it needs Node 18.11 or later). Run `review --engine embedded` the way
+this repository runs Redline, from its root:
 
-```
-npx redlinegate review --engine embedded
-```
+- `package.json` lists `redlinegate`: use the project's own copy, so you run the version the team
+  pinned.
 
-Do not run plain `npx redline` — that resolves to an unrelated package on the public registry; the
-published package is `redlinegate`. If the engineer already has it installed
-(`npm i -g redlinegate`), `redline review --engine embedded` is the same command.
+  ```
+  pnpm redline review --engine embedded      # with a pnpm-lock.yaml
+  yarn redline review --engine embedded      # with a yarn.lock
+  bun run redline review --engine embedded   # with a bun.lock
+  npx redlinegate review --engine embedded   # otherwise
+  ```
+
+- It does not, and `package.json` has a `devEngines.packageManager` naming pnpm, yarn or bun: npm
+  refuses to run in that project, so use `pnpm dlx redlinegate`, `yarn dlx redlinegate` or
+  `bunx redlinegate`, followed by `review --engine embedded`.
+- Anything else: `npx redlinegate review --engine embedded`.
+
+Never plain `npx redline` — that resolves to an unrelated package on the public registry; the
+published package is `redlinegate`.
 
 It works out which stacks the changed files belong to, so a React rule never lands on a build
 script. It also runs the rules a checker decides without a model, and it prints one prompt

@@ -1,3 +1,4 @@
+import { redlineCommandIn } from '../core/package-manager.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError } from '../core/errors.ts';
@@ -110,7 +111,7 @@ export async function verify(
     return { findings, ok: false };
   }
   if (!config) {
-    add('onboarded', false, `no ${opts.cwd}/.redline.json — run: npx redlinegate init`);
+    add('onboarded', false, `no ${opts.cwd}/.redline.json — run: ${redlineCommandIn(opts.cwd, 'init')}`);
     return { findings, ok: false };
   }
   add('onboarded', true, `profile ${config.profile}, standards v${config.standardsVersion}`);

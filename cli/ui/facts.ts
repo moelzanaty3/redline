@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readConfig } from '../config/redline-json.ts';
+import { pinnableManager } from '../core/package-manager.ts';
 import { OWNING_TEAM } from '../commands/init.ts';
 import { surveyRepo } from '../detect/existing.ts';
 import { offerable as offerableSetup } from '../detect/setup.ts';
@@ -115,6 +116,7 @@ export function gatherFacts(opts: GatherOptions): WizardFacts {
     detectedHost: opts.detectedHost,
     unreachable: opts.unreachable ?? null,
     existingPipeline: findExistingPipeline(cwd),
+    pinnable: pinnableManager(cwd),
     recorded:
       recorded === null
         ? null
