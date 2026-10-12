@@ -76,7 +76,12 @@ test('round-trips through disk with stable formatting', (t) => {
   assert.ok(onDisk.endsWith('\n'), 'file must end with a newline');
   // The `//` explainer rides on the front and is not part of the config, so the
   // round trip is over what parseConfig reads back, not over the bytes.
-  assert.equal(onDisk, `${JSON.stringify({ '//': JSON.parse(onDisk)['//'], ...valid }, null, 2)}\n`);
+  assert.deepEqual({ ...JSON.parse(onDisk), '//': undefined }, { '//': undefined, ...valid });
+  // The same config handed over in any key order writes the same bytes: a diff
+  // of this file shows what changed and nothing else.
+  const reversed = Object.fromEntries(Object.entries(valid).reverse()) as typeof valid;
+  writeConfig(dir, reversed);
+  assert.equal(readFileSync(join(dir, CONFIG_FILE), 'utf8'), onDisk);
   assert.ok(Array.isArray(JSON.parse(onDisk)['//']), 'the file explains its own keys');
   assert.deepEqual(readConfig(dir), valid, 'the explainer must not survive into the parsed config');
 });

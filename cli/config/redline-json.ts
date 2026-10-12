@@ -509,7 +509,42 @@ const EXPLAINER: readonly string[] = [
   'commandFiles, standardsVersion, cliVersion, onboardedAt, lastRunAt — Redline\'s own bookkeeping.',
 ];
 
+// One key order for every writer, so a diff of .redline.json shows what changed
+// and nothing else. `evidence record` spread the parsed config, whose order is
+// readConfig's, and every key it did not touch moved anyway. This is the order
+// `init` has always written, so a file already on disk keeps its shape. A
+// Record over every key, so a field added to RedlineConfig without a place here
+// is a compile error rather than a key that lands wherever it happens to.
+const KEY_RANK: Record<keyof RedlineConfig, number> = {
+  standardsVersion: 0,
+  cliVersion: 1,
+  host: 2,
+  pipeline: 3,
+  profile: 4,
+  vendors: 5,
+  menu: 6,
+  capabilities: 7,
+  integrations: 8,
+  pendingAdmin: 9,
+  onboardedAt: 10,
+  lastRunAt: 11,
+  localRules: 12,
+  commandFiles: 13,
+  rung: 14,
+  evidence: 15,
+  gateSource: 16,
+  gateVersion: 17,
+  docsBaseUrl: 18,
+  requiredApprovals: 19,
+};
+
+const isConfigKey = (key: string): key is keyof RedlineConfig => key in KEY_RANK;
+
 export function writeConfig(cwd: string, config: RedlineConfig): void {
-  const documented = { '//': EXPLAINER, ...config };
+  const ordered = Object.entries(config).sort(([a], [b]) => {
+    const rank = (key: string): number => (isConfigKey(key) ? KEY_RANK[key] : Number.MAX_SAFE_INTEGER);
+    return rank(a) - rank(b);
+  });
+  const documented = { '//': EXPLAINER, ...Object.fromEntries(ordered) };
   writeFileSync(join(cwd, CONFIG_FILE), `${JSON.stringify(documented, null, 2)}\n`);
 }
