@@ -76,10 +76,10 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "overview what is redline oversight ai review standards architecture delivery loop",
       },
       {
-        title: "Quickstart",
+        title: "Quick start",
         href: "/docs/quickstart",
-        description: "Onboard one repository and see what it changed. Ten minutes, nothing blocked at the end.",
-        keywords: "quickstart quick start get started first repo onboard dry run ten minutes try it",
+        description: "Take a small TypeScript service from no Redline to a merge gate that has earned its rung, one pull request per step.",
+        keywords: "quickstart quick start get started learn step by step walkthrough redline-demo demo onboard first finding explain fix team rule adr security floor dependency review blocking required check exemption evidence rung",
       },
       {
         title: "Tutorial",
@@ -195,7 +195,7 @@ export const DOCS_NAV: DocSection[] = [
         title: "Enforcement ladder",
         href: "/docs/enforcement",
         description: "Four rungs a repository climbs on evidence — and steps back from without asking.",
-        keywords: "enforcement ladder rung observe warn block-blocker block-high promotion evidence demotion market floor advisory blocking",
+        keywords: "enforcement ladder rung observe block-blocker block-high promotion evidence demotion market floor advisory blocking",
       },
       {
         title: "Reviewing before you push",

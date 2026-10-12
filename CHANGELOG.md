@@ -7,6 +7,59 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### Enforcement — `warn` is merged into `observe`
+
+The ladder had four rungs. `warn` sat between `observe` and `block-blocker`, and the gate treated it
+exactly like `observe`: nothing blocked, the same report, the same red check in the merge box. A
+team earned it with evidence and saw nothing change. The ladder is now `observe → block-blocker →
+block-high`.
+
+- A repository that recorded `warn` reads as `observe`, and its gate already behaved that way. The
+  next `redline init` writes `observe`.
+- `redline init --rung warn` is refused by name, and names the rungs that exist.
+- `block-blocker` asks for exactly what it did before, now straight from `observe`.
+- `redline status` and the wizard no longer say the check is "always green" at `observe`. The
+  security floor can still fail it.
+
+### CLI — a re-run no longer resets the onboarding branch
+
+`init` opened its pull request from `redline/onboard`, created with `git checkout -B`. On a
+re-run with that branch still on `origin` (GitHub keeps merged branches unless told to delete
+them), `-B` silently moved the local branch to `HEAD`, and the push was then refused as a
+non-fast-forward. The repository settings were applied; the pull request was not.
+
+- The branch is now the first of `redline/onboard`, `redline/onboard-2`, … that exists neither
+  locally nor on `origin`, created with `git checkout -b`. An existing branch is never moved.
+- The run says which branch it committed on.
+
+### CLI — `.redline.json` is written in one key order
+
+`redline evidence record` rewrote `.redline.json` in the order the file had been parsed in, so a
+one-field change moved half the file in the diff. Every writer now uses the order `init` has always
+written, and recording evidence adds the `evidence` block without touching any other line.
+
+### Gate — actions on their current majors
+
+The gate and the workflows Redline ships ran actions on Node 20, which GitHub has deprecated and
+warns about on every run.
+
+| Action | From | To |
+|---|---|---|
+| `actions/checkout` | v4 | v7 |
+| `actions/setup-node` | v4 | v7 |
+| `actions/dependency-review-action` | v4 | v5 |
+| `actions/upload-artifact` / `download-artifact` | v4 / v4 | v7 / v8 |
+| `actions/upload-pages-artifact` / `deploy-pages` | v3 / v4 | v5 / v5 |
+| `github/codeql-action` (written by `--setup codeql`) | v3 | v4 |
+| `trufflesecurity/trufflehog` (action SHA and container digest) | 3.97.1 | 3.99.2 |
+
+- The gate's policy job sets `package-manager-cache: false`. setup-node v5+ caches on its own when
+  a repository's `package.json` names npm as its `packageManager`, and this job installs nothing.
+- These actions need Actions runner 2.327.1 or later. GitHub-hosted runners have it; a self-hosted
+  runner must be updated first.
+- A vendored gate (`--gate-source local`) picks this up on the next `redline init`. A gate referenced
+  from an organisation's `.github` repository picks it up when that copy is updated.
+
 ### CLI — the review prompt left out the repository's own rules
 
 `.redline/local.md` is rendered into every assistant file, but `redline review` built its prompt
