@@ -55,22 +55,13 @@ export default async function Page() {
         </a>
         . Each step is one pull request there, merged and tagged <code>step-00</code> to{" "}
         <code>step-09</code>, so at every step you can see exactly what the repository held.
-        Step 00 helps you choose how to follow along:
       </p>
-      <ul>
-        <li>
-          <b>Read along:</b> clone the finished demo and check out each step. Nothing to set up
-          beyond git.
-        </li>
-        <li>
-          <b>Build it yourself on GitHub:</b> make your own copy and run every command. The most
-          you will learn, and the only way to see the gate on your own pull requests.
-        </li>
-        <li>
-          <b>Only on your machine:</b> no GitHub needed. Steps 00 to 04 work fully; from step 05
-          on, read along.
-        </li>
-      </ul>
+      <p>
+        Step 00 puts its starting files into a repository of your own. Steps 01 to 04 work on your
+        machine alone; from step 05 on, the lessons are about checks that run on pull requests, so
+        you push that repository to GitHub. Rather just read? Every step links the demo&apos;s pull
+        request, so you can follow without running anything.
+      </p>
       <p>
         Mark each step complete as you go. Your progress is kept in this browser only.
       </p>

@@ -23,7 +23,7 @@ export const LEARN_STEPS: LearnStep[] = [
     slug: "starting-point",
     n: "00",
     title: "The starting point",
-    summary: "Get the demo service running, and pick how you want to follow along.",
+    summary: "Get the starter files into your own repository, and see what it holds.",
     minutes: 5,
     tag: "step-00",
     needsGitHub: false,

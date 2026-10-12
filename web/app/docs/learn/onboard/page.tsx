@@ -59,7 +59,7 @@ export default async function Page() {
             ),
           },
           {
-            label: "Only on my machine",
+            label: "Not on GitHub yet",
             content: (
               <>
                 <Terminal

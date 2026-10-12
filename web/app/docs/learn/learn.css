@@ -202,6 +202,27 @@
 .learn-path-go:hover {
   filter: brightness(1.1);
 }
+.learn-get {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.learn-get .learn-path-go {
+  margin-top: 0;
+}
+.learn-get-alt {
+  display: inline-block;
+  padding: 9px 17px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+.learn-get-alt:hover {
+  border-color: var(--text);
+}
 .learn-path-go-done {
   margin-top: 16px;
   color: var(--green);
@@ -381,9 +402,13 @@
   margin-bottom: 14px;
 }
 .prose .learn-path li a,
-.prose .learn-stepper li a {
+.prose .learn-stepper li a,
+.prose .learn-get a {
   text-decoration: none;
   color: inherit;
+}
+.prose .learn-get .learn-path-go {
+  color: #fff;
 }
 .prose .learn-stepper .is-current a {
   color: #fff;
