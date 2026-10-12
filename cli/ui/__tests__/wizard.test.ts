@@ -442,7 +442,7 @@ test('a Node project is offered the pin, and pressing enter takes it', async () 
 
   assert.equal(answers.pinCli, true);
   const pin = asked.find((q) => q.title === PIN_QUESTION);
-  assert.match(String(pin?.hints[0]), /pnpm adds redlinegate at this exact version/);
+  assert.match(String(pin?.hints[0]), /runs pnpm here to add redlinegate at this exact version/);
 });
 
 // No package.json, or Redline already a dependency: there is nothing to add,

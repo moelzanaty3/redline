@@ -513,12 +513,12 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
     facts.pinnable === undefined || facts.pinnable === null
       ? false
       : await p.select<boolean>(
-          'Add Redline to this project\'s devDependencies?',
+          "Add Redline to this project's devDependencies?",
           [
             {
               value: true,
               label: 'yes, pin it',
-              hint: `${facts.pinnable} adds redlinegate at this exact version; everyone runs the same Redline`,
+              hint: `runs ${facts.pinnable} here to add redlinegate at this exact version; everyone runs the same Redline`,
             },
             {
               value: false,

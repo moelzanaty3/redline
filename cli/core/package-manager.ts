@@ -171,6 +171,13 @@ export interface AddCommand {
  * Install scripts are skipped. Adding one package must not run every
  * dependency's postinstall on the operator's machine as a side effect of
  * onboarding — redlinegate has none of its own.
+ *
+ * So is the code a repository can make its package manager run on any
+ * command: pnpm's `.pnpmfile.cjs`, and the yarn binary `yarnPath` points at
+ * (see INSTALL_ENV). Redline is often run by a platform team on a repository
+ * it does not own, and `init` executed nothing from the repository before it
+ * learned to pin itself. Yarn berry plugins committed to the repository still
+ * load: there is no switch for them, which the menu and --help say.
  */
 export function addCommand(runner: ProjectRunner, version: string): AddCommand | null {
   const spec = `${PACKAGE_NAME}@${version}`;
@@ -185,6 +192,7 @@ export function addCommand(runner: ProjectRunner, version: string): AddCommand |
           '--save-dev',
           '--save-exact',
           '--ignore-scripts',
+          '--ignore-pnpmfile',
           ...(runner.pnpmWorkspaceRoot ? ['--workspace-root'] : []),
           spec,
         ],
@@ -216,8 +224,11 @@ export function pinnableManager(cwd: string): PackageManager | null {
 
 // Yarn berry has no --ignore-scripts flag and classic reads npm's config from
 // the environment, so both are told here rather than on the command line.
+// YARN_IGNORE_PATH makes yarn ignore `yarnPath`, which otherwise hands the
+// whole command to a JavaScript file the repository itself supplies.
 export const INSTALL_ENV: Readonly<Record<string, string>> = {
   YARN_ENABLE_SCRIPTS: 'false',
+  YARN_IGNORE_PATH: '1',
   npm_config_ignore_scripts: 'true',
 };
 

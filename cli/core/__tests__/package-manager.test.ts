@@ -84,7 +84,7 @@ test('the add command pins the exact version and skips install scripts', () => {
   withProject({ 'package.json': '{}', 'pnpm-lock.yaml': '' }, (dir) => {
     assert.deepEqual(addCommand(detectRunner(dir), '0.2.8'), {
       command: 'pnpm',
-      args: ['add', '--save-dev', '--save-exact', '--ignore-scripts', 'redlinegate@0.2.8'],
+      args: ['add', '--save-dev', '--save-exact', '--ignore-scripts', '--ignore-pnpmfile', 'redlinegate@0.2.8'],
     });
   });
   withProject({ 'package.json': '{}' }, (dir) => {

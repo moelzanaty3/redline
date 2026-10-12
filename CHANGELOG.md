@@ -19,7 +19,8 @@ included. The gate ran `npx redlinegate … policy` from the checkout, so in suc
   `REDLINE_CLI_VERSION`. The pull request's own lockfile and `node_modules` also stay out of the
   tool that judges it.
 - The pre-push hook uses the project's own `node_modules/.bin/redline` first, then a global
-  install, then `npm exec` against a prefix of its own. It no longer runs `npx` from the
+  install, then `npm exec` against a private directory made for that push, never a fixed path
+  another account on the machine could create first. It no longer runs `npx` from the
   repository.
 - A vendored gate (`--gate-source local`), an Azure pipeline and a pre-push hook pick this up on
   the next `redline init`. An organisation's own copy of the gate, in its `.github` repository,
@@ -37,8 +38,9 @@ Redline it fetched a second copy, possibly a different version from the one the 
   with no `package.json`.
 - `/redline-init`, `/redline-review` and `/redline-verify` give an assistant the same rule.
 - `redline init --pin-cli`, or yes to the menu's new question, adds `redlinegate` to the project's
-  devDependencies at exactly the running version, with the project's own package manager and
-  with install scripts off. `package.json` and the lockfile ride in the onboarding pull request.
+  devDependencies at exactly the running version, with the project's own package manager. Install
+  scripts, pnpm's `.pnpmfile.cjs` and yarn's `yarnPath` are switched off, so onboarding runs none
+  of the repository's own code through them; yarn plugins committed to the repository still load. `package.json` and the lockfile ride in the onboarding pull request.
   It is offered only in a Node project that does not depend on Redline yet, and a package
   manager that fails leaves a note with the command to run, not a failed onboarding.
 

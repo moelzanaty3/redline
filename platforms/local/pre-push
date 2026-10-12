@@ -44,16 +44,23 @@ set -eu
 # refuse to run npx at all. The command still runs in this directory, so it
 # reads this repository's .redline.json.
 VIA_NPX="false"
+redline_prefix=""
 if [ -x ./node_modules/.bin/redline ]; then
   REDLINE="./node_modules/.bin/redline"
+  REDLINE_HINT="$REDLINE"
 elif command -v redline >/dev/null 2>&1; then
   REDLINE="redline"
+  REDLINE_HINT="$REDLINE"
 elif command -v npm >/dev/null 2>&1; then
-  # npm will not create the prefix itself.
-  tmp_root=${TMPDIR:-/tmp}
-  redline_prefix="${tmp_root%/}/redline-pre-push"
-  mkdir -p "$redline_prefix"
+  # A private directory made for this push, never a fixed path: in a shared
+  # /tmp another account could create that first and put its own redlinegate
+  # there, and npm exec would run it as whoever is pushing. npm's own cache
+  # still keeps the download, so the cost is a link, not a fetch.
+  redline_prefix=$(mktemp -d)
+  trap 'rm -rf "$redline_prefix"' EXIT
   REDLINE="npm exec --prefix $redline_prefix --yes --package=redlinegate@REDLINE_CLI_VERSION -- redline"
+  # Printed for later, when this push's directory is gone, so it makes its own.
+  REDLINE_HINT="npm exec --prefix \"\$(mktemp -d)\" --yes --package=redlinegate@REDLINE_CLI_VERSION -- redline"
   VIA_NPX="true"
 else
   echo "redline: no redline and no npm on PATH — skipping the local gate" >&2
@@ -71,7 +78,7 @@ EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 patch=$(mktemp)
 # `trap` rather than a delete at the end: the script runs under `set -e`, so any
 # failure below would otherwise leave the file behind on every blocked push.
-trap 'rm -f "$patch"' EXIT
+trap 'rm -f "$patch"; if [ -n "$redline_prefix" ]; then rm -rf "$redline_prefix"; fi' EXIT
 
 # Every ref's range goes into the one patch. Keeping only the last line's range
 # meant `git push origin main feature` reviewed `feature` alone and pushed
@@ -187,5 +194,5 @@ fi
 # a SUGGESTION and prints them immediately above this line, so claiming a clean
 # run here contradicted output the engineer could still see on screen.
 echo "redline: for the rules a checker cannot decide, ask your assistant:"
-echo "         $REDLINE review --base $base"
+echo "         $REDLINE_HINT review --base $base"
 echo "         or run /redline-review in an assistant that reads this repository."

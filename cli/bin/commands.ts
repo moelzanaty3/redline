@@ -105,6 +105,8 @@ export const COMMANDS = {
       '      --pin-cli   add redlinegate to package.json devDependencies at this exact version, with',
       '      the project\'s own package manager, in the same pull request. Then the team, its',
       '      assistants and its hooks run one known Redline: pnpm redline, yarn redline, npx redlinegate.',
+      '      It runs that package manager in this repository, with install scripts, .pnpmfile.cjs and',
+      '      yarnPath switched off; yarn plugins committed here still load, so pin only where you trust them.',
       '      --integrations <list>  comma-separated ids of controls this repository already runs',
       '      (sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql). Overrides what',
       '      detection found — it reads a checkout, so it cannot see a scanner wired through a',
