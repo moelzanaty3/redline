@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Quiz, Tabs } from "@/components/learn/interactive";
 import { File, LearnPage, Term, Terminal } from "@/components/learn/parts";
-import { DEMO_URL } from "@/lib/learn";
+import { DEMO_RAW, DEMO_URL } from "@/lib/learn";
 
 export const metadata: Metadata = { title: "Learn: a big change needs an ADR" };
 
@@ -56,11 +56,11 @@ export default function Page() {
       <h2>Make a big change</h2>
       <p>
         Add an address parser that refuses a country that is not real, checked against a
-        249-entry ISO 3166 table. Borrow the files from the demo rather than typing them:
+        249-entry ISO 3166 table. Download the files from the demo rather than typing them:
       </p>
       <Terminal
         commands={`git checkout -b feat/addresses
-git checkout step-05 -- src/countries.ts src/countries.test.ts src/address.ts src/address.test.ts
+curl -fsSL --remote-name-all --output-dir src "${DEMO_RAW}/step-05/src/{countries,countries.test,address,address.test}.ts"
 pnpm test
 git commit -m "feat: parse addresses, with the country checked against ISO 3166"
 git push -u origin feat/addresses

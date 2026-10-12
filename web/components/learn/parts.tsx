@@ -75,9 +75,9 @@ export function LearnPage({
         <span>About {step.minutes} minutes</span>
         <span>{step.needsGitHub ? "Needs GitHub" : "Works on your machine"}</span>
         {step.tag ? (
-          <span>
-            Demo: <code>git checkout {step.tag}</code>
-          </span>
+          <a href={`${DEMO_URL}/tree/${step.tag}`} rel="noopener noreferrer" target="_blank">
+            Files after this step ↗
+          </a>
         ) : null}
         {step.pr ? (
           <a href={`${DEMO_URL}/pull/${step.pr}`} rel="noopener noreferrer" target="_blank">

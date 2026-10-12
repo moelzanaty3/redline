@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Quiz, Tabs } from "@/components/learn/interactive";
 import { File, LearnPage, Term, Terminal } from "@/components/learn/parts";
+import { DEMO_RAW } from "@/lib/learn";
 
 export const metadata: Metadata = { title: "Learn: the security floor" };
 
@@ -42,7 +43,7 @@ export default function Page() {
         commands={`git checkout -b feat/directory
 pnpm add lodash@4.17.20 --save-exact
 pnpm add -D @types/lodash
-git checkout step-06 -- src/directory.ts src/directory.test.ts
+curl -fsSL --remote-name-all --output-dir src "${DEMO_RAW}/step-06/src/{directory,directory.test}.ts"
 pnpm test`}
       />
       <File name="src/directory.ts" text={DIRECTORY_TS} />

@@ -3,6 +3,8 @@
 // read this, so a step renamed here is renamed everywhere at once.
 
 export const DEMO_URL = "https://github.com/moelzanaty3/redline-demo";
+// Raw files at a tag, for steps that borrow the demo's larger files.
+export const DEMO_RAW = "https://raw.githubusercontent.com/moelzanaty3/redline-demo";
 
 export type LearnStep = {
   slug: string;
