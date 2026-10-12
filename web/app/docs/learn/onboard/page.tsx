@@ -22,6 +22,15 @@ export default async function Page() {
       <h2>Run it</h2>
       <p>From the root of your repository, on an up-to-date <code>main</code>:</p>
       <Terminal commands={rl("init")} />
+      <div className="callout warn">
+        <span className="ic">!</span>
+        <p>
+          <code>npm error code EBADDEVENGINES</code>? Your <code>package.json</code> has the{" "}
+          <code>devEngines</code> block <code>pnpm init</code> adds, and npm refuses to run in a
+          folder that names another package manager there. Remove it with{" "}
+          <code>pnpm pkg delete devEngines</code>, commit, and run the command again.
+        </p>
+      </div>
       <p>
         The first time, <code>npx</code> asks <code>Ok to proceed? (y)</code>; answer{" "}
         <code>y</code>. Then <code>init</code> asks a few questions about the repository. Space ticks
