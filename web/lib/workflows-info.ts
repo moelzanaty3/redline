@@ -32,7 +32,7 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
     steps: [
       "checklist (\"PR checklist\") — passes only if the PR body has a ## Launch readiness section with every box ticked. Fails loudly, not silently, if the heading is missing entirely.",
       "adr (\"ADR required for significant changes\") — passes if changed lines are at or below adr-diff-threshold (default 300), or the PR body links docs/adr/, or the no-adr label is applied.",
-      "dependency-review — actions/dependency-review-action@v4; fails at or above fail-on-dependency-severity (default high).",
+      "dependency-review — actions/dependency-review-action@v5; fails at or above fail-on-dependency-severity (default high).",
       "secrets (\"Secret scan (diff)\") — trufflehog, pinned to a commit SHA, scanning only the PR's diff range with --results=verified --fail; fails on any verified secret.",
       "gate (aggregate, name: gate) — needs all four. dependency-review and secrets are hard-fail and never label-exemptible. checklist and adr are soft-fail: the redline-exempt or redline-sync label downgrades a failure there to a warning. The branch ruleset requires the check context redline-gate / gate — the caller job id plus this aggregate job's id.",
     ],

@@ -38,7 +38,7 @@ variables:
   # does for the SHA-pinned actions on the GitHub side of the gate. Docker Hub
   # spells the tag without the `v` the git tag carries; both sides of the gate
   # deliberately run the same version.
-  TRUFFLEHOG_IMAGE: trufflesecurity/trufflehog@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08 # 3.97.1
+  TRUFFLEHOG_IMAGE: trufflesecurity/trufflehog@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a # 3.99.2
 
 steps:
   - checkout: self

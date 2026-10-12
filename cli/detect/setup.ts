@@ -184,15 +184,15 @@ export const INSTALLABLE: readonly Installable[] = [
           `        language: [${languages.join(', ')}]`,
           '    steps:',
           // Pinned to the major tag, which is what GitHub's own documented
-          // workflow uses: a floating v3 takes security fixes to the scanner
+          // workflow uses: a floating major takes security fixes to the scanner
           // without a pull request, and a SHA pin here would go stale silently
           // in every onboarded repository at once.
-          '      - uses: actions/checkout@v4',
-          '      - uses: github/codeql-action/init@v3',
+          '      - uses: actions/checkout@v7',
+          '      - uses: github/codeql-action/init@v4',
           '        with:',
           '          languages: ${{ matrix.language }}',
-          '      - uses: github/codeql-action/autobuild@v3',
-          '      - uses: github/codeql-action/analyze@v3',
+          '      - uses: github/codeql-action/autobuild@v4',
+          '      - uses: github/codeql-action/analyze@v4',
           '',
         ].join('\n'),
       };
