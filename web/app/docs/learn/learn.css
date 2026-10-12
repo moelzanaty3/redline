@@ -266,7 +266,10 @@
   font-weight: 600;
 }
 .learn-tabpanel {
-  padding: 4px 18px 6px;
+  padding: 18px 18px 6px;
+}
+.learn-tabpanel > :first-child {
+  margin-top: 0;
 }
 .learn-tabpanel > p,
 .learn-tabpanel > ul {
@@ -406,6 +409,9 @@
 .prose .learn-get a {
   text-decoration: none;
   color: inherit;
+}
+.prose .learn-get {
+  margin: 0 0 28px;
 }
 .prose .learn-get .learn-path-go {
   color: #fff;

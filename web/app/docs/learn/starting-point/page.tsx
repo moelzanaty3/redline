@@ -260,7 +260,7 @@ function BuildByHand() {
       <p>
         On every push to <code>main</code> and every pull request, GitHub installs the exact
         versions in your lockfile and runs the tests. It only runs once the repository is on GitHub,
-        which is step 05.
+        which step 01 does.
       </p>
 
       <h3>8. Commit</h3>
@@ -284,7 +284,6 @@ export default function Page() {
       learn={[
         "What the demo service is, and what its CI checks before Redline",
         "How to get the starter files: downloaded, or built by hand file by file",
-        "When you need GitHub, and when your machine is enough",
       ]}
     >
       <h2>Get the starter files</h2>
@@ -372,29 +371,6 @@ pnpm test`}
         <code>pnpm: command not found</code>? Install it with <code>npm install -g pnpm</code>. You
         never install Redline itself: every command runs it through <code>npx</code>, so you always
         get the current version.
-      </p>
-
-      <h2>Push it to GitHub when you need to</h2>
-      <p>
-        Steps 01 to 04 work entirely on your machine. From step 05 on, the lessons are about the
-        checks that run on a pull request, so your repository needs to be on GitHub. Do it now or
-        when you get there, with the{" "}
-        <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">GitHub CLI</a>{" "}
-        signed in (<code>gh auth login</code>):
-      </p>
-      <Terminal commands="gh repo create redline-demo --public --source . --remote origin --push" />
-      <div className="callout info">
-        <span className="ic">ℹ</span>
-        <p>
-          Make it <b>public</b>. Dependency review and secret scanning, which step 06 relies on, are
-          free on public repositories and need GitHub Advanced Security on private ones. Merge each
-          step&apos;s pull request before you start the next, and branch from an up-to-date{" "}
-          <code>main</code>.
-        </p>
-      </div>
-      <p>
-        Rather just read? Each step links the demo&apos;s pull request and tag, so you can see the
-        files, checks and logs the gate really produced without running anything.
       </p>
 
       <h2>What is in the repository</h2>

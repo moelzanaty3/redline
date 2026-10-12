@@ -28,6 +28,24 @@ export default async function Page() {
             label: "On GitHub",
             content: (
               <>
+                <p>
+                  First put your repository on GitHub, with the{" "}
+                  <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">
+                    GitHub CLI
+                  </a>{" "}
+                  signed in (<code>gh auth login</code>):
+                </p>
+                <Terminal commands="gh repo create redline-demo --public --source . --remote origin --push" />
+                <div className="callout info">
+                  <span className="ic">ℹ</span>
+                  <p>
+                    Make it <b>public</b>. Dependency review and secret scanning, which step 06
+                    relies on, are free on public repositories and need GitHub Advanced Security on
+                    private ones. From here on, merge each step&apos;s pull request before you start
+                    the next, and branch from an up-to-date <code>main</code>.
+                  </p>
+                </div>
+                <p>Then onboard it:</p>
                 <Terminal
                   commands={rl("init --gate-source local")}
                   output={`  profile tooling
