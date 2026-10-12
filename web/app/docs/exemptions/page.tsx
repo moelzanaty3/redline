@@ -69,12 +69,14 @@ export default function Page() {
 
       <h2>How it arrives</h2>
       <p>
-        This is a behaviour change for every onboarded repository, so it ships
-        behind a grace. The gate&apos;s <code>exemption-enforcement</code> input
-        defaults to <code>warn</code>: a label with no valid block is accepted and
-        told what is missing. A repository moves to <code>require</code> one
-        standards version later — so nobody&apos;s open pull request is failed by
-        a rule that did not exist when they opened it.
+        The gate&apos;s <code>exemption-enforcement</code> input defaults to{" "}
+        <code>require</code>: a label with no valid block is refused. It shipped
+        behind a grace, defaulting to <code>warn</code> (accept the label and say
+        what is missing) while the block was new, so nobody&apos;s open pull
+        request was failed by a rule that did not exist when they opened it. A
+        repository can still pass <code>exemption-enforcement: warn</code> to its
+        gate. Either way it only matters at a blocking rung: below one, a failing
+        process check does not stop a merge.
       </p>
 
       <h2>Redline exempts itself the same way</h2>
