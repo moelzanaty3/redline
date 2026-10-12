@@ -21,8 +21,112 @@ export default async function Page() {
     >
       <h2>Run it</h2>
       <p>From the root of your repository, on an up-to-date <code>main</code>:</p>
+      <Terminal commands={rl("init")} />
+      <p>
+        The first time, <code>npx</code> asks <code>Ok to proceed? (y)</code>; answer{" "}
+        <code>y</code>. Then <code>init</code> asks a few questions about the repository. Space ticks
+        a box, Enter moves on. Keep the default everywhere except the three in bold:
+      </p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>It asks</th>
+              <th>Answer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <b>Which standards apply here?</b>
+              </td>
+              <td>
+                <b>
+                  Tick <code>tooling</code>
+                </b>{" "}
+                (JavaScript, TypeScript). Nothing is ticked for you: which rules a repository is held
+                to is your decision.
+              </td>
+            </tr>
+            <tr>
+              <td>Where does this repository live?</td>
+              <td>GitHub</td>
+            </tr>
+            <tr>
+              <td>What runs your pull request checks?</td>
+              <td>GitHub Actions</td>
+            </tr>
+            <tr>
+              <td>Which assistants should read the standards?</td>
+              <td>The ones already ticked</td>
+            </tr>
+            <tr>
+              <td>Extra context to render beside the rules</td>
+              <td>Spec-driven development, already ticked</td>
+            </tr>
+            <tr>
+              <td>What should Redline set up alongside its own checks?</td>
+              <td>Nothing. GitHub&apos;s own secret scanning and dependency alerts are switched on anyway.</td>
+            </tr>
+            <tr>
+              <td>What should Redline install?</td>
+              <td>
+                <code>gate</code>, <code>merge-policy</code> and <code>labels</code>, already ticked
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <b>Where should the merge gate live?</b>
+              </td>
+              <td>
+                <b>in this repository</b>. See below for why.
+              </td>
+            </tr>
+            <tr>
+              <td>How hard should the check bite?</td>
+              <td>
+                <code>observe</code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <b>Ready?</b>
+              </td>
+              <td>
+                <b>Write, commit and open a pull request</b>. The default only previews.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <Term word="Where the merge gate lives">
+        <p>
+          The merge gate is a GitHub Actions workflow, and <code>init</code> can put it in one of two
+          places:
+        </p>
+        <ul>
+          <li>
+            <b>in the organisation</b>, the default. The gate lives once, in the organisation&apos;s{" "}
+            <code>.github</code> repository, and every repository calls it from there. A pull request
+            cannot edit the gate that judges it, and fixing the gate fixes it everywhere. It needs the
+            organisation to publish a gate first, which is what a real team should do.
+          </li>
+          <li>
+            <b>in this repository</b>. The gate is copied into the repository itself, so it works
+            with no organisation set up: right for a personal account, and for this path. It is
+            weaker: the gate runs from the pull request&apos;s own commit, so a pull request can edit
+            the gate judging it, even to switch off the secret and dependency checks.{" "}
+            <code>init</code> says so on every run.
+          </li>
+        </ul>
+        <p>
+          Choosing the organisation when it publishes no gate is not a dead end: <code>init</code>{" "}
+          notices, and asks again whether to skip the gate for now or copy it in.
+        </p>
+      </Term>
+      <p>Once you answer the last question, it does the work:</p>
       <Terminal
-        commands={rl("init --gate-source local")}
+        commands="# after Ready?"
         output={`  profile tooling
   Files  21 written
    + AGENTS.md
@@ -44,9 +148,9 @@ export default async function Page() {
    https://github.com/<you>/my-redline-demo/pull/1`}
       />
       <p>
-        The first time, <code>npx</code> asks <code>Ok to proceed? (y)</code>; answer{" "}
-        <code>y</code>. <code>repo-property</code> needs a GitHub organisation, so it is unavailable
-        on a personal account. Nothing depends on it.
+        <code>repo-property</code> needs a GitHub organisation, so it is unavailable on a personal
+        account. Nothing depends on it. Running it from a script, with no questions?{" "}
+        <code>{rl("init --gate-source local")}</code> gives the same result.
       </p>
 
       <h2>What it installed</h2>
@@ -83,10 +187,11 @@ export default async function Page() {
                   <code>.github/pull_request_template.md</code>, holds the checklist the gate reads.
                 </p>
                 <p>
-                  <code>--gate-source local</code> keeps the gate inside this repository, so the demo
-                  is self-contained. A real team references one gate from its organisation&apos;s{" "}
-                  <code>.github</code> repository instead, which a pull request here cannot edit.{" "}
-                  <code>init</code> prints that warning itself.
+                  Because you answered <i>in this repository</i>, the gate itself is in{" "}
+                  <code>redline-gate.yml</code>, so your repository is self-contained. A real team
+                  calls one gate from its organisation&apos;s <code>.github</code> repository
+                  instead, which a pull request here cannot edit. <code>init</code> prints that
+                  warning itself.
                 </p>
               </>
             ),
