@@ -1,4 +1,5 @@
 import { COMMANDS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
+import { LEARN_STEPS, learnHref } from "@/lib/learn";
 import { entriesOfKind, hrefOf, publisherOf, type Kind } from "@/lib/skills-catalog";
 
 export type DocLink = {
@@ -76,42 +77,16 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "overview what is redline oversight ai review standards architecture delivery loop",
       },
       {
-        title: "Quick start",
-        href: "/docs/quickstart",
-        description: "Take a small TypeScript service from no Redline to a merge gate that has earned its rung, one pull request per step.",
-        keywords: "quickstart quick start get started learn step by step walkthrough redline-demo demo onboard first finding explain fix team rule adr security floor dependency review blocking required check exemption evidence rung",
-      },
-      {
-        title: "Tutorial",
-        href: "/docs/tutorial",
-        description: "Write code Redline rejects, see the finding, understand it, fix it, and keep the rules current. Starts from an empty folder; about fifteen minutes.",
-        keywords: "tutorial walkthrough workshop demo first finding try it hands on learn review explain fix playground sandbox new repo",
-        children: [
-          {
-            title: "1. Your first finding",
-            href: "/docs/tutorial/first-finding",
-            description: "Plant four violations in a TypeScript file and watch redline review catch them with no model call.",
-            keywords: "tutorial first finding review staged git add untracked as unknown as ts-ignore todo blocker high",
-          },
-          {
-            title: "2. Ask your assistant",
-            href: "/docs/tutorial/assistant",
-            description: "Run the same review inside Claude Code, Copilot or Cursor with /redline-review, or paste the prompt into any chat.",
-            keywords: "tutorial assistant llm claude copilot cursor slash command redline-review print-prompt pbcopy chat",
-          },
-          {
-            title: "3. Explain and fix",
-            href: "/docs/tutorial/explain-and-fix",
-            description: "Ask Redline what a rule means and who decided it, fix the code, and re-run until it is clean.",
-            keywords: "tutorial explain rule id fix safety comment type predicate no findings clean",
-          },
-          {
-            title: "4. Push and stay current",
-            href: "/docs/tutorial/stay-current",
-            description: "What the gate does on the pull request, and how new standards reach your repository.",
-            keywords: "tutorial push pull request gate observe status drift behind sync verify standards version resync",
-          },
-        ],
+        title: "Learn",
+        href: "/docs/learn",
+        description: "Take a small TypeScript service from no Redline to a merge gate that has earned its rung, one pull request per step. No prior knowledge needed.",
+        keywords: "learn tutorial quickstart quick start get started step by step walkthrough workshop redline-demo demo onboard first finding explain fix team rule adr security floor dependency review blocking required check exemption evidence rung",
+        children: LEARN_STEPS.map((step) => ({
+          title: `${step.n} · ${step.title}`,
+          href: learnHref(step),
+          description: step.summary,
+          keywords: `learn tutorial step ${step.n} ${step.title.toLowerCase()} ${step.tag ?? ""}`,
+        })),
       },
       {
         title: "Onboard a repository",
@@ -194,7 +169,7 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Enforcement ladder",
         href: "/docs/enforcement",
-        description: "Four rungs a repository climbs on evidence — and steps back from without asking.",
+        description: "Three rungs a repository climbs on evidence — and steps back from without asking.",
         keywords: "enforcement ladder rung observe block-blocker block-high promotion evidence demotion market floor advisory blocking",
       },
       {

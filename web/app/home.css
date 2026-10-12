@@ -112,6 +112,10 @@
 }
 .hm-hero-alt {
   position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 0;
   margin: 0 0 24px;
   font-size: 13.5px;
 }
@@ -120,6 +124,26 @@
 }
 .hm-hero-alt a:hover {
   color: var(--red-soft);
+}
+.hm-hero-alt a.hm-hero-learn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+  transition: filter 0.15s, transform 0.15s;
+}
+.hm-hero-alt a.hm-hero-learn:hover {
+  color: #fff;
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+/* The pill carries its own edge; a middot after it would float in the gap. */
+.hm-hero-alt a.hm-hero-learn + a::before {
+  content: none;
+}
+.hm-hero-alt a.hm-hero-learn + a {
+  margin-left: 18px;
 }
 /* Same middot separator the final CTA row uses — two link rows on one page that
    separate their items differently read as two different components. */

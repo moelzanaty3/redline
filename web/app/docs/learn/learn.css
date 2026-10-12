@@ -1,0 +1,414 @@
+/* The Learn path: stepper, progress, tabs, quiz and the term boxes. Colours
+   come from the theme variables, so the light theme needs no overrides beyond
+   the few translucent washes at the end. */
+
+.learn-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---- stepper ---- */
+.learn-stepper ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+.learn-stepper a {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+.learn-stepper a:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+.learn-stepper .is-done a {
+  border-color: rgba(58, 178, 118, 0.6);
+  color: var(--green);
+}
+.learn-stepper .is-current a {
+  border-color: var(--red);
+  background: var(--red);
+  color: #fff;
+}
+
+.learn-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 13px;
+  color: var(--faint);
+}
+.learn-meta a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- step complete ---- */
+.learn-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin: 40px 0 0;
+  padding: 18px 20px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+}
+.learn-done.is-done {
+  border-style: solid;
+  border-color: rgba(58, 178, 118, 0.5);
+  background: rgba(58, 178, 118, 0.06);
+}
+.learn-done button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.learn-done-box {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  font-size: 13px;
+  color: #fff;
+}
+.learn-done.is-done .learn-done-box {
+  border-color: var(--green);
+  background: var(--green);
+  color: #0a0a0a;
+}
+.learn-done-next {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--green);
+}
+
+/* ---- overview path ---- */
+.learn-path {
+  margin: 20px 0 32px;
+}
+.learn-path-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.learn-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.learn-bar span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  transition: width 0.3s;
+}
+.learn-path-reset {
+  background: none;
+  border: 0;
+  color: var(--faint);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.learn-path ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.learn-path li a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.learn-path-n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.learn-path li.is-done .learn-path-n {
+  border-color: var(--green);
+  background: var(--green);
+  color: #0a0a0a;
+}
+.learn-path-body {
+  display: grid;
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.learn-path-body b {
+  color: var(--text);
+  font-size: 14.5px;
+}
+.learn-path-meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--faint);
+}
+.learn-path-go {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+}
+.learn-path-go:hover {
+  filter: brightness(1.1);
+}
+.learn-path-go-done {
+  margin-top: 16px;
+  color: var(--green);
+}
+@media (max-width: 560px) {
+  .learn-path-meta {
+    display: none;
+  }
+}
+
+/* ---- tabs ---- */
+.learn-tabs {
+  margin: 18px 0 26px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.learn-tabs [role="tablist"] {
+  display: flex;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+.learn-tabs [role="tab"] {
+  padding: 10px 16px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.learn-tabs [role="tab"]:hover {
+  color: var(--text);
+}
+.learn-tabs [role="tab"][aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--red);
+  font-weight: 600;
+}
+.learn-tabpanel {
+  padding: 4px 18px 6px;
+}
+.learn-tabpanel > p,
+.learn-tabpanel > ul {
+  max-width: 60ch;
+}
+
+/* ---- quiz ---- */
+.learn-quiz {
+  margin: 30px 0;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.learn-quiz-label {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.learn-quiz-q {
+  margin: 0 0 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.learn-quiz ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.learn-quiz li button {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.learn-quiz li button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.learn-quiz li button.is-right {
+  border-color: var(--green);
+  color: var(--text);
+}
+.learn-quiz li button.is-wrong {
+  border-color: var(--amber);
+  color: var(--text);
+}
+.learn-quiz-letter {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+  padding-top: 2px;
+}
+.learn-quiz-why {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.learn-quiz-why.is-right {
+  background: rgba(58, 178, 118, 0.09);
+}
+.learn-quiz-why.is-wrong {
+  background: rgba(214, 158, 46, 0.1);
+}
+.learn-quiz-why b {
+  color: var(--text);
+}
+.learn-quiz code {
+  font-size: 12.5px;
+}
+
+/* ---- new terms ---- */
+.learn-term {
+  max-width: 60ch;
+  margin: 14px 0 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+}
+.learn-term > summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+}
+.learn-term-tag {
+  margin-right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(82, 168, 255, 0.14);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.learn-term > div {
+  padding: 0 14px 12px;
+  color: var(--muted);
+}
+.learn-term p + p {
+  margin-top: 8px;
+}
+
+/* ---- inside .prose ----
+   The docs prose underlines every link in a list item and gives every list a
+   margin and a column layout. These lists are controls, not running text. */
+.prose .learn-stepper ol,
+.prose .learn-path ol,
+.prose .learn-quiz ul {
+  margin: 0;
+  color: inherit;
+}
+.prose .learn-stepper ol {
+  flex-direction: row;
+  margin-bottom: 14px;
+}
+.prose .learn-path li a,
+.prose .learn-stepper li a {
+  text-decoration: none;
+  color: inherit;
+}
+.prose .learn-stepper .is-current a {
+  color: #fff;
+}
+.prose .learn-stepper .is-done a {
+  color: var(--green);
+}
+.learn-path li a:hover {
+  border-color: rgba(230, 0, 0, 0.45);
+  background: var(--bg-soft);
+}
+.learn-path li a:hover .learn-path-n {
+  border-color: var(--red);
+  color: var(--text);
+}
+.learn-path li a:hover .learn-path-body b {
+  color: var(--red-soft);
+}
+.learn-path li a::after {
+  content: "→";
+  flex: none;
+  color: var(--faint);
+  transition: transform 0.15s, color 0.15s;
+}
+.learn-path li a:hover::after {
+  color: var(--red-soft);
+  transform: translateX(3px);
+}

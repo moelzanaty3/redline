@@ -33,6 +33,7 @@ export const PRODUCT_BLURB =
 export type NavLink = { readonly href: string; readonly label: string };
 
 export const NAV_LINKS: readonly NavLink[] = [
+  { href: "/docs/learn", label: "Learn" },
   { href: "/docs", label: "Docs" },
   { href: "/docs/standards", label: "Standards" },
   { href: "/docs/skills", label: "Skills" },

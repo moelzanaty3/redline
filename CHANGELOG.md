@@ -7,6 +7,16 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### Site — Learn replaces Quick start and Tutorial
+
+The docs had two beginner paths that overlapped: Quick start, one long page following
+`redline-demo`, and a four-page Tutorial on a throwaway folder. They are now one path,
+`/docs/learn`: an overview and a page per step, each with what you will learn, new terms
+explained where they first appear, tabs for each way of following along, and a short question
+to check understanding. Progress is ticked off per step and kept in the browser only. The
+Tutorial's unique parts moved in: the no-GitHub path, `/redline-review` in an assistant, and
+how new rules arrive. The old URLs redirect. The home page and the header link to Learn.
+
 ### CLI — the onboarding pull request passes the gate it installs
 
 `redline init`'s pull request failed two of the checks it adds: it had no `## Launch readiness`

@@ -27,6 +27,15 @@ const nextConfig = {
       destination: "/docs/onboarding",
       permanent: true,
     },
+    // Quick start (one long page) and the four-page Tutorial were merged into
+    // Learn: one path, a page per step. Both were linked from the home page and
+    // the README of the demo repository, so the old addresses keep working.
+    { source: "/docs/quickstart", destination: "/docs/learn", permanent: true },
+    { source: "/docs/tutorial", destination: "/docs/learn", permanent: true },
+    { source: "/docs/tutorial/first-finding", destination: "/docs/learn/first-finding", permanent: true },
+    { source: "/docs/tutorial/assistant", destination: "/docs/learn/first-finding", permanent: true },
+    { source: "/docs/tutorial/explain-and-fix", destination: "/docs/learn/explain-and-fix", permanent: true },
+    { source: "/docs/tutorial/stay-current", destination: "/docs/learn/next-steps", permanent: true },
   ],
 };
 

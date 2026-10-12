@@ -110,6 +110,12 @@ export default async function Home() {
             {/* "See a finding ↓" is gone: the finding is in the hero now, and a
                 link down to it was the hero apologising for not having one. */}
             <p className="hm-hero-alt hm-hero-in" style={{ animationDelay: "290ms" }}>
+              {/* The command is for someone who already knows they want it. The
+                  reader who has never heard of Redline needs somewhere to start
+                  that is not their own repository. */}
+              <Link className="hm-hero-learn" href="/docs/learn">
+                New here? Learn Redline step by step →
+              </Link>
               <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
                 {GITHUB_REPO} on GitHub
               </a>
@@ -426,7 +432,7 @@ export default async function Home() {
             <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
           </div>
           <p className="hm-cta-links">
-            <Link href="/docs/quickstart">Quick start</Link>
+            <Link href="/docs/learn">Learn Redline</Link>
             <Link href="/docs">Documentation</Link>
             <Link href="/docs/standards">The {ruleCount} rules</Link>
             <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">

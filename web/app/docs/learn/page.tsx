@@ -1,0 +1,101 @@
+import type { Metadata } from "next";
+import { DocsPage } from "@/components/docs-page";
+import { LearnPath, Quiz } from "@/components/learn/interactive";
+import { PackageBadge } from "@/components/package-badge";
+import { DEMO_URL, LEARN_MINUTES, LEARN_STEPS } from "@/lib/learn";
+import { browserRegistry, packageState } from "@/lib/package-version";
+import "./learn.css";
+
+export const metadata: Metadata = { title: "Learn Redline" };
+
+export default async function Page() {
+  const state = await packageState();
+
+  return (
+    <DocsPage
+      crumb="Getting Started / Learn"
+      title="Learn Redline"
+      intro={`Take a small TypeScript service from no Redline at all to a merge gate that has earned the right to block. ${LEARN_STEPS.length} short pages, about ${LEARN_MINUTES} minutes. No prior knowledge of Redline needed: every new idea is explained where you first meet it.`}
+      href="/docs/learn"
+    >
+      <PackageBadge initial={state} registry={browserRegistry()} />
+
+      <h2>Redline in one minute</h2>
+      <p>
+        Coding assistants write a lot of code, quickly. A reviewer reading that code cannot hold
+        every rule the team cares about in their head: no secrets in code, validate what comes
+        in from outside, no <code>as unknown as</code> to make the compiler stop complaining.
+        Redline writes those rules down once, and checks them in three places:
+      </p>
+      <ol>
+        <li>
+          <b>While the code is written.</b> The rules are rendered into the files your assistant
+          reads on every request: <code>AGENTS.md</code>, <code>CLAUDE.md</code>, the Copilot
+          instructions and the Cursor rules.
+        </li>
+        <li>
+          <b>Before you push.</b> <code>redline review</code> checks your change on your machine,
+          and <code>/redline-review</code> asks your assistant to do the same.
+        </li>
+        <li>
+          <b>On the pull request.</b> A merge gate runs the same checks again, plus a few only a
+          pipeline can do: a secret scan, a vulnerable-dependency check, a checklist.
+        </li>
+      </ol>
+      <p>
+        It also counts which rules people act on, so a team can tell the rules that catch real
+        bugs from the ones that only make noise.
+      </p>
+
+      <h2>How this path works</h2>
+      <p>
+        You follow one real repository,{" "}
+        <a href={DEMO_URL} rel="noopener noreferrer" target="_blank">
+          redline-demo
+        </a>
+        . Each step is one pull request there, merged and tagged <code>step-00</code> to{" "}
+        <code>step-09</code>, so at every step you can see exactly what the repository held.
+        Step 00 helps you choose how to follow along:
+      </p>
+      <ul>
+        <li>
+          <b>Read along:</b> clone the finished demo and check out each step. Nothing to set up
+          beyond git.
+        </li>
+        <li>
+          <b>Build it yourself on GitHub:</b> make your own copy and run every command. The most
+          you will learn, and the only way to see the gate on your own pull requests.
+        </li>
+        <li>
+          <b>Only on your machine:</b> no GitHub needed. Steps 00 to 04 work fully; from step 05
+          on, read along.
+        </li>
+      </ul>
+      <p>
+        Mark each step complete as you go. Your progress is kept in this browser only.
+      </p>
+
+      <h2>The steps</h2>
+      <LearnPath />
+
+      <Quiz
+        question="A rule is broken in a pull request. Where can Redline first notice it?"
+        options={[
+          {
+            text: "Only on the pull request, when the merge gate runs",
+            why: "The gate is the last place, not the first. The same rules reach your assistant and your terminal before anything is pushed.",
+          },
+          {
+            text: "While the code is being written, because the assistant reads the rules",
+            correct: true,
+            why: "The rules are in AGENTS.md, CLAUDE.md and the other assistant files, so a well-behaved assistant avoids the mistake before there is anything to review. The local review and the gate catch what slips through.",
+          },
+          {
+            text: "After it is merged, in a weekly report",
+            why: "Redline does report on rules over time, but its checks run before the merge: in the editor, on your machine and on the pull request.",
+          },
+        ]}
+      />
+    </DocsPage>
+  );
+}
