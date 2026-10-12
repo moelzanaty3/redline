@@ -164,7 +164,17 @@ jobs:
             block-high) fail_on=HIGH ;;
             *) fail_on=BLOCKER ;;
           esac
-          npx --yes "redlinegate@${REDLINE_CLI_VERSION}" policy \
+          # Installed into a directory of its own and run from there, not with npx
+          # from the checkout. npm reads the checkout's package.json before it
+          # does anything, and one whose devEngines names pnpm, yarn or bun —
+          # which `pnpm init` writes by default — makes npm 10.9+ refuse to run
+          # npx at all, failing this job on every pull request. Installing
+          # elsewhere also keeps the pull request's own lockfile and node_modules
+          # out of the tool that judges it. Still run from the checkout, so it
+          # reads this repository's .redline.json.
+          npm install --prefix "$RUNNER_TEMP/redline" --no-save --no-audit --no-fund --ignore-scripts \
+            "redlinegate@${REDLINE_CLI_VERSION}" > /dev/null
+          "$RUNNER_TEMP/redline/node_modules/.bin/redline" policy \
             --diff-file /tmp/redline.diff --fail-on "$fail_on"
 
   dependency-review:

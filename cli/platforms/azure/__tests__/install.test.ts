@@ -301,7 +301,11 @@ test('installGate writes the azure pipeline and PR template', async () => {
   // the public registry. The gate must pin npx to redlinegate explicitly,
   // never resolve `redline@<version>` directly.
   assert.doesNotMatch(yml, /npx --yes redline@/);
-  assert.match(yml, /npx --yes --package=redlinegate@latest redline verify --gate/);
+  // Installed outside the checkout and run from there: npx inside it is refused
+  // outright when the repository's package.json names pnpm in devEngines.
+  assert.doesNotMatch(yml, /npx --yes/);
+  assert.match(yml, /--ignore-scripts redlinegate@latest /);
+  assert.match(yml, /"\$\(Agent\.TempDirectory\)\/redline\/node_modules\/\.bin\/redline" verify --gate/);
 
   // Regression guard: the access token must never be interpolated into a
   // curl argv (visible to `ps`/`/proc/<pid>/cmdline`) — it is passed via a
@@ -937,7 +941,7 @@ test('installGate pins the npx version in the rendered pipeline', async () => {
   const cwd = tmp();
   await createAzureInstall(fakeAzure(registrationRoutes), gitFor, '3.1.4').installGate(ref, cwd, gateOpts);
   const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
-  assert.match(yml, /--package=redlinegate@3\.1\.4 redline verify --gate/);
+  assert.match(yml, /--ignore-scripts redlinegate@3\.1\.4 /);
   assert.doesNotMatch(yml, /redlinegate@latest/);
 });
 
@@ -949,7 +953,7 @@ test('an unpublished development build leaves @latest in place rather than pinni
     gateOpts
   );
   const yml = readFileSync(join(cwd, '.azuredevops/redline-gate.yml'), 'utf8');
-  assert.match(yml, /--package=redlinegate@latest redline verify --gate/);
+  assert.match(yml, /--ignore-scripts redlinegate@latest /);
 });
 
 // GitHub implements the redline-exempt / redline-sync escape hatch in the
