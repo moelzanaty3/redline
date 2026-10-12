@@ -60,7 +60,7 @@ export default async function Page() {
       <h2>Run the review</h2>
       <CodeWindow title="terminal" copyText={review}>
         <span className="tk-prompt">$</span> <span className="tk-white">{review}</span>{"\n"}
-        <span className="tk-dim">profile typescript — rules in scope: core, typescript</span>{"\n"}
+        <span className="tk-dim">profile javascript-typescript — rules in scope: core, typescript</span>{"\n"}
         src/user.ts:3{"\n"}
         {"  "}<span className="tk-amber">Redline/HIGH</span> [core/untracked-todo]: this TODO carries no ticket reference, so nothing will bring anyone back to it.{"\n"}
         src/user.ts:5{"\n"}

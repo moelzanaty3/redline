@@ -11,12 +11,13 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 Some profile names said nothing to someone choosing one: `tooling` for a plain TypeScript project,
 `vanilla`, `rn`, a bare `infra`. Profiles now follow one rule, `<kind>-<technology>` in full
-words, or the language alone when there is no framework.
+words; with no framework, the languages and platform the rules cover (javascript-typescript,
+javascript-typescript-browser).
 
 | Was | Now |
 |---|---|
-| `tooling` | `typescript` |
-| `web-vanilla` | `web-typescript` |
+| `tooling` | `javascript-typescript` |
+| `web-vanilla` | `javascript-typescript-browser` |
 | `web-next` | `web-nextjs` |
 | `mobile-rn` | `mobile-react-native` |
 | `infra` | `infra-terraform` |
@@ -27,7 +28,7 @@ words, or the language alone when there is no framework.
   `.redline.json`, `sync-targets.txt`. A repository is recorded under the new name on its next
   `init` or sync; until then nothing changes but the marker line in its artifacts.
 - Detection now recognises TypeScript with no framework (`tsconfig.json`, or a `typescript`
-  dependency) as `typescript` with confidence. The menu used to call such a repository a guess.
+  dependency) as `javascript-typescript` with confidence. The menu used to call such a repository a guess.
 
 ### Gate — a repository whose package.json names pnpm no longer fails the policy job
 

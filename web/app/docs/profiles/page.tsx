@@ -9,7 +9,7 @@ const PROFILES: ReadonlyArray<readonly [string, string]> = [
   ["web-angular", "javascript · angular"],
   ["web-vue", "javascript · vue"],
   ["web-svelte", "javascript · svelte / sveltekit"],
-  ["web-typescript", "javascript · browser / dom, no framework"],
+  ["javascript-typescript-browser", "javascript · typescript · browser / dom, no framework"],
   ["mobile-react-native", "javascript · react · react-native"],
   ["mobile-android", "kotlin"],
   ["mobile-ios", "swift"],
@@ -21,14 +21,14 @@ const PROFILES: ReadonlyArray<readonly [string, string]> = [
   ["service-dotnet", "microservices · csharp"],
   ["fullstack-react-node", "javascript · react · microservices · nodejs"],
   ["infra-terraform", "terraform / hcl"],
-  ["typescript", "javascript · typescript, no framework: CLIs, libraries, scripts"],
+  ["javascript-typescript", "javascript · typescript, no framework: CLIs, libraries, scripts"],
   ["typescript-effect", "effect, added on top of another profile"],
 ];
 
 // standards/manifest.json profileAliases — the names standards 0.2.2 replaced.
 const RENAMED: ReadonlyArray<readonly [string, string]> = [
-  ["tooling", "typescript"],
-  ["web-vanilla", "web-typescript"],
+  ["tooling", "javascript-typescript"],
+  ["web-vanilla", "javascript-typescript-browser"],
   ["web-next", "web-nextjs"],
   ["mobile-rn", "mobile-react-native"],
   ["infra", "infra-terraform"],
@@ -81,7 +81,8 @@ export default function Page() {
       <p>
         <code>&lt;kind&gt;-&lt;technology&gt;</code>, in full words:{" "}
         <code>web-react</code>, <code>service-go</code>, <code>infra-terraform</code>. With
-        no framework, the language alone: <code>typescript</code>. No abbreviations and no
+        no framework, the languages and platform the rules cover: <code>javascript-typescript</code>,{" "}
+        <code>javascript-typescript-browser</code>. No abbreviations and no
         slang, because the name is all a reader has when picking one.
       </p>
       <p>
@@ -127,7 +128,7 @@ export default function Page() {
         rules say in their own scope section that they do not apply to Nest.
       </p>
       <p>
-        <code>web-typescript</code> is never proposed by detection, only chosen.
+        <code>javascript-typescript-browser</code> is never proposed by detection, only chosen.
         Plain browser JavaScript and a build script are indistinguishable from
         the outside, and guessing wrong installs DOM rules on a repo with no DOM.
         Its rule set covers what a framework normally hides:{" "}

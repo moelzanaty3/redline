@@ -6,9 +6,9 @@ import { proposeProfile } from '../stack.ts';
 
 const manifest = loadManifest(fileURLToPath(new URL('../../../', import.meta.url)));
 
-test('an empty repo falls back to typescript with low confidence', () => {
+test('an empty repo falls back to javascript-typescript with low confidence', () => {
   const p = proposeProfile({ paths: [] });
-  assert.equal(p.profile, 'typescript');
+  assert.equal(p.profile, 'javascript-typescript');
   assert.equal(p.confidence, 'low');
 });
 
@@ -102,21 +102,21 @@ test('svelte beats react when both appear', () => {
   assert.equal(p.profile, 'web-svelte');
 });
 
-// web-typescript is never proposed: "plain browser JS" and "a build script" look
+// javascript-typescript-browser is never proposed: "plain browser JS" and "a build script" look
 // identical from the outside, and guessing wrong installs DOM rules on a repo
 // with no DOM. It is chosen in the menu or with --profile.
-test('plain js with no framework signal stays typescript', () => {
+test('plain js with no framework signal stays javascript-typescript', () => {
   const p = proposeProfile({ paths: ['package.json', 'index.html', 'src/main.js'] });
-  assert.equal(p.profile, 'typescript');
+  assert.equal(p.profile, 'javascript-typescript');
   assert.equal(p.confidence, 'low');
 });
 
 // TypeScript with no framework is a shape of its own — a CLI, a library, a
 // small service — not a guess: the menu used to say "nothing here names this
 // framework" about a repository with a tsconfig.json in its root.
-test('a tsconfig.json or a typescript dependency is a confident typescript', () => {
+test('a tsconfig.json or a typescript dependency is a confident javascript-typescript', () => {
   const byConfig = proposeProfile({ paths: ['package.json', 'tsconfig.json', 'src/users.ts'] });
-  assert.equal(byConfig.profile, 'typescript');
+  assert.equal(byConfig.profile, 'javascript-typescript');
   assert.equal(byConfig.confidence, 'high');
   const byDep = proposeProfile({
     paths: ['package.json', 'src/users.ts'],
@@ -274,5 +274,5 @@ test('an effect dependency adds typescript-effect on top of the detected profile
 
 test('effect alone still proposes a base profile', () => {
   const p = proposeProfile({ paths: ['package.json'], packageJson: { devDependencies: { effect: '3' } } });
-  assert.equal(p.profile, 'typescript,typescript-effect');
+  assert.equal(p.profile, 'javascript-typescript,typescript-effect');
 });

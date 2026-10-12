@@ -28,7 +28,7 @@ test('each framework profile carries javascript, typescript and its own stack', 
     ['web-angular', 'angular'],
     ['web-vue', 'vue'],
     ['web-svelte', 'svelte'],
-    ['web-typescript', 'dom'],
+    ['javascript-typescript-browser', 'dom'],
   ] as const) {
     assert.deepEqual(resolveProfile(manifest, name).stacks, ['javascript', 'typescript', stack]);
   }
@@ -39,8 +39,8 @@ test('each framework profile carries javascript, typescript and its own stack', 
 // still resolves — and is recorded under the new name from then on.
 test('every old profile name resolves to the profile it was renamed to', () => {
   for (const [old, now] of [
-    ['tooling', 'typescript'],
-    ['web-vanilla', 'web-typescript'],
+    ['tooling', 'javascript-typescript'],
+    ['web-vanilla', 'javascript-typescript-browser'],
     ['web-next', 'web-nextjs'],
     ['mobile-rn', 'mobile-react-native'],
     ['infra', 'infra-terraform'],

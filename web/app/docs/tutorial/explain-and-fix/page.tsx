@@ -56,7 +56,7 @@ export default async function Page() {
         {"  "}<span className="tk-dim">decided by</span>   a checker, with no model call{"\n"}
         {"  "}<span className="tk-dim">defined in</span>   standards/core.md:87{"\n"}
         {"  "}<span className="tk-dim">applies to</span>   every file — the core standard is not scoped by stack{"\n"}
-        {"  "}<span className="tk-dim">reaches</span>      typescript, web-react, web-nextjs, … every profile
+        {"  "}<span className="tk-dim">reaches</span>      javascript-typescript, web-react, web-nextjs, … every profile
       </CodeWindow>
       <p>
         It tells you three things a finding alone does not: the full rule,
@@ -90,7 +90,7 @@ export default async function Page() {
       <CodeWindow title="terminal" copyText={`${RESTAGE}\n${review}`}>
         <span className="tk-prompt">$</span> <span className="tk-white">{RESTAGE}</span>{"\n"}
         <span className="tk-prompt">$</span> <span className="tk-white">{review}</span>{"\n"}
-        <span className="tk-dim">profile typescript — rules in scope: core, typescript</span>{"\n"}
+        <span className="tk-dim">profile javascript-typescript — rules in scope: core, typescript</span>{"\n"}
         <span className="tk-green">no findings</span>
       </CodeWindow>
       <p>

@@ -160,7 +160,7 @@ const RULES: Rule[] = [
   // script, a small service. Without this the repository fell through to the
   // fallback below and the menu called a plain TypeScript project a guess.
   {
-    profile: 'typescript',
+    profile: 'javascript-typescript',
     when: (s) =>
       s.has('tsconfig.json') || s.dep('typescript') ? sure('tsconfig.json or typescript dependency') : null,
   },
@@ -178,7 +178,7 @@ export function proposeProfile(input: DetectInput): Proposal {
     dep: (name) => name in deps,
   };
 
-  let base: Proposal = { profile: 'typescript', confidence: 'low', evidence: ['no recognised stack signal'] };
+  let base: Proposal = { profile: 'javascript-typescript', confidence: 'low', evidence: ['no recognised stack signal'] };
   for (const rule of RULES) {
     const match = rule.when(signals);
     if (match) {

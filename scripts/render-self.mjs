@@ -7,7 +7,7 @@ import { render } from '../cli/render/standards.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
-const result = render({ root, profile: 'typescript', out: root, check });
+const result = render({ root, profile: 'javascript-typescript', out: root, check });
 
 if (result.stale.length) {
   console.error(`Rendered output is stale. Run: node scripts/render-self.mjs\n  ${result.stale.join('\n  ')}`);

@@ -118,7 +118,7 @@ export default async function Page() {
       </p>
       <CodeWindow title="terminal" copyText={init}>
         <span className="tk-prompt">$</span> <span className="tk-white">{init}</span>{"\n"}
-        {"  "}profile typescript{"\n"}
+        {"  "}profile javascript-typescript{"\n"}
         {"  "}<span className="tk-amber">▲</span> this repository has no git remote, so Redline installed the rules and{"\n"}
         {"    "}the local review only. The merge gate, branch policy, labels and security{"\n"}
         {"    "}floor need a host: add a remote and run redline init again to install them{"\n"}

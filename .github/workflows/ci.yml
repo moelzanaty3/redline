@@ -59,7 +59,7 @@ jobs:
             echo "::error::policy found nothing in a diff carrying a BLOCKER"
             exit 1
           fi
-          node dist/bin/redline.js review --engine embedded --profile typescript --diff-file "$RUNNER_TEMP/smoke.diff" > /dev/null
+          node dist/bin/redline.js review --engine embedded --profile javascript-typescript --diff-file "$RUNNER_TEMP/smoke.diff" > /dev/null
 
   lint:
     runs-on: ubuntu-latest
