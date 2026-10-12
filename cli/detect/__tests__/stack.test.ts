@@ -6,9 +6,9 @@ import { proposeProfile } from '../stack.ts';
 
 const manifest = loadManifest(fileURLToPath(new URL('../../../', import.meta.url)));
 
-test('an empty repo falls back to tooling with low confidence', () => {
+test('an empty repo falls back to javascript-typescript with low confidence', () => {
   const p = proposeProfile({ paths: [] });
-  assert.equal(p.profile, 'tooling');
+  assert.equal(p.profile, 'javascript-typescript');
   assert.equal(p.confidence, 'low');
 });
 
@@ -24,15 +24,15 @@ test('react-native in dependencies beats plain react', () => {
     paths: ['package.json', 'src/App.tsx'],
     packageJson: { dependencies: { react: '19.0.0', 'react-native': '0.76.0' } },
   });
-  assert.equal(p.profile, 'mobile-rn');
+  assert.equal(p.profile, 'mobile-react-native');
 });
 
-test('nest plus react in one repo is fullstack-node', () => {
+test('nest plus react in one repo is fullstack-react-node', () => {
   const p = proposeProfile({
     paths: ['package.json', 'apps/web/src/App.tsx', 'apps/api/src/main.ts', 'apps/api/nest-cli.json'],
     packageJson: { dependencies: { react: '19.0.0', '@nestjs/core': '11.0.0' } },
   });
-  assert.equal(p.profile, 'fullstack-node');
+  assert.equal(p.profile, 'fullstack-react-node');
 });
 
 test('nest without react is a node service', () => {
@@ -102,13 +102,27 @@ test('svelte beats react when both appear', () => {
   assert.equal(p.profile, 'web-svelte');
 });
 
-// web-vanilla is never proposed: "plain browser JS" and "a build script" look
+// javascript-typescript-browser is never proposed: "plain browser JS" and "a build script" look
 // identical from the outside, and guessing wrong installs DOM rules on a repo
 // with no DOM. It is chosen in the menu or with --profile.
-test('plain js with no framework signal stays tooling', () => {
+test('plain js with no framework signal stays javascript-typescript', () => {
   const p = proposeProfile({ paths: ['package.json', 'index.html', 'src/main.js'] });
-  assert.equal(p.profile, 'tooling');
+  assert.equal(p.profile, 'javascript-typescript');
   assert.equal(p.confidence, 'low');
+});
+
+// TypeScript with no framework is a shape of its own — a CLI, a library, a
+// small service — not a guess: the menu used to say "nothing here names this
+// framework" about a repository with a tsconfig.json in its root.
+test('a tsconfig.json or a typescript dependency is a confident javascript-typescript', () => {
+  const byConfig = proposeProfile({ paths: ['package.json', 'tsconfig.json', 'src/users.ts'] });
+  assert.equal(byConfig.profile, 'javascript-typescript');
+  assert.equal(byConfig.confidence, 'high');
+  const byDep = proposeProfile({
+    paths: ['package.json', 'src/users.ts'],
+    packageJson: { devDependencies: { typescript: '5.7.0' } },
+  });
+  assert.equal(byDep.confidence, 'high');
 });
 
 test('maven and java sources mean a java service', () => {
@@ -138,9 +152,9 @@ test('an App.xcodeproj directory marker means mobile-ios even without swift sour
   assert.equal(p.profile, 'mobile-ios');
 });
 
-test('terraform alone means infra', () => {
+test('terraform alone means infra-terraform', () => {
   const p = proposeProfile({ paths: ['main.tf', 'variables.tf'] });
-  assert.equal(p.profile, 'infra');
+  assert.equal(p.profile, 'infra-terraform');
 });
 
 test('a csproj means a dotnet service', () => {
@@ -192,7 +206,7 @@ test('next wins over react, by its dependency or its config file', () => {
     { paths: ['next.config.mjs'], packageJson: { dependencies: { react: '19' } } },
   ]) {
     const { profile, confidence } = proposeProfile(input);
-    assert.equal(profile, 'web-next');
+    assert.equal(profile, 'web-nextjs');
     assert.equal(confidence, 'high');
   }
 });
@@ -223,7 +237,7 @@ test('an express service is proposed from its dependency', () => {
 test('express as a dev dependency never outranks the front-end framework', () => {
   for (const [deps, expected] of [
     [{ dependencies: { react: '19' }, devDependencies: { express: '4' } }, 'web-react'],
-    [{ dependencies: { next: '15', react: '19' }, devDependencies: { express: '4' } }, 'web-next'],
+    [{ dependencies: { next: '15', react: '19' }, devDependencies: { express: '4' } }, 'web-nextjs'],
     [{ dependencies: { vue: '3' }, devDependencies: { express: '4' } }, 'web-vue'],
   ] as const) {
     assert.equal(proposeProfile({ paths: ['package.json'], packageJson: deps }).profile, expected);
@@ -246,12 +260,12 @@ test('a nest service that also depends on express stays service-node', () => {
 // Effect is a library a repository of any shape can use, so it is added to the
 // detected profile rather than replacing it — a Nest service on Effect still
 // needs the Nest rules.
-test('an effect dependency adds lib-effect on top of the detected profile', () => {
+test('an effect dependency adds typescript-effect on top of the detected profile', () => {
   const p = proposeProfile({
     paths: ['package.json', 'nest-cli.json'],
     packageJson: { dependencies: { '@nestjs/core': '11', effect: '3' } },
   });
-  assert.equal(p.profile, 'service-node,lib-effect');
+  assert.equal(p.profile, 'service-node,typescript-effect');
   assert.ok(p.evidence.includes('effect dependency'));
   for (const name of p.profile.split(',')) {
     assert.ok(manifest.profiles[name], `proposed unknown profile "${name}"`);
@@ -260,5 +274,5 @@ test('an effect dependency adds lib-effect on top of the detected profile', () =
 
 test('effect alone still proposes a base profile', () => {
   const p = proposeProfile({ paths: ['package.json'], packageJson: { devDependencies: { effect: '3' } } });
-  assert.equal(p.profile, 'tooling,lib-effect');
+  assert.equal(p.profile, 'javascript-typescript,typescript-effect');
 });

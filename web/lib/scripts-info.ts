@@ -43,7 +43,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     action: "Run it (without --check) locally right after adding a new rule bullet to standards/ — it assigns the id for you rather than you inventing one by hand.",
   },
   "render-self": {
-    what: "Renders this repository's own standards artifacts (AGENTS.md, CLAUDE.md, .github/copilot-instructions.md) using the same TypeScript renderer (cli/render/standards.ts) that product repos get via redline init, profile tooling.",
+    what: "Renders this repository's own standards artifacts (AGENTS.md, CLAUDE.md, .github/copilot-instructions.md) using the same TypeScript renderer (cli/render/standards.ts) that product repos get via redline init, profile javascript-typescript.",
     runsIn: "This (source) repo.",
     trigger: "CI (.github/workflows/ci.yml), job validate, step \"Rendered artifacts are current\", always with --check. Also referenced by workflows/redline-sync.yml, which is disabled in Phase 1 — see the Workflows section.",
     command: [

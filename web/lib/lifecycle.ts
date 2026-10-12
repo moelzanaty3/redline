@@ -14,7 +14,7 @@ export type Step = { label: string; detail: string };
 // --- standards ---------------------------------------------------------------
 
 // Which profiles pull a stack in, following `extends` — react-native extends
-// react, so a repo on the mobile-rn profile gets the react rules too and a page
+// react, so a repo on the mobile-react-native profile gets the react rules too and a page
 // that listed only direct membership would be wrong.
 export function profilesIncluding(stack: string): string[] {
   const { profiles, stacks } = loadManifest();

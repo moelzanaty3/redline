@@ -34,7 +34,7 @@ test('a file no stack covers is reported, not silently dropped', () => {
 });
 
 test('the profile order is preserved, so a stack comes after the one it extends', () => {
-  const scope = resolveScope(manifest, 'mobile-rn', ['src/App.native.tsx', 'src/util.ts']);
+  const scope = resolveScope(manifest, 'mobile-react-native', ['src/App.native.tsx', 'src/util.ts']);
 
   const react = scope.stacks.indexOf('react');
   const rn = scope.stacks.indexOf('react-native');

@@ -236,7 +236,7 @@ pnpm test`}
       <p>One command, from the repository root:</p>
       <Terminal
         commands={rl("init --gate-source local")}
-        output={`  profile tooling
+        output={`  profile javascript-typescript
   Files  21 written
    + AGENTS.md
    + CLAUDE.md
@@ -287,7 +287,7 @@ pnpm test`}
       <Terminal
         commands={`git add src/user.ts
 ${rl("review")}`}
-        output={`profile tooling — rules in scope: core, typescript
+        output={`profile javascript-typescript — rules in scope: core, typescript
 src/user.ts:3
   Redline/HIGH [core/untracked-todo]: this TODO carries no ticket reference, so nothing will bring anyone back to it.
 src/user.ts:5
@@ -335,7 +335,7 @@ gh pr create --fill`}
       <Terminal
         commands={`git add src/user.ts
 ${rl("review")}`}
-        output={`profile tooling — rules in scope: core, typescript
+        output={`profile javascript-typescript — rules in scope: core, typescript
 no findings`}
       />
       <p>Push it; every check on the pull request goes green.</p>

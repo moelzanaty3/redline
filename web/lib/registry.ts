@@ -31,7 +31,7 @@ export const STANDARDS: RegistryEntry[] = [
 export const SCRIPTS: RegistryEntry[] = [
   { slug: "validate", title: "validate.mjs", file: "scripts/validate.mjs", description: "Bundle self-check run by this repo's CI — manifest integrity, rule ids, ruleset/workflow files, the seed corpus." },
   { slug: "assign-rule-ids", title: "assign-rule-ids.mjs", file: "scripts/assign-rule-ids.mjs", description: "Assigns a permanent id to every rule missing one, and rewrites standards/ in place." },
-  { slug: "render-self", title: "render-self.mjs", file: "scripts/render-self.mjs", description: "Renders this repo's own standards artifacts with the CLI's TypeScript renderer, profile tooling." },
+  { slug: "render-self", title: "render-self.mjs", file: "scripts/render-self.mjs", description: "Renders this repo's own standards artifacts with the CLI's TypeScript renderer, profile javascript-typescript." },
   { slug: "check-pins", title: "check-pins.mjs", file: "scripts/check-pins.mjs", description: "Re-resolves SHA-pinned third-party actions against the tag they claim." },
   { slug: "score-seeds", title: "score-seeds.mjs", file: "scripts/score-seeds.mjs", description: "Scores a reviewer's PR comments against the seeded corpus: BLOCKER recall, false positives, rule attribution." },
   { slug: "collect-telemetry", title: "collect-telemetry.mjs", file: "scripts/collect-telemetry.mjs", description: "Nightly central pull of review outcomes across the org — runs in the redline-metrics repo." },
