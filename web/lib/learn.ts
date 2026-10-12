@@ -16,7 +16,7 @@ export type LearnStep = {
   // The demo's git tag and pull request for this step, when it has them.
   tag?: string;
   pr?: number;
-  // From step 01 the reader works in their own repository on GitHub.
+  // Step 00 puts the reader's own repository on GitHub; every step after works there.
   needsGitHub: boolean;
 };
 
@@ -25,10 +25,10 @@ export const LEARN_STEPS: LearnStep[] = [
     slug: "starting-point",
     n: "00",
     title: "The starting point",
-    summary: "Get the starter files into your own repository, and see what it holds.",
+    summary: "Get the starter files into a GitHub repository of your own, and see what it holds.",
     minutes: 5,
     tag: "step-00",
-    needsGitHub: false,
+    needsGitHub: true,
   },
   {
     slug: "onboard",

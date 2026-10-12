@@ -19,30 +19,6 @@ export default async function Page() {
         "Why every repository starts at observe, where findings are reported but nothing is blocked",
       ]}
     >
-      <h2>Put your repository on GitHub</h2>
-      <p>
-        The checks Redline adds run on pull requests, so your repository from step 00 needs to be
-        on GitHub. From its root, with the{" "}
-        <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">
-          GitHub CLI
-        </a>{" "}
-        signed in (<code>gh auth login</code>):
-      </p>
-      <Terminal commands="gh repo create my-redline-demo --public --source . --remote origin --push" />
-      <p>
-        That creates a new repository under your own account and pushes your <code>main</code> to
-        it. Everything from here on happens there; the demo is only ever read from.
-      </p>
-      <div className="callout info">
-        <span className="ic">ℹ</span>
-        <p>
-          Make it <b>public</b>. Dependency review and secret scanning, which step 06 relies on, are
-          free on public repositories and need GitHub Advanced Security on private ones. From here
-          on, merge each step&apos;s pull request before you start the next, and branch from an
-          up-to-date <code>main</code>.
-        </p>
-      </div>
-
       <h2>Run it</h2>
       <p>From the root of your repository, on an up-to-date <code>main</code>:</p>
       <Terminal
