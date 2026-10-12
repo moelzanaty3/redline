@@ -139,8 +139,16 @@ export default async function Page() {
         <code>init</code> committed everything on a branch and opened the pull request itself. Its
         description lists every file and setting, and carries a ticked{" "}
         <code>## Launch readiness</code> checklist and the <code>no-adr</code> label, because the
-        diff is generated rather than a decision. With Redline 0.2.7 or later its checklist and ADR jobs
-        passes. Read the diff, then merge it.
+        diff is generated rather than a decision. With Redline 0.2.7 or later its checklist and ADR
+        jobs pass. Read the diff, merge it, then bring the merged files back to your machine:
+      </p>
+      <Terminal
+        commands={`git checkout main
+git pull`}
+      />
+      <p>
+        Every later step starts from this <code>main</code>, so the rules and review commands are
+        in place before you write any code.
       </p>
       <div className="callout info">
         <span className="ic">ℹ</span>

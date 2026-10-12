@@ -266,10 +266,13 @@ function BuildByHand() {
       <h3>8. Commit</h3>
       <Terminal
         commands={`git add -A
-git commit -m "chore: a TypeScript service with tests and CI"`}
+git commit -m "chore: a TypeScript service with tests and CI"
+git branch -M main`}
       />
       <p>
-        The repository is yours alone: nothing connects it to the demo. When a later step needs one
+        <code>git branch -M main</code> names the branch <code>main</code>, whatever git called it:
+        every later step, and the rules Redline puts on the branch, use that name. The repository
+        is yours alone: nothing connects it to the demo. When a later step needs one
         of the demo&apos;s larger files, like a 249-country table, it downloads that file directly.
       </p>
     </>
@@ -293,10 +296,10 @@ export default function Page() {
         Redline yet. Download it in one go, or build it yourself file by file and see what each
         piece is for. You need{" "}
         <a href="https://git-scm.com/downloads" rel="noopener noreferrer" target="_blank">git</a>,{" "}
-        <a href="https://nodejs.org" rel="noopener noreferrer" target="_blank">Node</a> 18.11 or later
-        and{" "}
+        <a href="https://nodejs.org" rel="noopener noreferrer" target="_blank">Node</a> 18.11 or later,{" "}
         <a href="https://pnpm.io/installation" rel="noopener noreferrer" target="_blank">pnpm</a>{" "}
-        either way.
+        (or npm, yarn or bun if you build it by hand), and a GitHub account with the{" "}
+        <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">GitHub CLI</a>.
       </p>
       <Tabs
         label="How to get the starter files"
@@ -332,13 +335,17 @@ export default function Page() {
                 </div>
                 <p>
                   Or, in an empty folder, unpack it straight into a repository of your own. Skip{" "}
-                  <code>git init</code> if you have already run it.
+                  <code>git init</code> if you have already run it.{" "}
+                  <code>git branch -M main</code> names the branch <code>main</code>, whatever git
+                  called it: every later step, and the rules Redline puts on the branch, use that
+                  name.
                 </p>
                 <Terminal
                   commands={`git init
 curl -L ${DEMO_URL}/archive/refs/tags/step-00.tar.gz | tar -xz --strip-components=1
 git add -A
 git commit -m "chore: start from the Redline demo, step 00"
+git branch -M main
 pnpm install
 pnpm test`}
                   output={TESTS}
@@ -377,17 +384,23 @@ pnpm test`}
       <h2>Put your repository on GitHub</h2>
       <p>
         The checks Redline adds run on pull requests, so your repository needs to be on GitHub.
-        From its root, with the{" "}
-        <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">
-          GitHub CLI
-        </a>{" "}
-        signed in (<code>gh auth login</code>):
+        From its root, with the GitHub CLI signed in (<code>gh auth login</code>):
       </p>
       <Terminal commands="gh repo create my-redline-demo --public --source . --remote origin --push" />
       <p>
         That creates a new repository under your own account and pushes your <code>main</code> to
         it. Everything from here on happens there; the demo is only ever read from.
       </p>
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          <b>Already created the repository on GitHub?</b> Skip the command above. Check{" "}
+          <code>git remote -v</code> lists it as <code>origin</code> (if not,{" "}
+          <code>git remote add origin &lt;its url&gt;</code>), then{" "}
+          <code>git push -u origin main</code>. If GitHub added a README or licence when you
+          created it, the push is refused; create it again empty.
+        </p>
+      </div>
       <div className="callout info">
         <span className="ic">ℹ</span>
         <p>
@@ -423,7 +436,7 @@ pnpm test`}
             </tr>
             <tr>
               <td>.github/workflows/ci.yml</td>
-              <td>Installs with pnpm, compiles and runs the tests on every push and pull request</td>
+              <td>Installs the dependencies, compiles and runs the tests on every push and pull request</td>
             </tr>
           </tbody>
         </table>
