@@ -101,16 +101,12 @@ const PACKAGE_MANAGERS: PackageManager[] = [
     name: "pnpm",
     setup: `git init
 pnpm init
-pnpm pkg delete devEngines
 pnpm add -D typescript@5 @types/node@22`,
     setupNote: (
       <>
         <code>pnpm init</code> writes <code>package.json</code>, already marked{" "}
         <code>&quot;type&quot;: &quot;module&quot;</code> so the code uses <code>import</code> and{" "}
-        <code>export</code>. It also adds a <code>devEngines</code> block that makes npm refuse
-        every command in this folder, including the <code>npx</code> that runs Redline from step 01
-        on. <code>pnpm pkg delete devEngines</code> removes it; the <code>packageManager</code> line
-        CI reads stays.
+        <code>export</code>.
       </>
     ),
     scripts: `pnpm pkg set ${SCRIPTS}`,

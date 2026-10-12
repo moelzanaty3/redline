@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Quiz, Tabs } from "@/components/learn/interactive";
+import { PackageManagerTabs, Quiz, Tabs } from "@/components/learn/interactive";
 import { LearnPage, Term, Terminal } from "@/components/learn/parts";
 import { installCommand, packageState } from "@/lib/package-version";
 
@@ -8,6 +8,7 @@ export const metadata: Metadata = { title: "Learn: onboard" };
 export default async function Page() {
   const state = await packageState();
   const rl = (args: string) => installCommand(state, args);
+  const tag = state.status === "published" ? "@latest" : "";
 
   return (
     <LearnPage
@@ -20,21 +21,23 @@ export default async function Page() {
       ]}
     >
       <h2>Run it</h2>
-      <p>From the root of your repository, on an up-to-date <code>main</code>:</p>
-      <Terminal commands={rl("init")} />
-      <div className="callout warn">
-        <span className="ic">!</span>
-        <p>
-          <code>npm error code EBADDEVENGINES</code>? Your <code>package.json</code> has the{" "}
-          <code>devEngines</code> block <code>pnpm init</code> adds, and npm refuses to run in a
-          folder that names another package manager there. Remove it with{" "}
-          <code>pnpm pkg delete devEngines</code>, commit, and run the command again.
-        </p>
-      </div>
       <p>
-        The first time, <code>npx</code> asks <code>Ok to proceed? (y)</code>; answer{" "}
-        <code>y</code>. Then <code>init</code> asks a few questions about the repository. Space ticks
-        a box, Enter moves on. Keep the default everywhere except the three in bold:
+        From the root of your repository, on an up-to-date <code>main</code>, with the package
+        manager you picked in step 00:
+      </p>
+      <PackageManagerTabs
+        panels={[
+          { name: "pnpm", content: <Terminal commands={`pnpm dlx redlinegate${tag} init`} /> },
+          { name: "npm", content: <Terminal commands={rl("init")} /> },
+          { name: "yarn", content: <Terminal commands={`yarn dlx redlinegate${tag} init`} /> },
+          { name: "bun", content: <Terminal commands={`bunx redlinegate${tag} init`} /> },
+        ]}
+      />
+      <p>
+        Each runs Redline once without installing it; <code>init</code> then adds it to your
+        project. If it asks to download <code>redlinegate</code> first, answer <code>y</code>. Then{" "}
+        <code>init</code> asks a few questions about the repository. Space ticks a box, Enter moves
+        on. Keep the default everywhere except the three in bold:
       </p>
       <div className="table-scroll">
         <table>
@@ -98,6 +101,13 @@ export default async function Page() {
               </td>
             </tr>
             <tr>
+              <td>Add Redline to this project&apos;s devDependencies?</td>
+              <td>
+                yes, pin it, already selected. Your package manager adds <code>redlinegate</code> at
+                this exact version, so you, your team and your assistant all run the same Redline.
+              </td>
+            </tr>
+            <tr>
               <td>
                 <b>Ready?</b>
               </td>
@@ -137,7 +147,8 @@ export default async function Page() {
       <Terminal
         commands="# after Ready?"
         output={`  profile tooling
-  Files  21 written
+  Files  … written
+   + package.json
    + AGENTS.md
    + CLAUDE.md
    + .github/copilot-instructions.md
@@ -158,8 +169,13 @@ export default async function Page() {
       />
       <p>
         <code>repo-property</code> needs a GitHub organisation, so it is unavailable on a personal
-        account. Nothing depends on it. Running it from a script, with no questions?{" "}
-        <code>{rl("init --gate-source local")}</code> gives the same result.
+        account. Nothing depends on it. Running it from a script, with no questions? Add{" "}
+        <code>--gate-source local --pin-cli</code> to the same command for the same result.
+      </p>
+      <p>
+        Redline is in your <code>package.json</code> now, so from here on every command runs your
+        project&apos;s own copy: <code>pnpm redline &lt;command&gt;</code>, or{" "}
+        <code>npx redlinegate</code>, <code>yarn redline</code> or <code>bun run redline</code>.
       </p>
 
       <h2>What it installed</h2>
