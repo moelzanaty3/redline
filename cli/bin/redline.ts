@@ -661,7 +661,13 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       // Same contract as `init --dry-run`: the plan is built from the local
       // checkout, so previewing what backing Redline out would cost needs
       // neither a credential nor a reachable host.
-      const platform = await resolve(cwd, dryRun ? { lazyCredentials: true } : {});
+      // No remote: init installed nothing on a host, so there is none to
+      // resolve, and resolving one is what fails without a remote.
+      const removeGit = createGit(cwd);
+      const platform =
+        removeGit.isRepo() && removeGit.remoteUrl() === ''
+          ? null
+          : await resolve(cwd, dryRun ? { lazyCredentials: true } : {});
       const report = await remove(
         platform,
         () => deps.hostWithdrawal?.(cwd) ?? createHostWithdrawal(cwd),
@@ -706,6 +712,15 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (report.dryRun) {
         for (const step of report.hostPlan) log.info(`  would apply   ${step}`);
         log.info(out.yellow('dry run — nothing was written, read or changed on the host'));
+        printCaveats(log, report.caveats);
+        return 0;
+      }
+
+      if (report.local === true) {
+        log.info(
+          '  this repository has no git remote, so nothing was installed on a host and nothing there was touched'
+        );
+        log.info('  not committed — the removal is in your working tree; commit it when you are ready');
         printCaveats(log, report.caveats);
         return 0;
       }

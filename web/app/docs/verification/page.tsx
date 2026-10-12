@@ -221,19 +221,18 @@ export default function Page() {
 
       <h3>7 — The label on its own</h3>
       <p>
-        Delete the block, keep the label. <b>Expected:</b> the aggregate still
-        passes, and says exactly why it should not have:{" "}
+        Delete the block, keep the label. <b>Expected:</b> the aggregate{" "}
+        <b>fails</b>, still at <code>block-blocker</code>, and says why:{" "}
         <i>
-          &ldquo;This exemption has no valid <code>## Redline exemption</code>{" "}
-          block. It is being accepted this time; once this repository moves to
-          require, it will not be.&rdquo;
+          &ldquo;A soft-fail label was applied without a valid{" "}
+          <code>## Redline exemption</code> block (reason and expiry
+          required).&rdquo;
         </i>
       </p>
       <p>
-        That is <code>exemption-enforcement: warn</code>, the default. Repositories
-        move to <code>require</code> one standards version after the block is
-        introduced, so nobody&apos;s open pull request is failed by a rule that did
-        not exist when they opened it.
+        That is <code>exemption-enforcement: require</code>, the default. A
+        repository that passes <code>exemption-enforcement: warn</code> to its gate
+        accepts the bare label instead, with a warning that names what is missing.
       </p>
 
       <h3>8 — Stand a job down</h3>
@@ -290,7 +289,7 @@ export default function Page() {
             <tr><td>4</td><td>All ticked</td><td>PASS — all six green</td></tr>
             <tr><td>5</td><td>BLOCKER + <code>rung: block-blocker</code></td><td><b>FAIL</b></td></tr>
             <tr><td>6</td><td>+ valid exemption block</td><td>PASS, exemption recorded</td></tr>
-            <tr><td>7</td><td>Label with no block</td><td>PASS, warned</td></tr>
+            <tr><td>7</td><td>Label with no block</td><td><b>FAIL</b>, refused</td></tr>
             <tr><td>8</td><td><code>stand-down: policy</code></td><td>PASS, job skipped</td></tr>
             <tr><td>9</td><td>Secret scan failing, exemption applied</td><td><b>FAIL</b></td></tr>
           </tbody>

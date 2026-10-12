@@ -7,6 +7,33 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — the onboarding pull request passes the gate it installs
+
+`redline init`'s pull request failed two of the checks it adds: it had no `## Launch readiness`
+section, and it wrote hundreds of lines with no ADR. It merged only because it carried the
+`redline-sync` label, which the gate reported as an exemption with nothing on record behind it.
+
+- The pull request description now has a Launch readiness section. Only what is true of generated
+  configuration is ticked (no secrets, rollback is safe, no unrelated changes), and it says why the
+  rest is left out: the change adds no code that runs.
+- It also carries the `no-adr` label, the one the ADR check accepts for a large change that makes
+  no decision. Onboarding is generated, and the decision to adopt the standard was made before it.
+
+### CLI — `redline remove` works without a git remote
+
+A repository onboarded with no remote could not be taken back out: `remove` resolved a host first,
+and that is what fails without a remote. With no remote it now removes Redline's files from the
+working tree and touches nothing else. That is the same answer `init` gives, since nothing was ever
+installed on a host there. The changes are left uncommitted.
+
+### Gate — `exemption-enforcement` defaults to `require`
+
+A soft-fail label (`redline-exempt`, `redline-sync`) with no valid `## Redline exemption` block is
+now refused. The default was `warn` while the block was new (0.0.2), so no open pull request was
+failed by a rule that did not exist when it was opened. That grace is over. It only decides
+anything at a blocking rung: below one, a failing process check does not stop a merge either way.
+A repository that wants the old behaviour passes `exemption-enforcement: warn` to its gate.
+
 ### Enforcement — `warn` is merged into `observe`
 
 The ladder had four rungs. `warn` sat between `observe` and `block-blocker`, and the gate treated it

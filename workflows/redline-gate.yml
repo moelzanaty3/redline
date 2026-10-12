@@ -52,12 +52,13 @@ on:
       exemption-enforcement:
         description: >-
           What a soft-fail label without a valid "## Redline exemption" block does.
-          `warn` accepts it and says what is missing; `require` refuses it. Repos move
-          from warn to require one standards version after the block was introduced, so
-          nobody's open pull request is failed by a rule that did not exist when they
-          opened it.
+          `require` refuses it; `warn` accepts it and says what is missing. `warn` was
+          the default while the block was new (0.0.2), so nobody's open pull request
+          was failed by a rule that did not exist when they opened it. That grace is
+          over. It only decides anything at a blocking rung: below one, a failing
+          process check does not stop a merge either way.
         type: string
-        default: warn
+        default: require
 
 permissions:
   contents: read
