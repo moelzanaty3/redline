@@ -2,10 +2,25 @@
 description: Onboard this repository to Redline — standards, security floor and merge gate
 ---
 
-Run `npx redlinegate init` in the repository root and report what it printed. Do not run
-plain `npx redline` — that resolves to an unrelated package on the public registry; the
-published package is `redlinegate`. If the engineer already has it installed
-(`npm i -g redlinegate`), the everyday command is just `redline init`.
+Run Redline the way this repository does, from its root:
+
+- `package.json` lists `redlinegate`: use the project's own copy, so you run the version the team
+  pinned — `pnpm redline init` with a `pnpm-lock.yaml`, `yarn redline init` with a `yarn.lock`,
+  `bun run redline init` with a `bun.lock`, otherwise `npx redlinegate init`.
+- It does not, and `package.json` has a `devEngines.packageManager` naming pnpm, yarn or bun: npm
+  refuses to run in that project, so use `pnpm dlx redlinegate init`, `yarn dlx redlinegate init`
+  or `bunx redlinegate init`.
+- Anything else: `npx redlinegate init`.
+
+Never plain `npx redline` — that resolves to an unrelated package on the public registry; the
+published package is `redlinegate`. Below, `redline <command>` means that command run the same
+way.
+
+Report what it printed.
+
+In a Node project, `init` offers to add `redlinegate` to `devDependencies` at the version that is
+running; pass `--pin-cli` to do that without the questions. After that, every command above runs
+the project's own copy.
 
 The command is not interactive by default. If the engineer asked for something specific,
 pass it through:

@@ -1,3 +1,4 @@
+import { redlineCommandIn } from '../core/package-manager.ts';
 import {
   canPromote,
   evidenceAgeDays,
@@ -40,6 +41,8 @@ export interface EvidenceReport {
   readonly eligible: boolean;
   readonly ageDays: number | null;
   readonly stale: boolean;
+  /** How this repository runs Redline, for the next-step hint. `redline` when absent. */
+  readonly run?: string;
 }
 
 export interface EvidenceOptions {
@@ -53,7 +56,7 @@ function requireConfig(cwd: string) {
     throw new RedlineError(
       'usage',
       'this repository is not onboarded, so there is no rung to raise',
-      'run: npx redlinegate init'
+      `run: ${redlineCommandIn(cwd, 'init')}`
     );
   }
   return config;
@@ -69,7 +72,16 @@ export function evidenceReport(opts: EvidenceOptions): EvidenceReport {
   const stale = ageDays !== null && ageDays > EVIDENCE_MAX_AGE_DAYS;
 
   if (next === null) {
-    return { rung: config.rung, recorded, next: null, blockers: [], eligible: false, ageDays, stale };
+    return {
+      rung: config.rung,
+      recorded,
+      next: null,
+      blockers: [],
+      eligible: false,
+      ageDays,
+      stale,
+      run: redlineCommandIn(opts.cwd, ''),
+    };
   }
 
   // No record is not zero. `sampleSize: 0` with null rates is what canPromote
@@ -91,6 +103,7 @@ export function evidenceReport(opts: EvidenceOptions): EvidenceReport {
     eligible: check.eligible,
     ageDays,
     stale,
+    run: redlineCommandIn(opts.cwd, ''),
   };
 }
 
@@ -175,7 +188,7 @@ export function formatEvidence(report: EvidenceReport): string[] {
   }
 
   if (report.eligible) {
-    lines.push(`eligible for ${report.next} — raise it with: redline init --rung ${report.next}`);
+    lines.push(`eligible for ${report.next} — raise it with: ${report.run ?? 'redline'} init --rung ${report.next}`);
     return lines;
   }
 

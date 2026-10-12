@@ -56,6 +56,9 @@ export interface Git {
   checkoutBranch(name: string): void;
   stagePaths(paths: string[]): void;
   hasStagedChanges(): boolean;
+  // Which of `paths` differ from HEAD, staged or not, or are untracked. Empty
+  // outside a repository: there is nothing for a commit to sweep up there.
+  uncommitted(paths: readonly string[]): string[];
   commit(message: string): void;
   push(branch: string): void;
   // Read-only. A diff that cannot be produced — a ref that does not exist, a
@@ -244,6 +247,22 @@ export function createGit(cwd: string, run: GitRunner = execGit): Git {
         return false;
       } catch {
         return true;
+      }
+    },
+    uncommitted(paths) {
+      // Two commands that print bare paths rather than `git status`, whose
+      // leading status column the runner's trim would eat on the first line.
+      const listed = (out: string): string[] =>
+        out.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+      try {
+        return [
+          ...new Set([
+            ...listed(g('ls-files', '--modified', '--others', '--exclude-standard', '--', ...paths)),
+            ...listed(g('diff', '--cached', '--name-only', '--', ...paths)),
+          ]),
+        ];
+      } catch {
+        return [];
       }
     },
     commit(message) {

@@ -1,3 +1,4 @@
+import { redlineCommandIn } from '../core/package-manager.ts';
 import { readFileSync } from 'node:fs';
 import { RedlineError } from '../core/errors.ts';
 import { createGit } from '../core/git.ts';
@@ -89,7 +90,7 @@ export async function review(engine: ReviewEngine | null, opts: ReviewOptions): 
     throw new RedlineError(
       'usage',
       'no profile: this repository has no .redline.json and none was given',
-      'run: npx redlinegate init — or pass --profile <name>'
+      `run: ${redlineCommandIn(opts.cwd, 'init')} — or pass --profile <name>`
     );
   }
 

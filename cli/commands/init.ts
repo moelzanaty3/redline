@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRedlineError, RedlineError } from '../core/errors.ts';
+import { createGit } from '../core/git.ts';
+import { PROJECT_FILES, pinRedline } from '../core/package-manager.ts';
 import { CLI_VERSION, UNPUBLISHED_VERSION } from '../core/version.ts';
 import { VENDORED_GATE_PATH } from '../platforms/github/vendor.ts';
 import { canPromote, type Evidence, type Rung } from '../enforce/ladder.ts';
@@ -295,6 +297,11 @@ export interface InitOptions {
   // — dependabot, renovate, codeql. Only what can be configured with no account
   // and no token appears here; see cli/detect/setup.ts.
   setup?: string[];
+  // `--pin-cli`, or "yes" to the menu's question. Adds redlinegate to the
+  // project's devDependencies at the version running now, with the project's
+  // own package manager, in the same pull request — so the team and its
+  // assistants run one known version instead of whatever @latest is today.
+  pinCli?: boolean;
   // `--branches <patterns>`. Which branches the merge policy governs. Absent is
   // the default branch alone — see MergePolicy.branches for why that stays the
   // default rather than becoming a detected one.
@@ -884,6 +891,42 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
     }
   }
 
+  // Before the render, so a failure to pin is a note on a run that otherwise
+  // succeeded rather than something that stops it.
+  let pinnedFiles: readonly string[] = [];
+  if (opts.pinCli === true) {
+    // The pull request stages whole files. Pinning on top of someone's
+    // uncommitted package.json would carry their edits into the onboarding pull
+    // request under Redline's name, so that case is refused, not worked around.
+    const dirty = dryRun ? [] : createGit(cwd).uncommitted(PROJECT_FILES);
+    if (CLI_VERSION === UNPUBLISHED_VERSION) {
+      notes.push(
+        'a development build cannot pin itself — npm has no redlinegate@0.0.0-development. ' +
+          'Run a published one (npx redlinegate init --pin-cli) to add it'
+      );
+    } else if (dryRun) {
+      notes.push(`redlinegate@${CLI_VERSION} would be added to this project's devDependencies`);
+    } else if (dirty.length > 0) {
+      notes.push(
+        `redlinegate was not added to devDependencies: ${dirty.join(', ')} has uncommitted ` +
+          'changes. Commit or stash them, then re-run with --pin-cli'
+      );
+    } else {
+      const pin = pinRedline(cwd, CLI_VERSION);
+      if (pin.status === 'pinned') {
+        pinnedFiles = pin.written;
+        notes.push(`redlinegate@${CLI_VERSION} is a devDependency now (${pin.command})`);
+      } else if (pin.status === 'failed') {
+        notes.push(
+          `could not add redlinegate to this project: ${pin.reason}. Everything else is installed; ` +
+            `run ${pin.command} yourself`
+        );
+      } else {
+        notes.push(`redlinegate was not added to devDependencies: ${pin.reason}`);
+      }
+    }
+  }
+
   const contexts = CONTEXTS.filter((context) => menu[context.key]).map((context) => context.key);
 
   // Files next, host settings after: a denied host call must never cost the
@@ -919,6 +962,7 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
     ...gatePlan.files,
     ...ownershipPlan.files,
     ...setupResult.written,
+    ...pinnedFiles,
   ];
   // A menu change moves no file of its own (the gate template already diffs
   // adrForLargeDiffs), but it is exactly what `redline init --blocking` on a
