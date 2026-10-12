@@ -69,6 +69,11 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
           "The optional context sections rendered into the standards artifacts beside the rules — background about how this repository works, not rules with ids. speckit says the repository is spec-first and is on by default; it is dropped automatically, with a note in the report, where the repository already runs Spec Kit, which is a separate tool with its own installer that Redline neither creates nor edits. tmf says the repository implements TM Forum interfaces and is off unless asked for. The selection is reversible: passing the negative on a later run removes a section already rendered, because the block is regenerated rather than appended to.",
       },
       {
+        flag: "--adr / --no-adr",
+        detail:
+          "Whether a pull request over the ADR threshold (300 changed lines) must link a decision record under docs/adr/. On by default. A single pull request can still skip it with the no-adr label; --no-adr turns the check off for the whole repository, for a team that does not keep decision records, and --adr on a later run turns it back on.",
+      },
+      {
         flag: "--repair",
         detail:
           "Re-applies every capability even where the repository looks onboarded already. It exists for the capabilities whose recorded pendingAdmin entry a plain re-run can never clear on its own — labels, review-ownership, repo-property, gate, merge-policy. Composes with --dry-run.",

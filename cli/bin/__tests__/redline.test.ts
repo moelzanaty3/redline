@@ -1121,3 +1121,24 @@ test('remove works on a repository that has no git remote', async () => {
   assert.ok(lines.some((l) => /no git remote/.test(l)), lines.join('\n'));
   assert.ok(!lines.some((l) => /security floor stays on/.test(l)), 'nothing on a host was switched on');
 });
+
+// The ADR check is a team's choice, not a law: a repository that does not keep
+// decision records turns it off with one flag rather than by hand-editing
+// .redline.json, which says not to. The threshold is how the gate learns it.
+test('--no-adr turns the ADR check off for the repository, and --adr brings it back', async () => {
+  const dir = gitRepo('main');
+  const threshold = async (flag: string): Promise<number | undefined> => {
+    const platform = fakePlatform();
+    await run(['init', '--no-commit', '--profile', 'web-react', flag], {
+      ...deps(dir).opts,
+      resolvePlatform: async () => platform,
+    });
+    return platform.gateOptions.at(-1)?.adrDiffThreshold;
+  };
+
+  assert.equal(await threshold('--no-adr'), Number.MAX_SAFE_INTEGER);
+  assert.equal(readConfig(dir)?.menu.adrForLargeDiffs, false);
+
+  assert.equal(await threshold('--adr'), 300);
+  assert.equal(readConfig(dir)?.menu.adrForLargeDiffs, true);
+});
