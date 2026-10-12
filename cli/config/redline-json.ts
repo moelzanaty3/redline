@@ -10,7 +10,7 @@ import {
   type GateSource,
   type Host,
 } from '../platforms/types.ts';
-import { isRung, type Rung } from '../enforce/ladder.ts';
+import { isRung, LEGACY_RUNGS, type Rung } from '../enforce/ladder.ts';
 
 export const CONFIG_FILE = '.redline.json';
 
@@ -374,7 +374,11 @@ export function parseConfig(raw: unknown): RedlineConfig {
   // able to raise enforcement on a repository, and the failure direction for an
   // unreadable value is the one that blocks nobody.
   const rungRaw = o['rung'];
-  const rung: Rung = isRung(rungRaw) ? rungRaw : 'observe';
+  const rung: Rung = isRung(rungRaw)
+    ? rungRaw
+    : typeof rungRaw === 'string'
+      ? (LEGACY_RUNGS[rungRaw] ?? 'observe')
+      : 'observe';
 
   // Every field has to be the right shape or the whole record is discarded.
   // A partially-readable measurement is worse than none: it would promote on
@@ -491,7 +495,7 @@ const EXPLAINER: readonly string[] = [
   'menu.tmf — renders the TM Forum context. `redline init --tmf` / `--no-tmf`.',
   'menu.sensitivePathReviewers — writes CODEOWNERS and requires code-owner review on those paths.',
   'capabilities.* — false means "this repository has its own"; Redline does not install or report it.',
-  'rung — how hard the gate bites: observe, warn, block-blocker, block-high. Promotion needs evidence.',
+  'rung — how hard the gate bites: observe, block-blocker, block-high. Promotion needs evidence.',
   'pendingAdmin — capabilities an administrator still has to grant. Not a failure, a to-do list.',
   'gateSource — org: the gate lives in the organisation .github repo. local: vendored into this',
   '  repository, which means a pull request can edit the gate judging it. `--gate-source`.',
@@ -505,7 +509,42 @@ const EXPLAINER: readonly string[] = [
   'commandFiles, standardsVersion, cliVersion, onboardedAt, lastRunAt — Redline\'s own bookkeeping.',
 ];
 
+// One key order for every writer, so a diff of .redline.json shows what changed
+// and nothing else. `evidence record` spread the parsed config, whose order is
+// readConfig's, and every key it did not touch moved anyway. This is the order
+// `init` has always written, so a file already on disk keeps its shape. A
+// Record over every key, so a field added to RedlineConfig without a place here
+// is a compile error rather than a key that lands wherever it happens to.
+const KEY_RANK: Record<keyof RedlineConfig, number> = {
+  standardsVersion: 0,
+  cliVersion: 1,
+  host: 2,
+  pipeline: 3,
+  profile: 4,
+  vendors: 5,
+  menu: 6,
+  capabilities: 7,
+  integrations: 8,
+  pendingAdmin: 9,
+  onboardedAt: 10,
+  lastRunAt: 11,
+  localRules: 12,
+  commandFiles: 13,
+  rung: 14,
+  evidence: 15,
+  gateSource: 16,
+  gateVersion: 17,
+  docsBaseUrl: 18,
+  requiredApprovals: 19,
+};
+
+const isConfigKey = (key: string): key is keyof RedlineConfig => key in KEY_RANK;
+
 export function writeConfig(cwd: string, config: RedlineConfig): void {
-  const documented = { '//': EXPLAINER, ...config };
+  const ordered = Object.entries(config).sort(([a], [b]) => {
+    const rank = (key: string): number => (isConfigKey(key) ? KEY_RANK[key] : Number.MAX_SAFE_INTEGER);
+    return rank(a) - rank(b);
+  });
+  const documented = { '//': EXPLAINER, ...Object.fromEntries(ordered) };
   writeFileSync(join(cwd, CONFIG_FILE), `${JSON.stringify(documented, null, 2)}\n`);
 }

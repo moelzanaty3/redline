@@ -1076,7 +1076,7 @@ export function createAzureInstall(
         );
       }
       const originalBranch = git.currentBranch();
-      git.checkoutNewBranch(change.branch);
+      const branch = git.checkoutFreshBranch(change.branch);
       let gitFailed = false;
       try {
         // Stage only what Redline itself wrote — never sweep in pre-existing
@@ -1088,7 +1088,7 @@ export function createAzureInstall(
           return null;
         }
         git.commit(change.title);
-        git.push(change.branch);
+        git.push(branch);
       } catch (error) {
         gitFailed = true;
         throw error;
@@ -1107,7 +1107,7 @@ export function createAzureInstall(
         'POST',
         `/${project(ref)}/_apis/git/repositories/${repoId(ref)}/pullrequests`,
         {
-          sourceRefName: `refs/heads/${change.branch}`,
+          sourceRefName: `refs/heads/${branch}`,
           targetRefName: `refs/heads/${ref.defaultBranch}`,
           title: change.title,
           description: change.body,
@@ -1135,6 +1135,7 @@ export function createAzureInstall(
       return {
         number: id,
         url: `https://dev.azure.com/${ref.org}/${project(ref)}/_git/${ref.repo}/pullrequest/${id}`,
+        branch,
         ...(labelOutcomes.length > 0 ? { outcomes: [worstOutcome(labelOutcomes)] } : {}),
       };
     },

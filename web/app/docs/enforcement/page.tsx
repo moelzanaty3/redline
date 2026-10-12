@@ -8,15 +8,9 @@ export const metadata: Metadata = { title: "Enforcement ladder" };
 const RUNGS = [
   {
     rung: "observe",
-    blocks: "Nothing.",
+    blocks: "No finding. The security floor still blocks.",
     needs: "Nothing — this is where a repository starts.",
-    detail: "Findings are produced, commented and recorded. Observe is not 'off'; it is 'measured and not yet enforced'.",
-  },
-  {
-    rung: "warn",
-    blocks: "Nothing.",
-    needs: "5 reviewed pull requests.",
-    detail: "The check is visible in the merge box rather than buried in a log. Costs nobody a merge, so it asks only that the reviewer is actually running.",
+    detail: "Findings are produced, commented and recorded, and a failing rule shows as a red check in the merge box. Observe is not 'off'; it is 'measured and not yet enforced'.",
   },
   {
     rung: "block-blocker",
@@ -37,7 +31,7 @@ export default function Page() {
     <DocsPage
       crumb="Core Concepts"
       title="Enforcement ladder"
-      intro="Four rungs a repository climbs on recorded evidence. Rolling blocking enforcement to hundreds of repositories in one step is not achievable; leaving everything advisory means nobody can state a guarantee about any of them."
+      intro="Three rungs a repository climbs on recorded evidence. Rolling blocking enforcement to hundreds of repositories in one step is not achievable; leaving everything advisory means nobody can state a guarantee about any of them."
       href="/docs/enforcement"
     >
       <h2>The rungs</h2>
@@ -86,7 +80,7 @@ export default function Page() {
         <span className="tk-white">npx redlinegate init --rung block-blocker</span>
         {"\n"}
         <span className="tk-dim">
-          {"enforcement stays at warn — cannot move to block-blocker:"}
+          {"enforcement stays at observe — cannot move to block-blocker:"}
         </span>
         {"\n"}
         <span className="tk-dim">
@@ -95,6 +89,17 @@ export default function Page() {
         {"\n"}
         <span className="tk-dim">{"  misses known defects must not be given a veto"}</span>
       </CodeWindow>
+
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          There used to be a <code>warn</code> rung between <code>observe</code>{" "}
+          and <code>block-blocker</code>. It blocked nothing and reported exactly
+          what <code>observe</code> does, so it was merged into it. A repository
+          that recorded <code>warn</code> reads as <code>observe</code>, and the
+          next <code>redline init</code> writes it that way.
+        </p>
+      </div>
 
       <h2>Demotion never needs evidence</h2>
       <div className="callout info">

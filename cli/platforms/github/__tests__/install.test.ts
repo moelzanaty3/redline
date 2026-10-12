@@ -409,8 +409,8 @@ test('openPullRequest commits, pushes and opens a PR against the default branch'
     files: ['.github/workflows/redline.yml', '.github/pull_request_template.md'],
   });
 
-  assert.deepEqual(pr, { number: 7, url: 'https://x/7' });
-  assert.ok(repo.calls.some((c) => c[0] === 'checkout' && c[1] === '-B' && c[2] === 'redline/onboard'));
+  assert.deepEqual(pr, { number: 7, url: 'https://x/7', branch: 'redline/onboard' });
+  assert.ok(repo.calls.some((c) => c[0] === 'checkout' && c[1] === '-b' && c[2] === 'redline/onboard'));
   assert.deepEqual(repo.calls.find((c) => c[0] === 'add'), [
     'add',
     '--',

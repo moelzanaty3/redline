@@ -368,7 +368,7 @@ test('every rung is offered with an explanation, not just its name', async () =>
   const { prompter, asked } = acceptDefaults();
   await runWizard(prompter, FACTS);
   const rungs = asked.find((a) => a.title.startsWith('How hard'));
-  assert.deepEqual(rungs?.labels, ['observe', 'warn', 'block-blocker', 'block-high']);
+  assert.deepEqual(rungs?.labels, ['observe', 'block-blocker', 'block-high']);
   assert.ok(rungs?.hints.every((h) => h !== undefined && h.length > 0));
 });
 
@@ -407,11 +407,11 @@ test('what .redline.json recorded outranks fresh detection on a re-run', async (
   const { prompter } = acceptDefaults();
   const answers = await runWizard(prompter, {
     ...FACTS,
-    recorded: { profile: 'service-node', vendors: ['claude'], rung: 'warn' },
+    recorded: { profile: 'service-node', vendors: ['claude'], rung: 'block-blocker' },
   });
   assert.equal(answers.profile, 'service-node');
   assert.deepEqual(answers.vendors, ['claude']);
-  assert.equal(answers.rung, 'warn');
+  assert.equal(answers.rung, 'block-blocker');
 });
 
 test('findExistingPipeline finds a conventional Azure pull request definition', () => {

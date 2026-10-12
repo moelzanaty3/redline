@@ -81,7 +81,7 @@ Read three lines before anything else:
 - **`checks`** — what actually runs them. If this says `GitHub Actions` on a repository
   built by Azure Pipelines, every later step is measuring a file nothing executes. Fix it
   with `redline init --pipeline azure-pipelines`.
-- **`rung`** — how hard it bites. At `observe` and `warn` nothing is ever blocked. That is
+- **`rung`** — how hard it bites. At `observe` nothing but the security floor is blocked. That is
   the correct place to start, but do not then go looking for a blocked merge.
 - **`installed`** — if `gate` is absent, Redline installed no gate here and steps 3–5 have
   no subject.
@@ -197,7 +197,7 @@ it ran in and nothing else — this is the honest cost of a gate that needs no C
 
 Now push the probe file from step 2.
 
-**At `observe` or `warn`** the findings print and the push proceeds:
+**At `observe`** the findings print and the push proceeds:
 
 ```
 redline: checking 4b825dc..a48bcb7
@@ -215,7 +215,7 @@ ladder, and it will tell you what is missing:
 
 ```
 ▲ enforcement stays at observe — cannot move to block-high:
-  ▲ "observe" cannot jump to "block-high" — promote one rung at a time, through "warn"
+  ▲ "observe" cannot jump to "block-high" — promote one rung at a time, through "block-blocker"
   ▲ 50 reviewed pull requests are needed and 0 have been recorded
   ▲ the seeded corpus has never been scored for this stack
 ```
@@ -389,22 +389,26 @@ believing Redline had switched their secret scanning off on the way out.
 redline evidence
 ```
 
-Enforcement climbs `observe → warn → block-blocker → block-high`, and every rung above the
+Enforcement climbs `observe → block-blocker → block-high`, and every rung above the
 first is *earned on a recorded measurement*. With nothing recorded, the report says so and
 names what the next rung asks for. Confirm it refuses:
 
 ```sh
-redline init --no-commit --rung warn
+redline init --no-commit --rung block-blocker
 redline status          # still observe
 ```
 
 Then record a measurement and watch it move:
 
 ```sh
-redline evidence record --sample-size 12 --source "verification walkthrough"
-redline init --no-commit --rung warn
-redline status          # warn
+redline evidence record --sample-size 30 --seed-recall 1 --acted-on-rate 0.9 \
+  --false-positives 0 --source "verification walkthrough"
+redline init --no-commit --rung block-blocker
+redline status          # block-blocker
 ```
+
+Those figures are made up for the walkthrough. Put the repository back with
+`redline init --no-commit --rung observe`, which needs no evidence.
 
 The figures come from the metrics plane, which sees the estate over a window — the CLI
 supplies the mechanism and the audit trail, not the numbers. `--source` has no default
@@ -468,7 +472,7 @@ pull request gate does.
 
 ### The push was not blocked, but findings were printed
 
-Check the rung: `redline status`. At `observe` and `warn` nothing is ever blocked, by
+Check the rung: `redline status`. At `observe` no finding is ever blocked, by
 design. An unrecognised value in `.redline.json` also reads back as `observe` — a typo must
 never be able to make a repository stricter than anyone chose.
 

@@ -242,6 +242,7 @@ export function fakePlatform(opts: FakePlatformOptions = {}): FakePlatform {
       return {
         number: 1,
         url: 'https://example/pr/1',
+        branch: change.branch,
         ...(opts.pullRequestOutcomes ? { outcomes: opts.pullRequestOutcomes } : {}),
       };
     },

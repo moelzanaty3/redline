@@ -176,8 +176,7 @@ const PIPELINE_LABEL: Record<GatePipeline, string> = {
 };
 
 const RUNG_MEANING: Record<Rung, string> = {
-  observe: 'comments only, the check is always green',
-  warn: 'comments and labels, still never blocks a merge',
+  observe: 'findings are reported, only the security floor fails the check',
   'block-blocker': 'a BLOCKER finding stops the merge',
   'block-high': 'BLOCKER and HIGH both stop the merge',
 };
@@ -187,7 +186,6 @@ const RUNG_MEANING: Record<Rung, string> = {
 // wording sent the reader looking for a check that does not exist.
 const LOCAL_RUNG_MEANING: Record<Rung, string> = {
   observe: 'findings are printed, the push is never blocked',
-  warn: 'findings are printed, the push is still never blocked',
   'block-blocker': 'a BLOCKER finding refuses the push',
   'block-high': 'BLOCKER and HIGH both refuse the push',
 };

@@ -426,7 +426,7 @@ export default async function Home() {
             <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
           </div>
           <p className="hm-cta-links">
-            <Link href="/docs/quickstart">Quickstart</Link>
+            <Link href="/docs/quickstart">Quick start</Link>
             <Link href="/docs">Documentation</Link>
             <Link href="/docs/standards">The {ruleCount} rules</Link>
             <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">

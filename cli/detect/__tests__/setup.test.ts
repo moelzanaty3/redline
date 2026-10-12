@@ -61,7 +61,7 @@ test('codeql scans the languages the profile renders', () => {
 test('a workflow pins the action it runs', () => {
   const cwd = repo({ 'package.json': '{}' });
   const file = find(cwd, ['javascript'], 'codeql')?.file;
-  assert.match(String(file?.contents), /github\/codeql-action\/init@v3/);
+  assert.match(String(file?.contents), /github\/codeql-action\/init@v4/);
   assert.doesNotMatch(String(file?.contents), /@main|@master/);
 });
 

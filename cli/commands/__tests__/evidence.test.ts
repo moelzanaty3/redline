@@ -63,7 +63,7 @@ test('recording evidence makes the next rung reachable', () => {
 
   const after = recordEvidence({ cwd, ...FULL });
   assert.equal(after.eligible, true, after.blockers.join('; '));
-  assert.equal(after.next, 'warn');
+  assert.equal(after.next, 'block-blocker');
 });
 
 test('the record lands in .redline.json with its provenance', () => {
@@ -78,7 +78,27 @@ test('the record lands in .redline.json with its provenance', () => {
   assert.ok(!Number.isNaN(Date.parse(stored.recordedAt)));
 });
 
-// Provenance is the difference between evidence and assertion, so it is the one
+// The record used to rewrite the file in readConfig's key order, so the diff of
+// a one-field change moved half the file. Only the evidence may change.
+test('recording evidence leaves every other key where it was', () => {
+  const cwd = onboarded();
+  const path = join(cwd, '.redline.json');
+  writeConfig(cwd, readConfig(cwd)!);
+  const before = readFileSync(path, 'utf8');
+
+  recordEvidence({ cwd, ...FULL });
+  const after = readFileSync(path, 'utf8');
+
+  const keys = (text: string): string[] => Object.keys(JSON.parse(text) as Record<string, unknown>);
+  assert.deepEqual(
+    keys(after).filter((k) => k !== 'evidence'),
+    keys(before)
+  );
+  const afterLines = new Set(after.split('\n'));
+  assert.deepEqual(before.split('\n').filter((line) => !afterLines.has(line)), [], 'no existing line changed');
+});
+
+
 // field with no default.
 test('a record with no source is refused', () => {
   try {
@@ -142,7 +162,7 @@ test('a hand-written rate above 1 is discarded on read', () => {
 // nobody checked.
 test('evidence past the freshness window stops justifying a promotion', () => {
   const stale = new Date(Date.now() - (EVIDENCE_MAX_AGE_DAYS + 1) * 86_400_000).toISOString();
-  const check = canPromote('warn', 'block-blocker', {
+  const check = canPromote('observe', 'block-blocker', {
     seedRecall: 1,
     actedOnRate: 0.9,
     sampleSize: 60,
@@ -155,7 +175,7 @@ test('evidence past the freshness window stops justifying a promotion', () => {
 
 test('evidence inside the window still does', () => {
   const fresh = new Date(Date.now() - 10 * 86_400_000).toISOString();
-  const check = canPromote('warn', 'block-blocker', {
+  const check = canPromote('observe', 'block-blocker', {
     seedRecall: 1,
     actedOnRate: 0.9,
     sampleSize: 60,
@@ -179,7 +199,7 @@ test('stale evidence does not block a demotion', () => {
 });
 
 test('the report names what the next rung asks for, not just that it refused', () => {
-  const lines = formatEvidence(evidenceReport({ cwd: onboarded('warn') })).join('\n');
+  const lines = formatEvidence(evidenceReport({ cwd: onboarded('observe') })).join('\n');
   assert.match(lines, /seed recall\s+>= 100%/);
   assert.match(lines, /false positives\s+<= 0/);
   assert.match(lines, new RegExp(`measured within\\s+${EVIDENCE_MAX_AGE_DAYS} days`));

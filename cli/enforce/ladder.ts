@@ -5,19 +5,28 @@
 // them in one step is not achievable; leaving everything advisory means the
 // organisation can never state a guarantee about any of them.
 //
-// Four rungs, and a repository climbs on recorded evidence rather than on
-// assertion. Two decisions the roadmap left open are settled here, and both are
-// settled toward the same principle: **the safe direction never needs permission.**
+// Three rungs, and a repository climbs on recorded evidence rather than on
+// assertion. There was a fourth, `warn`, between observe and block-blocker. The
+// gate treated it exactly like observe — nothing blocked, the same report — so
+// it was a promotion that changed nothing a team could see, and it was merged
+// into observe. A recorded `warn` reads back as observe (see LEGACY_RUNGS).
+//
+// Two decisions the roadmap left open are settled here, and both are settled
+// toward the same principle: **the safe direction never needs permission.**
 
-export const RUNGS = ['observe', 'warn', 'block-blocker', 'block-high'] as const;
+export const RUNGS = ['observe', 'block-blocker', 'block-high'] as const;
 export type Rung = (typeof RUNGS)[number];
 
 export const RUNG_INDEX: Record<Rung, number> = {
   observe: 0,
-  warn: 1,
-  'block-blocker': 2,
-  'block-high': 3,
+  'block-blocker': 1,
+  'block-high': 2,
 };
+
+// Rungs that no longer exist, and the rung each now means. Read from a
+// repository's `.redline.json` or its caller workflow, so a repository onboarded
+// before the merge keeps exactly the behaviour it had.
+export const LEGACY_RUNGS: Readonly<Record<string, Rung>> = { warn: 'observe' };
 
 export const isRung = (value: unknown): value is Rung =>
   typeof value === 'string' && (RUNGS as readonly string[]).includes(value);
@@ -32,11 +41,6 @@ export const BEHAVIOUR: Record<Rung, RungBehaviour> = {
   observe: {
     blocks: false,
     description: 'Findings are reported and recorded. Nothing is blocked, including a BLOCKER.',
-  },
-  warn: {
-    blocks: false,
-    description:
-      'Findings are reported as warnings on the pull request. Still nothing is blocked, but the check is visible in the merge box rather than buried in a log.',
   },
   'block-blocker': {
     blocks: 'BLOCKER',
@@ -80,8 +84,6 @@ export interface Requirement {
 export const REQUIREMENTS: Record<Rung, Requirement> = {
   // Nothing to earn: observe is where a repository starts.
   observe: { minSeedRecall: null, minActedOnRate: null, minSampleSize: 0, maxFalsePositives: null },
-  // Warning costs nobody a merge, so it asks only that the reviewer is running.
-  warn: { minSeedRecall: null, minActedOnRate: null, minSampleSize: 5, maxFalsePositives: null },
   // The first rung that can stop a merge, and the first that needs proof the
   // reviewer both catches real defects and is not flagging correct code.
   'block-blocker': {
@@ -184,9 +186,9 @@ export function canPromote(
   const need = REQUIREMENTS[to];
 
   // Freshness first, because everything below it is read off the same record.
-  // Only asked of rungs that require something: `warn` from `observe` needs a
-  // sample size and nothing else, and failing that on age would be a second
-  // hurdle the requirement table never declared.
+  // Only asked of rungs that require something: a rung with nothing in the
+  // requirement table must not be refused on age alone, a hurdle the table
+  // never declared.
   const requiresEvidence =
     need.minSampleSize > 0 ||
     need.minSeedRecall !== null ||

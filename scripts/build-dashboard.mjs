@@ -92,9 +92,10 @@ try {
   const registryPath = process.env.REGISTRY ?? 'registry.json';
   if (existsSync(registryPath)) {
     const entries = JSON.parse(readFileSync(registryPath, 'utf8')).entries ?? [];
-    const counts = { observe: 0, warn: 0, 'block-blocker': 0, 'block-high': 0 };
+    const counts = { observe: 0, 'block-blocker': 0, 'block-high': 0 };
     for (const entry of entries) {
-      const rung = entry.rung ?? 'observe';
+      // `warn` was merged into observe; a register written before that still says it.
+      const rung = entry.rung === 'warn' ? 'observe' : (entry.rung ?? 'observe');
       if (rung in counts) counts[rung] += 1;
     }
     const total = entries.length;
@@ -311,7 +312,6 @@ ${
     <tbody>
 ${[
   ['observe', 'nothing — reported and recorded'],
-  ['warn', 'nothing — reported in the merge box'],
   ['block-blocker', 'a BLOCKER finding'],
   ['block-high', 'a BLOCKER or a HIGH'],
 ]

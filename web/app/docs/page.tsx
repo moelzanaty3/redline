@@ -82,7 +82,7 @@ export default function Page() {
 
       <h2>Where to go next</h2>
       <ul>
-        <li><Link href="/docs/quickstart"><b>Quickstart</b></Link> — onboard one repository in ten minutes, with nothing blocked at the end.</li>
+        <li><Link href="/docs/quickstart"><b>Quick start</b></Link> — take a small service from no Redline to an earned merge gate, one pull request per step.</li>
         <li><Link href="/docs/adopting"><b>Adopting Redline</b></Link> — what happens in week one and month two, and when it is reasonable to start blocking.</li>
         <li><Link href="/docs/output-contract"><b>The output contract</b></Link> — how to read a finding and what each severity obliges you to do.</li>
         <li><Link href="/docs/standards"><b>Standards</b></Link> — browse and copy the full rule set.</li>

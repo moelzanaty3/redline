@@ -16,8 +16,7 @@
 #   1. `redline policy` — the rules a checker decides without a model. No
 #      network, no credential, deterministic. Whether a finding here refuses the
 #      push is decided by the enforcement rung in `.redline.json`, exactly as it
-#      is in CI: `observe` and `warn` report, `block-blocker` and `block-high`
-#      refuse.
+#      is in CI: `observe` reports, `block-blocker` and `block-high` refuse.
 #   2. The model half — every rule a checker cannot decide. Printed as a command
 #      for the assistant the engineer already has, and never blocking: a hook
 #      that waits on a model is a hook that gets uninstalled.
@@ -92,7 +91,7 @@ done
 
 # The enforcement rung, read from .redline.json at run time rather than baked in
 # here. It is the same ladder the CI gate climbs and it has to mean the same
-# thing on both: `observe` and `warn` report and never block, and only the
+# thing on both: `observe` reports and never blocks, and only the
 # block-* rungs refuse anything. Ignoring it made this hook enforce at every
 # rung — so `redline status` said "comments only, the check is always green"
 # about a gate that was refusing pushes, and the promotion ladder, which is how
@@ -155,7 +154,7 @@ if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
   echo "         Not blocking: this repository is at rung \"$rung\"." >&2
 elif [ "$status" -eq 1 ]; then
   if [ "$enforcing" != "true" ]; then
-    # observe and warn: the findings are printed above and the push proceeds.
+    # observe: the findings are printed above and the push proceeds.
     # Not "off" — measured and not yet enforced, which is the whole point of
     # having a rung below blocking.
     echo "" >&2

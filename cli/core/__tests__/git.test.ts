@@ -110,13 +110,14 @@ test('stagePaths adds only the named files, as argv, and is a no-op for an empty
 test('branch, commit and push pass their arguments as argv, never a shell string', () => {
   const { run, calls } = recorder();
   const git = createGit('/repo', run);
-  git.checkoutNewBranch('redline/onboard');
+  git.checkoutFreshBranch('redline/onboard');
   git.commit('chore(redline): onboard');
   git.push('redline/onboard');
-  assert.deepEqual(calls[0], ['checkout', '-B', 'redline/onboard']);
-  assert.deepEqual(calls[1]?.slice(0, 2), ['commit', '-m']);
-  assert.equal(calls[1]?.[2], 'chore(redline): onboard');
-  assert.deepEqual(calls[2], ['push', '--set-upstream', 'origin', 'redline/onboard']);
+  const writes = calls.filter((c) => c[0] !== 'rev-parse' && c[0] !== 'ls-remote');
+  assert.deepEqual(writes[0], ['checkout', '-b', 'redline/onboard']);
+  assert.deepEqual(writes[1]?.slice(0, 2), ['commit', '-m']);
+  assert.equal(writes[1]?.[2], 'chore(redline): onboard');
+  assert.deepEqual(writes[2], ['push', '--set-upstream', 'origin', 'redline/onboard']);
 });
 
 test('a rejected push becomes a permission RedlineError naming the branch it was left on', () => {
@@ -170,13 +171,37 @@ test('a failed commit becomes a host RedlineError saying the changes are still s
   );
 });
 
+// A re-run with redline/onboard still on origin from the first onboarding ran
+// `checkout -B`, which silently reset the local branch to HEAD, then had its
+// push refused as a non-fast-forward. An existing branch is never moved now.
+test('a branch taken locally or on origin is skipped for the next free name', () => {
+  const { run, calls } = recorder({
+    'rev-parse --verify --quiet refs/heads/redline/onboard': 'a494bd9',
+    'ls-remote --heads origin refs/heads/redline/onboard-2': 'f00 refs/heads/redline/onboard-2',
+  });
+  const name = createGit('/repo', run).checkoutFreshBranch('redline/onboard');
+
+  assert.equal(name, 'redline/onboard-3');
+  assert.deepEqual(calls.at(-1), ['checkout', '-b', 'redline/onboard-3']);
+  assert.ok(!calls.some((c) => c[0] === 'checkout' && c[1] === '-B'), 'never resets a branch');
+});
+
+test('an unreachable origin does not count as a taken name', () => {
+  const run: GitRunner = (args) => {
+    if (args[0] === 'ls-remote') throw new Error('Could not resolve host');
+    return '';
+  };
+  assert.equal(createGit('/repo', run).checkoutFreshBranch('redline/onboard'), 'redline/onboard');
+});
+
 test('a failed branch checkout becomes a host RedlineError and reports nothing was committed', () => {
   const run: GitRunner = (args) => {
     if (args[0] === 'checkout') throw new Error('your local changes would be overwritten');
+    if (args[0] === 'rev-parse' || args[0] === 'ls-remote') return '';
     return 'main';
   };
   assert.throws(
-    () => createGit('/repo', run).checkoutNewBranch('redline/onboard'),
+    () => createGit('/repo', run).checkoutFreshBranch('redline/onboard'),
     (err: unknown) =>
       isRedlineError(err) &&
       err.kind === 'host' &&
