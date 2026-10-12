@@ -16,7 +16,7 @@ export type LearnStep = {
   // The demo's git tag and pull request for this step, when it has them.
   tag?: string;
   pr?: number;
-  // Steps 05 onwards need the pipeline, so they need GitHub.
+  // From step 01 the reader works in their own repository on GitHub.
   needsGitHub: boolean;
 };
 
@@ -38,7 +38,7 @@ export const LEARN_STEPS: LearnStep[] = [
     minutes: 5,
     tag: "step-01",
     pr: 1,
-    needsGitHub: false,
+    needsGitHub: true,
   },
   {
     slug: "first-finding",

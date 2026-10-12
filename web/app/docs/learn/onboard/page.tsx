@@ -19,36 +19,35 @@ export default async function Page() {
         "Why every repository starts at observe, where findings are reported but nothing is blocked",
       ]}
     >
+      <h2>Put your repository on GitHub</h2>
+      <p>
+        The checks Redline adds run on pull requests, so your repository from step 00 needs to be
+        on GitHub. From its root, with the{" "}
+        <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">
+          GitHub CLI
+        </a>{" "}
+        signed in (<code>gh auth login</code>):
+      </p>
+      <Terminal commands="gh repo create my-redline-demo --public --source . --remote origin --push" />
+      <p>
+        That creates a new repository under your own account and pushes your <code>main</code> to
+        it. Everything from here on happens there; the demo is only ever read from.
+      </p>
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          Make it <b>public</b>. Dependency review and secret scanning, which step 06 relies on, are
+          free on public repositories and need GitHub Advanced Security on private ones. From here
+          on, merge each step&apos;s pull request before you start the next, and branch from an
+          up-to-date <code>main</code>.
+        </p>
+      </div>
+
       <h2>Run it</h2>
-      <p>From the root of the repository, on an up-to-date <code>main</code>:</p>
-      <Tabs
-        label="Where you are following along"
-        tabs={[
-          {
-            label: "On GitHub",
-            content: (
-              <>
-                <p>
-                  First put your repository on GitHub, with the{" "}
-                  <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">
-                    GitHub CLI
-                  </a>{" "}
-                  signed in (<code>gh auth login</code>):
-                </p>
-                <Terminal commands="gh repo create redline-demo --public --source . --remote origin --push" />
-                <div className="callout info">
-                  <span className="ic">ℹ</span>
-                  <p>
-                    Make it <b>public</b>. Dependency review and secret scanning, which step 06
-                    relies on, are free on public repositories and need GitHub Advanced Security on
-                    private ones. From here on, merge each step&apos;s pull request before you start
-                    the next, and branch from an up-to-date <code>main</code>.
-                  </p>
-                </div>
-                <p>Then onboard it:</p>
-                <Terminal
-                  commands={rl("init --gate-source local")}
-                  output={`  profile tooling
+      <p>From the root of your repository, on an up-to-date <code>main</code>:</p>
+      <Terminal
+        commands={rl("init --gate-source local")}
+        output={`  profile tooling
   Files  21 written
    + AGENTS.md
    + CLAUDE.md
@@ -66,49 +65,13 @@ export default async function Page() {
    ✓ applied     merge-policy       branch ruleset
    · unsupported repo-property      repository property "redline=onboarded"
   Pull request
-   https://github.com/<you>/redline-demo/pull/1`}
-                />
-                <p>
-                  The first time, <code>npx</code> asks <code>Ok to proceed? (y)</code>; answer{" "}
-                  <code>y</code>. <code>repo-property</code> needs a GitHub organisation, so it is
-                  unavailable on a personal account. Nothing depends on it.
-                </p>
-              </>
-            ),
-          },
-          {
-            label: "Not on GitHub yet",
-            content: (
-              <>
-                <Terminal
-                  commands={rl("init")}
-                  output={`  profile tooling
-  ▲ this repository has no git remote, so Redline installed the rules and
-    the local review only. The merge gate, branch policy, labels and security
-    floor need a host: add a remote and run redline init again to install them
-  Files  … written
-   + AGENTS.md
-   + CLAUDE.md
-   + .claude/commands/redline-review.md
-   + .redline.json
-   …
-  not committed — the files are in your working tree; commit them when you are ready`}
-                />
-                <p>
-                  With no remote there is nowhere for a merge gate to run, so Redline installs what
-                  works on your machine and stops. It contacts no host and commits nothing. Commit the
-                  files yourself:
-                </p>
-                <Terminal commands={`git add -A && git commit -m "chore: onboard redline"`} />
-                <p>
-                  The parts below about GitHub settings and the pull request don&apos;t apply to you;
-                  read them anyway, because steps 05 to 09 build on them.
-                </p>
-              </>
-            ),
-          },
-        ]}
+   https://github.com/<you>/my-redline-demo/pull/1`}
       />
+      <p>
+        The first time, <code>npx</code> asks <code>Ok to proceed? (y)</code>; answer{" "}
+        <code>y</code>. <code>repo-property</code> needs a GitHub organisation, so it is unavailable
+        on a personal account. Nothing depends on it.
+      </p>
 
       <h2>What it installed</h2>
       <p>Three kinds of thing, each catching mistakes at a different moment:</p>

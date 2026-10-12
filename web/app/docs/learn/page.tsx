@@ -57,10 +57,10 @@ export default async function Page() {
         <code>step-09</code>, so at every step you can see exactly what the repository held.
       </p>
       <p>
-        Step 00 puts its starting files into a repository of your own. Steps 01 to 04 work on your
-        machine alone; from step 05 on, the lessons are about checks that run on pull requests, so
-        you push that repository to GitHub. Rather just read? Every step links the demo&apos;s pull
-        request, so you can follow without running anything.
+        Step 00 puts its starting files into a repository of your own, and step 01 puts that
+        repository on GitHub under your account, because the checks Redline adds run on pull
+        requests. The demo itself is only ever read from. Rather just read? Every step links the
+        demo&apos;s pull request, so you can follow without running anything.
       </p>
       <p>
         Mark each step complete as you go. Your progress is kept in this browser only.

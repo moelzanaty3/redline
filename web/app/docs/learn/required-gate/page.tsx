@@ -37,7 +37,7 @@ ${rl("init --blocking")}`}
    ✓ applied     merge-policy       branch ruleset
    …
   Pull request
-   https://github.com/<you>/redline-demo/pull/<n>`}
+   https://github.com/<you>/my-redline-demo/pull/<n>`}
       />
       <p>
         <code>merge-policy</code> is the change: the <code>Redline</code> ruleset on{" "}
@@ -122,8 +122,8 @@ gh pr view --json mergeStateStatus`}
                   with your own owner name:
                 </p>
                 <Terminal
-                  commands={`gh api repos/<you>/redline-demo/rulesets --jq '.[].id' \\
-  | xargs -I{} gh api repos/<you>/redline-demo/rulesets/{} \\
+                  commands={`gh api repos/<you>/my-redline-demo/rulesets --jq '.[].id' \\
+  | xargs -I{} gh api repos/<you>/my-redline-demo/rulesets/{} \\
       --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks'`}
                   output={`[{"context":"redline-gate / gate"}]`}
                 />

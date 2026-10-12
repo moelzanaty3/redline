@@ -102,8 +102,8 @@ standards    0.2.0 — behind 0.2.1, a sync will raise it`}
         </li>
       </ul>
       <p>
-        Built your own copy and finished with it? Delete it on GitHub, or locally with{" "}
-        <code>cd .. &amp;&amp; rm -rf redline-demo</code>.
+        Finished with your copy? Delete it with <code>gh repo delete my-redline-demo</code>, and
+        remove the folder.
       </p>
     </LearnPage>
   );
