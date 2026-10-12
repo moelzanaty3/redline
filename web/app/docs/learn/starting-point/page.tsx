@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Quiz, Tabs } from "@/components/learn/interactive";
+import {
+  PackageManagerTabs,
+  Quiz,
+  Tabs,
+  type PackageManagerName,
+} from "@/components/learn/interactive";
 import { File, LearnPage, Terminal } from "@/components/learn/parts";
 import { DEMO_URL } from "@/lib/learn";
 
@@ -81,12 +86,11 @@ jobs:
 const SCRIPTS = `scripts.build=tsc "scripts.test=tsc && node --test dist/*.test.js"`;
 
 type PackageManager = {
-  name: string;
+  name: PackageManagerName;
   setup: string;
   setupNote: ReactNode;
   scripts: string;
   test: string;
-  lockfile: string;
   ci: string;
 };
 
@@ -107,7 +111,6 @@ pnpm add -D typescript@5 @types/node@22`,
     ),
     scripts: `pnpm pkg set ${SCRIPTS}`,
     test: "pnpm test",
-    lockfile: "pnpm-lock.yaml",
     ci: `      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -129,7 +132,6 @@ npm install -D typescript@5 @types/node@22`,
     ),
     scripts: `npm pkg set type=module ${SCRIPTS}`,
     test: "npm test",
-    lockfile: "package-lock.json",
     ci: `      - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -151,7 +153,6 @@ yarn add -D typescript@5 @types/node@22`,
     ),
     scripts: `npm pkg set type=module ${SCRIPTS}`,
     test: "yarn test",
-    lockfile: "yarn.lock",
     ci: `      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -173,7 +174,6 @@ bun add -d typescript@5 @types/node@22`,
     ),
     scripts: `npm pkg set name=redline-demo type=module ${SCRIPTS}`,
     test: "bun run test",
-    lockfile: "bun.lock",
     ci: `      - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
@@ -184,7 +184,12 @@ bun add -d typescript@5 @types/node@22`,
   },
 ];
 
-function BuildByHand({ pm }: { pm: PackageManager }) {
+function variants(render: (pm: PackageManager) => ReactNode) {
+  const panels = PACKAGE_MANAGERS.map((pm) => ({ name: pm.name, content: render(pm) }));
+  return <PackageManagerTabs panels={panels} />;
+}
+
+function BuildByHand() {
   return (
     <>
       <h3>1. A project that uses TypeScript</h3>
@@ -193,22 +198,28 @@ function BuildByHand({ pm }: { pm: PackageManager }) {
         and Node&apos;s type definitions. The versions match the demo, so your output matches the
         lessons.
       </p>
-      <Terminal commands={pm.setup} />
-      <p>{pm.setupNote}</p>
+      {variants((pm) => (
+        <>
+          <Terminal commands={pm.setup} />
+          <p>{pm.setupNote}</p>
+        </>
+      ))}
 
       <h3>2. Scripts to build and test</h3>
-      <Terminal commands={pm.scripts} />
+      {variants((pm) => (
+        <>
+          <Terminal commands={pm.scripts} />
+          {pm.name === "yarn" || pm.name === "bun" ? (
+            <p>
+              <code>npm pkg</code> only edits <code>package.json</code>; npm comes with Node, so it
+              is already there.
+            </p>
+          ) : null}
+        </>
+      ))}
       <p>
-        <code>{pm.test}</code> now compiles <code>src/</code> into <code>dist/</code>, then runs
-        every compiled test file with the test runner built into Node. No test framework to
-        install.
-        {pm.name === "yarn" || pm.name === "bun" ? (
-          <>
-            {" "}
-            <code>npm pkg</code> only edits <code>package.json</code>; npm comes with Node, so it
-            is already there.
-          </>
-        ) : null}
+        The test script compiles <code>src/</code> into <code>dist/</code>, then runs every compiled
+        test file with the test runner built into Node. No test framework to install.
       </p>
 
       <h3>3. Tell the compiler how strict to be</h3>
@@ -238,14 +249,18 @@ function BuildByHand({ pm }: { pm: PackageManager }) {
         The import says <code>./users.js</code>, not <code>.ts</code>: the test runs after
         compiling, when the file next to it is JavaScript.
       </p>
-      <Terminal commands={pm.test} output={TESTS} />
+      {variants((pm) => (
+        <Terminal commands={pm.test} output={TESTS} />
+      ))}
 
       <h3>7. CI that runs the tests on GitHub</h3>
-      <File name=".github/workflows/ci.yml" text={CI_HEAD + pm.ci} />
+      {variants((pm) => (
+        <File name=".github/workflows/ci.yml" text={CI_HEAD + pm.ci} />
+      ))}
       <p>
         On every push to <code>main</code> and every pull request, GitHub installs the exact
-        versions in <code>{pm.lockfile}</code> and runs <code>{pm.test}</code>. It only runs once the
-        repository is on GitHub, which is step 05.
+        versions in your lockfile and runs the tests. It only runs once the repository is on GitHub,
+        which is step 05.
       </p>
 
       <h3>8. Commit</h3>
@@ -341,18 +356,13 @@ pnpm test`}
             content: (
               <>
                 <p>
-                  Pick your package manager. Every later step uses pnpm, so with another one, swap
+                  Where a command depends on your package manager, pick yours; every switcher on the
+                  page follows. Every later step uses pnpm, so with another one, swap
                   the command: <code>pnpm add</code> is <code>npm install</code>,{" "}
                   <code>yarn add</code> or <code>bun add</code>, and <code>pnpm test</code> is{" "}
                   <code>npm test</code>, <code>yarn test</code> or <code>bun run test</code>.
                 </p>
-                <Tabs
-                  label="Package manager"
-                  tabs={PACKAGE_MANAGERS.map((pm) => ({
-                    label: pm.name,
-                    content: <BuildByHand pm={pm} />,
-                  }))}
-                />
+                <BuildByHand />
               </>
             ),
           },

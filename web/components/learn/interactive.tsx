@@ -173,8 +173,19 @@ export function LearnPath() {
 
 export type Tab = { label: string; content: ReactNode };
 
-export function Tabs({ label, tabs }: { label: string; tabs: Tab[] }) {
-  const [active, setActive] = useState(0);
+type TabsProps = {
+  label: string;
+  tabs: Tab[];
+  // Set both to drive the selection from outside, as the package manager
+  // switchers do so that picking one switches them all.
+  selected?: number;
+  onSelect?: (index: number) => void;
+};
+
+export function Tabs({ label, tabs, selected, onSelect }: TabsProps) {
+  const [own, setOwn] = useState(0);
+  const active = selected ?? own;
+  const select = onSelect ?? setOwn;
   const base = useId();
 
   function onKey(event: KeyboardEvent<HTMLButtonElement>) {
@@ -182,7 +193,7 @@ export function Tabs({ label, tabs }: { label: string; tabs: Tab[] }) {
     if (step === 0) return;
     event.preventDefault();
     const next = (active + step + tabs.length) % tabs.length;
-    setActive(next);
+    select(next);
     document.getElementById(`${base}-tab-${next}`)?.focus();
   }
 
@@ -198,7 +209,7 @@ export function Tabs({ label, tabs }: { label: string; tabs: Tab[] }) {
             aria-selected={i === active}
             aria-controls={`${base}-panel-${i}`}
             tabIndex={i === active ? 0 : -1}
-            onClick={() => setActive(i)}
+            onClick={() => select(i)}
             onKeyDown={onKey}
           >
             {tab.label}
@@ -218,6 +229,56 @@ export function Tabs({ label, tabs }: { label: string; tabs: Tab[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Package manager. Only the commands that differ get a switcher, and every
+// switcher on the page shows the same choice, remembered in this browser.
+// ---------------------------------------------------------------------------
+
+const PACKAGE_MANAGER_NAMES = ["pnpm", "npm", "yarn", "bun"] as const;
+export type PackageManagerName = (typeof PACKAGE_MANAGER_NAMES)[number];
+
+const PACKAGE_MANAGER_KEY = "redline-learn-package-manager";
+
+function readPackageManager(): string {
+  try {
+    return localStorage.getItem(PACKAGE_MANAGER_KEY) ?? "pnpm";
+  } catch {
+    return "pnpm";
+  }
+}
+
+function writePackageManager(name: PackageManagerName) {
+  try {
+    localStorage.setItem(PACKAGE_MANAGER_KEY, name);
+  } catch {
+    // storage unavailable: the choice lasts for this page view only
+  }
+  for (const listener of listeners) listener();
+}
+
+export function PackageManagerTabs({
+  panels,
+}: {
+  panels: { name: PackageManagerName; content: ReactNode }[];
+}) {
+  const chosen = useSyncExternalStore(subscribe, readPackageManager, () => "pnpm");
+  const index = panels.findIndex((panel) => panel.name === chosen);
+
+  function onSelect(i: number) {
+    const panel = panels[i];
+    if (panel) writePackageManager(panel.name);
+  }
+
+  return (
+    <Tabs
+      label="Package manager"
+      tabs={panels.map((panel) => ({ label: panel.name, content: panel.content }))}
+      selected={index === -1 ? 0 : index}
+      onSelect={onSelect}
+    />
   );
 }
 
