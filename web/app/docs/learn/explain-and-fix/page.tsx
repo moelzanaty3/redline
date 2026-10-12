@@ -56,7 +56,7 @@ export default async function Page() {
   decided by   a checker, with no model call
   defined in   standards/core.md:87
   applies to   every file — the core standard is not scoped by stack
-  reaches      tooling, web-react, web-next, … every profile`}
+  reaches      javascript-typescript, web-react, web-nextjs, … every profile`}
       />
       <ul>
         <li>
@@ -130,7 +130,7 @@ export default async function Page() {
         commands={`pnpm test
 git add src/user.ts
 ${rl("review")}`}
-        output={`profile tooling — rules in scope: core, typescript
+        output={`profile javascript-typescript — rules in scope: core, typescript
 no findings`}
       />
       <p>

@@ -20,7 +20,7 @@ export function loadUser(raw: string) {
 export type Payload = unknown
 `;
 
-const FINDINGS = `profile tooling — rules in scope: core, typescript
+const FINDINGS = `profile javascript-typescript — rules in scope: core, typescript
 src/user.ts:3
   Redline/HIGH [core/untracked-todo]: this TODO carries no ticket reference, so nothing will bring anyone back to it.
 src/user.ts:5

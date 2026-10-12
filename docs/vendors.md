@@ -59,7 +59,7 @@ it meant React rules silently firing on NestJS files.
 The replacement is **profiles**. A repo installs exactly one profile, and a profile never
 contains two rule sets that contradict each other. `service-node` gets the NestJS rules
 and no React rules, so `src/**/*.ts` is unambiguous inside that repo. The one deliberate
-overlap — `mobile-rn` installing both React and React Native — is additive by design, and
+overlap — `mobile-react-native` installing both React and React Native — is additive by design, and
 each file says so in its own text. `scripts/validate.mjs` fails the build if a negated or
 brace-expanded glob is ever reintroduced.
 
@@ -91,4 +91,4 @@ you list in `CANARY_TARGETS`.
 - **Instruction size and precedence** differ per vendor. Copilot reads the core file plus
   every matching `instructions` file; AGENTS.md consumers read one concatenated file.
   Keep individual stack files focused — the concatenated `AGENTS.md` for
-  `fullstack-node` is the largest artifact the renderer produces and is the one to watch.
+  `fullstack-react-node` is the largest artifact the renderer produces and is the one to watch.

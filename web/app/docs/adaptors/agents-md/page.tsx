@@ -43,7 +43,7 @@ export default function Page() {
         <span className="ic">ℹ</span>
         <p>
           The concatenated <code>AGENTS.md</code> for{" "}
-          <code>fullstack-node</code> is the largest artifact the renderer
+          <code>fullstack-react-node</code> is the largest artifact the renderer
           produces — keep individual stack files focused when adding rules.
         </p>
       </div>

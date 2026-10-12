@@ -54,7 +54,7 @@ export default async function Page() {
               </td>
               <td>
                 <b>
-                  Tick <code>tooling</code>
+                  Tick <code>javascript-typescript</code>
                 </b>{" "}
                 (JavaScript, TypeScript). Nothing is ticked for you: which rules a repository is held
                 to is your decision.
@@ -146,7 +146,7 @@ export default async function Page() {
       <p>Once you answer the last question, it does the work:</p>
       <Terminal
         commands="# after Ready?"
-        output={`  profile tooling
+        output={`  profile javascript-typescript
   Files  … written
    + package.json
    + AGENTS.md
@@ -309,7 +309,7 @@ git pull`}
       </p>
       <Terminal
         commands={rl("status")}
-        output={`profile      tooling (javascript, typescript)
+        output={`profile      javascript-typescript (javascript, typescript)
 host         github
 checks       GitHub Actions
 rung         observe — findings are reported, only the security floor fails the check

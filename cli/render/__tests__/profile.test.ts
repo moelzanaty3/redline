@@ -28,24 +28,41 @@ test('each framework profile carries javascript, typescript and its own stack', 
     ['web-angular', 'angular'],
     ['web-vue', 'vue'],
     ['web-svelte', 'svelte'],
-    ['web-vanilla', 'dom'],
+    ['javascript-typescript-browser', 'dom'],
   ] as const) {
     assert.deepEqual(resolveProfile(manifest, name).stacks, ['javascript', 'typescript', stack]);
   }
 });
 
+// Every profile that was renamed keeps its old name as an alias, so a
+// repository onboarded before the rename, and every script passing --profile,
+// still resolves — and is recorded under the new name from then on.
+test('every old profile name resolves to the profile it was renamed to', () => {
+  for (const [old, now] of [
+    ['tooling', 'javascript-typescript'],
+    ['web-vanilla', 'javascript-typescript-browser'],
+    ['web-next', 'web-nextjs'],
+    ['mobile-rn', 'mobile-react-native'],
+    ['infra', 'infra-terraform'],
+    ['fullstack-node', 'fullstack-react-node'],
+    ['lib-effect', 'typescript-effect'],
+  ] as const) {
+    assert.equal(resolveProfile(manifest, old).profile, now);
+  }
+});
+
 test('resolves an alias to its target key', () => {
   const r = resolveProfile(manifest, 'mobile');
-  assert.equal(r.profile, 'mobile-rn');
+  assert.equal(r.profile, 'mobile-react-native');
 });
 
 test('a parent stack always precedes the child that extends it', () => {
-  const { stacks } = resolveProfile(manifest, 'mobile-rn');
+  const { stacks } = resolveProfile(manifest, 'mobile-react-native');
   assert.deepEqual(stacks, ['javascript', 'typescript', 'react', 'react-native']);
 });
 
 test('a stack is listed once even when reached twice', () => {
-  const { stacks } = resolveProfile(manifest, 'fullstack-node');
+  const { stacks } = resolveProfile(manifest, 'fullstack-react-node');
   assert.equal(new Set(stacks).size, stacks.length);
 });
 
@@ -70,8 +87,8 @@ test('several profiles resolve to the union of their stacks', () => {
 // or verify's artifacts-current finding flaps between their runs.
 test('the recorded name is sorted, so order of selection cannot matter', () => {
   const one = resolveProfile(manifest, 'web-react,infra');
-  const other = resolveProfile(manifest, 'infra,web-react');
-  assert.equal(one.profile, 'infra,web-react');
+  const other = resolveProfile(manifest, 'infra-terraform,web-react');
+  assert.equal(one.profile, 'infra-terraform,web-react');
   assert.deepEqual(one, other);
 });
 
@@ -95,7 +112,7 @@ test('a stack two profiles share is listed once', () => {
 });
 
 test('aliases resolve per element in a list', () => {
-  assert.equal(resolveProfile(manifest, 'mobile,infra').profile, 'infra,mobile-rn');
+  assert.equal(resolveProfile(manifest, 'mobile,infra').profile, 'infra-terraform,mobile-react-native');
 });
 
 test('one bad name in a list names that name, not the whole list', () => {
@@ -110,10 +127,10 @@ test('whitespace and empty segments are tolerated, an empty list is not', () => 
   assert.throws(() => resolveProfile(manifest, ' , '), /no profile given/);
 });
 
-// lib-effect is added on top of a base profile, and effect extends typescript,
+// typescript-effect is added on top of a base profile, and effect extends typescript,
 // so the TypeScript rules arrive once and before the Effect rules that build on them.
-test('lib-effect layers on a base profile without repeating typescript', () => {
-  const { stacks } = resolveProfile(manifest, 'service-node,lib-effect');
+test('typescript-effect layers on a base profile without repeating typescript', () => {
+  const { stacks } = resolveProfile(manifest, 'service-node,typescript-effect');
   assert.equal(stacks.filter((s) => s === 'typescript').length, 1);
   assert.ok(stacks.indexOf('typescript') < stacks.indexOf('effect'));
   assert.ok(stacks.includes('nodejs'));
