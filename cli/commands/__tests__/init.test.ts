@@ -1371,6 +1371,23 @@ test('a deselected merge policy is never applied to the host', async () => {
   assert.ok(!platform.applied.includes('applyPolicy'));
 });
 
+// The onboarding pull request used to fail the two process checks of the gate
+// it installs: no `## Launch readiness` section, and hundreds of generated lines
+// with no ADR. It passed only on the redline-sync label, which the gate reports
+// as an exemption with no record behind it. Read the body the way the gate's
+// checklist job does: the section must exist and hold no unticked box.
+test('the onboarding pull request passes the checklist and ADR checks it installs', async () => {
+  const platform = fakePlatform();
+  await init(platform, { cwd: repo(), root, now });
+
+  const body = platform.lastChange?.body ?? '';
+  const section = body.split(/^##\s+Launch readiness/m)[1]?.split(/^##\s/m)[0] ?? '';
+  assert.notEqual(section.trim(), '', 'the checklist job fails a body with no Launch readiness section');
+  assert.doesNotMatch(section, /^\s*- \[ \]/m, 'an unticked box fails the checklist job');
+  assert.match(section, /^- \[x\] No secrets/m);
+  assert.ok(platform.lastChange?.labels.includes('no-adr'), 'the ADR check accepts the no-adr label');
+});
+
 test('deselected labels leave the onboarding pull request unlabelled', async () => {
   const platform = fakePlatform();
   await init(platform, { cwd: repo(), root, now, capabilities: { labels: false } });

@@ -54,6 +54,11 @@ export const DEFAULT_MENU: MenuSelections = MENU_DEFAULTS;
 // be pinned against the real source (cli/render/__tests__/vendors.test.ts).
 export const SYNC_LABEL = 'redline-sync';
 
+// The label the ADR check accepts for a large change that makes no decision.
+// Onboarding is exactly that: hundreds of generated lines, and the decision to
+// adopt the standard was made before the command ran.
+export const NO_ADR_LABEL = 'no-adr';
+
 export const DEFAULT_CAPABILITIES: CapabilitySelections = {
   gate: true,
   mergePolicy: true,
@@ -1273,7 +1278,7 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
       branch: ONBOARD_BRANCH,
       title: `chore(redline): onboard to standards v${manifest.version}`,
       body: onboardBody(profile, manifest.version, pendingAdmin, files, hostPlan, menu, notes),
-      labels: capabilities.labels ? [SYNC_LABEL] : [],
+      labels: capabilities.labels ? [SYNC_LABEL, NO_ADR_LABEL] : [],
       files,
     });
   } catch (error) {
@@ -1371,6 +1376,23 @@ function onboardBody(
     '',
     '`.redline.json` records every choice above and explains each one in its own `//` key.',
     ...(notes.length === 0 ? [] : ['', '## Worth knowing', '', ...notes.map((n) => `- ${n}`)]),
+    '',
+    // The gate this pull request installs reads this section, so the pull
+    // request that installs it has to pass it honestly rather than lean on a
+    // soft-fail label. Only the items that are true of generated configuration
+    // are ticked; the template's own rule for the rest is to delete the line and
+    // say why, which is what the sentence below the list does.
+    '## Launch readiness',
+    '',
+    '- [x] No secrets, keys, or customer data in code, logs, or fixtures',
+    '- [x] Rollback is safe (no destructive migration, no breaking contract change)',
+    '- [x] No unrelated changes in the diff',
+    '',
+    'Input validation, typecheck and lint, device testing and error states are left out: this change',
+    'adds configuration and markdown, and no code that runs. `redline remove` rolls it back.',
+    '',
+    `The \`${NO_ADR_LABEL}\` label is applied because the diff is generated: the decision it records is`,
+    'adopting the standard, which was made before this pull request was opened.',
     ...pending,
   ].join('\n');
 }
