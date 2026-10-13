@@ -12,7 +12,7 @@ export function SearchButton() {
 
   return (
     <button type="button" className="search-pill" onClick={openCmdk} aria-label="Search documentation">
-      <span>Search documentation…</span>
+      <span>Search</span>
       <kbd>{isMac ? "⌘" : "Ctrl"} K</kbd>
     </button>
   );

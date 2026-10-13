@@ -133,12 +133,21 @@
   transition: width 0.3s;
 }
 .learn-path-reset {
+  margin-left: auto;
+  padding: 4px 10px;
   background: none;
-  border: 0;
-  color: var(--faint);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
   font: inherit;
-  text-decoration: underline;
   cursor: pointer;
+}
+.learn-path-reset:hover {
+  color: var(--text);
+  border-color: currentColor;
+}
+.learn-done-next .learn-path-reset {
+  margin-left: 6px;
 }
 .learn-path ol {
   list-style: none;
@@ -389,6 +398,15 @@
 }
 .learn-term p + p {
   margin-top: 8px;
+}
+/* Wider than a term: these carry terminals, and a 60ch box clips them. */
+.learn-private {
+  max-width: none;
+  border-color: rgba(214, 158, 46, 0.42);
+}
+.learn-private .learn-term-tag {
+  background: rgba(214, 158, 46, 0.16);
+  color: #d69e2e;
 }
 
 /* ---- inside .prose ----

@@ -1,20 +1,19 @@
 import type { Metadata } from "next";
-import { Quiz, Tabs } from "@/components/learn/interactive";
-import { File, LearnPage, Term, Terminal } from "@/components/learn/parts";
-import { installCommand, packageState } from "@/lib/package-version";
+import { Quiz, RedlineCode, Tabs } from "@/components/learn/interactive";
+import { File, LearnPage, RedlineTerminal, Term, Terminal } from "@/components/learn/parts";
 
 export const metadata: Metadata = { title: "Learn: explain and fix" };
 
-const USER_FIXED_TS = `export type User = { id: string; name: string }
-
-function isUser(value: unknown): value is User {
+const USER_FIXED_TS = `function isUser(value: unknown): value is User {
   return (
     typeof value === 'object' &&
     value !== null &&
     'id' in value &&
     typeof value.id === 'string' &&
     'name' in value &&
-    typeof value.name === 'string'
+    typeof value.name === 'string' &&
+    'email' in value &&
+    typeof value.email === 'string'
   )
 }
 
@@ -23,15 +22,34 @@ export function loadUser(raw: string): User {
   if (!isUser(parsed)) throw new Error('payload is not a User')
   return parsed
 }
+
+export function requireUser(directory: UserDirectory, id: string): User {
+  const user = directory.find(id)
+  if (!user) throw new Error('the requested user does not exist')
+  return user
+}
+`;
+
+const USER_TEST_IMPORT = `import { UserDirectory, loadUser, requireUser } from './users.js'`;
+
+const USER_TEST_TS = `test('a valid payload becomes a User', () => {
+  const user = { id: 'u1', name: 'Ada', email: 'ada@example.com' }
+  assert.deepEqual(loadUser(JSON.stringify(user)), user)
+})
+
+test('a payload missing a field is refused', () => {
+  assert.throws(() => loadUser('{"id":"u1","name":"Ada"}'), /not a User/)
+})
+
+test('a missing user is refused without naming anyone', () => {
+  assert.throws(() => requireUser(new UserDirectory(), 'u1'), /^Error: the requested user does not exist$/)
+})
 `;
 
 const SILENCED_TS = `// SAFETY: trust me
 return JSON.parse(raw) as unknown as User`;
 
-export default async function Page() {
-  const state = await packageState();
-  const rl = (args: string) => installCommand(state, args);
-
+export default function Page() {
   return (
     <LearnPage
       slug="explain-and-fix"
@@ -44,8 +62,8 @@ export default async function Page() {
     >
       <h2>Ask why</h2>
       <p>Take the rule id from the brackets of any finding:</p>
-      <Terminal
-        commands={rl("explain core/unsafe-assertion")}
+      <RedlineTerminal
+        commands="{redline} explain core/unsafe-assertion"
         output={`BLOCKER core/unsafe-assertion
 
   No unsafe assertions (\`as unknown as X\`, force casts) used to silence an error. Where one is
@@ -68,7 +86,7 @@ export default async function Page() {
           file is where you propose changing it, in a pull request, like code.
         </li>
         <li>
-          <code>{rl("explain --list")}</code> prints every rule id.
+          <RedlineCode args="explain --list" /> prints every rule id.
         </li>
       </ul>
       <Term word="Standard">
@@ -91,15 +109,21 @@ export default async function Page() {
                 <p>
                   Check the parsed JSON with a type predicate. Once the code has proved the value is a{" "}
                   <code>User</code>, there is nothing left to assert or suppress, and the{" "}
-                  <code>TODO</code> and the <code>unknown</code> alias go with it:
+                  <code>TODO</code> and the <code>unknown</code> alias go with it. The error in{" "}
+                  <code>requireUser</code> stops naming anyone: the caller knows who asked, and
+                  decides what is safe to log. In <code>src/users.ts</code>, replace everything you
+                  added in step 02 with:
                 </p>
-                <File name="src/user.ts" text={USER_FIXED_TS} />
+                <File name="src/users.ts — replaces the step 02 code" text={USER_FIXED_TS} />
                 <p>
                   A payload with a missing field now throws a clear error, at the boundary where it
                   arrived, instead of becoming a <code>User</code> with an <code>undefined</code>{" "}
-                  name somewhere far away. The demo adds a test for both outcomes in{" "}
-                  <code>src/user.test.ts</code>.
+                  name somewhere far away. Pin all three outcomes with a test. In{" "}
+                  <code>src/users.test.ts</code>, change the import line to:
                 </p>
+                <File name="src/users.test.ts — the import line" text={USER_TEST_IMPORT} />
+                <p>and add these at the end:</p>
+                <File name="src/users.test.ts — add at the end" text={USER_TEST_TS} />
               </>
             ),
           },
@@ -111,7 +135,7 @@ export default async function Page() {
                   The rule allows an assertion with a <code>SAFETY:</code> comment that says why it
                   holds:
                 </p>
-                <File name="src/user.ts" text={SILENCED_TS} />
+                <File name="src/users.ts" text={SILENCED_TS} />
                 <p>
                   The checker would accept this. But the comment would be false: nothing has checked
                   the payload. <code>SAFETY:</code> is for the rare assertion that is genuinely
@@ -126,18 +150,44 @@ export default async function Page() {
       />
 
       <h2>Check it</h2>
-      <Terminal
-        commands={`pnpm test
-git add src/user.ts
-${rl("review")}`}
+      <Terminal commands="pnpm test" />
+      <RedlineTerminal
+        commands={`git add src/users.ts src/users.test.ts
+{redline} review`}
         output={`profile javascript-typescript — rules in scope: core, typescript
 no findings`}
       />
       <p>
-        Commit and push. On GitHub, every check on the pull request goes green, including{" "}
-        <b>Deterministic policy</b>. The checklist&apos;s input-validation item can be ticked now,
-        honestly, because the code validates.
+        That is the checker&apos;s four. The fifth, line 30, needs a model, so run{" "}
+        <code>/redline-review</code> in your assistant again and expect no{" "}
+        <code>[core/customer-data-in-logs]</code> finding: the error no longer names anyone.
       </p>
+
+      <h2>Merge it</h2>
+      <p>The fix goes onto the same branch, so it lands in the pull request from step 02:</p>
+      <Terminal
+        commands={`git commit -m "fix: validate the user payload, and keep personal data out of errors"
+git push
+gh pr checks --watch`}
+        output={`✓  CI / test
+✓  Redline / redline-gate / Deterministic policy
+X  Redline / redline-gate / PR checklist                      the box you left unticked
+✓  Redline / redline-gate / ADR required for significant changes
+✓  Redline / redline-gate / Dependency review
+✓  Redline / redline-gate / Secret scan (diff)
+✓  Redline / redline-gate / gate`}
+      />
+      <p>
+        <code>Redline / redline-gate / Deterministic policy</code> is green now. On GitHub, tick the
+        input-validation item you left unticked in step 02, honestly this time, because the code
+        validates. Ticking it re-runs the checklist, and every check is green. Then merge, and
+        bring <code>main</code> back to your machine for the next step:
+      </p>
+      <Terminal
+        commands={`gh pr merge --squash
+git checkout main
+git pull`}
+      />
 
       <Quiz
         question={

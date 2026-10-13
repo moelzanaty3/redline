@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { CopyButton } from "@/components/copy-button";
-import { FindingPanel } from "@/components/finding";
-import { HeroFinding } from "@/components/hero-finding";
+import { HeroLine } from "@/components/hero-line";
 import { Journey } from "@/components/journey";
 import { Reveal } from "@/components/reveal";
 import { SEED_FILE, SEED_RULE_ID, seedDiff, seedMarkerExcerpt } from "@/components/seed-excerpt";
@@ -13,7 +12,7 @@ import { loadManifest } from "@/lib/manifest";
 import { installCommand, packageState } from "@/lib/package-version";
 import { findRule, getRules } from "@/lib/rules";
 import { seededFindingCount } from "@/lib/seeds";
-import { GITHUB_REPO, GITHUB_URL } from "@/lib/site";
+import { GITHUB_REPO, GITHUB_URL, LICENSE_NAME, NPM_PACKAGE, NPM_URL } from "@/lib/site";
 import "./home-skills.css";
 
 // Declared, not inherited from Next's default. The loaders behind this page —
@@ -28,6 +27,10 @@ export const dynamic = "force-static";
 // rule itself is ever renamed or removed.
 const RULE_HREF = "/docs/standards/javascript";
 
+// Where "And more" under the hero's finding goes: the adaptor pages, which list
+// every assistant the standard is rendered for.
+const ADAPTORS_HREF = "/docs/adaptors/github-copilot";
+
 // A second rule, for the one panel whose claim is that ids are many and each is
 // countable on its own. Illustrating that with the same id the hero and the
 // finding already carry made the page look like it owns one example.
@@ -40,6 +43,13 @@ export default async function Home() {
   const stackCount = Object.keys(manifest.stacks).length;
   const checkedCount = manifest.deterministic?.length ?? 0;
   const seedCount = seededFindingCount();
+
+  // The evidence strip names two stacks as examples; it must not outlive them.
+  for (const stack of ["react", "terraform"]) {
+    if (manifest.stacks[stack] === undefined) {
+      throw new Error(`standards/manifest.json no longer has stack "${stack}"; the home page names it`);
+    }
+  }
 
   // The finding in section 4 is a real rule at its real severity. A page that
   // typeset `Redline/BLOCKER [javascript/shell-injection]` after that id had
@@ -76,70 +86,90 @@ export default async function Home() {
     <main id="content" tabIndex={-1}>
       {/* ============ 1 — hero ============ */}
       <section className="hero">
-        <div className="hero-glow" aria-hidden="true" />
         <div className="hero-lines" aria-hidden="true" />
-        <div className="container hero-split">
+        <div className="container hero-grid">
           <div className="hero-copy">
-            {/* Two block spans rather than a hard <br/>: each sentence owns its
-                own line at every width, so the headline cannot fold into four
-                ragged rows on a narrow screen, and the two halves can be sized
-                apart — the first sets up, the second is the claim. */}
+            {/* One sentence per line at every width wide enough to hold it: the
+                setup, then the claim. */}
             <h1 className="hm-hero-in" style={{ animationDelay: "40ms" }}>
               <span className="hero-h1-a">AI writes the code.</span>
               <span className="hero-h1-b">
                 <span className="hero-mark">Redline</span> holds the line.
               </span>
             </h1>
-            {/* The definition, not a slogan. The headline above is the claim;
-                this is the one sentence a reader should be able to repeat —
-                what Redline is, where it acts, and what it measures. */}
-            <p className="sub hm-hero-in" style={{ animationDelay: "140ms" }}>
-              Redline is the review system your team doesn&apos;t have:{" "}
-              <b>one written standard</b> that your AI follows while it writes,
-              your machine checks before you push, and the pull request gate
-              checks before merge — and it counts which rules actually catch
-              bugs.
+            {/* The definition, cut to the three moments. Its last clause — that
+                Redline counts which rules catch bugs — is the "countable"
+                claim further down the page, not lost. */}
+            <p className="sub hm-hero-in" style={{ animationDelay: "120ms" }}>
+              <b>One written standard</b> your AI follows while it writes, your
+              machine checks before you push, and the pull request gate checks
+              before merge.
             </p>
-            <div className="hm-hero-cmd hm-hero-in" style={{ animationDelay: "220ms" }}>
-              <code>
-                <span className="tk-prompt">$ </span>
-                {initCmd}
-              </code>
-              <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
-            </div>
-            {/* "See a finding ↓" is gone: the finding is in the hero now, and a
-                link down to it was the hero apologising for not having one. */}
-            <p className="hm-hero-alt hm-hero-in" style={{ animationDelay: "290ms" }}>
-              {/* The command is for someone who already knows they want it. The
-                  reader who has never heard of Redline needs somewhere to start
-                  that is not their own repository. */}
-              <Link className="hm-hero-learn" href="/docs/learn">
-                New here? Learn Redline step by step →
+            <div className="hero-actions hm-hero-in" style={{ animationDelay: "200ms" }}>
+              {/* The reader who has never heard of Redline needs somewhere to
+                  start that is not their own repository; the command is for
+                  someone who already knows they want it. */}
+              <Link className="hm-pill" href="/docs/learn">
+                Learn Redline
               </Link>
-              <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
-                {GITHUB_REPO} on GitHub
+              <div className="hm-hero-cmd">
+                <code>
+                  <span className="tk-prompt">$ </span>
+                  {initCmd}
+                </code>
+                <CopyButton icon text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+              </div>
+            </div>
+            {/* Where the command comes from, and which release it resolves to
+                today — read from the registry at build time. */}
+            <p className="hero-pkg hm-hero-in" style={{ animationDelay: "260ms" }}>
+              <a href={NPM_URL} rel="noopener noreferrer" target="_blank">
+                <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14">
+                  <path d="M0 0h16v16H0z" fill="#cb3837" />
+                  <path d="M3 3h10v10h-2.5V5.5H8V13H3z" fill="#fff" />
+                </svg>
+                {state.status === "published" ? `${NPM_PACKAGE}@${state.version}` : NPM_PACKAGE}
+                <span aria-hidden="true">↗</span>
+              </a>
+              <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank" title={GITHUB_REPO}>
+                {GITHUB_REPO}
+                <span aria-hidden="true">↗</span>
               </a>
             </p>
-            {/* One quiet row, not a table. Six bordered cells outweighed the
-                install command they sat under, and the catalogue counts belong
-                to the section that is about the catalogue. */}
-            <ul className="hero-proof hm-hero-in" style={{ animationDelay: "350ms" }}>
-              <li>{ruleCount} rules with permanent ids</li>
-              <li>{checkedCount} checked without a model</li>
-              <li>{stackCount} stacks</li>
-              <li>GitHub &amp; Azure DevOps</li>
-              <li>MIT</li>
-            </ul>
           </div>
 
-          <div className="hero-art hm-hero-in" style={{ animationDelay: "430ms" }}>
-            <HeroFinding
+          <div className="hero-art hm-hero-in" style={{ animationDelay: "300ms" }}>
+            <HeroLine
+              diff={diff.slice(2)}
               file={SEED_FILE}
               ruleHref={RULE_HREF}
               ruleId={demoRule.id}
               severity={demoRule.severity}
+              moreHref={ADAPTORS_HREF}
             />
           </div>
+        </div>
+
+        {/* The evidence, as one quiet strip along the bottom of the fold. Every
+            figure is derived from standards/ at build time. */}
+        <div className="container hero-strip-wrap hm-hero-in" style={{ animationDelay: "380ms" }}>
+          {/* Plain words, for a reader who has never met the terms: an "id" is
+              a rule's fixed name, a "model" is AI, a "stack" is a language or
+              framework, a cloud tool or an architecture. */}
+          <ul className="hero-strip">
+            <li>
+              <b>{ruleCount}</b> review rules, each with a name that never changes
+            </li>
+            <li>
+              <b>{checkedCount}</b> checked automatically, no AI involved
+            </li>
+            <li>
+              <b>{stackCount}</b> tech stacks covered, from React to Terraform
+            </li>
+            <li>
+              <b>Free</b> open source ({LICENSE_NAME}), for GitHub &amp; Azure DevOps
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -155,33 +185,45 @@ export default async function Home() {
       {/* ============ 5 — the thinking behind the rules ============ */}
       <LowEvidence />
 
-      {/* ============ 6 — a finding ============ */}
+      {/* ============ 6 — what a finding means ============ */}
+      {/* The hero already shows one finding on real code. This section is about
+          the rule set behind it: what each severity obliges, and which rules a
+          checker decides without a model. */}
       <section className="hm-sec hm-finding" id="finding">
         <div className="container">
           <Reveal>
-          <div className="hm-sec-head">
-            <h2 className="hm-h2">This is what Redline produces</h2>
-            <p className="hm-lead">
-              A rule is only worth anything at the moment it catches something.
-              Here is one, on real code from the corpus Redline publishes to be
-              scored against.
+            <div className="hm-sec-head">
+              <h2 className="hm-h2">
+                Every finding is <span className="rl-mark">graded</span>
+              </h2>
+              <p className="hm-lead">
+                The finding at the top of this page names one rule at one
+                severity. Here is the whole set behind it: what each severity
+                obliges, and who decides a finding.
+              </p>
+            </div>
+            <SeverityFloor />
+            <ul className="hm-decide">
+              <li>
+                <b>{checkedCount}</b>
+                <h3>Checked, with no model</h3>
+                <p>
+                  Decided in <code>redline review</code>, the pre-push hook and
+                  the gate, where a false positive is a bug.
+                </p>
+              </li>
+              <li>
+                <b>{ruleCount - checkedCount}</b>
+                <h3>Judged by your AI reviewer</h3>
+                <p>
+                  Copilot, Claude or a local model, against the same ids — so
+                  every finding counts the same, whoever wrote it.
+                </p>
+              </li>
+            </ul>
+            <p className="hm-split">
+              <Link href="/docs/deterministic">Which rules are checked, and why →</Link>
             </p>
-          </div>
-          <FindingPanel
-            diff={diff}
-            file={SEED_FILE}
-            ruleId={demoRule.id}
-            ruleHref={RULE_HREF}
-            severity={demoRule.severity}
-          />
-          <SeverityFloor />
-          <p className="hm-split">
-            <b>{checkedCount} rules are decided by a checker, with no model</b> —
-            in <code>redline review</code>, the pre-push hook and the gate, where
-            a false positive is a bug. The other {ruleCount - checkedCount} are
-            judged by the AI reviewer you already use, against the same ids.{" "}
-            <Link href="/docs/deterministic">Which rules, and why →</Link>
-          </p>
           </Reveal>
         </div>
       </section>
@@ -191,7 +233,9 @@ export default async function Home() {
         <div className="container">
           <Reveal>
             <div className="hm-sec-head">
-              <h2 className="hm-h2">Why you can trust what it says</h2>
+              <h2 className="hm-h2">
+                Why you can <span className="rl-mark">trust</span> what it says
+              </h2>
             </div>
             <div className="hm-claim">
               <div className="hm-claim-copy">
@@ -294,7 +338,7 @@ export default async function Home() {
                   <span className="tk-prompt">$ </span>
                   {initCmd}
                 </code>
-                <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+                <CopyButton icon text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
               </div>
               <ul className="hm-try-list">
                 <li>
@@ -416,29 +460,34 @@ export default async function Home() {
       </section>
 
       {/* ============ 10 — final cta ============ */}
+      {/* The page closes on the same line it opened on. */}
       <section className="final-cta">
-        <div className="glow" aria-hidden="true" />
+        <span className="final-cta-line" aria-hidden="true" />
         <div className="container">
-          <h2>
-            Ship at AI speed.
-            <br />
-            The line still holds.
-          </h2>
-          <div className="hm-hero-cmd hm-hero-cmd-cta">
-            <code>
-              <span className="tk-prompt">$ </span>
-              {initCmd}
-            </code>
-            <CopyButton text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+          <Reveal>
+            <h2>
+              Ship at AI speed.
+              <br />
+              The line still <span className="rl-mark">holds</span>.
+            </h2>
+          </Reveal>
+          <div className="final-cta-actions">
+            <div className="hm-hero-cmd">
+              <code>
+                <span className="tk-prompt">$ </span>
+                {initCmd}
+              </code>
+              <CopyButton icon text={initCmd} label="Copy" ariaLabel={`Copy ${initCmd}`} />
+            </div>
+            <p className="hm-cta-links">
+              <Link href="/docs/learn">Learn Redline</Link>
+              <Link href="/docs">Documentation</Link>
+              <Link href="/docs/standards">The {ruleCount} rules</Link>
+              <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
+                Source on GitHub
+              </a>
+            </p>
           </div>
-          <p className="hm-cta-links">
-            <Link href="/docs/learn">Learn Redline</Link>
-            <Link href="/docs">Documentation</Link>
-            <Link href="/docs/standards">The {ruleCount} rules</Link>
-            <a href={GITHUB_URL} rel="noopener noreferrer" target="_blank">
-              Source on GitHub
-            </a>
-          </p>
         </div>
       </section>
     </main>

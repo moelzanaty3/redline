@@ -9,14 +9,15 @@ import type { DiffLine } from "@/components/seed-excerpt";
 // composes `Redline/<SEVERITY> [<rule-id>]:` from validated JSON rather than
 // letting a model free-type it (web/app/docs/local-review). The toggle exists
 // to make that visible in one click, so it changes nothing else on the panel.
-type Reviewer = {
+export type Reviewer = {
   id: string;
   label: string;
   where: string;
   prose: ReactNode;
 };
 
-const REVIEWERS: Reviewer[] = [
+// Shared with the hero card, which makes the same point above the fold.
+export const REVIEWERS: Reviewer[] = [
   {
     id: "copilot",
     label: "GitHub Copilot",
@@ -109,7 +110,15 @@ export function FindingPanel({
             </span>
             :
           </p>
-          <p className="hm-out-prose">{reviewer?.prose}</p>
+          {/* All three in one grid cell, only the active one visible: the
+              panel keeps the tallest height, so switching never shifts it. */}
+          <div className="hf-prose-stack">
+            {REVIEWERS.map((r) => (
+              <p className="hm-out-prose" key={r.id} aria-hidden={r.id !== active} data-on={r.id === active}>
+                {r.prose}
+              </p>
+            ))}
+          </div>
         </div>
 
         <div className="hm-switch" role="group" aria-label="Which tool produced this finding">

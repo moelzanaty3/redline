@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useId, useMemo, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
-import { LEARN_STEPS, learnHref } from "@/lib/learn";
+import { LEARN_STEPS, REDLINE_RUNNERS, learnHref } from "@/lib/learn";
 
 // ---------------------------------------------------------------------------
 // Progress. Which steps the reader has marked done, kept in this browser only:
@@ -40,6 +40,11 @@ function writeProgress(done: Set<string>) {
   for (const listener of listeners) listener();
 }
 
+// One click would wipe every tick, so it asks first.
+function resetProgress() {
+  if (window.confirm("Clear your progress through every Learn step?")) writeProgress(new Set());
+}
+
 function useProgress() {
   // The server has no storage, so it renders every step as not done and the
   // ticks appear once the page hydrates.
@@ -74,7 +79,14 @@ export function StepDone({ slug }: { slug: string }) {
           Next: {next.n} · {next.title} →
         </Link>
       ) : null}
-      {isDone && !next ? <span className="learn-done-next">You finished the path.</span> : null}
+      {isDone && !next ? (
+        <span className="learn-done-next">
+          You finished the path.{" "}
+          <button type="button" className="learn-path-reset" onClick={resetProgress}>
+            Start over
+          </button>
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -132,8 +144,8 @@ export function LearnPath() {
           {count} of {LEARN_STEPS.length} complete
         </span>
         {count > 0 ? (
-          <button type="button" className="learn-path-reset" onClick={() => writeProgress(new Set())}>
-            Reset
+          <button type="button" className="learn-path-reset" onClick={resetProgress}>
+            Reset progress
           </button>
         ) : null}
       </div>
@@ -257,6 +269,13 @@ function writePackageManager(name: PackageManagerName) {
     // storage unavailable: the choice lasts for this page view only
   }
   for (const listener of listeners) listener();
+}
+
+/** A Redline command inside a sentence, in the package manager the reader picked. */
+export function RedlineCode({ args }: { args: string }) {
+  const chosen = useSyncExternalStore(subscribe, readPackageManager, () => "pnpm");
+  const name = PACKAGE_MANAGER_NAMES.find((candidate) => candidate === chosen) ?? "pnpm";
+  return <code>{`${REDLINE_RUNNERS[name]} ${args}`}</code>;
 }
 
 export function PackageManagerTabs({

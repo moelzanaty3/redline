@@ -2,7 +2,8 @@ import Link from "next/link";
 import { loadManifest } from "@/lib/manifest";
 import {
   AUTHOR,
-  AUTHOR_CREDIT,
+  EMPLOYER,
+  EMPLOYER_URL,
   GITHUB_REPO,
   GITHUB_URL,
   ISSUES_URL,
@@ -102,16 +103,38 @@ export function SiteFooter() {
           </div>
         </div>
         <div className="legal">
-          <p className="built">
-            Built by <b>{AUTHOR}</b>, {AUTHOR_CREDIT}.
-          </p>
           <p className="terms">
-            © {new Date().getFullYear()} {AUTHOR} ·{" "}
+            {/* The author is named once, in the credit beside this; the
+                licence file names the copyright holder. */}
+            © {new Date().getFullYear()} ·{" "}
             <a href={LICENSE_URL} rel="noopener noreferrer" target="_blank">
               {LICENSE_NAME} licence
             </a>
           </p>
+          <p className="built">
+            Built by{" "}
+            <a href={LINKEDIN_URL} rel="noopener noreferrer" target="_blank">
+              <b>{AUTHOR}</b>
+            </a>
+            , an engineering manager at{" "}
+            <a href={EMPLOYER_URL} rel="noopener noreferrer" target="_blank">
+              {EMPLOYER}
+            </a>{" "}
+            who had this problem at scale.
+          </p>
+          {/* The standard this site documents, by the version in
+              standards/manifest.json — the one fact a footer can carry that
+              changes. */}
+          <Link className="f-status" href="/docs/changes">
+            <i aria-hidden="true" />
+            Standards v{manifest.version}
+          </Link>
         </div>
+      </div>
+      {/* The page's last mark: the name, ghosted and bleeding off the bottom
+          edge, struck through by the line it is named after. */}
+      <div className="f-word" aria-hidden="true">
+        <span>Redline</span>
       </div>
     </footer>
   );

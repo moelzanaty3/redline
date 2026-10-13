@@ -69,7 +69,9 @@ export function LowEvidence() {
         <Reveal>
           <div className="hm-sec-head">
             <span className="hm-eyebrow">Anti-slop: the thinking behind the rules</span>
-            <h2 className="hm-h2">AI slop looks finished. Redline asks for proof.</h2>
+            <h2 className="hm-h2">
+              AI slop looks finished. Redline asks for <span className="rl-mark">proof</span>.
+            </h2>
             <p className="hm-lead">
               AI writes <b>slop</b>: code that compiles, reads well, and proves
               nothing. 66% of developers surveyed name AI answers that are{" "}

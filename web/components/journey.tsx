@@ -3,7 +3,7 @@ import { join } from "node:path";
 import Link from "next/link";
 import { repoRoot } from "@/lib/content";
 import { loadManifest, type Manifest } from "@/lib/manifest";
-import { JourneyTerminal, type Line, type Tok } from "@/components/journey-terminal";
+import { JourneyScroll, type Chapter, type Line, type Tok } from "@/components/journey-scroll";
 
 // Everything printed in this transcript is a literal string from the CLI. Sources:
 //   cli/bin/redline.ts:130     — the write line: `  ` + `write ` (padded to the
@@ -302,7 +302,7 @@ export function Journey({ initCmd }: { initCmd: string }) {
   // Every line below is laid out the way cli/ui/tty.ts and cli/ui/report.ts lay
   // it out — the glyphs, the two-space gutters, the padded status column — and
   // painted in the colours those functions use.
-  const lines: Line[] = [
+  const intro: Line[] = [
     cmd(initCmd),
     // tty.ts intro(): the wordmark, a blank row, the chip, then a bare bar.
     // One block rather than five lines: the transcript's line height would
@@ -316,12 +316,16 @@ export function Journey({ initCmd }: { initCmd: string }) {
     { toks: [dim("│"), plain("  "), amber("▲"), plain(" Around ten questions, most already answered.")] },
     { toks: [plain("Whatever was detected is preselected, so enter accepts it.")] },
     { toks: [plain("The last question can still be a preview that writes nothing.")] },
+  ];
+  const menu: Line[] = [
     // tty.ts answered() — `◇  <title> · <answer>` — the line each question
     // leaves behind once it is confirmed. The expanded lists are further down
     // the page.
     ...MENU.map(([question, answer]) => ({
       toks: [dim("◇"), plain(`  ${question} `), dim("·"), plain(" "), cyan(answer)],
     })),
+  ];
+  const run: Line[] = [
     // prompt.ts task() → tty.ts spinnerDone(), once the run finishes.
     { toks: [dim("│"), plain("  "), green("✓"), plain(" onboarding this repository")] },
     // report.ts renderReport().
@@ -344,6 +348,8 @@ export function Journey({ initCmd }: { initCmd: string }) {
     { toks: [] },
     { toks: [bold("  Pull request")] },
     { toks: [plain("   "), cyan(`https://github.com/${EXAMPLE_REPO}/pull/${EXAMPLE_PR}`)] },
+  ];
+  const review: Line[] = [
     { toks: [] },
     // The second `#` line, like the first, is ours: the time between runs.
     { toks: [dim("# later, on a feature branch, before pushing")] },
@@ -362,6 +368,8 @@ export function Journey({ initCmd }: { initCmd: string }) {
           "run /redline-review in your assistant, or `redline review --engine api`"
       ),
     ]),
+  ];
+  const verify: Line[] = [
     { toks: [] },
     { toks: [dim(`# the gate workflow has since run on PR #${EXAMPLE_PR}`)] },
     cmd("redline verify"),
@@ -370,33 +378,81 @@ export function Journey({ initCmd }: { initCmd: string }) {
     })),
   ];
 
+  // Each step owns the run of transcript lines it describes; the terminal grows
+  // to the step being read. The copy says nothing the lines do not show.
+  const chapters: Chapter[] = [
+    {
+      title: "Run one command",
+      body: (
+        <p>
+          It opens with the questions it cannot answer for itself. Whatever it
+          detected is preselected, so enter accepts it.
+        </p>
+      ),
+      lines: intro,
+    },
+    {
+      title: "Answer around ten questions",
+      body: (
+        <p>
+          Which standards apply, where the repository lives, which assistants
+          read the rules, how hard the check bites. The <code>◇</code> rows are
+          each question after you answer it —{" "}
+          <Link href="/docs/onboarding#menu">every one explained in the docs</Link>.
+        </p>
+      ),
+      lines: menu,
+    },
+    {
+      title: "One pull request. Never a push.",
+      body: (
+        <p>
+          It writes {totalWrites} files — four are shown — merging into the ones
+          you already have, and opens a pull request on{" "}
+          <code>{ONBOARD_BRANCH}</code> titled{" "}
+          <code>chore(redline): onboard to standards v{version}</code>, labelled{" "}
+          <code>{SYNC_LABEL}</code>, for your own team to review and merge.{" "}
+          <Link href="/docs/onboarding">Every file, and how the merge works →</Link>
+        </p>
+      ),
+      lines: run,
+    },
+    {
+      title: "Review before you push",
+      body: (
+        <p>
+          On a feature branch, <code>redline review</code> runs every rule a
+          checker can decide, with no model. The rest of the standard is judged
+          by your assistant, through <code>/redline-review</code>.
+        </p>
+      ),
+      lines: review,
+    },
+    {
+      title: "Check that it held",
+      body: (
+        <p>
+          Once the gate workflow has run, <code>redline verify</code> reads the
+          repository back and reports each check. Four of them are shown.
+        </p>
+      ),
+      lines: verify,
+    },
+  ];
+
   return (
     <section className="hm-sec hm-journey" id="proof">
       <div className="container">
         <div className="hm-sec-head">
           <h2 className="hm-h2">One repository, start to finish</h2>
           <p className="hm-lead">
-            <b>Every line below is one the CLI prints</b>, laid out and coloured
-            the way it draws them: onboarding, a review before you push, then
-            the check that it all held. The <code>◇</code> rows are the
-            questions after you answer them —{" "}
-            <Link href="/docs/onboarding#menu">each one explained in the docs</Link>. The two{" "}
-            <code>#</code> lines are ours, marking time between runs.
+            <b>Every line in the terminal is one the CLI prints</b>, laid out
+            and coloured the way it draws them. The two <code>#</code> lines are
+            ours, marking time between runs.
           </p>
         </div>
 
-        <div className="hm-term-wrap">
-          <JourneyTerminal lines={lines} title={`terminal — ${EXAMPLE_REPO}`} />
-        </div>
-
-        <p className="hm-term-cap">
-          <b>One pull request on <code>{ONBOARD_BRANCH}</code>. Never a push.</b>{" "}
-          Titled <code>chore(redline): onboard to standards v{version}</code> and
-          labelled <code>{SYNC_LABEL}</code>, for the repository&apos;s own team to
-          review and merge. Four of the {totalWrites} files it writes are shown;
-          it merges into files you already have rather than overwriting them.{" "}
-          <Link href="/docs/onboarding">Every file, and how the merge works →</Link>
-        </p>
+        <JourneyScroll chapters={chapters} title={`terminal — ${EXAMPLE_REPO}`} />
       </div>
     </section>
   );

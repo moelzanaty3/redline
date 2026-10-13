@@ -1,21 +1,20 @@
 import type { Metadata } from "next";
 import { Quiz, Tabs } from "@/components/learn/interactive";
-import { File, LearnPage, Term, Terminal } from "@/components/learn/parts";
-import { installCommand, packageState } from "@/lib/package-version";
+import { File, LearnPage, RedlineTerminal, Term, Terminal } from "@/components/learn/parts";
 
 export const metadata: Metadata = { title: "Learn: exemptions" };
 
+const REASON =
+  "parseUser replaces loadUser with no alias, so a consumer that upgrades cannot roll back without renaming its import again. Nothing outside this repository imports it yet.";
+
 const EXEMPTION = `## Redline exemption
 
-- reason: parseUser replaces loadUser with no alias, so a consumer that upgrades cannot roll back without renaming its import again. Nothing outside this repository imports it yet.
+- reason: ${REASON}
 - until: YYYY-MM-DD
 - scope: checklist
 `;
 
-export default async function Page() {
-  const state = await packageState();
-  const rl = (args: string) => installCommand(state, args);
-
+export default function Page() {
   return (
     <LearnPage
       slug="exemptions"
@@ -26,34 +25,100 @@ export default async function Page() {
         "What the gate refuses, and why a label alone is not enough",
       ]}
     >
+      <h2>Why exemptions exist</h2>
+      <p>
+        Until now, every red check meant you did something wrong, and you fixed it. This step is
+        about the other case: the check is right, and your change is <i>also</i> right.
+      </p>
+      <p>
+        Here is the example you are about to build. You rename <code>loadUser</code> to{" "}
+        <code>parseUser</code>. Good change. But any code that imports <code>loadUser</code> will
+        break. The pull request checklist asks <i>&quot;Rollback is safe, no breaking change?&quot;</i>{" "}
+        and the honest answer is <b>no</b>. You still want to merge it.
+      </p>
+      <p>You have three options:</p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>You…</th>
+              <th>What happens</th>
+              <th>The problem</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>tick the box anyway</td>
+              <td>everything goes green</td>
+              <td>the checklist now lies</td>
+            </tr>
+            <tr>
+              <td>ask an admin to force the merge</td>
+              <td>the change lands</td>
+              <td>nobody wrote down why</td>
+            </tr>
+            <tr>
+              <td>
+                <b>write an exemption</b>
+              </td>
+              <td>the check stays red, the gate lets it through</td>
+              <td>none: the reason is on the pull request</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        An exemption is a short note in the pull request description: <b>why</b> you are merging
+        anyway, <b>until when</b> that is acceptable, and <b>which check</b> it is about. Add the{" "}
+        <code>redline-exempt</code> label, and the gate reads the note instead of failing. Think of
+        it as a signed note: &quot;I know this check is red. Here is why that is fine, until this
+        date.&quot;
+      </p>
+      <Term word="Process check">
+        <p>
+          A check about <i>how</i> you work, not about whether the code is dangerous: the rule
+          checker (<code>policy</code>), the pull request <code>checklist</code> and the{" "}
+          <code>adr</code> check. An exemption can cover these. It can never cover the security
+          floor from step 06: a vulnerable dependency or a leaked secret is never waived.
+        </p>
+      </Term>
+
       <h2>A change that is right, and breaks a check</h2>
       <p>
-        Rename <code>loadUser</code> to <code>parseUser</code>, to match <code>parseAddress</code>,
-        with no alias left behind. The tests pass. But anyone importing <code>loadUser</code> breaks,
-        so the checklist item <i>Rollback is safe (no destructive migration, no breaking contract
-        change)</i> is honestly false, and you leave it unticked:
+        Rename <code>loadUser</code> to <code>parseUser</code> in <code>src/users.ts</code> and its
+        test, to match <code>parseAddress</code>, with no alias left behind:
+      </p>
+      <Terminal
+        commands={`git checkout -b refactor/parse-user
+perl -pi -e 's/\\bloadUser\\b/parseUser/g' src/users.ts src/users.test.ts
+pnpm test
+git commit -am "refactor: rename loadUser to parseUser"
+git push -u origin refactor/parse-user
+gh pr create --title "refactor: rename loadUser to parseUser" --body-file .github/pull_request_template.md`}
+      />
+      <p>
+        The tests pass. On GitHub, tick the <code>## Launch readiness</code> boxes that hold. One
+        does not: anyone importing <code>loadUser</code> breaks, so{" "}
+        <i>Rollback is safe (no destructive migration, no breaking contract change)</i> is
+        honestly false. Leave it unticked:
       </p>
       <Terminal
         commands="# from the PR checklist job"
         output={`Error: 1 unchecked launch-readiness item(s). Tick each one, or delete the line and say why in the PR description.`}
       />
-      <p>
-        You could tick the box anyway. Then the checklist says something untrue, and nobody finds
-        out until a rollback fails. The exemption is the honest route.
-      </p>
-      <Term word="Process check">
-        <p>
-          The gate&apos;s jobs about how a change is made: the rule checker (<code>policy</code>),
-          the pull request <code>checklist</code> and the <code>adr</code> check. They are the ones
-          the rung governs and an exemption can cover. The security floor is not a process check.
-        </p>
-      </Term>
 
       <h2>Write the exemption</h2>
       <p>
-        Add the <code>redline-exempt</code> label, and fill in the section the pull request template
-        already has:
+        The pull request template already has a <code>## Redline exemption</code> section with three
+        empty fields. Fill them in, with an end date 30 days from today, and add the{" "}
+        <code>redline-exempt</code> label that step 07 created:
       </p>
+      <Terminal
+        commands={`UNTIL=$(node -p "new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)")
+gh pr view --json body -q .body | UNTIL=$UNTIL perl -pe 's/^- reason:\\s*$/- reason: ${REASON}\\n/; s/^- until:\\s*$/- until: $ENV{UNTIL}\\n/; s/^- scope:\\s*$/- scope: checklist\\n/' | gh pr edit --body-file -
+gh pr edit --add-label redline-exempt`}
+      />
+      <p>Or edit the description on GitHub, so the section reads:</p>
       <File name="pull request description" text={EXEMPTION} />
       <Tabs
         label="The three fields"
@@ -91,9 +156,9 @@ export default async function Page() {
 
       <h2>Check it before you push</h2>
       <p>The gate runs this exact command. Run it yourself first, against the check that is failing:</p>
-      <Terminal
+      <RedlineTerminal
         commands={`gh pr view --json body --jq .body > body.md
-${rl("exempt --body-file body.md --scope checklist")}`}
+{redline} exempt --body-file body.md --scope checklist`}
         output="exempt until YYYY-MM-DD (checklist): parseUser replaces loadUser with no alias, …"
       />
       <p>And see what it refuses:</p>
@@ -103,8 +168,8 @@ ${rl("exempt --body-file body.md --scope checklist")}`}
           {
             label: "Wrong scope",
             content: (
-              <Terminal
-                commands={rl("exempt --body-file body.md --scope adr")}
+              <RedlineTerminal
+                commands="{redline} exempt --body-file body.md --scope adr"
                 output={`warn  the exemption covers checklist — it does not cover "adr". Widen its scope deliberately, or fix the check.`}
               />
             ),
@@ -157,6 +222,29 @@ ${rl("exempt --body-file body.md --scope checklist")}`}
         blocks on its findings, a failing process check stops the merge, and a valid exemption is the
         only way through it. That is the next step.
       </p>
+
+      <h2>Merge it</h2>
+      <Terminal
+        commands="gh pr checks --watch"
+        output={`✓  CI / test
+✓  Redline / redline-gate / Deterministic policy
+X  Redline / redline-gate / PR checklist                      still red, on the record
+✓  Redline / redline-gate / ADR required for significant changes
+✓  Redline / redline-gate / Dependency review
+✓  Redline / redline-gate / Secret scan (diff)
+✓  Redline / redline-gate / gate                              passes; its log shows the exemption`}
+      />
+      <p>
+        The checklist job stays red: the item is still false, and the page says so. The gate is
+        green, so the required check from step 07 lets the merge through. Merge, and clean up the
+        description copy you checked locally:
+      </p>
+      <Terminal
+        commands={`gh pr merge --squash
+git checkout main
+git pull
+rm body.md`}
+      />
 
       <Quiz
         question="PR checklist and ADR are both failing. The exemption block says scope: checklist. At a blocking rung, what happens?"

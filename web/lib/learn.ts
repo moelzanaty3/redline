@@ -6,6 +6,16 @@ export const DEMO_URL = "https://github.com/moelzanaty3/redline-demo";
 // Raw files at a tag, for steps that borrow the demo's larger files.
 export const DEMO_RAW = "https://raw.githubusercontent.com/moelzanaty3/redline-demo";
 
+// From step 01 on, Redline is in the project's devDependencies, so a command
+// runs that copy through the reader's package manager: the same command the CLI
+// prints in its own hints (redlineCommand in cli/core/package-manager.ts).
+export const REDLINE_RUNNERS = {
+  pnpm: "pnpm redline",
+  npm: "npx redlinegate",
+  yarn: "yarn redline",
+  bun: "bun run redline",
+} as const;
+
 export type LearnStep = {
   slug: string;
   n: string;
@@ -114,8 +124,8 @@ export const LEARN_STEPS: LearnStep[] = [
     slug: "earn-a-rung",
     n: "09",
     title: "Earn a stricter rung",
-    summary: "Blocking on findings is earned with evidence, never switched on.",
-    minutes: 6,
+    summary: "Watch a BLOCKER merge, then see what it takes for the gate to stop the next one.",
+    minutes: 15,
     tag: "step-09",
     pr: 15,
     needsGitHub: true,

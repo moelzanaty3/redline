@@ -12,10 +12,9 @@ const SEVERITY_MEANING: Record<Severity, string> = {
 
 const ORDER: Severity[] = ["BLOCKER", "HIGH", "SUGGESTION"];
 
-// The whole rule set, by severity. It sits directly under a single finding
-// because that is the only place the three words mean anything: the reader has
-// just seen one BLOCKER, and this says how many more there are and what the
-// other two levels oblige.
+// The whole rule set, by severity. The reader has already seen one BLOCKER in
+// the hero; this says how many more there are and what the other two levels
+// oblige.
 export function SeverityFloor() {
   const rules = getRules();
   const total = rules.length;

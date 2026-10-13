@@ -6,7 +6,7 @@ import {
   Tabs,
   type PackageManagerName,
 } from "@/components/learn/interactive";
-import { File, LearnPage, Terminal } from "@/components/learn/parts";
+import { File, LearnPage, PrivateRepo, Terminal } from "@/components/learn/parts";
 import { DEMO_URL } from "@/lib/learn";
 
 export const metadata: Metadata = { title: "Learn: the starting point" };
@@ -148,7 +148,7 @@ yarn add -D typescript@5 @types/node@22`,
     setupNote: (
       <>
         <code>yarn init -y</code> writes <code>package.json</code>, and a <code>.gitignore</code>{" "}
-        you will add to in step 4.
+        you will add to in part 4 below.
       </>
     ),
     scripts: `npm pkg set type=module ${SCRIPTS}`,
@@ -377,8 +377,8 @@ pnpm test`}
       />
       <p>
         <code>pnpm: command not found</code>? Install it with <code>npm install -g pnpm</code>. You
-        never install Redline itself: every command runs it through <code>npx</code>, so you always
-        get the current version.
+        don&apos;t install Redline yet: step 01 runs it once, and it adds itself to your project as
+        a pinned dev dependency, so everyone on the repository runs the same version.
       </p>
 
       <h2>Put your repository on GitHub</h2>
@@ -388,9 +388,22 @@ pnpm test`}
       </p>
       <Terminal commands="gh repo create my-redline-demo --public --source . --remote origin --push" />
       <p>
-        That creates a new repository under your own account and pushes your <code>main</code> to
-        it. Everything from here on happens there; the demo is only ever read from.
+        That creates a new <b>public</b> repository under your own account and pushes your{" "}
+        <code>main</code> to it. Everything from here on happens there; the demo is only ever read
+        from. Public matters: GitHub gives a public repository dependency review and secret
+        scanning for free, and the gate uses both from step 01 on. Merge each step&apos;s pull
+        request before you start the next, and branch from an up-to-date <code>main</code>.
       </p>
+      <PrivateRepo title="Must it be public?">
+        <p>
+          No, and most real repositories are private. On a private repository, dependency review
+          and secret scanning are part of GitHub Advanced Security, which an organisation buys on a
+          Team or Enterprise plan. Without it, the gate&apos;s dependency review goes red on your
+          first pull request. Step 01 shows what that looks like and the two ways to answer it,
+          and steps 06 and 07 say what changes for you. For this path, public is simpler: you can
+          switch it to private, or delete it, when you are done.
+        </p>
+      </PrivateRepo>
       <div className="callout info">
         <span className="ic">ℹ</span>
         <p>
@@ -399,15 +412,6 @@ pnpm test`}
           <code>git remote add origin &lt;its url&gt;</code>), then{" "}
           <code>git push -u origin main</code>. If GitHub added a README or licence when you
           created it, the push is refused; create it again empty.
-        </p>
-      </div>
-      <div className="callout info">
-        <span className="ic">ℹ</span>
-        <p>
-          Make it <b>public</b>. Dependency review and secret scanning, which step 06 relies on, are
-          free on public repositories and need GitHub Advanced Security on private ones. From here
-          on, merge each step&apos;s pull request before you start the next, and branch from an
-          up-to-date <code>main</code>.
         </p>
       </div>
 

@@ -60,7 +60,7 @@ export function ReviewGap() {
             <h2 className="hm-h2">
               AI multiplied how fast we write code.
               <br />
-              It did not multiply how fast we can review it.
+              It did not multiply how fast we can <span className="rl-mark">review it</span>.
             </h2>
           </div>
 

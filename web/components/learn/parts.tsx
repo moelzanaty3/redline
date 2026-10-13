@@ -1,18 +1,37 @@
 import type { ReactNode } from "react";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
-import { LearnStepper, StepDone } from "@/components/learn/interactive";
-import { DEMO_URL, learnHref, learnStep } from "@/lib/learn";
+import { LearnStepper, PackageManagerTabs, StepDone } from "@/components/learn/interactive";
+import { DEMO_URL, REDLINE_RUNNERS, learnHref, learnStep } from "@/lib/learn";
 import "@/app/docs/learn/learn.css";
 
 // Commands are copied as one block; output is shown dimmed under them and is
 // never part of what the Copy button puts on the clipboard.
+// The lines of a heredoc (`cat > file <<'EOF'` … `EOF`) are input to the
+// command above them, not commands: they get no prompt, and a markdown heading
+// among them is not a shell comment.
+function heredocLines(lines: string[]) {
+  let delimiter: string | null = null;
+  return lines.map((line) => {
+    if (delimiter !== null) {
+      if (line === delimiter) delimiter = null;
+      return true;
+    }
+    delimiter = /<<-?\s*'?(\w+)'?\s*$/.exec(line)?.[1] ?? null;
+    return false;
+  });
+}
+
 export function Terminal({ commands, output }: { commands: string; output?: string }) {
+  const lines = commands.split("\n");
+  const inHeredoc = heredocLines(lines);
   return (
     <CodeWindow title="terminal" copyText={commands}>
-      {commands.split("\n").map((line, i) => (
+      {lines.map((line, i) => (
         <span key={i}>
-          {line.startsWith("#") ? (
+          {inHeredoc[i] ? (
+            <span className="tk-white">{line}</span>
+          ) : line.startsWith("#") ? (
             <span className="tk-dim">{line}</span>
           ) : (
             <>
@@ -24,6 +43,27 @@ export function Terminal({ commands, output }: { commands: string; output?: stri
       ))}
       {output ? <span className="tk-dim">{`\n${output}`}</span> : null}
     </CodeWindow>
+  );
+}
+
+/**
+ * A terminal whose Redline commands follow the package manager the reader
+ * picked. `{redline}` in `commands` becomes that manager's way of running the
+ * project's own copy; every other line is shown as written.
+ */
+export function RedlineTerminal({ commands, output }: { commands: string; output?: string }) {
+  return (
+    <PackageManagerTabs
+      panels={(["pnpm", "npm", "yarn", "bun"] as const).map((name) => ({
+        name,
+        content: (
+          <Terminal
+            commands={commands.replaceAll("{redline}", REDLINE_RUNNERS[name])}
+            output={output}
+          />
+        ),
+      }))}
+    />
   );
 }
 
@@ -45,6 +85,23 @@ export function Term({ word, children }: { word: string; children: ReactNode }) 
     <details className="learn-term">
       <summary>
         <span className="learn-term-tag">New term</span> {word}
+      </summary>
+      <div>{children}</div>
+    </details>
+  );
+}
+
+/**
+ * What changes on a private repository. The path assumes a public one, where
+ * GitHub's security features are free; a private one without Advanced Security
+ * meets a different result at a few steps, and this is where each step says so.
+ * Folded, like a term: a reader on a public repository walks past it.
+ */
+export function PrivateRepo({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className="learn-term learn-private">
+      <summary>
+        <span className="learn-term-tag">Private repository</span> {title}
       </summary>
       <div>{children}</div>
     </details>
