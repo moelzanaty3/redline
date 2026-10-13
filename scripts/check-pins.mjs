@@ -152,7 +152,12 @@ if (cliPins.length) {
     if (!res.ok) throw new Error(`registry: ${res.status}`);
     const latest = (await res.json())['dist-tags']?.latest;
     for (const version of pinned) {
-      if (latest && latest !== version) {
+      // The reusable gate asks for `latest` on purpose: it runs the newest CLI,
+      // and a vendored copy is stamped with the version that wrote it
+      // (cli/platforms/github/vendor.ts). There is no number here to fall behind.
+      if (version === 'latest') {
+        console.log(`ok   redlinegate@latest follows the published latest${latest ? ` (${latest})` : ''}`);
+      } else if (latest && latest !== version) {
         console.warn(`     update available: redlinegate@${version} → ${latest}`);
         updates += 1;
       } else {
