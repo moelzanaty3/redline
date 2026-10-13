@@ -87,7 +87,7 @@ export function status(cwd: string, root: string): StatusReport {
     rung: config.rung,
     vendors: config.vendors,
     capabilities: selected,
-    integrations: config.integrations,
+    integrations: config.integrations ?? [],
     pendingAdmin: config.pendingAdmin,
     standardsVersion: config.standardsVersion,
     currentStandards: current,

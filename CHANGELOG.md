@@ -7,6 +7,14 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### Init — a tool you said you do not run stays unticked
+
+`redline init --integrations ''` recorded an empty list in `.redline.json`, and the next plain
+`init` read that empty list as "nobody has said" and ran detection again. A repository with a
+`.github/dependabot.yml` got the gate's `dependencies` job stood down on that run, after it had
+been put back. The wizard did the same. An empty list is now kept as the answer "runs none of
+them". Only a record written before the field existed falls back to detection.
+
 ### Gate — the ADR check no longer passes on the template's own placeholder
 
 The ADR job counted any `docs/adr/` in the pull request description as a link to a decision

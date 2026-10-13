@@ -2265,3 +2265,15 @@ test('a re-run over a vendored gate does not stand down the secrets job it carri
   assert.equal(again.gateOptions.at(-1)?.standDown, undefined);
   assert.deepEqual(readConfig(cwd)?.integrations, []);
 });
+
+test('a tool unticked once stays unticked on the next plain run', async () => {
+  const cwd = repo({
+    'package.json': '{"dependencies":{"react":"19"}}',
+    '.github/dependabot.yml': 'version: 2\n',
+  });
+  await init(fakePlatform(), { cwd, root, now, integrations: [] });
+
+  const again = fakePlatform();
+  await init(again, { cwd, root, now: laterNow });
+  assert.equal(again.gateOptions.at(-1)?.standDown, undefined);
+});
