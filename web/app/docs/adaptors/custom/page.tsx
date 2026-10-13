@@ -82,7 +82,10 @@ export default function Page() {
           <Link href="/docs/adaptors#codex">
             <code>codex</code>
           </Link>{" "}
-          does with <code>AGENTS.md</code>.
+          does with <code>AGENTS.md</code>. If the tool&apos;s file only points at another file,
+          write that file too: the <code>claude</code> renderer spreads{" "}
+          <code>agents(ctx).files</code> into its own map, so its <code>@AGENTS.md</code> import
+          always has a file to point at.
         </li>
         <li>
           <strong>Can a file be scoped to some paths?</strong> If yes, write one file per stack with

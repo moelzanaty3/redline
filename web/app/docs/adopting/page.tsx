@@ -36,7 +36,7 @@ const PHASES: Phase[] = [
     title: "Find out whether the findings are any good",
     you: [
       "Read the findings on real pull requests. Are they right? Are they worth the interruption?",
-      "Score the reviewer against the seeded corpus on a pilot repository.",
+      "Score the reviewer against the seeded corpus on a pilot repository with redline metrics score-seeds.",
       "Raise anything that fires constantly on code you have deliberately decided to allow.",
     ],
     get: [
@@ -50,8 +50,8 @@ const PHASES: Phase[] = [
     title: "Onboard the rest, still watching",
     you: [
       "Onboard the repositories that matter. redline init is idempotent, so batching is safe.",
-      "Let the nightly register pick them up.",
-      "Turn on telemetry collection so acted-on rate starts accumulating.",
+      "Let the nightly redline registry run in the source repository add them to the register.",
+      "Schedule redline metrics collect in your metrics repository, so the acted-on rate starts accumulating.",
     ],
     get: [
       "A derived register, and a coverage figure that is instrumented-against-onboarded rather than a raw count.",
@@ -76,7 +76,7 @@ const PHASES: Phase[] = [
     when: "Ongoing",
     title: "Price it, and tune it",
     you: [
-      "Run the ROI page before a budget conversation.",
+      "Build the cost page with redline metrics roi before a budget conversation.",
       "Read the tuning queue: rules that fire often and are acted on rarely.",
       "Ingest whatever scanners the estate already runs, so the picture is whole.",
     ],
@@ -92,7 +92,7 @@ export default function Page() {
     <DocsPage
       crumb="Getting Started"
       title="Adopting Redline"
-      intro="A gate that blocks before anyone trusts it gets routed around, and a gate that never blocks protects nothing. This page is the path between the two: what happens in order, and when it is reasonable to start blocking merges. The short answer is later than you think, and on evidence rather than a date."
+      intro="A gate that blocks before anyone trusts it gets routed around. A gate that never blocks protects nothing. This page is the path between the two: what happens in order, and when to start blocking merges. The short answer: later than you think, and on evidence rather than a date."
       href="/docs/adopting"
     >
       <p>
@@ -188,6 +188,7 @@ export default function Page() {
             <tr><td>What does this finding mean?</td><td><code>redline explain &lt;id&gt;</code></td><td>anywhere</td></tr>
             <tr><td>Would this diff pass?</td><td><code>redline review</code></td><td>your repo, before you push</td></tr>
             <tr><td>Who is onboarded?</td><td><code>redline registry</code></td><td>source repo, nightly</td></tr>
+            <tr><td>What happened to the findings?</td><td><code>redline metrics collect</code></td><td>metrics repo, on a schedule</td></tr>
             <tr><td>Is review being acted on?</td><td><code>redline metrics dashboard</code></td><td>metrics repo</td></tr>
             <tr><td>Does it still catch defects?</td><td><code>redline metrics score-seeds</code></td><td>against a pull request carrying the corpus</td></tr>
             <tr><td>What did it cost?</td><td><code>redline metrics roi</code></td><td>metrics repo</td></tr>
@@ -203,9 +204,12 @@ export default function Page() {
           able to say yes to one.
         </li>
         <li>
-          <b>Who can turn the gate off.</b> Before any repository blocks, write
-          down how a team disables it out of hours without waiting for that
-          person. A control nobody can release is one people work around.
+          <b>Who can turn the gate off.</b> Stepping down to{" "}
+          <code>observe</code> needs no evidence: it is{" "}
+          <code>redline init --rung observe</code>, merged as a pull request.
+          Before any repository blocks, write down who can approve that pull
+          request out of hours. A control nobody can release is one people work
+          around.
         </li>
       </ul>
 

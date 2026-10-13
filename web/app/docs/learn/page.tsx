@@ -15,7 +15,7 @@ export default async function Page() {
     <DocsPage
       crumb="Getting Started / Learn"
       title="Learn Redline"
-      intro={`Take a small TypeScript service from no Redline at all to a merge gate that has earned the right to block. ${LEARN_STEPS.length} short pages, about ${LEARN_MINUTES} minutes. No prior knowledge of Redline needed: every new idea is explained where you first meet it.`}
+      intro={`Take a small TypeScript service from no Redline at all to a merge gate that has earned the right to block. ${LEARN_STEPS.length} short pages, about ${LEARN_MINUTES} minutes. You need no prior knowledge of Redline: each new idea is explained where you first meet it.`}
       href="/docs/learn"
     >
       <PackageBadge initial={state} registry={browserRegistry()} />
@@ -47,23 +47,48 @@ export default async function Page() {
         bugs from the ones that only make noise.
       </p>
 
+      <h2>What you need</h2>
+      <ul>
+        <li>
+          <b>git</b> and <b>Node 18.11 or later</b>.
+        </li>
+        <li>
+          <b>pnpm</b>, or npm, yarn or bun. Every command that differs has a tab for each.
+        </li>
+        <li>
+          <b>A GitHub account</b> and the{" "}
+          <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">
+            GitHub CLI
+          </a>
+          , signed in with <code>gh auth login</code>. The gate runs on pull requests, so each
+          step opens one.
+        </li>
+        <li>
+          <b>An AI assistant</b>, if you have one: Claude Code, GitHub Copilot or Cursor. Steps 02
+          to 04 run a review inside it. Without one, those steps show what it would say.
+        </li>
+      </ul>
+
       <h2>How this path works</h2>
       <p>
         You follow one real repository,{" "}
         <a href={DEMO_URL} rel="noopener noreferrer" target="_blank">
           redline-demo
         </a>
-        . Each step is one pull request there, merged and tagged <code>step-00</code> to{" "}
-        <code>step-09</code>, so at every step you can see exactly what the repository held.
+        . Each step is one pull request there, merged and tagged, from <code>step-00</code> to{" "}
+        <code>step-09</code>. At every step you can see exactly what the repository held.
       </p>
       <p>
-        Step 00 puts its starting files into a repository of your own on GitHub, under your
-        account, because the checks Redline adds run on pull requests. The demo itself is only ever read from. Rather just read? Every step links the
-        demo&apos;s pull request, so you can follow without running anything.
+        You do the work in a repository of your own. Step 00 copies the demo&apos;s starting files
+        into a new GitHub repository under your account. The demo itself is only ever read from.
       </p>
       <p>
-        Mark each step complete as you go. Your progress is kept in this browser only.
+        From step 01 on, a step ends the same way: commit on a branch, open a pull request, watch
+        the checks, merge, and pull <code>main</code> before the next step. Step 02 is the exception: its pull
+        request stays open, and step 03 fixes and merges it. Rather just read? Every step links
+        the demo&apos;s pull request, so you can follow without running anything.
       </p>
+      <p>Mark each step complete as you go. Your progress is kept in this browser only.</p>
 
       <h2>The steps</h2>
       <LearnPath />

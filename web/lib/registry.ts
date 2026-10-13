@@ -37,7 +37,7 @@ export const SCRIPTS: RegistryEntry[] = [
   { slug: "validate", title: "validate.mjs", file: "scripts/validate.mjs", description: "Bundle self-check: manifest integrity, rule ids, the output contract, ruleset and workflow files, the seeded corpus." },
   { slug: "assign-rule-ids", title: "assign-rule-ids.mjs", file: "scripts/assign-rule-ids.mjs", description: "Writes a permanent <stack>/<slug> id onto every rule in standards/ that lacks one; --check fails instead of writing." },
   { slug: "render-self", title: "render-self.mjs", file: "scripts/render-self.mjs", description: "Renders this repository's own AGENTS.md, CLAUDE.md and Copilot files from standards/; --check fails if they are stale." },
-  { slug: "check-pins", title: "check-pins.mjs", file: "scripts/check-pins.mjs", description: "Re-resolves every pinned action SHA, Docker image digest and the gate's redlinegate pin against what its comment claims." },
+  { slug: "check-pins", title: "check-pins.mjs", file: "scripts/check-pins.mjs", description: "Checks every SHA-pinned action and digest-pinned Docker image against the tag its comment names, and that every gate job asks for the same redlinegate version. Reports newer releases." },
   { slug: "score-seeds", title: "score-seeds.mjs", file: "scripts/score-seeds.mjs", description: "Scores a reviewer's comments on a seeded pull request: BLOCKER recall, false positives on clean code, rule attribution." },
   { slug: "collect-telemetry", title: "collect-telemetry.mjs", file: "scripts/collect-telemetry.mjs", description: "Pulls review outcomes for merged pull requests across the org into monthly JSONL." },
   { slug: "build-digest", title: "build-digest.mjs", file: "scripts/build-digest.mjs", description: "Builds the weekly Teams digest as an Adaptive Card from collected telemetry." },
@@ -53,13 +53,13 @@ export const SCRIPTS: RegistryEntry[] = [
 
 export const WORKFLOWS: RegistryEntry[] = [
   { slug: "redline-gate", title: "redline-gate.yml", file: "workflows/redline-gate.yml", description: "The reusable merge gate: five jobs (checklist, ADR, deterministic policy, dependency review, diff secret scan) aggregated into one required check." },
-  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Distributes standards and gate callers to onboarded repos as PRs. Active — runs on a push to main touching standards/, cli/render/ or templates/, and on workflow_dispatch." },
+  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Lands the current standards on every registered repository as a pull request, whenever standards/ changes on main. Lives in this (source) repo." },
   { slug: "redline-collect", title: "redline-collect.yml", file: "workflows/redline-collect.yml", description: "Nightly: runs redline metrics collect and commits the telemetry. Lives in the redline-metrics repo." },
   { slug: "weekly-digest", title: "weekly-digest.yml", file: "workflows/weekly-digest.yml", description: "Mondays: runs redline metrics digest and posts the card to Teams. Lives in the redline-metrics repo." },
   { slug: "inbox", title: "inbox.yml", file: "workflows/inbox.yml", description: "Weekdays every 30 minutes: builds the CLI, runs redline metrics inbox, publishes to Pages. Lives in this (source) repo." },
   { slug: "dashboard", title: "dashboard.yml", file: "workflows/dashboard.yml", description: "Daily and after each collect or canary run: runs redline metrics dashboard and publishes to Pages. Lives in the redline-metrics repo." },
   { slug: "seed-canary", title: "seed-canary.yml", file: "workflows/seed-canary.yml", description: "Weekly: opens a seeded pull request on each canary repo, scores it with redline metrics score-seeds, closes it. Lives in the redline-metrics repo." },
-  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Re-verifies onboarded repos still report the required check, and opens one tracking issue on drift. Active — weekly, Tuesday 06:00 UTC, plus workflow_dispatch." },
+  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Weekly: re-verifies every registered repo and keeps one tracking issue listing the ones that drifted. Lives in this (source) repo." },
 ];
 
 export const TEMPLATES: RegistryEntry[] = [

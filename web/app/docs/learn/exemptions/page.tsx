@@ -111,7 +111,7 @@ gh pr create --title "refactor: rename loadUser to parseUser" --body-file .githu
       <p>
         The pull request template already has a <code>## Redline exemption</code> section with three
         empty fields. Fill them in, with an end date 30 days from today, and add the{" "}
-        <code>redline-exempt</code> label that step 07 created:
+        <code>redline-exempt</code> label that step 01&apos;s <code>init</code> created:
       </p>
       <Terminal
         commands={`UNTIL=$(node -p "new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10)")
@@ -155,13 +155,17 @@ gh pr edit --add-label redline-exempt`}
       />
 
       <h2>Check it before you push</h2>
-      <p>The gate runs this exact command. Run it yourself first, against the check that is failing:</p>
+      <p>
+        The gate runs this exact command against each failing process check. Run it yourself
+        first, against the check that is failing. It exits <code>0</code> when the exemption covers
+        that check:
+      </p>
       <RedlineTerminal
         commands={`gh pr view --json body --jq .body > body.md
 {redline} exempt --body-file body.md --scope checklist`}
         output="exempt until YYYY-MM-DD (checklist): parseUser replaces loadUser with no alias, …"
       />
-      <p>And see what it refuses:</p>
+      <p>Each refusal exits <code>1</code> and says what is wrong:</p>
       <Tabs
         label="What the exemption check refuses"
         tabs={[
@@ -179,7 +183,7 @@ gh pr edit --add-label redline-exempt`}
             content: (
               <Terminal
                 commands="# until: more than 90 days away"
-                output="warn  `until: 2027-06-01` is 232 days away; the maximum is 90 — a longer exemption is a standards change, not an exemption"
+                output="warn  `until: 2027-06-01` is <n> days away; the maximum is 90 — a longer exemption is a standards change, not an exemption"
               />
             ),
           },
@@ -201,9 +205,9 @@ gh pr edit --add-label redline-exempt`}
                   output="Error: A soft-fail label was applied without a valid `## Redline exemption` block (reason and expiry required)."
                 />
                 <p>
-                  A label says something was waived, not why, by whom or until when. From Redline
-                  0.2.7 the gate refuses one on its own: at <code>observe</code> the error is recorded and the
-                  gate still passes, and at a blocking rung it fails.
+                  A label says something was waived, not why, by whom or until when, so the gate
+                  refuses a label on its own. At <code>observe</code> the error is recorded and the
+                  gate still passes. At a blocking rung, the gate fails.
                 </p>
               </>
             ),
@@ -215,30 +219,37 @@ gh pr edit --add-label redline-exempt`}
         there, and an exemption block is ignored the same way.
       </p>
 
-      <h2>Why it matters more later</h2>
+      <h2>What the gate does with it</h2>
+      <Terminal
+        commands="gh pr checks --watch"
+        output={`✓  test
+✓  redline-gate / Deterministic policy
+X  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate`}
+      />
       <p>
-        At <code>observe</code> a failing process check does not block, so the exemption changes the
-        record, not the merge: the gate logs who accepted what, and until when. Once a repository
-        blocks on its findings, a failing process check stops the merge, and a valid exemption is the
-        only way through it. That is the next step.
+        The checklist job stays red: the item is still false, and the pull request says so. The
+        gate&apos;s log shows the exemption it read:
+      </p>
+      <Terminal
+        commands="# from the gate job"
+        output={`Soft-fail label present: redline-exempt
+exempt until YYYY-MM-DD (checklist): parseUser replaces loadUser with no alias, …
+Warning: Process checks failed: checklist. This repository is at rung 'observe', which reports and does not block. The findings are recorded either way.
+Redline gate passed.`}
+      />
+      <p>
+        At <code>observe</code> the gate would have passed without the exemption too, so here it
+        changes the record, not the merge: the pull request now says what was accepted, why, and
+        until when. At a blocking rung, a failing process check stops the merge, and a valid
+        exemption is the only way through it. That is the next step.
       </p>
 
       <h2>Merge it</h2>
-      <Terminal
-        commands="gh pr checks --watch"
-        output={`✓  CI / test
-✓  Redline / redline-gate / Deterministic policy
-X  Redline / redline-gate / PR checklist                      still red, on the record
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate                              passes; its log shows the exemption`}
-      />
-      <p>
-        The checklist job stays red: the item is still false, and the page says so. The gate is
-        green, so the required check from step 07 lets the merge through. Merge, and clean up the
-        description copy you checked locally:
-      </p>
+      <p>Merge, and delete the copy of the description you checked locally:</p>
       <Terminal
         commands={`gh pr merge --squash
 git checkout main

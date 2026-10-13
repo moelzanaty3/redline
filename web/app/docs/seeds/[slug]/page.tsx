@@ -94,21 +94,27 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     >
       {isClean ? (
         <p>
-          Correct code with nothing wrong in it. It measures <b>precision</b>, and
-          its pass condition is the strict one: <b>zero comments</b>. A reviewer
-          that flags everything scores perfect recall on every other corpus here
-          and is useless — this is the half that catches that, and it is why the
-          canary runs both together.
+          Correct code with nothing wrong in it. It counts <b>false positives</b>
+          : comments on code that needs none. The pass condition is strict:{" "}
+          <b>zero comments</b>. A reviewer that flags everything would catch every
+          defect in the other corpora and still be useless. This corpus is what
+          exposes it, which is why every run includes it.
         </p>
       ) : (
-        <p>
-          {corpus.defects.length} deliberate defects, each carrying a marker naming
-          the rule in <code>standards/</code> it violates. It measures{" "}
-          <b>recall</b>, and its pass condition is that every one of the{" "}
-          {blockers} BLOCKER markers is flagged. The rule id in each marker means
-          the scorer grades attribution too: a reviewer that finds the bug but
-          cites the wrong rule counts as caught, and separately as misattributed.
-        </p>
+        <>
+          <p>
+            {corpus.defects.length} deliberate defects, each with a marker naming
+            the rule in <code>standards/</code> it breaks. It measures{" "}
+            <b>recall</b>: how many of the defects the reviewer flags at their
+            severity or higher. The pass condition is that all {blockers} BLOCKER
+            defects are flagged.
+          </p>
+          <p>
+            Because each marker names a rule, the scorer also grades{" "}
+            <b>attribution</b>. A reviewer that finds the bug but cites the wrong
+            rule counts as caught, and separately as misattributed.
+          </p>
+        </>
       )}
 
       <h2>Running it</h2>
@@ -164,25 +170,28 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
 
       <h2>Adding a defect</h2>
       <p>
-        Add a defect by adding the code and one marker line above it. There is no
-        separate expectations file to keep in sync — the scorer parses the
-        markers straight out of the source:
+        Add the code and one marker line above it. The format, and what{" "}
+        <code>scripts/validate.mjs</code> checks, are on{" "}
+        <Link href="/docs/seeds#adding-a-defect">Seeded corpus</Link>.
       </p>
-      <CodeWindow
-        title="marker format"
-        copyText="SEED <n> [BLOCKER|HIGH|SUGGESTION] (<stack>/<rule-slug>) <short description>"
-      >
-        <span className="tk-white">
-          SEED &lt;n&gt; [BLOCKER|HIGH|SUGGESTION] (&lt;stack&gt;/&lt;rule-slug&gt;)
-          &lt;short description&gt;
-        </span>
-      </CodeWindow>
-      <p>
-        <code>scripts/validate.mjs</code> fails CI if a seed cites a rule that does
-        not exist, or claims a severity higher than that rule carries in the
-        standard — so a marker cannot quietly drift away from the rule it is
-        testing.
-      </p>
+
+      <h2>Related</h2>
+      <ul>
+        {!isClean ? (
+          <li>
+            <Link href={`/docs/standards/${slug}`}>The {entry.title} standard</Link>{" "}
+            — every rule these defects test.
+          </li>
+        ) : null}
+        <li>
+          <Link href="/docs/workflows/seed-canary">seed-canary.yml</Link> — runs
+          this corpus every week.
+        </li>
+        <li>
+          <Link href="/docs/telemetry">Telemetry &amp; validation</Link> — where
+          the scores end up.
+        </li>
+      </ul>
 
       <h2>The full file</h2>
       {corpus.files.map((file) => (

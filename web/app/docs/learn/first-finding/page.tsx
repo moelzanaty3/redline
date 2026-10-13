@@ -59,8 +59,9 @@ export default function Page() {
       </p>
       <Terminal commands="git checkout -b feat/load-user" />
       <p>
-        Open <code>src/users.ts</code>, keep everything in it, and add this at the end, below the
-        closing <code>{"}"}</code> of <code>UserDirectory</code>:
+        Open <code>src/users.ts</code> and keep everything in it. Below the closing{" "}
+        <code>{"}"}</code> of <code>UserDirectory</code>, leave one blank line, then add this. The
+        blank line keeps your line numbers the same as the ones on this page:
       </p>
       <File name="src/users.ts — add at the end" text={USER_TS} />
       <p>
@@ -79,8 +80,9 @@ export default function Page() {
             content: (
               <>
                 <p>
-                  Redline reviews a <i>diff</i>, and a file git does not track is not in one, so stage
-                  it first:
+                  Redline reviews your <i>diff</i> against <code>main</code>. Git only diffs files
+                  it tracks. <code>src/users.ts</code> already is, so staging it is optional here,
+                  but it is the habit that saves you on a new file:
                 </p>
                 <RedlineTerminal
                   commands={`git add src/users.ts\n{redline} review`}
@@ -89,7 +91,8 @@ export default function Page() {
                 <p>
                   The messages are shortened here; your terminal prints each in full, with the fix.
                   No model was called: these four rules are decided by a checker, so the result is
-                  the same every time. Skip <code>git add</code> and the review stops with{" "}
+                  the same every time. A new file you forgot to <code>git add</code> is not in the
+                  diff at all; if nothing else changed, the review stops with{" "}
                   <code>there is nothing to review — the diff is empty</code>.
                 </p>
                 <div className="callout warn">
@@ -277,7 +280,8 @@ export default function Page() {
         On GitHub, open a pull request with the findings still in it, to see what the pipeline does:
       </p>
       <Terminal
-        commands={`git commit -m "feat: load a user from JSON"
+        commands={`git add src/users.ts
+git commit -m "feat: load a user from JSON"
 git push -u origin feat/load-user
 gh pr create --title "feat: load a user from JSON" --body-file .github/pull_request_template.md`}
       />
@@ -288,21 +292,21 @@ gh pr create --title "feat: load a user from JSON" --body-file .github/pull_requ
       </p>
       <Terminal
         commands="gh pr checks"
-        output={`✓  CI / test                                                  compiles, tests pass
-X  Redline / redline-gate / Deterministic policy              the same four findings
-X  Redline / redline-gate / PR checklist                      one box, honestly unticked
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate                              passes, with a warning`}
+        output={`✓  test                                                       compiles, tests pass
+X  redline-gate / Deterministic policy                        the same four findings
+X  redline-gate / PR checklist                                one box, honestly unticked
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate                                        passes, with a warning`}
       />
       <p>
-        Open <code>Redline / redline-gate / gate</code>: its log says why it passed with two red
+        Open <code>redline-gate / gate</code>: its log says why it passed with two red
         jobs. <code>checklist</code> and <code>policy</code> are the ids of the PR checklist and
         Deterministic policy jobs:
       </p>
       <Terminal
-        commands="# from the log of Redline / redline-gate / gate"
+        commands="# from the log of redline-gate / gate"
         output={`Warning: Process checks failed: checklist
 policy. This repository is at rung 'observe', which reports and does not block. The findings
 are recorded either way.`}
@@ -325,6 +329,9 @@ are recorded either way.`}
           on your machine can block you.
         </p>
       </div>
+      <p>
+        <b>Leave this pull request open.</b> Step 03 fixes the code on this branch and merges it.
+      </p>
 
       <Quiz
         question="The Deterministic policy job failed, but the gate passed. Why?"

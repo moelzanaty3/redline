@@ -54,11 +54,11 @@ export const LEARN_STEPS: LearnStep[] = [
     slug: "first-finding",
     n: "02",
     title: "Your first finding",
-    summary: "Four broken rules, caught on your machine, by your assistant and in the pipeline.",
+    summary: "Five broken rules, and which ones your machine, your assistant and the gate each catch.",
     minutes: 8,
     tag: "step-02",
     pr: 2,
-    needsGitHub: false,
+    needsGitHub: true,
   },
   {
     slug: "explain-and-fix",
@@ -68,7 +68,7 @@ export const LEARN_STEPS: LearnStep[] = [
     minutes: 6,
     tag: "step-03",
     pr: 3,
-    needsGitHub: false,
+    needsGitHub: true,
   },
   {
     slug: "team-rule",
@@ -78,7 +78,7 @@ export const LEARN_STEPS: LearnStep[] = [
     minutes: 6,
     tag: "step-04",
     pr: 4,
-    needsGitHub: false,
+    needsGitHub: true,
   },
   {
     slug: "adr",

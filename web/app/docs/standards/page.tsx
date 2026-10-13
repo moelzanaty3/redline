@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
+import { LifecycleSteps } from "@/components/lifecycle-steps";
 import { STANDARDS } from "@/lib/registry";
 import { loadManifest } from "@/lib/manifest";
 import { findRule, getRules } from "@/lib/rules";
+import { STANDARDS_EDIT, profilesIncluding, severityBreakdown } from "@/lib/lifecycle";
 
 export const metadata: Metadata = { title: "Standards" };
 
@@ -13,38 +15,43 @@ const EXAMPLE_RULE_ID = "core/query-string-concatenation";
 export default function Page() {
   const rules = getRules();
   const example = findRule(EXAMPLE_RULE_ID);
-  const { stacks, profiles } = loadManifest();
+  const { version, stacks, profiles } = loadManifest();
   const stackCount = Object.keys(stacks).length;
   const profileCount = Object.keys(profiles).length;
+  const ruleFiles = STANDARDS.filter((s) => s.slug !== "manifest");
 
   return (
     <DocsPage
       crumb="Reference"
       title="Standards"
-      intro={`A versioned catalogue of ${rules.length} rules — core plus ${stackCount} stacks — and the only files a human edits. Everything a developer's tooling actually sees is generated from these.`}
+      intro={`The ${rules.length} review rules every onboarded repository is held to: a core set for every file, plus ${stackCount} stack sets. Look up any rule id you see in a review comment.`}
       href="/docs/standards"
     >
-      <h2>What a standard is here</h2>
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          <b>For product engineers</b> who want to know what a finding means,
+          and for anyone proposing a rule change. Editing a rule is a platform
+          change: see <a href="#changing-a-rule">Changing a rule</a>.
+        </p>
+      </div>
+
+      <h2>Why the standards exist</h2>
       <p>
-        Two paths and a version number:{" "}
-        <code>standards/core.md</code> for the rules every repository gets,{" "}
-        <code>standards/stacks/*.md</code> for the {stackCount} stack sets, both
-        versioned together in <code>standards/manifest.json</code>. What a
-        repository ends up with —{" "}
-        <code>.github/copilot-instructions.md</code>, <code>AGENTS.md</code>,{" "}
-        <code>CLAUDE.md</code>, <code>.cursor/rules/</code> — is rendered from
-        those by the CLI and written in by <code>redline init</code>.
+        AI reviewers comment on whatever they notice. The standards turn that
+        into a fixed list: what to flag, how severe it is, and what not to flag
+        at all. Every finding names the rule it applies, so you can look it up
+        here and argue with the rule rather than the reviewer.
       </p>
 
-      <h2>What a developer actually sees</h2>
+      <h2>What a finding looks like</h2>
       <p>
-        A developer never opens <code>standards/</code>. They meet it as a
-        review comment. This is the output contract the standard specifies
-        for a reviewer — every finding begins with a machine-readable prefix,
-        a real rule pulled straight out of <code>standards/core.md</code>:
+        You never open <code>standards/</code> yourself. You meet a rule as a
+        review comment on your pull request. Every comment starts with its
+        severity and the rule id in brackets:
       </p>
-      {example && (
-        <CodeWindow title="a real finding">
+      {example ? (
+        <CodeWindow title="a finding">
           <span className="tk-red">Redline/BLOCKER</span>{" "}
           <span className="tk-blue">[{example.id}]</span>:{" "}
           <span className="tk-white">{example.text}</span>
@@ -54,39 +61,86 @@ export default function Page() {
             WHERE name = $1&quot;, name)
           </span>
         </CodeWindow>
-      )}
+      ) : null}
       <p>
-        Then one or two sentences: why it breaks, and the concrete fix. One
-        finding per comment. What each severity obliges the developer to do, why
-        the bracketed id is permanent, and the &ldquo;what NOT to flag&rdquo;
-        section every standard ships are all on{" "}
-        <Link href="/docs/output-contract">The output contract</Link>.
+        A <b>BLOCKER</b> must be fixed before merge, a <b>HIGH</b> needs a
+        reviewer to accept the trade-off, and a <b>SUGGESTION</b> is optional.
+        What each one obliges you to do is on{" "}
+        <Link href="/docs/output-contract">The output contract</Link>. Whether a
+        BLOCKER actually stops the merge depends on your repository&apos;s{" "}
+        <b>rung</b>, its position on the enforcement ladder — see{" "}
+        <Link href="/docs/enforcement">Enforcement</Link>.
       </p>
 
-      <h2>A repo installs exactly one profile</h2>
+      <h2>Which rules your repository gets</h2>
       <p>
-        A profile names exactly which stacks apply, and never composes two rule
-        sets that contradict each other — which is what keeps every stack&apos;s
-        globs plain and unambiguous inside a repository.{" "}
-        <code>redline init</code> proposes one by scanning the repo;{" "}
-        <code>--profile &lt;name&gt;</code> overrides the guess. The {profileCount}{" "}
-        profiles, and why glob negation was not the answer, are on{" "}
-        <Link href="/docs/profiles">Profiles &amp; stacks</Link>.
+        A <b>stack</b> is one rule file for one language or framework, such as
+        React or Go. It applies only to files matching its globs. A{" "}
+        <b>profile</b> is a named list of stacks, such as{" "}
+        <code>web-react</code>. Each repository installs exactly one of the{" "}
+        {profileCount} profiles, and always gets core. <code>redline init</code>{" "}
+        detects the profile; <code>--profile &lt;name&gt;</code> overrides it.
+        More on <Link href="/docs/profiles">Profiles &amp; stacks</Link>.
       </p>
 
-      <h2>Browse the standards</h2>
-      <p>
-        The full source, plus a rule reference table grouped by severity, per
-        stack.
-      </p>
-      <div className="doc-cards" style={{ marginTop: 24 }}>
-        {STANDARDS.map((s) => (
-          <Link className="doc-card" href={`/docs/standards/${s.slug}`} key={s.slug}>
-            <h3>{s.title} <span>→</span></h3>
-            <p>{s.description}</p>
-          </Link>
-        ))}
+      <h2>All standards</h2>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Standard</th>
+              <th>Covers</th>
+              <th>BLOCKER</th>
+              <th>HIGH</th>
+              <th>SUGGESTION</th>
+              <th>In profiles</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ruleFiles.map((s) => {
+              const counts = severityBreakdown(s.slug);
+              return (
+                <tr key={s.slug}>
+                  <td>
+                    <Link href={`/docs/standards/${s.slug}`}>{s.title}</Link>
+                  </td>
+                  <td>{s.description}</td>
+                  <td>{counts.BLOCKER}</td>
+                  <td>{counts.HIGH}</td>
+                  <td>{counts.SUGGESTION}</td>
+                  <td>{s.slug === "core" ? "All" : profilesIncluding(s.slug).length}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
+      <p>
+        <Link href="/docs/standards/manifest">
+          <code>manifest.json</code>
+        </Link>{" "}
+        ties them together: each stack&apos;s globs, the profiles, and the
+        standards version, currently <code>{version}</code>.
+      </p>
+
+      <h2>Where the rules live</h2>
+      <p>
+        The rules are written once, in <code>standards/core.md</code> and{" "}
+        <code>standards/stacks/*.md</code>. These are the only files a human
+        edits. The CLI renders them into the files each assistant reads:{" "}
+        <code>.github/copilot-instructions.md</code>, <code>AGENTS.md</code>,{" "}
+        <code>CLAUDE.md</code> and <code>.cursor/rules/</code>.{" "}
+        <code>redline init</code> writes them into a repository, and{" "}
+        <Link href="/docs/distribution">sync</Link> keeps them current.
+      </p>
+
+      <h2>Changing a rule</h2>
+      <p>
+        A merged change reaches every onboarded repository as a pull request, so
+        treat it as a production change. Rule ids are permanent: reword a rule
+        freely, but never rename or delete its id.
+      </p>
+      <LifecycleSteps steps={STANDARDS_EDIT} />
     </DocsPage>
   );
 }

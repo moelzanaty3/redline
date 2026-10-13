@@ -1,8 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PackageManagerTabs } from "@/components/learn/interactive";
 import { LearnPage, RedlineTerminal, Terminal } from "@/components/learn/parts";
+import { REDLINE_RUNNERS } from "@/lib/learn";
 
 export const metadata: Metadata = { title: "Learn: recap and next steps" };
+
+const UPGRADE = {
+  pnpm: "pnpm add -D --save-exact redlinegate@latest",
+  npm: "npm install -D --save-exact redlinegate@latest",
+  yarn: "yarn add -D --exact redlinegate@latest",
+  bun: "bun add -d --exact redlinegate@latest",
+} as const;
 
 export default function Page() {
   return (
@@ -96,11 +105,15 @@ export default function Page() {
         repository keeps the old ones until you take them.
       </p>
       <p>Taking them is a pull request. Raise the pin, see what it changes, and render again:</p>
-      <RedlineTerminal
-        commands={`git checkout -b chore/redline-update
-pnpm add -D --save-exact redlinegate@latest
-{redline} status
-{redline} init --no-commit
+      <PackageManagerTabs
+        panels={(["pnpm", "npm", "yarn", "bun"] as const).map((name) => ({
+          name,
+          content: (
+            <Terminal
+              commands={`git checkout -b chore/redline-update
+${UPGRADE[name]}
+${REDLINE_RUNNERS[name]} status
+${REDLINE_RUNNERS[name]} init --no-commit
 git add -A
 git commit -m "chore: update Redline"
 git push -u origin chore/redline-update
@@ -109,14 +122,20 @@ gh pr checks --watch
 gh pr merge --squash
 git checkout main
 git pull`}
+            />
+          ),
+        }))}
       />
       <p>
-        <code>status</code> compares the rules rendered in your repository with the ones in the
-        version you just installed, and says <code>behind</code> when they differ.{" "}
+        <code>status</code> compares the standards your repository was rendered from with the ones
+        in the version you just installed. Its <code>standards</code> line ends in{" "}
+        <code>current</code>, or names the newer version when there is one.{" "}
         <code>init</code> keeps every choice recorded in <code>.redline.json</code> and rewrites{" "}
-        <code>AGENTS.md</code>, <code>CLAUDE.md</code>, the gate workflow and the rest. Raising the
-        pin alone is not enough: the gate in <code>.github/workflows/</code> is a copy, and only{" "}
-        <code>init</code> replaces it.
+        <code>AGENTS.md</code>, <code>CLAUDE.md</code>, the gate workflow and the rest.
+      </p>
+      <p>
+        Raising the pin alone is not enough. The gate in <code>.github/workflows/</code> is a copy,
+        and only <code>init</code> replaces it.
       </p>
       <p>
         In an organisation with many repositories, the team that owns Redline does this for

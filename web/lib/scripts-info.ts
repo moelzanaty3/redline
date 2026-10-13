@@ -36,7 +36,7 @@ export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
     group: "source",
     runBy: "CI's pins job on every pull request and push to main, allowed to fail because it needs the network.",
     command: "node scripts/check-pins.mjs",
-    when: "After adding or bumping a pinned action, a Docker image digest or the gate's REDLINE_CLI_VERSION. Set GH_TOKEN to avoid the API rate limit; add --strict to fail on available updates as well as on mismatches.",
+    when: "After adding or bumping a pinned action, a Docker image digest or the gate's REDLINE_CLI_VERSION. The gate asks for redlinegate@latest on purpose, and the check accepts it. Set GH_TOKEN to avoid the GitHub API rate limit. Add --strict to fail on available updates as well as on mismatches.",
   },
   "score-seeds": {
     group: "measurement",

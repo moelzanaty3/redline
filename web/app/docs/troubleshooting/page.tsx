@@ -11,20 +11,21 @@ export default function Page() {
     <DocsPage
       crumb="Getting Started"
       title="Troubleshooting"
-      intro="What each failure actually means, and the command that resolves it. Ordered by how often it happens rather than by how the system is built — you are here with a symptom, not a component."
+      intro="What each failure means, and the command that resolves it. Ordered by how often it happens, because you are here with a symptom, not a component."
       href="/docs/troubleshooting"
     >
       <p>
-        Everything below is a real message from <code>redline</code>, the gate,
-        or the host. If you have a string, search it — <kbd>⌘K</kbd> indexes the
-        prose of every page and every rule id.
+        Every heading below is a real message from <code>redline</code>, the
+        gate, or GitHub. Each entry says what causes it, the command that fixes
+        it, and how to confirm the fix. If you have a string, search it:{" "}
+        <kbd>⌘K</kbd> indexes every page and every rule id.
       </p>
 
       <h2>Start here: one command answers most of it</h2>
       <p>
         <code>redline verify</code> reads back what the host actually reports,
         not what a config file claims, and names every check that is wrong. Run
-        it before reading further; the row it prints is the section you want.
+        it before reading further. Each line starts with one of these:
       </p>
       <RedlineTerminal commands="{redline} verify" />
       <div className="table-scroll">
@@ -69,10 +70,11 @@ export default function Page() {
             </tr>
             <tr>
               <td>
-                <code>not onboarded</code>
+                <code>FAIL  onboarded  no …/.redline.json</code>, alone
               </td>
               <td>
-                no <code>.redline.json</code> here. Nothing has been installed.
+                Nothing has been installed here. The line ends with the{" "}
+                <code>init</code> command to run.
               </td>
               <td>
                 <code>2</code>
@@ -82,8 +84,8 @@ export default function Page() {
         </table>
       </div>
       <p>
-        Three different people act on those three answers, which is why they are
-        three answers and not two.
+        <code>FAIL</code> is work for you or an admin. <code>??</code> means
+        run it again with a token that can see the setting.
       </p>
 
       <h2 id="waiting-for-status">
@@ -127,11 +129,28 @@ export default function Page() {
         </table>
       </div>
       <p>
-        <code>redline verify</code> catches this: it compares the required
-        context against what the host reported on a real pull request. If you
-        edited the gate yourself, see{" "}
-        <Link href="/docs/gate#adding-a-check">Adding a check of your own</Link>{" "}
-        — renaming a job id is the first of the two traps there.
+        <b>Find it.</b> <code>redline verify</code> compares the required name
+        with what GitHub reported on a real pull request, on its{" "}
+        <code>check-name-reported</code> line. Or ask GitHub which check the
+        default branch requires:
+      </p>
+      <RedlineTerminal
+        commands={`gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '.[] | select(.type=="required_status_checks") | .parameters.required_status_checks'`}
+        output={`[{"context":"redline-gate / gate"}]`}
+      />
+      <p>
+        <b>Fix it.</b> If you renamed the caller job (<code>redline-gate</code>{" "}
+        in <code>.github/workflows/redline.yml</code>) or the gate&apos;s{" "}
+        <code>gate</code> job, put the name back, or re-run{" "}
+        <RedlineCode args="init --repair" /> to rewrite both files. If you are
+        adding your own job, see{" "}
+        <Link href="/docs/gate#adding-a-check">Adding a check of your own</Link>.
+      </p>
+      <p>
+        <b>Confirm.</b> Push to the pull request. A check named{" "}
+        <code>redline-gate / gate</code> appears in <code>gh pr checks</code>,
+        and <code>check-name-reported</code> in <code>verify</code> reads{" "}
+        <code>ok</code>.
       </p>
 
       <h2 id="green-but-nothing-checked">
@@ -169,6 +188,12 @@ export default function Page() {
         has the details. It is not <code>rm .redline.json</code>: your recorded
         menu, rung and onboarding date survive it.
       </p>
+      <p>
+        <b>Confirm.</b> In the <code>--repair</code> report, every setting reads{" "}
+        <code>applied</code> or <code>already</code>, and{" "}
+        <RedlineCode args="verify" /> prints <code>ok</code> on{" "}
+        <code>pending-admin</code>.
+      </p>
       <div className="callout">
         <p>
           <b>If your gate is vendored</b> (<code>--gate-source local</code>),
@@ -182,22 +207,42 @@ export default function Page() {
       <h2 id="exemption-ignored">
         I applied <code>redline-exempt</code> and the gate still blocked
       </h2>
-      <p>Two reasons, and they are different problems:</p>
+      <p>The gate&apos;s log says which of three causes it is:</p>
       <ul>
         <li>
-          <b>The label on its own does nothing.</b> It needs a{" "}
-          <code>## Redline exemption</code> block in the pull request body with a{" "}
-          <code>reason</code> of at least 20 characters, an <code>until</code>{" "}
-          date no more than 90 days out, and a <code>scope</code>. A label with no
-          block is a label. See <Link href="/docs/exemptions">Exemptions</Link>.
+          <code>A soft-fail label was applied without a valid `## Redline exemption` block (reason and expiry required).</code>{" "}
+          The label on its own does nothing. The pull request description needs
+          a <code>## Redline exemption</code> block with a <code>reason</code>{" "}
+          of at least 20 characters and an <code>until</code> date no more than
+          90 days out. See <Link href="/docs/exemptions">Exemptions</Link>.
         </li>
         <li>
-          <b>You exempted a security check.</b> Dependency review and the secret
-          scan are the security floor. They are not on the ladder and{" "}
-          <b>no label waives them at any rung</b> — that is the one thing an
-          exemption cannot do, on purpose.
+          The same error, with a block present: the block does not cover the
+          failing check. Its <code>scope</code> must name every process check
+          that is failing, or be left out to cover them all.
+        </li>
+        <li>
+          <code>Redline gate failed on security checks (not label-exemptible, and not on the enforcement ladder): …</code>{" "}
+          Dependency review or the secret scan failed. They are the security
+          floor, and no label or exemption waives them at any rung. Fix the
+          dependency or remove the secret.
         </li>
       </ul>
+      <p>
+        <b>Find which.</b> Run the check the gate runs, on your machine,
+        once per failing check (<code>checklist</code>, <code>adr</code>,{" "}
+        <code>policy</code>). It prints what is wrong with the block:
+      </p>
+      <RedlineTerminal
+        commands={`gh pr view --json body --jq .body > body.md
+{redline} exempt --body-file body.md --scope checklist`}
+      />
+      <p>
+        <b>Confirm.</b> The command prints{" "}
+        <code>exempt until &lt;date&gt; (&lt;scope&gt;): &lt;reason&gt;</code>{" "}
+        and exits <code>0</code>. Edit the description, and the gate runs
+        again.
+      </p>
       <p>
         An exemption downgrades the <i>process</i> checks — checklist, ADR,
         policy — for a reviewer who accepts the trade-off on the record. It does
@@ -207,13 +252,24 @@ export default function Page() {
       <h2 id="checklist-fails">
         The checklist check fails and the boxes look ticked
       </h2>
+      <p>The <code>PR checklist</code> job fails with one of two errors:</p>
+      <ul>
+        <li>
+          <code>No &apos;## Launch readiness&apos; section in the PR description. Restore .github/pull_request_template.md and complete the checklist.</code>{" "}
+          The job finds the checklist by its heading, and the heading is gone or
+          reworded. The boxes can all be ticked and it still fails. Paste the{" "}
+          <code>## Launch readiness</code> section back from{" "}
+          <code>.github/pull_request_template.md</code>.
+        </li>
+        <li>
+          <code>N unchecked launch-readiness item(s). Tick each one, or delete the line and say why in the PR description.</code>{" "}
+          A box under the heading is still <code>[ ]</code>. Tick it, or delete
+          the line and explain why in the description.
+        </li>
+      </ul>
       <p>
-        The gate reads the checklist section of the pull request template by its
-        heading. It fails loudly when the heading has been deleted — which is
-        different from an unticked box, and is the failure people spend longest
-        on because the body <i>looks</i> fine. Restore the heading from the
-        template Redline installed, or from{" "}
-        <Link href="/docs/templates">Templates &amp; rulesets</Link>.
+        <b>Confirm.</b> Editing the description re-runs the job, and its log
+        ends with <code>Launch readiness complete.</code>
       </p>
 
       <h2 id="rule-not-firing">A rule is installed and never fires</h2>

@@ -105,37 +105,107 @@ ${MARKER_END}`;
     <DocsPage
       crumb="Adaptors"
       title="Adaptors"
-      intro="One standard, five assistants, and each one reads its instructions from a different file. Redline writes the right files for each, so Copilot, Claude, Cursor, Codex and every agent that reads AGENTS.md review against the same rules and quote the same rule ids."
+      intro="Each AI assistant reads its instructions from its own files. redline init writes the organisation's standard into the files your assistants read, so Copilot, Claude, Cursor and Codex all review against the same rules and cite the same rule ids."
       href="/docs/adaptors"
     >
-      <h2>Why adaptors exist</h2>
+      <h2>Which files Redline writes for your tool</h2>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>You use</th>
+              <th>Redline writes</th>
+              <th>What the files do</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <a href="#copilot">GitHub Copilot</a>
+              </td>
+              <td>
+                <code>.github/copilot-instructions.md</code>, one{" "}
+                <code>.github/instructions/redline-&lt;stack&gt;.instructions.md</code> per stack,
+                and <code>.github/prompts/redline-*.prompt.md</code>
+              </td>
+              <td>
+                The core rules on every request, each stack&apos;s rules on matching files, and three
+                prompts
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="#claude">Claude Code</a>
+              </td>
+              <td>
+                <code>CLAUDE.md</code>, <code>AGENTS.md</code> and{" "}
+                <code>.claude/commands/redline-*.md</code>
+              </td>
+              <td>
+                <code>CLAUDE.md</code> imports <code>AGENTS.md</code>, which holds every rule. Three
+                slash commands
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="#cursor">Cursor</a>
+              </td>
+              <td>
+                <code>.cursor/rules/redline-core.mdc</code>, one{" "}
+                <code>.cursor/rules/redline-&lt;stack&gt;.mdc</code> per stack, and{" "}
+                <code>.cursor/commands/redline-*.md</code>
+              </td>
+              <td>The core rules always, each stack&apos;s rules on matching files, and three commands</td>
+            </tr>
+            <tr>
+              <td>
+                <a href="#codex">OpenAI Codex</a>, and any agent that reads{" "}
+                <a href="#agents">AGENTS.md</a>
+              </td>
+              <td>
+                <code>AGENTS.md</code>
+              </td>
+              <td>Every rule in one always-on file</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>&lt;stack&gt;</code> is each stack in the repository&apos;s profile, such as{" "}
+        <code>typescript</code>. The three commands are <code>redline-init</code>,{" "}
+        <code>redline-review</code> and <code>redline-verify</code>. Redline rewrites its part of
+        these files on every run, so do not edit it; text of your own outside the{" "}
+        <a href="#marker-block">marker block</a> stays. Put your team&apos;s own rules in{" "}
+        <a href="#local-rules">
+          <code>.redline/local.md</code>
+        </a>
+        .
+      </p>
+
+      <h2>Why one standard needs several files</h2>
       <p>
         The organisation writes its rules once, in <code>standards/</code>. No assistant reads that
-        folder. GitHub Copilot reads <code>.github/copilot-instructions.md</code>. Claude Code reads{" "}
-        <code>CLAUDE.md</code>. Cursor reads <code>.cursor/rules/</code>. Codex reads{" "}
-        <code>AGENTS.md</code>. Each also has its own way of saying &quot;these rules are only for{" "}
-        <code>.ts</code> files&quot;, or none at all.
+        folder, and each one has its own file and its own way of scoping rules to some file types.
+        Copies kept by hand drift apart, and then a finding from one assistant cannot be compared
+        with a finding from another.
       </p>
       <p>
-        Copy the rules into each file by hand and the copies drift apart within a month: Copilot
-        enforces last quarter&apos;s rule, Claude this quarter&apos;s, and a finding from one cannot
-        be compared with a finding from the other. An <strong>adaptor</strong> is the part of{" "}
-        <code>redline init</code> that renders the one standard into one assistant&apos;s files. Every
-        adaptor renders the same rule text with the same rule ids, so a finding tagged{" "}
-        <code>[core/customer-data-in-logs]</code> means the same thing whichever assistant posted it.
+        An <strong>adaptor</strong> is the part of <code>redline init</code> that writes the
+        standard into one assistant&apos;s files. Every adaptor writes the same rule text with the
+        same rule ids, so a finding tagged <code>[core/customer-data-in-logs]</code> means the same
+        thing whichever assistant posted it.
       </p>
       <p>
-        Each adaptor has a <strong>vendor id</strong>. That is the name you pass to{" "}
-        <code>--vendors</code>, and the name <code>.redline.json</code> records:
+        Each adaptor has a <strong>vendor id</strong>: the name you pass to <code>--vendors</code>,
+        and the name <code>.redline.json</code> records. Pass the full list you want:
       </p>
-      <RedlineTerminal commands={`{redline} init --vendors copilot,agents,claude,cursor`} />
+      <RedlineTerminal commands={`{redline} init --vendors copilot,claude,cursor`} />
 
       <h2>What each adaptor writes</h2>
       <p>
-        <code>&lt;stack&gt;</code> is each stack in the repository&apos;s profile, for example{" "}
-        <code>typescript</code>. <strong>Always on</strong> means the tool loads the file for every
-        request. <strong>By glob</strong> means the tool loads it only when the files in play match
-        the globs in its frontmatter.
+        <strong>Always on</strong> means the tool loads the file for every request.{" "}
+        <strong>By glob</strong> means it loads the file only when the files in play match the globs
+        in its frontmatter.
       </p>
       <div className="table-scroll">
         <table>
@@ -196,10 +266,12 @@ ${MARKER_END}`;
               </td>
               <td>
                 <code>CLAUDE.md</code>
+                <br />
+                <code>AGENTS.md</code> (the same file as <code>agents</code>)
               </td>
               <td>Claude Code, and Claude in GitHub</td>
               <td>
-                Always on; it imports <code>AGENTS.md</code>
+                Always on; <code>CLAUDE.md</code> imports <code>AGENTS.md</code>
               </td>
             </tr>
             <tr>
@@ -284,8 +356,9 @@ ${MARKER_END}`;
         Codex reads <code>AGENTS.md</code>, so the <code>codex</code> adaptor writes exactly what{" "}
         <code>agents</code> writes, with the same renderer. It is a separate id so that someone
         looking for Codex in the menu or in <code>--vendors</code> finds it by name. Selecting{" "}
-        <code>codex</code>, <code>agents</code>, or both writes one <code>AGENTS.md</code> with
-        identical content. Neither gets slash commands.
+        <code>codex</code>, <code>agents</code>, <code>claude</code>, or any mix of them writes one{" "}
+        <code>AGENTS.md</code> with identical content. Neither <code>codex</code> nor{" "}
+        <code>agents</code> gets slash commands.
       </p>
 
       <h2 id="claude">Claude</h2>
@@ -296,15 +369,15 @@ ${MARKER_END}`;
       </p>
       <File name="CLAUDE.md" text={CLAUDE_MD} />
       <p>
-        So Claude sees exactly the rules every <code>AGENTS.md</code> reader sees. Two consequences:
+        So Claude sees exactly the rules every <code>AGENTS.md</code> reader sees.
       </p>
       <ul>
         <li>
-          <strong>Select <code>agents</code> (or <code>codex</code>) with <code>claude</code>.</strong>{" "}
-          Only those adaptors write <code>AGENTS.md</code>. <code>--vendors claude</code> on its own
-          writes a <code>CLAUDE.md</code> that imports a file that is not there. Detection has the
-          same gap: a repository with <code>CLAUDE.md</code> and no <code>AGENTS.md</code> is
-          detected as <code>claude</code> alone, so pass <code>--vendors claude,agents</code>.
+          <strong>Selecting <code>claude</code> brings <code>AGENTS.md</code> with it.</strong> The
+          adaptor writes both files, so <code>--vendors claude</code> on its own, or a repository
+          detected as <code>claude</code> alone, never leaves the import pointing at nothing.
+          Selecting <code>agents</code> or <code>codex</code> as well writes the same{" "}
+          <code>AGENTS.md</code> once.
         </li>
         <li>
           Org context sections and <code>.redline/local.md</code> are rendered into{" "}
@@ -385,8 +458,9 @@ ${MARKER_END}`;
       <p>
         A deselected vendor&apos;s shared file is handled differently: Redline takes its block out of{" "}
         <code>AGENTS.md</code>, <code>CLAUDE.md</code> or <code>.github/copilot-instructions.md</code>
-        , and deletes the file only if nothing else is left in it. Slash command files follow the
-        same rule.
+        , and deletes the file only if nothing else is left in it. A file another selected vendor
+        still writes is kept: deselect <code>agents</code> while <code>claude</code> stays, and{" "}
+        <code>AGENTS.md</code> stays too. Slash command files follow the same rule.
       </p>
 
       <h2 id="detection">How init picks the vendors</h2>
@@ -451,8 +525,10 @@ ${MARKER_END}`;
       </div>
       <p>
         <code>codex</code> is never detected, because its file is <code>AGENTS.md</code>, which
-        selects <code>agents</code>. The output is the same. To add or drop a vendor later, re-run{" "}
-        <code>init</code> with the full list you want; the new list replaces the recorded one.
+        selects <code>agents</code>. The output is the same. A repository with only{" "}
+        <code>CLAUDE.md</code> is detected as <code>claude</code>, which writes{" "}
+        <code>AGENTS.md</code> as well. To add or drop a vendor later, re-run <code>init</code> with
+        the full list you want; the new list replaces the recorded one.
       </p>
 
       <h2 id="enabled">Vendors the organisation turns off</h2>

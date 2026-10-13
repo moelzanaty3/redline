@@ -28,6 +28,15 @@ export default async function Page() {
         reads them, and adds a gate that checks every pull request against the same rules, whoever
         or whatever wrote the code.
       </p>
+      <Term word="Merge gate">
+        <p>
+          One check on every pull request, <code>redline-gate / gate</code>, that combines five
+          jobs into one pass or fail: the rule checker, the pull request checklist, the
+          decision-record check, dependency review and a secret scan. You meet each job in the next
+          steps. For now the gate is advice: a red gate shows on the pull request, but GitHub still
+          lets you merge. Step 07 makes it required.
+        </p>
+      </Term>
 
       <h2>Run it</h2>
       <p>
@@ -87,7 +96,10 @@ export default async function Page() {
             </tr>
             <tr>
               <td>What should Redline set up alongside its own checks?</td>
-              <td>Nothing. GitHub&apos;s own secret scanning and dependency alerts are switched on anyway.</td>
+              <td>
+                Nothing. GitHub&apos;s own secret scanning and dependency alerts don&apos;t need a
+                box: Redline switches them on when it applies repository settings, in step 07.
+              </td>
             </tr>
             <tr>
               <td>What should Redline install?</td>
@@ -106,7 +118,8 @@ export default async function Page() {
             <tr>
               <td>How hard should the check bite?</td>
               <td>
-                <code>observe</code>
+                <code>observe</code>: findings are reported, and only the dependency and secret checks
+                can fail the gate. The end of this page explains why.
               </td>
             </tr>
             <tr>
@@ -157,10 +170,15 @@ export default async function Page() {
       <Terminal
         commands="# after Ready?"
         output={`  profile javascript-typescript
+  opted out: review-ownership
   ▲ the gate is vendored at .github/workflows/redline-gate.yml rather than
     referenced from <you>/.github. It runs from the pull request's own head
     commit, so a pull request that edits it changes the gate judging it …
-  ▲ redlinegate is a devDependency now (pnpm add …)
+  ▲ nothing requires review on .github/workflows/ here, so that edit needs no
+    owner's approval …
+  ▲ this repository already has .github/workflows/ci.yml — if one of them is
+    already your merge gate, re-run with --skip gate …
+  ▲ redlinegate@… is a devDependency now (pnpm add …)
 
   Files  … written
    + package.json
@@ -183,6 +201,25 @@ export default async function Page() {
 
   not committed — the files are in your working tree, and you are on main …`}
       />
+      <p>
+        The <code>▲</code> lines are warnings, not errors, and none needs action on this path:
+      </p>
+      <ul>
+        <li>
+          <b>The gate is vendored</b>, meaning copied into this repository. That is the answer
+          you chose; <i>Where the merge gate lives</i> above explains the cost.
+        </li>
+        <li>
+          <b>Nothing requires review on <code>.github/workflows/</code></b>: no owner has to
+          approve a change to the gate. A team names one with{" "}
+          <code>--with review-ownership --review-owners &lt;team&gt;</code>. Alone on a personal
+          account, there is nobody else to name.
+        </li>
+        <li>
+          <b>The repository already has <code>ci.yml</code></b>: Redline checks it is not about to
+          add a second gate. Yours only runs the tests, so keep the Redline gate.
+        </li>
+      </ul>
       <p>
         Nothing has reached GitHub yet: no commit, no pull request, no repository setting. Running
         it from a script, with no questions? Add{" "}
@@ -453,10 +490,10 @@ export default async function Page() {
                 <ul>
                   <li>
                     A failed dependency review or secret scan fails the gate, always. No label and
-                    no rung waives them: they are the security floor.
+                    no rung waives them. These two are the <b>security floor</b>.
                   </li>
                   <li>
-                    The other three are process checks. At <code>observe</code> a failure is a
+                    The other three are <b>process checks</b>. At <code>observe</code> a failure is a
                     warning and the gate stays green. At <code>block-blocker</code> or{" "}
                     <code>block-high</code> it fails the gate, unless the pull request carries a
                     soft-fail label <i>and</i> a <code>## Redline exemption</code> block with a
@@ -607,15 +644,6 @@ export default async function Page() {
         ]}
       />
 
-      <Term word="Merge gate">
-        <p>
-          One required-looking check on the pull request, <code>redline-gate / gate</code>, that
-          combines several jobs into one verdict: the rule checker, the pull request checklist, the
-          decision-record check, dependency review and a secret scan. You will meet each job in the
-          next steps.
-        </p>
-      </Term>
-
       <h2>Commit it and open the pull request</h2>
       <p>Once you have read the files, take them to a pull request the way you would any change.</p>
       <h3>1. Commit on a branch</h3>
@@ -667,12 +695,12 @@ gh pr view --web`}
       </p>
       <Terminal
         commands="gh pr checks"
-        output={`X  Redline / redline-gate / PR checklist
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate                   passes, with a warning`}
+        output={`X  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Deterministic policy
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate                             passes, with a warning`}
       />
       <p>
         The ADR check passes on the label. The checklist failed, and the <code>gate</code> still
@@ -698,12 +726,12 @@ and say why in the PR description.`}
         <p>On a private repository, two more checks fail:</p>
         <Terminal
           commands="gh pr checks"
-          output={`X  Redline / redline-gate / PR checklist
-X  Redline / redline-gate / Dependency review
-X  Redline / redline-gate / gate
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / Secret scan (diff)`}
+          output={`X  redline-gate / PR checklist
+X  redline-gate / Dependency review
+X  redline-gate / gate
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Deterministic policy
+✓  redline-gate / Secret scan (diff)`}
         />
         <p>Open Dependency review and the reason is one line:</p>
         <Terminal

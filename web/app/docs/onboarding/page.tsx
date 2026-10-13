@@ -51,10 +51,11 @@ export default async function Page() {
         {"   "}<span className="tk-green">+</span> .github/pull_request_template.md{"\n"}
         {"   "}<span className="tk-green">+</span> .redline.json{"\n"}
         {"\n"}
-        {"  "}<span className="tk-bold">Repository settings</span><span className="tk-dim">  2 in place · 1 refused</span>{"\n"}
+        {"  "}<span className="tk-bold">Repository settings</span><span className="tk-dim">  … in place · 1 refused</span>{"\n"}
         {"   "}<span className="tk-green">✓ applied    </span> <span className="tk-bold">secret-scanning  </span>  <span className="tk-dim">secret scanning</span>{"\n"}
         {"   "}<span className="tk-green">✓ applied    </span> <span className="tk-bold">push-protection  </span>  <span className="tk-dim">secret scanning push protection</span>{"\n"}
         {"   "}<span className="tk-red">✗ denied     </span> <span className="tk-bold">dependency-alerts</span>  <span className="tk-dim">dependabot alerts (vulnerability alerts) (needs repository admin)</span>{"\n"}
+        {"   "}<span className="tk-dim">…</span>{"\n"}
         {"\n"}
         {"  "}<span className="tk-bold">Pull request</span>{"\n"}
         {"   "}<span className="tk-blue">https://github.com/acme/checkout-service/pull/42</span>{"\n"}
@@ -91,13 +92,12 @@ export default async function Page() {
         </li>
       </ul>
       <p>
-        Two version lines run separately and neither is derived from the other.
-        The <b>package version</b> is the CLI on npm, computed by semantic-release
-        at publish time. The <b>standards version</b> is{" "}
-        <code>standards/manifest.json</code> → <code>version</code>, currently{" "}
-        <code>{standardsVersion()}</code>; every rendered artifact and every sync
-        pull request names it, so a repository can always say which standard its
-        files came from.
+        Two versions appear in the output, and they are separate. The{" "}
+        <b>package version</b> is the CLI release on npm. The{" "}
+        <b>standards version</b> is the version of the rules themselves,
+        currently <code>{standardsVersion()}</code>. Every rendered file names
+        the standards version, so a repository can always say which rules it
+        was given.
       </p>
 
       <h2 id="sequence">The whole sequence</h2>
@@ -130,7 +130,7 @@ export default async function Page() {
             </tr>
             <tr>
               <td>4</td>
-              <td><RedlineCode args="init --repair" /> with an <b>admin</b> token — applies everything the first run recorded in <code>pendingAdmin</code>, including the branch ruleset. See <a href="#after-merge">After the pull request merges</a>.</td>
+              <td><RedlineCode args="init --repair" /> with an <b>admin</b> token — applies the settings the first run was refused, which <code>.redline.json</code> lists under <code>pendingAdmin</code>, including the branch ruleset. See <a href="#after-merge">After the pull request merges</a>.</td>
               <td>repo admin</td>
             </tr>
             <tr>
@@ -161,7 +161,7 @@ export default async function Page() {
         <li><b>Rendered standards</b> for the detected profile, plus the review output contract, in the files each enabled assistant reads — <Link href="/docs/adaptors">Adaptors</Link> lists them per tool.</li>
         <li><b>Context sections</b>, where selected — background about how this repository works, rendered into the same artifacts as the rules and carrying no rule ids, because they are chosen per repository rather than by stack. Spec-first is on by default; TM Forum is opt-in.</li>
         <li><b>Security floor</b> — secret scanning with push protection and dependency alerts on the host, and dependency review plus a secret scan in the gate. Anything it could not enable is reported, not silently skipped. The floor fails the gate at every rung and no label waives it — see <Link href="/docs/gate">the gate</Link>.</li>
-        <li><b>Merge gate, advisory</b> — the gate reports on every pull request as <code>redline-gate / gate</code>, and a branch ruleset requires a pull request to merge. Required approvals default to none (<code>--approvals</code>). The gate reports; it stops a merge only once it is made required (<code>--blocking</code>) and the rung is raised.</li>
+        <li><b>Merge gate, advisory</b> — the gate reports on every pull request as <code>redline-gate / gate</code>, and a branch ruleset requires a pull request to merge. Required approvals default to none (<code>--approvals</code>). Until the gate is a required check (<code>--blocking</code>), a red gate does not stop a merge. Once it is required, the <Link href="/docs/enforcement">rung</Link> decides what turns it red: at <code>observe</code>, only the security floor.</li>
         <li><b><code>.redline.json</code></b> — profile, vendors, menu choices, pending-admin list, and the standards/CLI versions that produced it. This is what makes the repo visible to central telemetry — read-only, no secret is ever written to the repo.</li>
       </ul>
       <PrivateRepo title="Dependency review needs GitHub Code Security">
@@ -282,33 +282,52 @@ export default async function Page() {
         file against the CLI running the check.
       </p>
       <p>
-        A repo installs exactly one profile — see <b>Profiles &amp; stacks</b>{" "}
-        for the full table.
+        A profile is the set of stacks whose rules a repository gets. One
+        repository can combine several: <code>--profile web,infra</code>{" "}
+        renders a React app&apos;s rules and its Terraform rules together. See{" "}
+        <Link href="/docs/profiles">Profiles &amp; stacks</Link> for the full
+        table.
       </p>
 
-      <h2>Permission degradation is the normal path</h2>
+      <h2 id="permissions">When your token cannot do everything</h2>
       <p>
-        The engineer running <code>redline init</code> usually doesn&apos;t
-        have repo admin. The command never aborts part-way: file-level work
-        always lands, and the pull request always opens. Refused settings are
-        recorded under <code>pendingAdmin</code> in <code>.redline.json</code>,
-        and the command still exits <code>0</code>.
+        The engineer running <code>redline init</code> usually is not a
+        repository admin. That is expected. The files always land and the pull
+        request always opens; only the repository settings that need admin are
+        refused. The command still exits <code>0</code>.
       </p>
-      <div className="callout info">
-        <span className="ic">ℹ</span>
-        <p>
-          <code>pendingAdmin</code>, <b>unsupported</b> and <b>unknown</b> are
-          three different things. A denied capability goes in{" "}
-          <code>pendingAdmin</code> — an admin can grant it later. Azure
-          DevOps Advanced Security is separately licensed; an unlicensed
-          repository reports it as <code>unsupported</code>, not{" "}
-          <code>pendingAdmin</code> — no admin action clears it, so it
-          doesn&apos;t sit on the dashboard forever demanding one. A read the
-          host answered with neither a yes nor a definite no — a 401/403 it
-          cannot tell apart from a genuine refusal — reports{" "}
-          <code>unknown</code> instead, and is treated the same way: an
-          indeterminate read is never filed as admin work either.
-        </p>
+      <p>
+        Each setting in the <b>Repository settings</b> part of the report, and
+        in <code>verify</code>, is in one of these states:
+      </p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr><th>State</th><th>Means</th><th>What to do</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>applied</code>, <code>already</code></td>
+              <td>The setting is on.</td>
+              <td>Nothing.</td>
+            </tr>
+            <tr>
+              <td><code>denied</code></td>
+              <td>The host refused it, usually for lack of admin. It is recorded in <code>.redline.json</code> under <code>pendingAdmin</code>.</td>
+              <td>An admin runs <RedlineCode args="init --repair" />.</td>
+            </tr>
+            <tr>
+              <td><code>unsupported</code></td>
+              <td>This repository cannot have it, for example a feature its plan or licence does not include.</td>
+              <td>Nothing an admin can do; it is not recorded as admin work.</td>
+            </tr>
+            <tr>
+              <td><code>unknown</code></td>
+              <td>The host gave no clear answer, usually because a token without admin cannot see the setting.</td>
+              <td>Read it again with an admin token: <RedlineCode args="verify" />.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <h2>Verify</h2>

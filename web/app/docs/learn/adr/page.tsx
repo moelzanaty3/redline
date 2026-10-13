@@ -74,7 +74,7 @@ export default function Page() {
 
       <h2>What the check reads</h2>
       <p>
-        The job is <code>Redline / redline-gate / ADR required for significant changes</code>. It
+        The job is <code>redline-gate / ADR required for significant changes</code>. It
         fails when the change is over the threshold, has no ADR link, and has no{" "}
         <code>no-adr</code> label:
       </p>
@@ -130,13 +130,13 @@ git commit -m "feat: parse addresses, with the country checked against ISO 3166"
 git push -u origin feat/addresses
 gh pr create --title "feat: parse addresses, with the country checked against ISO 3166" --body-file .github/pull_request_template.md
 gh pr checks --watch`}
-        output={`✓  CI / test
-✓  Redline / redline-gate / Deterministic policy
-X  Redline / redline-gate / PR checklist                      until you tick the boxes
-X  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate                              passes, with a warning`}
+        output={`✓  test
+✓  redline-gate / Deterministic policy
+X  redline-gate / PR checklist                                until you tick the boxes
+X  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate                                        passes, with a warning`}
       />
       <p>
         On GitHub, tick the <code>## Launch readiness</code> boxes that hold, as in step 02. The
@@ -207,7 +207,8 @@ git push`}
                 <File name="pull request description" text={PR_BODY} />
                 <p>
                   Editing the description re-runs the gate, so no new commit is needed for the
-                  link.
+                  link. The link points at <code>main</code>, so it opens only after you merge; the
+                  gate reads the file name, not the page behind it.
                 </p>
               </>
             ),
@@ -218,13 +219,13 @@ git push`}
               <>
                 <Terminal
                   commands="gh pr checks --watch"
-                  output={`✓  CI / test
-✓  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / PR checklist
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate`}
+                  output={`✓  test
+✓  redline-gate / Deterministic policy
+✓  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate`}
                 />
                 <p>The ADR job&apos;s log now counts the link:</p>
                 <Terminal

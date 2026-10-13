@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 import { RedlineCode } from "@/components/learn/interactive";
+import { RedlineTerminal } from "@/components/learn/parts";
 import { loadManifest } from "@/lib/manifest";
 import { LifecycleSteps } from "@/components/lifecycle-steps";
 import type { Step } from "@/lib/lifecycle";
@@ -67,14 +68,43 @@ export default function Page() {
       intro="Trying a tool is only safe if you can take it back out. redline init writes into files you already own and changes settings on your host, so this page is the full list: which files are Redline's to delete, which are yours with a Redline block inside them, and which host settings you should think twice about switching off."
       href="/docs/removing"
     >
+      <h2 id="one-command">Remove it with one command</h2>
       <p>
-        <RedlineCode args="remove" /> does this in one step and opens the pull
-        request for you, on the branch <code>redline/remove</code>; add{" "}
-        <code>--dry-run</code> to see the plan first. The rest of this page is the manual path, and it is
-        written out in full deliberately: <code>redline init</code> writes into
-        files you already own and changes settings on your host, so
-        &ldquo;how do I back this out&rdquo; deserves an answer you can read
-        and check rather than a command you have to trust.
+        Read the plan first. A dry run writes nothing and contacts no host:
+      </p>
+      <RedlineTerminal
+        commands="{redline} remove --dry-run"
+        output={`  would remove   AGENTS.md  — nothing but the Redline block was in it
+  would remove   CLAUDE.md  — nothing but the Redline block was in it
+  would remove   .claude/commands/redline-review.md  — its frontmatter carries the Redline ownership line
+  …
+  would remove   .github/workflows/redline.yml  — it references Redline's reusable gate and publishes redline-gate / gate
+  would unmerge  .github/pull_request_template.md  — the Redline block only — every byte outside it is kept as it is
+  would remove   .redline.json  — Redline's own record of this repository — removed last
+  would apply   withdraw Redline's own state on github: the merge policy it applied, the labels it created, and the repository property it set where the host has them
+  would apply   pull request on redline/remove
+dry run — nothing was written, read or changed on the host`}
+      />
+      <p>
+        Then run it for real. It removes only the files it can prove Redline
+        wrote. It withdraws the ruleset, labels and repository property first,
+        so a required <code>redline-gate / gate</code> check cannot hold up the
+        removal. Then it opens a pull request on the branch{" "}
+        <code>redline/remove</code>:
+      </p>
+      <RedlineTerminal commands="{redline} remove" />
+      <p>
+        Two things it leaves for you: the security floor, which you almost
+        certainly want to keep (<a href="#keep">below</a>), and the{" "}
+        <a href="#devdependency"><code>redlinegate</code> devDependency</a>,
+        which is the copy the command runs from. Once the pull request merges,{" "}
+        <code>redline verify</code> reports the repository as not onboarded and
+        exits <code>2</code>.
+      </p>
+      <p>
+        The rest of this page is the manual path, written out in full so you
+        can read and check exactly what removal touches rather than trust a
+        command.
       </p>
       <div className="callout info">
         <span className="ic">ℹ</span>
@@ -331,7 +361,7 @@ export default function Page() {
         that only arrived with Redline.
       </p>
 
-      <h3>Keep these</h3>
+      <h3 id="keep">Keep these</h3>
       <p>
         Secret scanning, push protection and dependency alerts are an
         organisation-wide security floor. They are additive host settings —

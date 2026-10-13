@@ -6,37 +6,79 @@ import { PrivateRepo, RedlineTerminal, Terminal } from "@/components/learn/parts
 
 export const metadata: Metadata = { title: "The merge gate" };
 
+// The four messages the aggregate `gate` job in workflows/redline-gate.yml prints.
+const GATE_LOG = `# a security floor check failed: fails at every rung
+Error: Redline gate failed on security checks (not label-exemptible, and not on the enforcement ladder): dependency-review
+
+# a process check failed at observe: passes, with a warning
+Warning: Process checks failed: policy. This repository is at rung 'observe', which reports and does not block. The findings are recorded either way.
+
+# a process check failed at a blocking rung, with a valid exemption: passes, with a warning
+Warning: Process checks failed but a valid exemption is recorded: checklist. A reviewer is accepting this deliberately, with a reason and an expiry.
+
+# a process check failed at a blocking rung, no exemption: fails
+Error: Redline gate failed: policy`;
+
 export default function Page() {
   return (
     <DocsPage
       crumb="Core Concepts"
       title="The merge gate"
-      intro="Rules in AGENTS.md are advice: an assistant can ignore them and a busy reviewer can miss what it wrote. The gate is the part that runs on every pull request whoever wrote it, and decides whether it can merge."
+      intro="Rules in AGENTS.md are advice: an assistant can ignore them, and a busy reviewer can miss what it wrote. The gate is the part that runs on every pull request, whoever or whatever wrote it, and reports whether it is fit to merge."
       href="/docs/gate"
     >
-      <h2>Why a gate, and why two kinds of check</h2>
+      <h2>Why a gate</h2>
       <p>
-        Onboarding (<RedlineCode args="init" />) installs one workflow that runs a handful of checks on every
-        pull request and reports a single result, <code>redline-gate / gate</code>. The checks
-        fall into two groups, because the mistakes they catch differ in one way that matters:
-        whether merging them is already the damage.
+        A standard that nothing checks drifts. The gate is one workflow,{" "}
+        <RedlineCode args="init" /> installs it, and it runs a handful of checks on every pull
+        request. It reports one result, <code>redline-gate / gate</code>, that a branch rule can
+        require.
       </p>
-      <ul>
-        <li>
-          <b>Process checks</b> catch mistakes that can be fixed in the next pull request: an
-          unticked checklist, a big change with no written decision, a broken rule. How strictly
-          they are enforced is the repository&apos;s choice, set by its{" "}
-          <Link href="/docs/enforcement">rung</Link>, and a reviewer can waive one with a recorded{" "}
-          <Link href="/docs/exemptions">exemption</Link>.
-        </li>
-        <li>
-          <b>The security floor</b> catches mistakes that cannot be undone once merged: a
-          dependency with a published vulnerability, a credential in a commit. These fail the
-          gate at every rung, and nothing waives them.
-        </li>
-      </ul>
 
-      <h2>What it checks</h2>
+      <h2>Two kinds of check</h2>
+      <p>
+        The checks fall into two groups. The question that separates them:{" "}
+        <b>is merging the mistake already the damage?</b>
+      </p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Process checks</th>
+              <th>Security floor</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Catches</td>
+              <td>an unticked checklist, a large change with no written decision, a broken rule</td>
+              <td>a dependency with a known vulnerability, a live credential in a commit</td>
+            </tr>
+            <tr>
+              <td>If it merges anyway</td>
+              <td>fix it in the next pull request</td>
+              <td>the damage is done: the credential is exposed, the vulnerable version shipped</td>
+            </tr>
+            <tr>
+              <td>How strict</td>
+              <td>
+                set per repository by its <Link href="/docs/enforcement">rung</Link>
+              </td>
+              <td>fails the gate at every rung</td>
+            </tr>
+            <tr>
+              <td>Can be waived</td>
+              <td>
+                yes, with a recorded <Link href="/docs/exemptions">exemption</Link>
+              </td>
+              <td>never</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>The checks</h2>
       <div className="table-scroll">
         <table>
           <thead>
@@ -66,15 +108,15 @@ export default function Page() {
               <td>Deterministic policy</td>
               <td>
                 An added line breaks a <Link href="/docs/deterministic">rule a checker can decide</Link>{" "}
-                with no model, at or above the severity the rung sets.
+                without a model, at or above the severity the rung sets.
               </td>
               <td>process</td>
             </tr>
             <tr>
               <td>Dependency review</td>
               <td>
-                The pull request adds or changes a dependency with an advisory at or above{" "}
-                <code>fail-on-dependency-severity</code> (default <code>high</code>).
+                The pull request adds or changes a dependency with a known vulnerability rated{" "}
+                <code>high</code> or worse.
               </td>
               <td>security floor</td>
             </tr>
@@ -87,179 +129,280 @@ export default function Page() {
         </table>
       </div>
       <p>
-        On GitHub each appears as <code>Redline / redline-gate / &lt;check&gt;</code>, beside the
-        aggregate <code>Redline / redline-gate / gate</code>. A missing checklist section fails
-        loudly rather than passing, so deleting the heading is not a way past it.
+        On GitHub each check appears as <code>redline-gate / &lt;check&gt;</code>, beside
+        the aggregate <code>redline-gate / gate</code>. Model review comments are not a
+        check: they are posted on the pull request and measured, and never fail the gate.
+      </p>
+
+      <h3>The checklist check</h3>
+      <p>
+        The pull request template carries a <code>## Launch readiness</code> section. Every box in
+        it must be ticked, or deleted with a reason in the description. Deleting the whole heading
+        does not get past it: a missing section fails too.
       </p>
 
       <h3>The ADR check</h3>
       <p>
-        A change over <code>adr-diff-threshold</code> (300 changed lines, additions plus deletions)
-        must link a real decision record under <code>docs/adr/</code> in its description, such as{" "}
+        A change over 300 changed lines (additions plus deletions) must link a decision record
+        under <code>docs/adr/</code> in its description, such as{" "}
         <code>docs/adr/0001-country-list-in-code.md</code>. The template&apos;s own placeholder,{" "}
-        <code>docs/adr/NNNN-*.md</code>, does not count. Two ways out, both on the record: the{" "}
-        <code>no-adr</code> label for one pull request that is large but decides nothing (a
-        lockfile, a rename), or <RedlineCode args="init --no-adr" /> to turn the check off for the
-        repository. <Link href="/docs/learn/adr">Learn step 05</Link> walks through it.
+        <code>docs/adr/NNNN-*.md</code>, does not count. Two ways out, both on the record:
+      </p>
+      <ul>
+        <li>
+          the <code>no-adr</code> label, for one pull request that is large but decides nothing, such
+          as a lockfile update or a rename
+        </li>
+        <li>
+          <RedlineCode args="init --no-adr" />, to turn the check off for the repository
+        </li>
+      </ul>
+      <p>
+        <Link href="/docs/learn/adr">Learn step 05</Link> walks through it.
       </p>
 
       <h3>The security floor</h3>
       <p>
-        Dependency review is GitHub&apos;s <code>dependency-review-action</code>: every package the
-        pull request adds or changes, checked against GitHub&apos;s advisory database. Advisories
-        below the threshold are reported without failing. The secret scan runs TruffleHog over
-        the pull request&apos;s commits, pinned to a commit SHA, and counts verified results only:
-        an unverified match is a false positive on a check nobody can waive.{" "}
+        <b>Dependency review</b> is GitHub&apos;s <code>dependency-review-action</code>. It checks
+        every package the pull request adds or changes against GitHub&apos;s advisory database.
+        Advisories rated below <code>high</code> do not fail it.
+      </p>
+      <p>
+        <b>The secret scan</b> runs TruffleHog over the pull request&apos;s commits. It counts only
+        credentials TruffleHog has verified are live. An unverified match is too often a false
+        positive, and this is a check nobody can waive.{" "}
         <Link href="/docs/learn/security-floor">Learn step 06</Link> shows a failing dependency
         review and its fix.
       </p>
       <PrivateRepo title="Dependency review needs GitHub Code Security">
         <p>
           On a public repository dependency review is free. On a private one it needs GitHub Code
-          Security; without it, onboarding can hand dependency checks to Dependabot instead, and
-          the job is then skipped. A skipped job reads as a pass, so nothing in the pull request
-          stops a vulnerable version: Dependabot alerts after it reaches <code>main</code>. The
-          secret scan needs no licence and runs on every repository.
+          Security. Without it, onboarding can hand dependency checks to Dependabot instead, and the
+          job is skipped.
+        </p>
+        <p>
+          A skipped job counts as a pass, so nothing in the pull request stops a vulnerable version:
+          Dependabot alerts after it reaches <code>main</code>. The secret scan needs no licence and
+          runs on every repository.
         </p>
       </PrivateRepo>
 
       <h2>How the gate decides</h2>
       <p>
-        The aggregate <code>gate</code> job reads every check&apos;s result, in this order:
+        The aggregate <code>gate</code> job reads every check&apos;s result. A skipped check counts
+        as a pass. Then:
       </p>
-      <ol>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>What failed</th>
+              <th>
+                At <code>observe</code>
+              </th>
+              <th>
+                At <code>block-blocker</code> or <code>block-high</code>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>A security floor check</td>
+              <td>gate fails</td>
+              <td>gate fails, exemption or not</td>
+            </tr>
+            <tr>
+              <td>A process check</td>
+              <td>gate passes, with a warning</td>
+              <td>gate fails, unless a valid exemption covers every failing check</td>
+            </tr>
+            <tr>
+              <td>Nothing</td>
+              <td>gate passes</td>
+              <td>gate passes</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        At <code>observe</code> a failing process check still shows red on its own line. Only the
+        aggregate stays green. <code>observe</code> means &ldquo;measured, not yet enforced&rdquo;,
+        not &ldquo;off&rdquo;.
+      </p>
+      <p>The gate job&apos;s log says which case applied:</p>
+      <Terminal commands="# the gate job's log, one line per case" output={GATE_LOG} />
+      <p>
+        A rung the gate does not recognise is treated as not enforcing, so a typo can never make a
+        repository stricter than anyone chose.
+      </p>
+
+      <h2>Red is not the same as blocked</h2>
+      <p>
+        The gate turning red and the merge button being disabled are two separate settings:
+      </p>
+      <ul>
         <li>
-          <b>A security floor check failed:</b> the gate fails, at every rung, labelled or not.
+          <b>The rung</b> decides what turns the gate red.
         </li>
         <li>
-          <b>A process check failed, at <code>observe</code>:</b> the gate passes with a warning.
-          The findings are still produced and recorded: <code>observe</code> means
-          &ldquo;measured, not yet enforced&rdquo;, not &ldquo;off&rdquo;.
+          <b>
+            <RedlineCode args="init --blocking" />
+          </b>{" "}
+          makes <code>redline-gate / gate</code> a required check, so a red gate stops the merge. A
+          new onboarding is advisory: the gate shows red, and the merge button still works.
         </li>
-        <li>
-          <b>A process check failed, at <code>block-blocker</code> or <code>block-high</code>:</b>{" "}
-          the gate fails, unless the pull request carries a valid exemption covering every failing
-          check.
-        </li>
-      </ol>
-      <Terminal
-        commands="# the gate job's log, in each of the three cases"
-        output={`Error: Redline gate failed on security checks (not label-exemptible,
-       and not on the enforcement ladder): dependency-review
-
-Warning: Process checks failed: policy. This repository is at rung 'observe',
-         which reports and does not block. The findings are recorded either way.
-
-Error: Redline gate failed: policy`}
-      />
+      </ul>
       <p>
-        The rung also sets the policy check&apos;s own threshold: it fails on a{" "}
-        <code>BLOCKER</code> finding at <code>observe</code> and <code>block-blocker</code>, and on
-        a <code>HIGH</code> or <code>BLOCKER</code> at <code>block-high</code>. A rung the gate
-        does not recognise is treated as not enforcing, so a typo can never make a repository
-        stricter than anyone chose.
+        Turn blocking on once the team has watched the gate for a while.{" "}
+        <Link href="/docs/learn/required-gate">Learn step 07</Link> does it, and{" "}
+        <Link href="/docs/enforcement">Enforcement ladder</Link> explains how the two combine.
       </p>
 
-      <h2>Blocking is a separate switch</h2>
+      <h2>Gate settings and defaults</h2>
       <p>
-        The rung decides what turns the gate red. Whether a red gate stops the merge is a
-        different setting: <RedlineCode args="init --blocking" /> makes{" "}
-        <code>redline-gate / gate</code> a required check in the branch policy. A new onboarding is
-        advisory, so a red gate is visible but the merge button still works. Turning it on is a
-        deliberate second step, after the team has watched the gate for a while.{" "}
-        <Link href="/docs/learn/required-gate">Learn step 07</Link> does it.
+        <code>init</code> writes these into the caller workflow,{" "}
+        <code>.github/workflows/redline.yml</code>. The file is regenerated on every{" "}
+        <code>init</code>, so change a setting with its flag rather than by hand.
       </p>
-      <p>
-        Required at <code>observe</code> means only the security floor can stop a merge; raising
-        the rung is how process checks start to. See{" "}
-        <Link href="/docs/enforcement">Enforcement ladder</Link>.
-      </p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Setting</th>
+              <th>Default</th>
+              <th>Change it with</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>rung</code>
+              </td>
+              <td>
+                <code>observe</code>
+              </td>
+              <td>
+                <RedlineCode args="init --rung <name>" />, if the evidence allows
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>adr-diff-threshold</code>
+              </td>
+              <td>300 changed lines</td>
+              <td>
+                <RedlineCode args="init --no-adr" /> turns the check off
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>fail-on-dependency-severity</code>
+              </td>
+              <td>
+                <code>high</code>
+              </td>
+              <td>no flag</td>
+            </tr>
+            <tr>
+              <td>
+                <code>soft-fail-labels</code>
+              </td>
+              <td>
+                <code>redline-exempt,redline-sync</code>
+              </td>
+              <td>no flag: the labels that mark an exemption</td>
+            </tr>
+            <tr>
+              <td>
+                <code>stand-down</code>
+              </td>
+              <td>empty: every check runs</td>
+              <td>
+                <RedlineCode args="init --integrations <list>" />; see{" "}
+                <a href="#adding-a-check">below</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <h2>Who can change the gate</h2>
-      <p>
-        A gate the pull request can edit is not a gate. Where the workflow lives decides this:
-      </p>
+      <p>A gate the pull request can edit is not a gate. Where the workflow lives decides this:</p>
       <ul>
         <li>
           <b>
             <code>--gate-source org</code>
           </b>{" "}
           (the default) references a reusable workflow in your organisation&apos;s{" "}
-          <code>&lt;org&gt;/.github</code> repository. A pull request in a product repository
-          cannot change it.
+          <code>&lt;org&gt;/.github</code> repository. A pull request in a product repository cannot
+          change it.
         </li>
         <li>
           <b>
             <code>--gate-source local</code>
           </b>{" "}
-          vendors a copy into <code>.github/workflows/redline-gate.yml</code>, for an organisation
-          with no shared <code>.github</code> repository yet. A pull request runs the workflow
-          from its own branch, so <b>it can edit the gate that is judging it</b>. Close that gap
-          by requiring an owner&apos;s review on <code>.github/workflows/</code>, with{" "}
-          <code>--with review-ownership --review-owners &lt;team&gt;</code>, or by moving to the
-          org gate. <code>init</code> warns about it on every run.
+          copies the workflow into <code>.github/workflows/redline-gate.yml</code>, for an
+          organisation with no shared <code>.github</code> repository yet. A pull request runs the
+          workflow from its own branch, so <b>it can edit the gate that is judging it</b>.{" "}
+          <code>init</code> warns about this on every run. Close the gap by requiring an
+          owner&apos;s review on <code>.github/workflows/</code> with{" "}
+          <code>--with review-ownership --review-owners &lt;team&gt;</code>, or move to the org gate.
         </li>
       </ul>
 
       <h2 id="local-agent">No CI at all: the local-agent gate</h2>
       <p>
-        <RedlineCode args="init --pipeline local-agent" /> installs no workflow. The gate is{" "}
-        <code>.redline/hooks/pre-push</code>, committed so it can be reviewed, versioned and
-        removed like anything else. Before <code>git push</code> it runs the deterministic rules
-        as <code>redline policy</code> over every ref being pushed, and the rung in{" "}
-        <code>.redline.json</code> decides what a finding does: <code>observe</code> reports,{" "}
-        <code>block-blocker</code> and <code>block-high</code> refuse the push. The model-judged
-        rules are handed to whichever assistant you already use.
+        <RedlineCode args="init --pipeline local-agent" /> installs no workflow. The gate is a git
+        hook, <code>.redline/hooks/pre-push</code>, committed so it is reviewed, versioned and
+        removed like any other file.
       </p>
       <p>
-        It publishes no check, so no ruleset can require it, and{" "}
-        <code>git push --no-verify</code> skips it: the honest trade for a gate that needs no CI,
-        no credential and no host. Each engineer runs it once per clone:
+        Before each <code>git push</code> it runs <code>redline policy</code> over the commits being
+        pushed. The rung in <code>.redline.json</code> decides what a finding does:{" "}
+        <code>observe</code> reports, <code>block-blocker</code> and <code>block-high</code> refuse
+        the push. The judgement rules are left to whichever assistant you already use.
       </p>
+      <p>Each engineer turns it on once per clone:</p>
       <Terminal commands="git config core.hooksPath .redline/hooks" />
       <p>
-        A hook already installed in <code>.git/hooks/pre-push</code> by husky v4, lefthook or
-        pre-commit is reported as <code>denied</code> rather than silently orphaned.
+        The trade-off: it publishes no check, so no branch rule can require it, and{" "}
+        <code>git push --no-verify</code> skips it. In return it needs no CI, no credential and no
+        host. If husky v4, lefthook or pre-commit already installed a hook in{" "}
+        <code>.git/hooks/pre-push</code>, <code>init</code> reports <code>denied</code> rather than
+        silently disabling it.
       </p>
 
-      <h2>Policy invariants</h2>
+      <h2>Branch policy</h2>
+      <p>
+        <code>init</code> also applies a branch policy, as a GitHub ruleset named{" "}
+        <code>Redline</code> or an Azure DevOps branch policy, so no repository is set up by hand:
+      </p>
       <ul>
-        <li>
-          Approvals are the team&apos;s choice. Redline fails the pipeline; a new onboarding
-          requires no approving review, and <RedlineCode args="init --approvals <n>" /> requires
-          n. Automated review is advisory input and never approves.
-        </li>
         <li>Review threads must be resolved before merge.</li>
         <li>
-          Applied per repo by <code>init</code>, as a GitHub ruleset named <code>Redline</code> or
-          an Azure DevOps branch policy: no manual per-repo setup, no drift from a hand-edited
-          setting.
+          No approving review is required by default; <RedlineCode args="init --approvals <n>" />{" "}
+          requires n. Automated review is advice and never approves.
+        </li>
+        <li>
+          The gate is required only after <RedlineCode args="init --blocking" />.
         </li>
       </ul>
 
-      <h2>Two hosts, two gate contracts</h2>
-      <p>
-        Reusable GitHub workflows report a check-run name derived from two job ids, so requiring
-        the wrong string{" "}
-        <Link href="/docs/troubleshooting#waiting-for-status">
-          hangs every pull request in the repository
-        </Link>
-        . Azure has no such derivation: Redline defines its own contract, so nothing is derived
-        from a job name and that failure mode does not exist on that host.
-      </p>
+      <h2>GitHub and Azure DevOps</h2>
+      <p>The name a branch policy requires differs by host:</p>
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
               <th>Host</th>
-              <th>Gate contract</th>
-              <th>Required by the policy as</th>
+              <th>What the gate reports</th>
+              <th>Required as</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>GitHub</td>
-              <td>Check-run name from the caller/called job ids</td>
+              <td>a check run, named from the caller and called job ids</td>
               <td>
                 <code>redline-gate / gate</code>
               </td>
@@ -267,7 +410,7 @@ Error: Redline gate failed: policy`}
             <tr>
               <td>Azure DevOps</td>
               <td>
-                PR status, genre <code>redline</code>, name <code>gate</code>
+                a pull request status, genre <code>redline</code>, name <code>gate</code>
               </td>
               <td>
                 <code>redline/gate</code>
@@ -277,57 +420,72 @@ Error: Redline gate failed: policy`}
         </table>
       </div>
       <p>
-        Azure Repos ignores a pipeline&apos;s YAML <code>pr:</code> trigger, so the gate pipeline
-        alone runs nothing. <code>init</code> also registers a build definition for it and a{" "}
-        <code>Redline: gate build</code> Build Validation branch policy that queues that pipeline
-        on every pull request. Without Build Administrator rights that registration is recorded as
-        pending and the required status is written advisory, since no pipeline could publish what
-        it would require.
+        On GitHub, requiring the wrong string{" "}
+        <Link href="/docs/troubleshooting#waiting-for-status">
+          leaves every pull request waiting for a status that never arrives
+        </Link>
+        . Azure DevOps has no such derivation, so that failure cannot happen there.
       </p>
       <p>
-        <RedlineCode args="verify" /> reads back the check names or statuses the host{" "}
-        <b>actually reported</b> on a real pull request, not what a config file claims, before it
-        will call the check name confirmed.
+        Azure Repos ignores a pipeline&apos;s YAML <code>pr:</code> trigger. So <code>init</code>{" "}
+        also registers the gate pipeline and a <code>Redline: gate build</code> Build Validation
+        policy that queues it on every pull request. Without Build Administrator rights that step
+        is recorded as pending, and the status is left advisory: requiring a status no pipeline can
+        publish would block every pull request.
+      </p>
+      <p>
+        To confirm the name the host <b>actually reported</b> on a real pull request, rather than
+        what a config file claims:
       </p>
       <RedlineTerminal commands="{redline} verify" />
 
       <h2 id="adding-a-check">Adding a check of your own</h2>
-      <p>
-        Three ways, in the order to reach for them. The first two need no change to Redline.
-      </p>
+      <p>Three ways, in the order to reach for them. The first two need no change to Redline.</p>
       <ol>
         <li>
-          <b>Run it beside the gate.</b> A check that is yours alone (a licence scan, a bundle-size
-          budget) is an ordinary workflow. To make it block, require its check name in a{" "}
-          <i>second</i> ruleset; hand-editing the one named <code>Redline</code> is drift, and{" "}
-          <code>verify</code> reports it.
+          <b>Run it beside the gate.</b> A check that is yours alone, such as a licence scan or a
+          bundle-size budget, is an ordinary workflow. To make it block, require its check name in a{" "}
+          <i>second</i> ruleset. Editing the ruleset named <code>Redline</code> by hand is drift,
+          and <code>verify</code> reports it.
         </li>
         <li>
-          <b>Stand a Redline job down.</b> Where another tool already covers a gate job,{" "}
-          <code>init --integrations</code> records the tools you declared and writes{" "}
-          <code>stand-down:</code> into the caller; a stood-down job is skipped and a skip reads
+          <b>Stand a Redline check down.</b> When another tool already covers a check,{" "}
+          <RedlineCode args="init --integrations <list>" /> records the tools you declared and writes{" "}
+          <code>stand-down:</code> into the caller. A stood-down check is skipped, and a skip counts
           as a pass. <code>policy</code>, <code>dependencies</code> and <code>secrets</code> can be
-          stood down. The last two are the security floor, so stand one down only because another
-          scanner genuinely covers it, never to get a red pull request green.
+          stood down. The last two are the security floor: stand one down only because another
+          scanner genuinely covers it, never to turn a red pull request green.
         </li>
         <li>
-          <b>Add a job to the gate itself</b>, for a check the whole organisation should get. Do
-          not rename any job id: the required check name is built from <code>redline-gate</code>{" "}
-          and <code>gate</code>, and renaming either leaves every pull request on &ldquo;Expected
-          — waiting for status&rdquo;. Add the job to the <code>gate</code> job&apos;s{" "}
-          <code>needs:</code> list, or the aggregate never reads its result and it blocks nothing.
-          A new job is a process check; the security floor is deliberately not a list a
-          repository extends.
+          <b>Add a job to the gate itself</b>, for a check the whole organisation should get. Add
+          the job to the <code>gate</code> job&apos;s <code>needs:</code> list, or the aggregate
+          never reads its result. Do not rename the <code>redline-gate</code> or <code>gate</code>{" "}
+          job ids: the required check name is built from them, and renaming either leaves every pull
+          request on &ldquo;Expected — waiting for status&rdquo;. A new job is a process check; the
+          security floor is deliberately not a list a repository extends.
         </li>
       </ol>
       <p>
         With <code>--gate-source org</code> the jobs live in <code>&lt;org&gt;/.github</code>, and
-        one merge there reaches every repository. With <code>--gate-source local</code>, the
-        vendored file is overwritten by the next <RedlineCode args="init --repair" />, so put the
-        check in its own workflow or contribute it to the Redline source repository. Either way,
-        prove it: <Link href="/docs/onboarding#prove-it">Prove it</Link> shows a stood-down job
-        reading as a pass, and a check that blocks against one that only reports.
+        one merge there reaches every repository. With <code>--gate-source local</code>, the copied
+        file is overwritten by the next <RedlineCode args="init --repair" />, so put the check in its
+        own workflow or contribute it to the Redline source repository. Either way, prove it:{" "}
+        <Link href="/docs/onboarding#prove-it">Prove it</Link> shows a stood-down job reading as a
+        pass, and a check that blocks next to one that only reports.
       </p>
+
+      <h2>Related</h2>
+      <ul>
+        <li>
+          <Link href="/docs/enforcement">Enforcement ladder</Link>: rungs, evidence and blocking.
+        </li>
+        <li>
+          <Link href="/docs/exemptions">Exemptions</Link>: waiving a process check on the record.
+        </li>
+        <li>
+          <Link href="/docs/workflows/redline-gate">The gate workflow</Link>: the file itself.
+        </li>
+      </ul>
     </DocsPage>
   );
 }

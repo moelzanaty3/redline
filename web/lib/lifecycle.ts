@@ -39,7 +39,7 @@ export const STANDARDS_EDIT: Step[] = [
   {
     label: "Edit the markdown",
     detail:
-      "standards/ is the only place a human edits a rule. Everything under AGENTS.md, .github/copilot-instructions.md and .github/instructions/ is rendered from it and is overwritten by the next render.",
+      "standards/ is the only place a human edits a rule. AGENTS.md, CLAUDE.md, .github/copilot-instructions.md and .github/instructions/ are rendered from it, and the next render overwrites any hand edit there.",
   },
   {
     label: "node scripts/assign-rule-ids.mjs",
@@ -49,22 +49,22 @@ export const STANDARDS_EDIT: Step[] = [
   {
     label: "node scripts/render-self.mjs",
     detail:
-      "Re-renders this repository's own artifacts from the edited source. CI runs it with --check, so stale checked-in output fails the build.",
+      "Re-renders this repository's own copies of those files. CI runs it with --check, so a stale copy fails the build.",
   },
   {
     label: "Bump standards/manifest.json → version",
     detail:
-      "Required in the same pull request as the rule change. Sync pull requests quote the version, so a repository's rendered artifacts always name where they came from.",
+      "In the same pull request as the rule change. Sync pull requests quote the version, so every repository can tell which standards it is on.",
   },
   {
     label: "Add a CHANGELOG.md entry",
     detail:
-      "Also in the same pull request. A standards change with no measurement is an opinion — record the seed score alongside it.",
+      "Also in the same pull request. Say what changed and why, and record the seed score: a standards change with no measurement is an opinion.",
   },
   {
     label: "node scripts/validate.mjs",
     detail:
-      "The bundle self-check CI runs: manifest integrity, well-formed rule ids, the severity output contract surviving your edit, glob portability.",
+      "The self-check CI runs: the manifest is consistent, rule ids are well formed, the output contract is intact, and every glob is one Copilot can read.",
   },
 ];
 
@@ -95,19 +95,24 @@ export const WORKFLOW_EDIT: Step[] = [
 
 export const TEMPLATE_EDIT: Step[] = [
   {
-    label: "Check whether the CLI reads this file at all",
+    label: "Find the real source",
     detail:
-      "Several of these are reference shapes: the CLI generates the equivalent in code and never opens the checked-in copy, so editing one changes nothing redline init writes. Each template's page says which kind it is.",
+      "Check the Editing it column. A file marked no effect is a picture of what the CLI builds in code; its page names the code to change instead.",
   },
   {
-    label: "Edit the real source",
+    label: "Edit it",
     detail:
-      "For a generated artifact that is cli/commands/init.ts; for a file installed verbatim it is the template itself.",
+      "For a live template, edit the file in templates/ or platforms/azure/. For a generated file, edit the code its page names, such as SENSITIVE_PATHS in cli/commands/init.ts or applyPolicy in cli/platforms/github/install.ts.",
   },
   {
     label: "npm test && node scripts/validate.mjs",
     detail:
-      "The install path is unit-tested against a fake host client, and validate.mjs pins the shapes the merge gate's required check name depends on.",
+      "The install path is unit-tested against a fake host client. validate.mjs checks the shapes the required check name depends on, such as the caller's redline-gate job id.",
+  },
+  {
+    label: "Release, then re-run redline init",
+    detail:
+      "Templates ship inside the published redlinegate package. For a file redline init writes, a merged edit reaches a repository once it is released and redline init runs there again. Repositories already onboarded keep their copy until then.",
   },
 ];
 

@@ -2,7 +2,23 @@
 // redline init writes the file or a human has to act — several of these are
 // reference shapes nothing applies automatically, and that is stated plainly
 // rather than implied by omission.
+// What editing the checked-in file does. "installed": redline init writes from
+// this file, so an edit reaches every repository on the next init or sync.
+// "generated": the CLI builds the content in code and never reads this file.
+// "manual": a human copies or imports it. "reference": nothing applies it.
+export type TemplateKind = "installed" | "generated" | "manual" | "reference";
+
+export const TEMPLATE_KIND_LABEL: Record<TemplateKind, string> = {
+  installed: "Live — redline init writes from this file",
+  generated: "No effect — the CLI builds it in code",
+  manual: "Live — a human copies or imports it",
+  reference: "No effect — nothing applies it",
+};
+
 export type TemplateInfo = {
+  kind: TemplateKind;
+  // Who puts it in place, in a few words, for the index table.
+  by: string;
   what: string;
   installedAs: string | null;
   installedBy: string;
@@ -14,6 +30,8 @@ export type TemplateInfo = {
 
 export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
   "repo-context": {
+    kind: "manual",
+    by: "A team member, once",
     what: "The team-owned top half of AGENTS.md: product, architecture, conventions, and the deliberate deviations from Redline. Review quality is bounded by context — a reviewer that does not know FlashList is the standard here cannot flag FlatList.",
     installedAs: "The top of AGENTS.md, above the <!-- REDLINE:BEGIN --> marker.",
     installedBy: "A human, once. redline init never writes this file.",
@@ -25,6 +43,8 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     editWhere: "The target repository's AGENTS.md, above the marker.",
   },
   codeowners: {
+    kind: "generated",
+    by: "redline init --with review-ownership",
     what: "Code-owner rules for the files that decide what the gate checks and how strictly. Without them the ruleset's require_code_owner_review protects nothing, and a contributor can weaken their own gate — or the rules their pull request is reviewed against — in a self-approved pull request.",
     installedAs: ".github/CODEOWNERS",
     installedBy: "redline init --with review-ownership, and only where the repository has no CODEOWNERS in any of the three places GitHub looks. It is off by default because the owner it writes may not exist: GitHub ignores an owner it cannot resolve, so a wrong team name enforces nothing while reporting as installed. Pass --review-owners with the real team or user.",
@@ -35,6 +55,8 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     editWhere: "SENSITIVE_PATHS in cli/commands/init.ts. Editing this template changes nothing redline init writes.",
   },
   "redline-caller": {
+    kind: "installed",
+    by: "redline init",
     what: "The only gate file an onboarded GitHub repository owns: a thin workflow that calls the reusable gate on every pull request with this repository's settings.",
     installedAs: ".github/workflows/redline.yml",
     installedBy: "redline init, from this file with <org>, the ADR threshold, the dependency-severity floor, the soft-fail labels, the rung and the stand-down list filled in. With --gate-source local it points at the vendored ./.github/workflows/redline-gate.yml instead of <org>/.github.",
@@ -42,9 +64,11 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
       "Runs on pull_request: opened, synchronize, reopened, edited, labeled, unlabeled and ready_for_review — edited and the label events matter because the checklist and exemptions are read from the body and labels.",
       "The job id is redline-gate, and it is load-bearing: the required check redline-gate / gate is this job id plus the gate's aggregate job id. Renaming either makes the required check unreportable and blocks every pull request. scripts/validate.mjs fails CI if this template's job id changes.",
     ],
-    editWhere: "This template. redline init re-renders it, so hand edits in an onboarded repository are overwritten on the next init or sync.",
+    editWhere: "This template. redline init renders it into each repository, so a hand edit in an onboarded repository is overwritten the next time redline init runs there.",
   },
   "pr-template": {
+    kind: "installed",
+    by: "redline init",
     what: "The GitHub pull request template: a Change type pick-list, which nothing checks, and a Launch readiness checklist, which the gate's checklist job does.",
     installedAs: ".github/pull_request_template.md",
     installedBy: "redline init — written whole when the repository has no template GitHub would serve, merged into the existing one otherwise.",
@@ -57,6 +81,8 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     editWhere: "templates/github/pull_request_template.md. A repository's own text outside the markers survives re-runs.",
   },
   "azure-pr-template": {
+    kind: "installed",
+    by: "redline init (Azure DevOps)",
     what: "The same Launch readiness checklist for Azure DevOps.",
     installedAs: ".azuredevops/pull_request_template.md",
     installedBy: "redline init — written whole when the repository has no template Azure would serve, merged into the existing one otherwise.",
@@ -68,6 +94,8 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     editWhere: "templates/azure/pull_request_template.md, with the same marker merge as the GitHub template.",
   },
   "azure-gate-template": {
+    kind: "installed",
+    by: "redline init (Azure DevOps)",
     what: "The Azure Pipelines gate for an Azure Repos repository: a diff secret scan, redline verify --gate, and a final step that publishes the redline/gate pull-request status the branch policy requires.",
     installedAs: ".azuredevops/redline-gate.yml",
     installedBy: "redline init on an Azure DevOps repository, with the ADR threshold, dependency-severity floor, soft-fail labels and stand-down list filled in.",
@@ -81,6 +109,8 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     editWhere: "platforms/azure/gate-template.yml. A GitHub-hosted repository built by Azure Pipelines gets platforms/azure/gate-template-github.yml instead.",
   },
   "repo-ruleset": {
+    kind: "reference",
+    by: "Nobody",
     what: "The shape of the per-repository branch ruleset: one approval, resolved threads, and the required redline-gate / gate check.",
     installedAs: null,
     installedBy: "Nothing installs it. redline init builds the equivalent ruleset at runtime in applyPolicy (cli/platforms/github/install.ts) and never reads this file.",
@@ -92,6 +122,8 @@ export const TEMPLATES_INFO: Record<string, TemplateInfo> = {
     editWhere: "applyPolicy in cli/platforms/github/install.ts. Editing this JSON changes no behaviour.",
   },
   "org-ruleset": {
+    kind: "manual",
+    by: "An org administrator, once",
     what: "The same ruleset shape at organisation level, targeting every repository whose custom property redline equals onboarded.",
     installedAs: null,
     installedBy: "An organisation administrator, by hand, once — Settings → Rulesets → Import. No code in this repository uploads it.",

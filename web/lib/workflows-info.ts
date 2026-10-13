@@ -3,10 +3,18 @@
 // this source repository or in a separate redline-metrics repository, with their
 // own secrets. Behaviour documented elsewhere is linked through `docs` rather than
 // restated here, so the two cannot drift apart.
+export type WorkflowHome = "onboarded" | "source" | "metrics";
+
 export type WorkflowInfo = {
   what: string;
+  // Which repository runs it, for the index table. livesIn says it in full.
+  home: WorkflowHome;
   livesIn: string;
+  // The schedule in a few words, for the index table. trigger says it in full.
+  cadence: string;
   trigger: string;
+  // The secrets the run reads, and what each can reach.
+  credential: string;
   // How it gets into the repository that runs it, and what that repository has
   // to provide before it will run.
   install: string;
@@ -19,8 +27,12 @@ export type WorkflowInfo = {
 export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   "redline-gate": {
     what: "The merge gate every onboarded GitHub repository runs on its pull requests: five jobs — PR checklist, ADR for large diffs, deterministic policy, dependency review and a diff secret scan — aggregated by a sixth into the one status a branch ruleset can require, redline-gate / gate.",
+    home: "onboarded",
     livesIn: "With --gate-source org, the org's .github repository, referenced by every caller as <org>/.github/.github/workflows/redline-gate.yml@main. With --gate-source local, a copy redline init writes into the repository itself.",
+    cadence: "Every pull request",
     trigger: "workflow_call, from the caller .github/workflows/redline.yml that redline init installs, on every pull request.",
+    credential:
+      "The run's own GITHUB_TOKEN: contents: read and pull-requests: write, on that one repository.",
     install: "redline init writes the caller, and the local copy when you choose one. What each job checks, which failures a valid exemption can downgrade, and how the rung decides what blocks are on The merge gate.",
     steps: [],
     output: "One required status check, redline-gate / gate, with each job reporting beside it.",
@@ -28,8 +40,12 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   },
   "redline-sync": {
     what: "Lands the current standards on every registered repository as a pull request — never a push, never a merge.",
+    home: "source",
     livesIn: "This (source) repository.",
+    cadence: "On a change to standards/",
     trigger: "A push to main touching standards/**, cli/render/**, templates/** or .github/pull_request_template.md, and workflow_dispatch with dry-run and only <owner/name> inputs.",
+    credential:
+      "REDLINE_SYNC_TOKEN: contents, pull_requests and workflows write on every registered repository. It only opens pull requests.",
     install: "Already here. It needs the REDLINE_SYNC_TOKEN secret, and it only targets repositories listed in registry.json.",
     steps: [
       "Runs scripts/render-self.mjs --check first, so stale artifacts are never distributed.",
@@ -40,8 +56,12 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   },
   "redline-collect": {
     what: "Pulls review outcomes for merged pull requests across the org and commits them as monthly JSONL.",
+    home: "metrics",
     livesIn: "The redline-metrics repository — not this one.",
+    cadence: "Daily, 05:00 UTC",
     trigger: "Daily at 05:00 UTC, and workflow_dispatch with a days input (default 8).",
+    credential:
+      "REDLINE_ORG_READ_TOKEN, read-only across the org. The commit goes to redline-metrics under the run's own token.",
     install: "Copy the file into redline-metrics as .github/workflows/redline-collect.yml and set the REDLINE_ORG_READ_TOKEN secret there.",
     steps: [
       "Runs npx --yes redlinegate@0.0.3 metrics collect --org <owner> --days <days> --out data, with REDLINE_ORG_READ_TOKEN as GH_TOKEN.",
@@ -52,8 +72,12 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   },
   "weekly-digest": {
     what: "Posts a Monday stakeholder digest to Teams as an Adaptive Card: open and stale PR counts, seed recall, a dashboard link.",
+    home: "metrics",
     livesIn: "The redline-metrics repository — not this one.",
+    cadence: "Mondays, 07:00 UTC",
     trigger: "Mondays at 07:00 UTC, and workflow_dispatch.",
+    credential:
+      "REDLINE_ORG_READ_TOKEN, read-only across the org, and TEAMS_WEBHOOK_URL to post the card.",
     install: "Copy the file into redline-metrics and set REDLINE_ORG_READ_TOKEN and TEAMS_WEBHOOK_URL there, plus the REDLINE_DASHBOARD_URL variable for the link. The webhook is a Power Automate \"When a Teams webhook request is received\" flow.",
     steps: [
       "Counts open and stale (not updated for 7 days) non-draft org PRs through the GitHub search API.",
@@ -65,8 +89,12 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   },
   inbox: {
     what: "Rebuilds the org-wide prioritised pull-request inbox and publishes it to GitHub Pages.",
+    home: "source",
     livesIn: "This (source) repository.",
+    cadence: "Every 30 min, weekdays",
     trigger: "Every 30 minutes, 06:00–19:00 UTC, Monday to Friday, and workflow_dispatch.",
+    credential:
+      "REDLINE_ORG_READ_TOKEN, read-only across the org. Pages publishing uses the run's own token.",
     install: "Already here. Set the repository variable PAGES_VISIBILITY_ACKNOWLEDGED to private or internal after confirming the Pages site is not public, and provide REDLINE_ORG_READ_TOKEN.",
     steps: [
       "Refuses to build unless PAGES_VISIBILITY_ACKNOWLEDGED is private or internal: the page lists PR titles, authors and repository names.",
@@ -78,8 +106,12 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   },
   dashboard: {
     what: "Rebuilds the telemetry dashboard from collected data and publishes it to GitHub Pages.",
+    home: "metrics",
     livesIn: "The redline-metrics repository — not this one.",
+    cadence: "Daily, and after collect or canary",
     trigger: "Daily at 05:30 UTC, workflow_dispatch, and whenever Redline Collect or Redline Seed Canary completes.",
+    credential:
+      "REDLINE_ORG_READ_TOKEN, read-only across the org. Pages publishing uses the run's own token.",
     install: "Copy the file into redline-metrics, set REDLINE_ORG_READ_TOKEN and acknowledge Pages visibility there. REDLINE_SOURCE (default <owner>/redline) says where to read registry.json from.",
     steps: [
       "The same Pages-visibility refusal as the inbox.",
@@ -91,12 +123,17 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   },
   "seed-canary": {
     what: "The regression test for the reviewer itself: a throwaway pull request of known-bad code on a canary repository, scored once the reviewer goes quiet, then closed. It is what tells \"nothing to find\" apart from \"stopped finding things\".",
+    home: "metrics",
     livesIn: "The redline-metrics repository — not this one.",
+    cadence: "Mondays, 03:00 UTC",
     trigger: "Mondays at 03:00 UTC, and workflow_dispatch with a targets override.",
+    credential:
+      "REDLINE_CANARY_TOKEN, write on the canary repositories only, and REDLINE_ORG_READ_TOKEN to check out seeded/.",
     install: "Copy the file into redline-metrics and set CANARY_TARGETS (a JSON array of {repo, stack}), REDLINE_CANARY_TOKEN scoped to the canary repositories only, and REDLINE_ORG_READ_TOKEN to check out the seeded corpus from the source repository.",
     steps: [
       "plan — reads the targets from CANARY_TARGETS or the dispatch override.",
-      "score, once per target — pushes seeded/<stack> and seeded/clean to a new branch, opens a pull request labelled redline-exempt, waits until the review comments stop arriving (up to 40 minutes), runs npx --yes redlinegate@0.0.3 metrics score-seeds against it, then closes the pull request and deletes the branch, also when an earlier step failed.",
+      "score, once per target — pushes seeded/<stack> and seeded/clean to a new branch and opens a pull request. The seeds break the process checks on purpose, so the body carries a ## Redline exemption block (a reason, a 7-day expiry, and scope checklist, adr, policy) and the redline-exempt label. The security floor is not exempted.",
+      "Still in score — waits until the review comments stop arriving (up to 40 minutes), runs npx --yes redlinegate@0.0.3 metrics score-seeds against the pull request, then closes it and deletes the branch, also when an earlier step failed.",
       "record — appends every score to data/seed-scores.jsonl, commits it, and fails the run if any target's BLOCKER recall is below 1.0 or the clean corpus drew a comment.",
     ],
     output: "A commit to data/seed-scores.jsonl, and a failed run on a regression.",
@@ -104,8 +141,12 @@ export const WORKFLOWS_INFO: Record<string, WorkflowInfo> = {
   },
   "verify-onboarding": {
     what: "Re-verifies every registered repository each week and keeps one tracking issue listing the ones that drifted.",
+    home: "source",
     livesIn: "This (source) repository.",
+    cadence: "Tuesdays, 06:00 UTC",
     trigger: "Tuesdays at 06:00 UTC, and workflow_dispatch with an only <owner/name> input.",
+    credential:
+      "REDLINE_ORG_READ_TOKEN, read-only across the org. The tracking issue is opened in this repository under the run's own token.",
     install: "Already here. It runs under REDLINE_ORG_READ_TOKEN and verifies the repositories in registry.json, so an empty register produces nothing.",
     steps: [
       "Builds the CLI and runs node dist/bin/redline.js verify --repo for each repository in the register, carrying on past a failure so one drifted repository does not hide the rest.",

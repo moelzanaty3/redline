@@ -172,22 +172,24 @@ ${LOCAL_MD}EOF`}
       <p>
         The file alone changes nothing: assistants read <code>AGENTS.md</code>,{" "}
         <code>CLAUDE.md</code> and the rest, not <code>.redline/</code>. Run <code>init</code>{" "}
-        again to copy the rule into them:
+        again to copy the rule into them. With a flag, it asks no questions and keeps every answer
+        you gave in step 01:
       </p>
       <RedlineTerminal
         commands={`{redline} init --no-commit`}
-        output={`  Files  6 written
+        output={`  Files  5 written
    + .github/copilot-instructions.md
    + AGENTS.md
    + CLAUDE.md
    + .cursor/rules/redline-core.mdc
-   …
-  not committed — the files are in your working tree`}
+   + .redline.json
+
+  not committed — the files are in your working tree …`}
       />
       <p>
-        Every assistant file gains a <code># Repository-local rules</code> section with your rule,
-        and <code>.redline.json</code> records <code>&quot;localRules&quot;: true</code>. A re-run
-        keeps what was chosen at onboarding: the rung, the gate source, the approvals. Look at the
+        It also prints the same <code>▲</code> warnings as in step 01; nothing new. Every
+        assistant file gains a <code># Repository-local rules</code> section with your rule, and{" "}
+        <code>.redline.json</code> records <code>&quot;localRules&quot;: true</code>. Look at the
         diff before you go on:
       </p>
       <Terminal commands="git diff --stat" />
@@ -256,8 +258,9 @@ ${SECOND_RULE}EOF`}
       </div>
 
       <h2>Try it</h2>
-      <p>Break the rule on purpose:</p>
+      <p>Break the rule on purpose. Create <code>src/greet.ts</code>:</p>
       <File name="src/greet.ts" text={GREET_TS} />
+      <p>It is a new file, so stage it, or no review can see it:</p>
       <Terminal commands="git add src/greet.ts" />
       <p>
         Run <code>/redline-review</code> in your assistant and expect a finding tagged{" "}

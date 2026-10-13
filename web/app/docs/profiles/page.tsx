@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsPage } from "@/components/docs-page";
+import { RedlineCode } from "@/components/learn/interactive";
+import { RedlineTerminal } from "@/components/learn/parts";
 import { loadManifest } from "@/lib/manifest";
 
 export const metadata: Metadata = { title: "Profiles & stacks" };
@@ -27,26 +29,60 @@ export default function Page() {
     <DocsPage
       crumb="Core Concepts"
       title="Profiles & stacks"
-      intro="A rule written for React is wrong on a NestJS service. A profile is the list of rule sets that fit one kind of repository, and each repository installs exactly one, so it only ever gets rules that apply to it."
+      intro="A rule written for React is wrong on a NestJS service. A profile is the set of rule sets that fit one kind of repository, so each repository only gets rules that apply to it."
       href="/docs/profiles"
     >
-      <h2>The problem a profile solves</h2>
+      <h2>Why profiles exist</h2>
       <p>
-        Redline has {stackCount} <b>stack</b> rule sets: one per language, framework or platform,
-        such as <code>react</code>, <code>nodejs</code> or <code>terraform</code>. Each says which
-        files it applies to with a glob, like <code>**/*.tsx</code>. A glob cannot tell a React
-        component from a NestJS controller: both are TypeScript. Install every stack everywhere
-        and React&apos;s rules about effects and rendering fire on a service that has neither,
-        and the review teaches its readers to skip findings.
+        React&apos;s rules about effects and rendering make no sense on a backend service. Fire
+        them there and every finding is noise, and people learn to skip findings. The problem is
+        that both a React component and a NestJS controller are <code>.tsx</code> or{" "}
+        <code>.ts</code> files, so a file pattern alone cannot tell them apart.
       </p>
       <p>
-        Excluding files with a negated glob (<code>!**/*.native.*</code>) is not the fix: it is
-        not part of Copilot&apos;s <code>applyTo</code> contract, and <code>AGENTS.md</code> has
-        no equivalent at all. So the choice is made one level up. A <b>profile</b> names the
-        stacks that belong together, a repository installs one, and no profile contains two
-        stacks that contradict each other. Inside any one repository, a plain glob is then
-        unambiguous. <code>scripts/validate.mjs</code> fails the build if a negated or
-        brace-expanded glob is ever added.
+        Redline makes that choice once per repository instead of once per file. The repository
+        picks a profile, and only that profile&apos;s rules are installed.
+      </p>
+
+      <h2>Stacks and profiles</h2>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>What it is</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <b>Stack</b>
+              </td>
+              <td>
+                One rule set for a language, framework or platform. Each says which files it
+                applies to with a glob. Redline has {stackCount}.
+              </td>
+              <td>
+                <code>react</code>, applies to <code>**/*.tsx</code> and <code>**/*.jsx</code>, among others
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <b>Profile</b>
+              </td>
+              <td>A named list of stacks that belong together for one kind of repository.</td>
+              <td>
+                <code>web-react</code> = javascript · typescript · react
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The core standard applies to every profile and is not listed. Within one repository the
+        installed stacks never contradict each other, so a plain glob is enough to say which rules
+        apply to which file.
       </p>
 
       <h2>The profiles</h2>
@@ -74,54 +110,99 @@ export default function Page() {
         </table>
       </div>
       <p>
-        The one deliberate overlap, <code>mobile-react-native</code> installing both React and
-        React Native, is additive by design, and each file says so in its own text.
+        <code>mobile-react-native</code> installs both React and React Native on purpose: the React
+        Native rules extend the React ones, and each file says so.
       </p>
 
-      <h3>How profiles are named</h3>
+      <h2>How a profile is chosen</h2>
       <p>
-        <code>&lt;kind&gt;-&lt;technology&gt;</code>, in full words: <code>web-react</code>,{" "}
-        <code>service-go</code>, <code>infra-terraform</code>. With no framework, the languages
-        and platform the rules cover: <code>javascript-typescript</code>,{" "}
-        <code>javascript-typescript-browser</code>. No abbreviations, because the name is all a
-        reader has when picking one.
+        <RedlineCode args="init" /> proposes a profile from the files and dependencies in the
+        checkout, and you can accept it or name another. Detection tries the more specific
+        frameworks first:
       </p>
+      <ul>
+        <li>
+          <b>Next.js before React.</b> Every Next.js app also depends on React, so checking React
+          first would review a Next.js codebase with nothing covering Server Actions, the client
+          boundary or <code>NEXT_PUBLIC_</code>.
+        </li>
+        <li>
+          <b>Express after every web framework.</b> Many front-end repositories list Express as a
+          dev dependency for a dev server or mock API. A React app with an Express dev server is
+          still a React app. A NestJS service stays <code>service-node</code>, because the Express
+          rules say they do not apply to Nest.
+        </li>
+        <li>
+          <b>Effect is added, not chosen.</b> A repository that depends on <code>effect</code> gets{" "}
+          <code>typescript-effect</code> on top of whatever else it is.
+        </li>
+        <li>
+          <b>
+            <code>javascript-typescript-browser</code> is never proposed.
+          </b>{" "}
+          Plain browser JavaScript looks the same as a build script from the outside, and guessing
+          wrong would install DOM rules where there is no DOM. Choose it yourself.
+        </li>
+      </ul>
+
+      <h2>Choosing or combining profiles</h2>
       <p>
-        Short and older names (<code>web</code>, <code>mobile</code>, <code>node</code>,{" "}
-        <code>tooling</code>…) are accepted as aliases wherever a profile is named and resolve to
-        the names above; a repository is recorded under the resolved name on its next{" "}
-        <code>init</code>. The full list is <code>profileAliases</code> in{" "}
-        <code>standards/manifest.json</code>, and the rename that introduced most of them is in{" "}
-        <Link href="/docs/changes">What changed</Link>.
+        Name a profile to override detection. A repository that is two kinds of code at once names
+        several, separated by commas, and gets every stack from each:
+      </p>
+      <RedlineTerminal
+        commands={`{redline} init --profile javascript-typescript-browser
+# a React app with its own Terraform beside it
+{redline} init --profile web-react,infra-terraform`}
+      />
+      <p>
+        The choice is recorded in <code>.redline.json</code> and kept on every later{" "}
+        <code>init</code>. The list is stored sorted, so the order you type it in never changes the
+        result.
       </p>
 
-      <h2>How detection picks one</h2>
+      <h3>Names and aliases</h3>
       <p>
-        <code>web-nextjs</code> and <code>service-express</code> are both cases where a broader
-        profile would otherwise claim the repo. Every Next.js repo also depends on React, and
-        detection tries <code>web-nextjs</code> first so a Next codebase is not reviewed with
-        nothing covering Server Actions, the client boundary or <code>NEXT_PUBLIC_</code>.
-        Express runs the other way: it is a dev dependency in a great many front-end repos, so
-        it is tried <em>last</em>, below every web framework. A React app with an express dev
-        server is a React app. A NestJS service that lists express directly stays{" "}
-        <code>service-node</code>, because the Express rules say in their own scope section that
-        they do not apply to Nest.
+        Profiles are named <code>&lt;kind&gt;-&lt;technology&gt;</code> in full words:{" "}
+        <code>web-react</code>, <code>service-go</code>, <code>infra-terraform</code>. With no
+        framework, the name lists the languages and platform the rules cover:{" "}
+        <code>javascript-typescript</code>, <code>javascript-typescript-browser</code>.
       </p>
       <p>
-        <code>javascript-typescript-browser</code> is never proposed by detection, only chosen.
-        Plain browser JavaScript and a build script are indistinguishable from the outside, and
-        guessing wrong installs DOM rules on a repo with no DOM. Its rule set covers what a
-        framework normally hides: <code>innerHTML</code> sinks, <code>postMessage</code> origin
-        checks, listeners and observers that outlive their widget.
+        Short and older names such as <code>web</code>, <code>node</code>, <code>infra</code> and{" "}
+        <code>tooling</code> still work anywhere a profile is named. They resolve to the full name,
+        and the repository is recorded under that name on its next <code>init</code> or sync. The
+        full list is <code>profileAliases</code> in <code>standards/manifest.json</code>.
       </p>
 
-      <h2>What is not covered</h2>
+      <h2>Files no stack covers</h2>
       <p>
-        Shell, Dockerfile and Gherkin have no stack on purpose: a linter serves them better than
-        a model review. A changed file no stack matches is reported by{" "}
-        <Link href="/docs/local-review">local review</Link> rather than silently reviewed against
-        the core rules alone.
+        Shell scripts, Dockerfiles and Gherkin have no stack on purpose: a linter serves them better
+        than a model review. When a change touches a file no installed stack matches,{" "}
+        <Link href="/docs/local-review">local review</Link> says so and applies only the core rules
+        to it:
       </p>
+      <RedlineTerminal
+        commands="{redline} review --staged"
+        output={`warn  no stack covers 1 changed file(s), so only the core rules applied to them: run.sh`}
+      />
+      <p>
+        <Link href="/docs/learn/first-finding">Learn step 02</Link> runs a review bounded to your
+        profile.
+      </p>
+
+      <h2>Related</h2>
+      <ul>
+        <li>
+          <Link href="/docs/standards">Standards</Link>: every stack and its rules.
+        </li>
+        <li>
+          <Link href="/docs/onboarding">Onboarding</Link>: where the profile is chosen.
+        </li>
+        <li>
+          <Link href="/docs/changes">What changed</Link>: the rename that introduced most aliases.
+        </li>
+      </ul>
     </DocsPage>
   );
 }

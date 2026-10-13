@@ -39,19 +39,31 @@ export default async function Page({
       href={`/docs/workflows/${slug}`}
     >
       <p>{info.what}</p>
-      <ul>
-        <li>
-          <b>Lives in:</b> {info.livesIn}
-        </li>
-        <li>
-          <b>Runs on:</b> {info.trigger}
-        </li>
-        <li>
-          <b>Setting it up:</b> {info.install}
-        </li>
-      </ul>
 
-      {info.steps.length > 0 && (
+      <div className="table-scroll">
+        <table>
+          <tbody>
+            <tr>
+              <th scope="row">Runs in</th>
+              <td>{info.livesIn}</td>
+            </tr>
+            <tr>
+              <th scope="row">Runs on</th>
+              <td>{info.trigger}</td>
+            </tr>
+            <tr>
+              <th scope="row">Credential</th>
+              <td>{info.credential}</td>
+            </tr>
+            <tr>
+              <th scope="row">Leaves behind</th>
+              <td>{info.output}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {info.steps.length > 0 ? (
         <>
           <h2>What a run does</h2>
           <ol>
@@ -60,11 +72,35 @@ export default async function Page({
             ))}
           </ol>
         </>
-      )}
+      ) : null}
+
+      <h2>Setting it up</h2>
+      <p>{info.install}</p>
+
+      <h2>Changing it</h2>
       <p>
-        <b>Leaves behind:</b> {info.output} More on{" "}
-        <Link href={info.docs.href}>{info.docs.label}</Link>.
+        Edit <code>{entry.file}</code> in this repository, then follow{" "}
+        <Link href="/docs/workflows#changing-a-workflow">Changing a workflow</Link>
+        . {info.home === "metrics"
+          ? "The copy in redline-metrics does not update itself: copy the file across again after the change merges."
+          : info.home === "source"
+            ? "It runs from this repository, so the change takes effect when it merges."
+            : "The org gate is a separate copy in <org>/.github: copy the merged file there. Callers reference it at @main, so every repository runs the new version on its next pull request. A vendored copy (--gate-source local) is rewritten only when redline init runs in that repository again."}
       </p>
+
+      <h2>Related</h2>
+      <ul>
+        <li>
+          <Link href={info.docs.href}>{info.docs.label}</Link>
+        </li>
+        <li>
+          <Link href="/docs/who-runs-what">Who runs what</Link> — every
+          credential, side by side.
+        </li>
+        <li>
+          <Link href="/docs/workflows">All workflows</Link>
+        </li>
+      </ul>
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={720} />

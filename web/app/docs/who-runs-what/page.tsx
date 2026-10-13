@@ -2,137 +2,214 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
-import { Tiers } from "@/components/tiers";
-import "../../tiers.css";
 
 export const metadata: Metadata = { title: "Who runs what" };
+
+const LOCAL_REVIEW = "redline review --engine api --provider openai --model qwen2.5-coder:14b";
+
+type Actor = {
+  who: string;
+  where: string;
+  runs: string;
+  credential: string;
+  reach: string;
+};
+
+// One row per credential. The point of the page is that each one is separate
+// and can be reasoned about alone, so two jobs that share a token share a row.
+const ACTORS: Actor[] = [
+  {
+    who: "You",
+    where: "Your machine, in one checkout",
+    runs: "init, verify, review, remove",
+    credential: "Your own GitHub auth",
+    reach: "The one repository you are in. init and remove open a pull request; they do not push.",
+  },
+  {
+    who: "The merge gate",
+    where: "The onboarded repository's CI, on each pull request",
+    runs: "policy, exempt",
+    credential: "The run's own GITHUB_TOKEN",
+    reach: "The pull request that triggered it, in that repository only.",
+  },
+  {
+    who: "Platform team: measure",
+    where: "Scheduled, in the source repository and redline-metrics",
+    runs: "metrics, registry, verify",
+    credential: "REDLINE_ORG_READ_TOKEN",
+    reach: "Every repository in the org, read-only. It writes nothing to them.",
+  },
+  {
+    who: "Platform team: distribute",
+    where: "The source repository, on a change to standards/",
+    runs: "sync",
+    credential: "REDLINE_SYNC_TOKEN",
+    reach: "Every registered repository, and only by opening a pull request.",
+  },
+  {
+    who: "Platform team: test the reviewer",
+    where: "redline-metrics, weekly",
+    runs: "seed-canary.yml",
+    credential: "REDLINE_CANARY_TOKEN",
+    reach: "The canary repositories only.",
+  },
+  {
+    who: "Redline maintainers",
+    where: "This repository's CI",
+    runs: "The four source-check scripts",
+    credential: "The CI run's own token",
+    reach: "This repository only.",
+  },
+];
 
 export default function Page() {
   return (
     <DocsPage
       crumb="Who runs what"
       title="Who runs what"
-      intro="redline --help prints fifteen commands as one flat list. They are not one thing: they run in four different places, under three different credentials, with three different blast radii. This page is that map, with the file and the environment variable for each."
+      intro="Every place Redline runs, the credential it holds there, and how far that credential reaches."
       href="/docs/who-runs-what"
     >
+      <div className="callout info">
+        <span className="ic">ℹ</span>
+        <p>
+          <b>For the platform team</b> setting up or auditing Redline, and for
+          any engineer who wants to know what Redline can touch before they
+          onboard.
+        </p>
+      </div>
+
+      <h2>The model in one table</h2>
       <p>
-        Redline writes into repositories and walks an organisation. Anything that
-        does that owes you an exact account of what it can reach. Every claim
-        below names the file it comes from, so you can check it rather than
-        believe it.
+        Redline writes into repositories and reads across an organisation, so it
+        owes you an exact account of its <b>blast radius</b>: what each
+        credential could reach if it were misused or leaked. Each row below holds
+        a different credential, and none can do another row&apos;s job.
       </p>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Who</th>
+              <th>Runs where</th>
+              <th>Runs</th>
+              <th>Credential</th>
+              <th>Can reach</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ACTORS.map((a) => (
+              <tr key={a.who}>
+                <td>
+                  <b>{a.who}</b>
+                </td>
+                <td>{a.where}</td>
+                <td>{a.runs}</td>
+                <td>
+                  <code>{a.credential}</code>
+                </td>
+                <td>{a.reach}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p>Three things follow from it:</p>
+      <ul>
+        <li>
+          <b>Onboarding grants Redline nothing.</b> No product repository holds a
+          Redline secret. The central tokens are created by a person on the
+          platform team, never by <code>redline init</code>.
+        </li>
+        <li>
+          <b>The widest credential is read-only.</b> Only the measurement token
+          reaches every repository, and it cannot write.
+        </li>
+        <li>
+          <b>Nothing pushes to your default branch.</b> Every write into a product
+          repository arrives as a pull request.
+        </li>
+      </ul>
+      <p>The sections below give the evidence for each row.</p>
 
-      <Tiers />
-
-      <h2>Tier 1 — you, on your own machine, in one repository</h2>
+      <h2>You, on your own machine</h2>
       <p>
         <code>redline init</code>, <code>redline verify</code>,{" "}
-        <code>redline review</code> and <code>redline remove</code>. You run
-        them from a checkout, in your own shell.
-      </p>
-      <p>
-        Beside them, six that need no credential and contact no host at all:{" "}
-        <code>redline status</code>, <code>redline explain</code>,{" "}
-        <code>redline doctor</code>, <code>redline evidence</code> (which writes
-        only <code>.redline.json</code>), <code>redline funnel</code> (a file in{" "}
-        <code>~/.redline</code>, off by default) and{" "}
-        <code>redline completion</code>.
+        <code>redline review</code> and <code>redline remove</code> run in your
+        shell, from a checkout.
       </p>
       <ul>
         <li>
-          <b>Credential:</b> your own git auth, and nothing else.{" "}
-          <code>cli/platforms/github/client.ts</code> resolves{" "}
-          <code>GH_TOKEN ?? GITHUB_TOKEN</code> from the environment and falls
-          back to <code>gh auth token</code>. Redline never mints a credential,
-          never stores one, and never writes one into the repository —{" "}
-          <code>.redline.json</code> records the profile, the vendors, the menu
-          choices and the pending-admin list, and no secret.
+          <b>Credential:</b> your own GitHub auth and nothing else.{" "}
+          <code>cli/platforms/github/client.ts</code> reads{" "}
+          <code>GH_TOKEN</code>, then <code>GITHUB_TOKEN</code>, then falls back
+          to <code>gh auth token</code>. Redline never creates or stores a
+          credential. <code>.redline.json</code> records your choices, not a
+          secret.
         </li>
         <li>
-          <b>Reach:</b> the one repository you are standing in. Both{" "}
-          <code>init</code> and <code>remove</code> land as a{" "}
-          <b>pull request</b>, not a push.
+          <b>Reach:</b> the repository you are in. It cannot reach a second
+          repository or act on the organisation.
         </li>
         <li>
-          <b>It cannot</b> reach a second repository, and it cannot act on the
-          organisation. Estate-wide work is <code>sync</code> and{" "}
-          <code>metrics</code>, which are Tier 3 and refuse to be useful without
-          a token you had to create yourself.
-        </li>
-        <li>
-          <b>Without repo-admin rights it still works.</b> Whatever your token
-          cannot reach is recorded rather than skipped — see{" "}
+          <b>Without admin rights it still works.</b> Whatever your token cannot
+          change is recorded for an administrator rather than skipped — see{" "}
           <Link href="/docs/onboarding">Onboard a repository</Link>.
         </li>
       </ul>
-
-      <h3>
-        <code>redline review</code> needs no token at all
-      </h3>
       <p>
-        The default <code>embedded</code> engine calls no model: it emits the
-        bounded prompt for the assistant that is already running the command.
-        The <code>api</code> engine calls an endpoint — and its
-        OpenAI-compatible default base URL is{" "}
-        <code>http://localhost:11434/v1</code>, which is Ollama&apos;s.{" "}
-        <code>cli/review/engines/api.ts</code> treats <code>localhost</code>,{" "}
-        <code>127.0.0.1</code> and <code>[::1]</code> as local and skips the API
-        key requirement entirely — the comment on that branch reads{" "}
-        <i>&ldquo;a local endpoint legitimately needs no key&rdquo;</i>. Point it
-        at a local model and your diff does not leave the machine.
+        Six more commands need no credential and contact no host:{" "}
+        <code>status</code>, <code>explain</code>, <code>doctor</code>,{" "}
+        <code>evidence</code> (writes only <code>.redline.json</code>),{" "}
+        <code>funnel</code> (a file under <code>~/.redline</code>, off by
+        default) and <code>completion</code>.
       </p>
-      <CodeWindow
-        title="terminal — no key, no network egress"
-        copyText="redline review --engine api --model qwen2.5-coder:14b"
-      >
+
+      <h3>Does a local review send my code anywhere?</h3>
+      <p>
+        Not unless you choose an endpoint that does. The default{" "}
+        <code>embedded</code> engine calls no model: it prints a prompt for the
+        assistant already running the command.
+      </p>
+      <p>
+        The <code>api</code> engine calls an endpoint. For the{" "}
+        <code>openai</code> provider the default is{" "}
+        <code>http://localhost:11434/v1</code>, a local Ollama server.{" "}
+        <code>cli/review/engines/api.ts</code> asks for no API key when the
+        endpoint is <code>localhost</code>, <code>127.0.0.1</code> or{" "}
+        <code>[::1]</code>. With a local model, the diff stays on your machine:
+      </p>
+      <CodeWindow title="terminal" copyText={LOCAL_REVIEW}>
         <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">
-          redline review --engine api --model qwen2.5-coder:14b
-        </span>
-        {"\n"}
-        <span className="tk-dim">
-          {"  endpoint  http://localhost:11434/v1   (local — no API key required)"}
-        </span>
-        {"\n"}
-        <span className="tk-dim">
-          {"  local findings are excluded from rule-tuning telemetry"}
-        </span>
+        <span className="tk-white">{LOCAL_REVIEW}</span>
       </CodeWindow>
       <p>
-        A remote endpoint is the opposite case and is treated as one: without a
-        key the run <b>fails</b> rather than sending an unauthenticated request
-        that would break confusingly at the far end. See{" "}
+        A remote endpoint with no key fails instead of sending an
+        unauthenticated request. See{" "}
         <Link href="/docs/local-review">Reviewing before you push</Link>.
       </p>
 
-      <h2>Tier 2 — the onboarded repository&apos;s own CI</h2>
+      <h2>The merge gate, in your repository&apos;s CI</h2>
       <p>
-        <code>redline policy</code> and <code>redline exempt</code>. You do not
-        run these; the gate does, via{" "}
-        <code>workflows/redline-gate.yml</code> — hosted in the org{" "}
-        <code>.github</code> repository and called by the thin{" "}
-        <code>.github/workflows/redline.yml</code> each onboarded repo carries.
-        The org-hosted gate runs <code>redlinegate@latest</code> — the{" "}
-        <code>policy</code> job from an <code>npm install --prefix</code> into a
-        directory of its own, <code>exempt</code> through{" "}
-        <code>npx --yes</code>; a vendored copy runs the version that wrote it.
+        You do not run <code>redline policy</code> or{" "}
+        <code>redline exempt</code>. The <Link href="/docs/gate">merge gate</Link>{" "}
+        does: <code>workflows/redline-gate.yml</code>, called on each pull
+        request by the thin <code>.github/workflows/redline.yml</code> that{" "}
+        <code>redline init</code> installs.
       </p>
       <ul>
         <li>
-          <b>Credential:</b> the run&apos;s own repo-scoped{" "}
-          <code>GITHUB_TOKEN</code>. The whole grant is the workflow&apos;s
-          declared block, and it is three lines long.
+          <b>Credential:</b> the run&apos;s own <code>GITHUB_TOKEN</code>, which
+          GitHub scopes to one repository. The gate&apos;s whole grant is below.
         </li>
         <li>
-          <b>Reach:</b> the pull request it was triggered by, in its own
-          repository. A repo-scoped token cannot address another repository, so
-          neither can the gate.
+          <b>Reach:</b> the pull request that triggered it. A repository-scoped
+          token cannot address another repository.
         </li>
         <li>
-          <b>No model call.</b> <code>redline policy</code> evaluates only the
-          deterministic rule tier and exits 1 on a finding at or above the
-          rung&apos;s floor. The reviewing model, wherever it runs, is a separate
-          concern from the gate.
+          <b>No model call.</b> <code>redline policy</code> checks only the{" "}
+          <Link href="/docs/deterministic">deterministic rules</Link>, the ones
+          a program can decide. AI review is a separate concern.
         </li>
       </ul>
       <CodeWindow title="workflows/redline-gate.yml — the entire grant">
@@ -145,95 +222,85 @@ export default function Page() {
         {"  "}
         <span className="tk-white">pull-requests:</span>{" "}
         <span className="tk-amber">write</span>
-        <span className="tk-dim">{"   # to post findings on this PR"}</span>
       </CodeWindow>
 
-      <h2>Tier 3 — the platform team, on a schedule</h2>
+      <h2>The platform team, on a schedule</h2>
       <p>
-        Two credentials, and the distinction between them is the reason this page
-        exists. Neither is created by <code>redline init</code>: a human on the
-        platform team makes them and stores them as secrets on a central
-        repository. Onboarding a repository grants Redline nothing.
+        Three central tokens, each created and stored by a person on the
+        platform team. They could have been one token. They are three so that
+        each can be reasoned about on its own.
       </p>
 
       <h3>
-        Read-only: <code>REDLINE_ORG_READ_TOKEN</code>
+        Measure: <code>REDLINE_ORG_READ_TOKEN</code>
       </h3>
       <p>
-        The entire measurement plane runs on it —{" "}
-        <code>redline metrics collect | dashboard | digest | inbox | baseline |
-        roi | correlate | score-seeds</code> and{" "}
-        <code>redline registry</code>, driven by{" "}
-        <code>redline-collect.yml</code>, <code>dashboard.yml</code>,{" "}
-        <code>inbox.yml</code>, <code>weekly-digest.yml</code>,{" "}
-        <code>verify-onboarding.yml</code> and{" "}
-        <code>.github/workflows/registry.yml</code>. It observes the estate and
-        writes nothing to it. <code>redline-collect.yml</code> says so at the
-        point of use: <i>&ldquo;Read-only: repo metadata + pull requests across
-        the org. No write scope.&rdquo;</i>
+        Read-only. It runs <code>redline metrics</code> and{" "}
+        <code>redline registry</code> from <code>redline-collect.yml</code>,{" "}
+        <code>dashboard.yml</code>, <code>inbox.yml</code>,{" "}
+        <code>weekly-digest.yml</code>, <code>verify-onboarding.yml</code> and{" "}
+        <code>.github/workflows/registry.yml</code>.{" "}
+        <code>redline-collect.yml</code> states it where the token is used:{" "}
+        <i>&ldquo;Read-only: repo metadata + pull requests across the org. No
+        write scope.&rdquo;</i>
+      </p>
+      <p>
+        Some of these workflows declare <code>contents: write</code>,{" "}
+        <code>pages: write</code> or <code>issues: write</code>. Those apply to
+        the central repository the job runs in, through the run&apos;s own
+        token: committing telemetry, publishing a page, opening a tracking
+        issue. They never apply to the repositories being measured.
       </p>
       <div className="callout ok">
         <span className="ic">✓</span>
         <p>
-          Telemetry was deliberately moved <b>central</b>. The previous design
-          ran a collector in every onboarded repo, which meant storing a
-          cross-repo write token as a secret in every one of them.{" "}
-          <code>scripts/collect-telemetry.mjs</code> records the reason in its
-          header: <i>one central read token in one repo has a far smaller blast
-          radius</i>. That is why onboarding grants Redline no write access to
-          anything.
+          <b>Why measurement is central.</b> A collector in every repository
+          would need a cross-repository token stored in every one of them. One
+          read token in one central repository has a far smaller blast radius.
         </p>
       </div>
-      <p>
-        Those workflows do declare <code>contents: write</code> or{" "}
-        <code>pages: write</code> in places — <code>redline-collect.yml</code>{" "}
-        commits the collected JSONL, <code>registry.yml</code> commits{" "}
-        <code>registry.json</code>, the dashboard and inbox publish to Pages.
-        Those permissions apply to the <b>central repository the job runs in</b>,
-        never to the repositories being measured. The only credential that
-        reaches out across the estate on those jobs is the read token.
-      </p>
 
       <h3>
-        Narrowly-scoped write: <code>REDLINE_SYNC_TOKEN</code>
+        Distribute: <code>REDLINE_SYNC_TOKEN</code>
       </h3>
       <p>
-        One workflow, one command: <code>workflows/redline-sync.yml</code>{" "}
-        running <code>redline sync</code>. Its required scope is documented
-        inline where the secret is consumed —{" "}
-        <code>contents:write</code>, <code>pull_requests:write</code>,{" "}
-        <code>workflows:write</code> on target repos, the last because pushing{" "}
-        <code>.github/workflows/redline.yml</code> is otherwise rejected.
+        One workflow, <code>workflows/redline-sync.yml</code>, running{" "}
+        <code>redline sync</code>. The file documents its scope where the
+        secret is used: <code>contents</code>, <code>pull_requests</code> and{" "}
+        <code>workflows</code> write on each target repository.
       </p>
       <ul>
         <li>
-          <b>It opens pull requests.</b> The header of that file is explicit:
-          standards are distributed{" "}
-          <i>&ldquo;never as direct pushes, and never as a merge&rdquo;</i>. What
-          a repository does with its sync pull request is the repository&apos;s
-          decision.
+          <b>It only opens pull requests.</b> The file&apos;s header: standards
+          are distributed{" "}
+          <i>&ldquo;never as direct pushes, and never as a merge&rdquo;</i>.
+          Merging is the repository&apos;s decision.
         </li>
         <li>
           <b>Its targets are derived, not listed.</b> They come from{" "}
-          <code>registry.json</code>, discovered nightly from the{" "}
-          <code>.redline.json</code> each onboarded repo carries. A repository
-          that runs <code>redline remove</code> leaves the register and stops
-          being a target without anyone editing a list.
+          <code>registry.json</code>, rebuilt nightly from the{" "}
+          <code>.redline.json</code> each onboarded repository carries. A
+          repository that runs <code>redline remove</code> drops out without
+          anyone editing a list.
         </li>
         <li>
-          <b>It refuses to distribute stale artifacts.</b> The job runs{" "}
+          <b>It refuses to distribute stale files.</b> The job runs{" "}
           <code>render-self.mjs --check</code> before it opens anything.
         </li>
       </ul>
+      <p>
+        More on <Link href="/docs/distribution">Distribution and drift</Link>.
+      </p>
 
       <h3>
-        A third, deliberately separate one: <code>REDLINE_CANARY_TOKEN</code>
+        Test the reviewer: <code>REDLINE_CANARY_TOKEN</code>
       </h3>
       <p>
         <code>workflows/seed-canary.yml</code> opens a throwaway pull request of
-        known-bad code against a canary repo weekly to regression-test the
-        reviewer itself. That needs write access, so it gets its own token, and
-        the file says exactly how far it goes:
+        known-bad code on a canary repository each week, to check the reviewer
+        still catches it — see <Link href="/docs/seeds">Seeded corpus</Link>.
+        That needs write access, so it gets its own token, and the file limits
+        it:
       </p>
       <CodeWindow title="workflows/seed-canary.yml — header">
         <span className="tk-dim">
@@ -244,82 +311,40 @@ export default function Page() {
           {"#                                  repos ONLY. Never an org-wide token."}
         </span>
       </CodeWindow>
+
+      <h2>Redline&apos;s own maintainers</h2>
       <p>
-        These three could have been one token. They are three because a token
-        that can do everything is a token nobody can reason about.
+        <code>.github/workflows/ci.yml</code> runs the four source checks —{" "}
+        <code>validate.mjs</code>, <code>assign-rule-ids.mjs</code>,{" "}
+        <code>render-self.mjs</code> and <code>check-pins.mjs</code> — on this
+        repository. <code>release.yml</code> runs the first three again before
+        a publish. They need no credential beyond the CI run&apos;s own.
+      </p>
+      <p>
+        Only <code>check-pins.mjs</code> uses the network. It compares each
+        pinned action and image with the tag its comment names, and checks the
+        gate&apos;s <code>redlinegate</code> version against npm. It runs here
+        and nowhere else; the gate never runs it in your repository. All of them
+        are on <Link href="/docs/scripts">Maintainer scripts</Link>.
       </p>
 
-      <h2>Tier 4 — Redline&apos;s own maintainers</h2>
-      <p>
-        <code>scripts/validate.mjs</code>,{" "}
-        <code>scripts/assign-rule-ids.mjs</code>,{" "}
-        <code>scripts/render-self.mjs</code> and{" "}
-        <code>scripts/check-pins.mjs</code>, run by{" "}
-        <code>.github/workflows/ci.yml</code> in this repository, and all but{" "}
-        <code>check-pins</code> again by <code>release.yml</code> before a
-        publish. They act on this repository&apos;s own{" "}
-        <code>standards/</code> and pinned actions — Redline enforced on Redline.
-        Nobody installs the CLI to run them, and they need no credential beyond
-        the CI run&apos;s own.
-      </p>
-      <p>
-        <code>check-pins.mjs</code> is the only one that needs network: it
-        re-resolves every SHA-pinned third-party action and every digest-pinned
-        Docker image against the tag its trailing comment claims, and compares
-        the gate&apos;s <code>redlinegate</code> pin with the published latest.
-        It runs as its own CI job here, and <b>only here</b> — the gate
-        references it in a comment explaining where its own pin is reviewed, but
-        does not invoke it in your repository. All four, and the scripts behind{" "}
-        <code>metrics</code>, are on{" "}
-        <Link href="/docs/scripts">Maintainer scripts</Link>.
-      </p>
-
-      <h2>What this means for you</h2>
-      <div className="callout ok">
-        <span className="ic">✓</span>
-        <p>
-          <b>Does my code leave my machine?</b> Not for a local review. With{" "}
-          <code>--engine api</code> pointed at a local endpoint, no key is asked
-          for and no diff is sent anywhere; the default <code>embedded</code>{" "}
-          engine calls no model at all. If you configure a hosted endpoint, your
-          diff goes to that endpoint — that is your choice, made per run, and the
-          CLI names the endpoint it is calling.
-        </p>
-      </div>
-      <div className="callout ok">
-        <span className="ic">✓</span>
-        <p>
-          <b>What can Redline do to my other repositories?</b> Nothing. Tier 1
-          and Tier 2 are single-repository by construction. Estate-wide write
-          exists only as <code>redline sync</code>, which runs from a central
-          repository under <code>REDLINE_SYNC_TOKEN</code> — a token your
-          platform team created, scoped and stored. It opens pull requests; it
-          does not push to a default branch, and it does not merge.
-        </p>
-      </div>
+      <h2>Limits</h2>
       <div className="callout warn">
         <span className="ic">⚠</span>
         <p>
-          <b>The honest caveats.</b> The workflow files above are the GitHub
-          ones. The CLI onboards and verifies on{" "}
-          <b>GitHub and Azure DevOps</b> both, but the scheduled measurement and
-          sync plane is GitHub-only today — see{" "}
-          <Link href="/docs/telemetry">Telemetry &amp; validation</Link>.{" "}
-          <code>redline-sync.yml</code> and <code>verify-onboarding.yml</code>{" "}
-          are <b>active</b> wherever the platform team has created the tokens
-          they name, so <code>sync</code> is a real cross-repository write on a
-          GitHub estate — scoped and pull-request-only as described above, but
-          not hypothetical. On Azure DevOps both report a registered repository
-          as <b>unsupported</b> rather than skipping it silently, so an Azure
-          repository is measured and synced by nothing today.
+          The workflows on this page are GitHub Actions, and they reach GitHub
+          repositories only. The CLI onboards and verifies Azure DevOps
+          repositories by hand, but the register is discovered from GitHub,{" "}
+          <code>redline sync</code> refuses an Azure entry as unsupported, and{" "}
+          <code>verify-onboarding.yml</code> checks GitHub entries only. Today,
+          nothing on a schedule measures or syncs an Azure repository — see{" "}
+          <Link href="/docs/telemetry">Telemetry &amp; validation</Link>.
         </p>
       </div>
       <p>
-        If you want the repository-level view instead —{" "}
-        what <code>init</code> installs and what it asks an administrator for —
-        see <Link href="/docs/onboarding">Onboard a repository</Link>, and{" "}
-        <Link href="/docs/removing">Removing Redline</Link> for taking it back
-        out.
+        For what <code>redline init</code> installs in one repository, see{" "}
+        <Link href="/docs/onboarding">Onboard a repository</Link>. To take it
+        back out, see <Link href="/docs/removing">Removing Redline</Link>.
       </p>
     </DocsPage>
   );

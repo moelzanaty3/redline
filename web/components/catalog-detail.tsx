@@ -29,7 +29,7 @@ export function CatalogDetail({ entry }: { entry: CatalogEntry }) {
   const kind = KIND_COPY[entry.kind];
   const phases = phasesOf(entry);
   const related = relatedTo(entry);
-  const cmd = installCommand(p);
+  const cmd = installCommand(entry);
   const primary = phases[0];
   const base = basePathOf(entry.kind);
   const starCount = starsFor(p);
@@ -51,12 +51,13 @@ export function CatalogDetail({ entry }: { entry: CatalogEntry }) {
             />
           </div>
           <p className="sk-cmd-note">
-            The CLI&apos;s unit is the repository, so this installs everything in{" "}
+            This installs <code>{entry.name}</code> alone. Drop <code>--skill</code> to choose
+            from everything in{" "}
             <code>
               {p.owner}/{p.repo}
             </code>
-            , not <code>{entry.name}</code> alone. It writes into whichever agent
-            directories it finds — Claude Code, Codex, Cursor, Copilot, Windsurf, Zed.
+            . It writes into whichever agent directories it finds — Claude Code, Codex, Cursor,
+            Copilot, Windsurf, Zed.
           </p>
         </section>
 

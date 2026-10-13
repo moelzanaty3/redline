@@ -32,6 +32,34 @@ nothing (a repository updates by raising its `redlinegate` pin and running `init
 after onboarding run the project's pinned copy. The express and nextjs stacks and four seed
 corpora that had no pages now do. `init --help` lists `codex` among the vendors it accepts.
 
+A second pass rewrote every page for a developer reading it cold: why first, terms defined
+where they are used, tables for comparisons, and outputs taken from real runs. Sample `gh pr
+checks` output now shows the names the command prints (`redline-gate / gate`), not the web
+page's. Release notes written as paragraphs now appear on What changed, and each catalogue entry
+installs that skill alone (`npx skills add <owner>/<repo> --skill <name>`).
+
+### Init — `--vendors claude` writes the AGENTS.md it imports
+
+`CLAUDE.md` holds one line of substance, `@AGENTS.md`. Selected on its own, or detected from a
+repository whose only marker was `CLAUDE.md`, the claude vendor wrote that import and no
+`AGENTS.md`, so Claude read no rules at all. It now renders `AGENTS.md` too, the way `codex`
+does; selecting `agents` as well still writes it once.
+
+### Seed canary — the exemption carries a reason, not only a label
+
+The canary pull request is broken on purpose and never merged. It carried the `redline-exempt`
+label with no `## Redline exemption` block, which a blocking rung refuses, so its gate failed on
+the refused exemption instead of on its findings. Its body now names a reason, a 7-day expiry and
+the three process checks. The security floor is not covered.
+
+### check-pins — `latest` is not an outdated pin
+
+The gate asks for `REDLINE_CLI_VERSION: 'latest'` on purpose; a vendored copy is stamped with the
+version that wrote it. `check-pins` compared the word `latest` with the published version and
+reported an update on every run, failing under `--strict`. It now reports the pin as current.
+
+The pull request template's exemption comment named two process checks; it names all three.
+
 ### Init — a tool you said you do not run stays unticked
 
 `redline init --integrations ''` recorded an empty list in `.redline.json`, and the next plain

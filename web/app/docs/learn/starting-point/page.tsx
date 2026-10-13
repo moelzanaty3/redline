@@ -290,16 +290,31 @@ export default function Page() {
         "How to put them in a GitHub repository of your own",
       ]}
     >
+      <h2>Before you start</h2>
+      <ul>
+        <li>
+          <a href="https://git-scm.com/downloads" rel="noopener noreferrer" target="_blank">git</a>
+        </li>
+        <li>
+          <a href="https://nodejs.org" rel="noopener noreferrer" target="_blank">Node</a> 18.11 or
+          later
+        </li>
+        <li>
+          <a href="https://pnpm.io/installation" rel="noopener noreferrer" target="_blank">pnpm</a>.
+          If you build the files by hand, npm, yarn or bun work too.
+        </li>
+        <li>
+          A GitHub account, and the{" "}
+          <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">GitHub CLI</a>{" "}
+          signed in with <code>gh auth login</code>
+        </li>
+      </ul>
+
       <h2>Get the starter files</h2>
       <p>
         Step 00 is a small TypeScript service with two tests and a CI workflow, and nothing from
         Redline yet. Download it in one go, or build it yourself file by file and see what each
-        piece is for. You need{" "}
-        <a href="https://git-scm.com/downloads" rel="noopener noreferrer" target="_blank">git</a>,{" "}
-        <a href="https://nodejs.org" rel="noopener noreferrer" target="_blank">Node</a> 18.11 or later,{" "}
-        <a href="https://pnpm.io/installation" rel="noopener noreferrer" target="_blank">pnpm</a>{" "}
-        (or npm, yarn or bun if you build it by hand), and a GitHub account with the{" "}
-        <a href="https://cli.github.com" rel="noopener noreferrer" target="_blank">GitHub CLI</a>.
+        piece is for.
       </p>
       <Tabs
         label="How to get the starter files"
@@ -376,24 +391,33 @@ pnpm test`}
         ]}
       />
       <p>
-        <code>pnpm: command not found</code>? Install it with <code>npm install -g pnpm</code>. You
-        don&apos;t install Redline yet: step 01 runs it once, and it adds itself to your project as
-        a pinned dev dependency, so everyone on the repository runs the same version.
+        <code>pnpm: command not found</code>? Install it with <code>npm install -g pnpm</code>.
+      </p>
+      <p>
+        You don&apos;t install Redline yet. Step 01 runs it once, and it adds itself to your
+        project as a pinned dev dependency, so everyone on the repository runs the same version.
       </p>
 
       <h2>Put your repository on GitHub</h2>
       <p>
         The checks Redline adds run on pull requests, so your repository needs to be on GitHub.
-        From its root, with the GitHub CLI signed in (<code>gh auth login</code>):
+        From its root:
       </p>
       <Terminal commands="gh repo create my-redline-demo --public --source . --remote origin --push" />
       <p>
         That creates a new <b>public</b> repository under your own account and pushes your{" "}
         <code>main</code> to it. Everything from here on happens there; the demo is only ever read
-        from. Public matters: GitHub gives a public repository dependency review and secret
-        scanning for free, and the gate uses both from step 01 on. Merge each step&apos;s pull
-        request before you start the next, and branch from an up-to-date <code>main</code>.
+        from.
       </p>
+      <p>
+        Why public: GitHub gives a public repository dependency review and secret scanning for
+        free, and the gate uses both from step 01 on.
+      </p>
+      <p>
+        To check it worked, open the repository in your browser and look at its{" "}
+        <b>Actions</b> tab. The CI workflow ran on the push to <code>main</code>, and it is green:
+      </p>
+      <Terminal commands="gh repo view --web" />
       <PrivateRepo title="Must it be public?">
         <p>
           No, and most real repositories are private. On a private repository, dependency review

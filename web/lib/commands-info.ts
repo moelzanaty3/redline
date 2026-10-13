@@ -1,471 +1,695 @@
-// Every command the CLI has, including the ones that act on the estate rather
-// than on a repository. All fifteen are built; `built` stays on the type because
-// a command that is later specified ahead of its implementation should be
-// documented as unbuilt rather than omitted — "does redline review exist?" is a
-// question people ask, and a page that lacks the answer reads as an oversight
-// instead of a decision.
+// The content of every /docs/cli/<command> page. The set of commands is the set
+// `redline --help` prints, and every flag, default and output line below was
+// checked against `redline <command> --help` and a real run. Change the CLI,
+// change this.
 //
-// The set here is the set `redline --help` prints. That is the invariant worth
-// keeping: a command that exists and is documented nowhere is one nobody runs.
-export type CommandInfo = {
-  what: string;
-  built: boolean;
-  onboard: string;
-  usage: string[];
-  flags: { flag: string; detail: string }[];
-  output: string;
-  edit: string;
+// In `commands`, `{redline}` is the project's pinned copy (the reader's package
+// manager picks the runner) and `{npx}` is the published package, for the runs
+// that happen before a pinned copy exists. Estate commands are written out in
+// full, because they run from a checkout of the source repository or from the
+// metrics repository rather than from a product repository.
+export type CommandGroup = "setup" | "everyday" | "estate";
+
+export type CommandExample = {
+  title: string;
+  commands: string;
+  output?: string;
 };
+
+export type CommandInfo = {
+  group: CommandGroup;
+  // One line, for the index table and the page intro.
+  summary: string;
+  // What it does and when you would run it.
+  what: string;
+  // Where the command runs, and with which copy of the CLI.
+  runsIn: string;
+  synopsis: string[];
+  flags: { flag: string; default: string; detail: string }[];
+  examples: CommandExample[];
+  exitCodes: { code: string; meaning: string }[];
+  related: { href: string; label: string }[];
+  source: string;
+};
+
+export const COMMAND_GROUPS: { id: CommandGroup; title: string; blurb: string }[] = [
+  {
+    id: "setup",
+    title: "Set up a repository",
+    blurb: "Run once per machine or repository, and again when you change what is installed.",
+  },
+  {
+    id: "everyday",
+    title: "Everyday work",
+    blurb: "Run while you write and review code. The gate runs verify, policy and exempt for you on every pull request.",
+  },
+  {
+    id: "estate",
+    title: "Across the organisation",
+    blurb: "Run by the platform team, from the Redline source repository or the metrics repository. Not from a product repository.",
+  },
+];
+
+const PRODUCT_REPO =
+  "Inside the product repository, through the copy pinned in its devDependencies.";
+
+const EXIT_OK = { code: "0", meaning: "Success." };
+const EXIT_USAGE = { code: "2", meaning: "Usage error: an unknown flag or value, or a Node version below 18.11." };
 
 export const COMMANDS_INFO: Record<string, CommandInfo> = {
   init: {
-    what: "Onboards this repository: renders the standards into whichever AI tools it uses, applies the organisation's security floor, installs the merge gate advisory-by-default, and records what it did in .redline.json. It is idempotent — a re-run reconciles rather than reinstalls.",
-    built: true,
-    onboard:
-      "Run it from inside the repository you are onboarding, with no flags. At a terminal it walks a menu — standards, host, what runs your checks, which assistants, what to install, how hard the gate bites — with whatever it detected preselected and every term explained beside the choice that uses it. The last question offers Dry run before Apply. In CI, in a pipe, or with any flag present it prompts for nothing and behaves exactly as it always did. On GitHub it resolves the org's reusable gate in the .github repo BEFORE writing the caller that references it: if that workflow does not exist, no caller is written and the gate is recorded as awaiting an administrator, because a workflow that cannot start is a red X on every pull request that looks like Redline working.",
-    usage: [
-      "redline init                          # walk the menu; Dry run offered before Apply",
-      "redline init --dry-run                # print the plan; writes nothing, contacts no host",
-      "redline init --profile web-react      # name the profile instead of detecting it",
-      "redline init --profile web-react,infra  # a React app with its own Terraform beside it",
-      "redline init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines",
-      "redline init --vendors claude,copilot # render for these AI tools only",
-      "redline init --blocking               # promote the gate from advisory to blocking",
-      "redline init --skip gate              # this repository has its own; do not install one",
-      "redline init --with review-ownership  # also seed CODEOWNERS; off unless asked for",
-      "redline init --no-speckit             # drop the spec-first context section",
-      "redline init --tmf                    # add the TM Forum context section",
-      "redline init --repair                 # re-apply every capability on an already-onboarded repo",
+    group: "setup",
+    summary: "Onboard this repository: assistant rules, security floor, merge gate and a pull request with all of it.",
+    what: "Onboards the repository you are in. It writes the standards into the files each AI assistant reads, turns on the organisation's security floor (secret scanning, push protection, dependency alerts), installs the merge gate in advisory mode, and records every choice in .redline.json. On a repository with a remote, everything lands as one pull request on the redline/onboard branch. Run it once to onboard, and again whenever you want to change what is installed: omitted flags keep what .redline.json already recorded.",
+    runsIn:
+      "Inside the product repository. The first run uses the published package; after that, use the pinned copy (add it with --pin-cli). With no flags at a terminal, init walks a menu with what it detected preselected and offers a dry run before applying. Any flag, a pipe, CI, or REDLINE_NO_PROMPT=1 skips the menu.",
+    synopsis: [
+      "redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]",
+      "             [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]",
+      "             [--gate-source org|local] [--docs-url <base>] [--approvals <n>] [--no-commit]",
     ],
     flags: [
+      { flag: "--dry-run", default: "off", detail: "Print the plan. Writes nothing, needs no credential, contacts no host." },
+      { flag: "--no-commit", default: "off", detail: "Write the files into the working tree and stop. No repository setting, branch, commit or pull request. Works offline. Commit the files, then run init again to apply the settings." },
+      { flag: "--profile <list>", default: "detected", detail: "One profile, or several separated by commas, rendered together (web,infra for a React app with Terraform beside it). Short aliases such as web and infra work. Order does not matter." },
+      { flag: "--vendors <list>", default: "recorded, else detected", detail: "Which assistants to write files for: copilot, agents, codex, claude, cursor. Replaces both detection and the recorded list. A vendor the organisation has disabled never renders. See Adaptors." },
+      { flag: "--pipeline <name>", default: "recorded, else follows the host", detail: "What runs this repository's pull request checks: github-actions, azure-pipelines or local-agent. Set it when the host and the CI differ, such as a GitHub repository built by Azure Pipelines. local-agent installs no CI: the gate is a pre-push hook." },
+      { flag: "--skip <list>", default: "review-ownership", detail: "Capabilities not to install: gate, merge-policy, labels, review-ownership. Use it when the repository already has its own. The security floor cannot be skipped." },
+      { flag: "--with <list>", default: "none", detail: "The same names, selected again. --with review-ownership writes CODEOWNERS, which is off by default." },
+      { flag: "--review-owners <list>", default: "the platform team", detail: "Who owns the paths seeded into CODEOWNERS: teams, users or emails, comma separated. GitHub ignores an owner it cannot resolve, so set this to someone who exists." },
+      { flag: "--rung <name>", default: "recorded, else observe", detail: "How hard the gate blocks: observe, block-blocker or block-high. Moving up needs recorded evidence (see redline evidence). Moving down is always allowed." },
+      { flag: "--blocking", default: "off", detail: "Make the merge gate blocking instead of advisory. --rung is the finer-grained version of the same choice." },
+      { flag: "--gate-source org|local", default: "recorded, else org", detail: "org references the reusable gate in <org>/.github. local copies the gate into .github/workflows/redline-gate.yml. local is weaker: a pull request can edit the gate that judges it, so protect .github/workflows/ with CODEOWNERS." },
+      { flag: "--approvals <n>", default: "recorded, else 0", detail: "Approving reviews the branch policy requires, 0 to 10." },
+      { flag: "--branches <patterns>", default: "the default branch", detail: "Branches the merge policy governs, comma separated, in the host's syntax (~DEFAULT_BRANCH, refs/heads/release/*). Never detected." },
+      { flag: "--docs-url <base>", default: "unset", detail: "Where your organisation publishes the standard. Each finding then links to <base>/r/<rule-id>. Pass an empty string to clear it." },
+      { flag: "--integrations <list>", default: "detected", detail: "Controls this repository already runs: sonarqube, snyk, mend, dependabot, renovate, gitleaks, trufflehog, codeql. Corrects detection, which cannot see a scanner wired through a shared pipeline template." },
+      { flag: "--setup <list>", default: "none", detail: "Extra controls to install: dependabot, renovate, codeql. Writes .github/dependabot.yml, renovate.json or .github/workflows/codeql.yml. Never overwrites an existing file." },
+      { flag: "--pin-cli", default: "off", detail: "Add redlinegate to devDependencies at this exact version, with the project's package manager, in the same pull request. The team then runs pnpm redline, yarn redline or npx redlinegate." },
+      { flag: "--speckit / --no-speckit", default: "on", detail: "Add the spec-first context section to the assistant files. Dropped automatically where the repository already runs Spec Kit." },
+      { flag: "--tmf / --no-tmf", default: "off", detail: "Add the TM Forum context section. The negative removes a section rendered earlier." },
+      { flag: "--adr / --no-adr", default: "on", detail: "Require a pull request over 300 changed lines to link a decision record in docs/adr/. One pull request can skip it with the no-adr label." },
+      { flag: "--repair", default: "off", detail: "Re-apply every capability even if the repository looks onboarded. Use it to clear an item still waiting on an administrator. Works with --dry-run." },
+      { flag: "--adopt-caller", default: "off", detail: "Take over an existing .github/workflows/redline.yml or .azuredevops/redline-gate.yml that nothing marks as Redline's. Without it, init refuses to overwrite the file." },
+      { flag: "--no-a11y", default: "off", detail: "Recorded in .redline.json. Changes nothing yet." },
+    ],
+    examples: [
       {
-        flag: "(no flags)",
-        detail:
-          "At a terminal, walks the menu. Every question preselects what detection found and explains its own terms — what a rung is, what a capability installs, which tool already covers a check. The standards and assistants questions are multi-selects: a repository is routinely more than one profile, and a vendor the organisation has disabled is listed greyed with the reason rather than hidden. The last question offers Dry run before Apply, so the first run can see the whole plan without writing anything. Any flag, a pipe, or CI suppresses it — a prompt in a pipeline is a hang with nobody there to answer it. REDLINE_NO_PROMPT=1 forces the scripted path.",
+        title: "See the plan first",
+        commands: "{npx} init --dry-run",
+        output: `  profile web-react · dry run
+  opted out: review-ownership
+
+  Files  22 to write
+   + .github/copilot-instructions.md
+   + .github/instructions/redline-javascript.instructions.md
+   …
+   + AGENTS.md
+   + CLAUDE.md
+   + .cursor/rules/redline-core.mdc
+   …
+   + .github/workflows/redline.yml
+   + .github/pull_request_template.md
+   + .redline.json
+
+  Repository settings  4 to apply
+   → merge gate machinery on github
+   → security floor: secret scanning, push protection, dependency alerts
+   → branch policy: no approving review, gate advisory
+   → pull request on redline/onboard
+
+  menu: blockingGate=false adrForLargeDiffs=true accessibility=true speckit=true tmf=false sensitivePathReviewers=false
+
+dry run — nothing was written, read or changed on the host`,
       },
       {
-        flag: "--profile <list>",
-        detail:
-          "One profile, or several separated by commas, whose stacks render together: a React application with its own Terraform beside it is web-react,infra-terraform, and a single choice made it pick the half that fitted worst. The recorded name is sorted and de-duplicated, so the order you type cannot change the artifacts. Omitted, the stack is detected from the checkout.",
+        title: "Onboard, and pin the CLI for the team",
+        commands: "{npx} init --pin-cli",
       },
       {
-        flag: "--pipeline <name>",
-        detail:
-          "github-actions or azure-pipelines — what actually runs this repository's pull request checks, asked separately from the host because the two come apart. A repository can live on GitHub and be built entirely by Azure Pipelines; deriving one from the other is what put an Actions workflow into a repository that runs no Actions. On a GitHub host, azure-pipelines writes an Azure pipeline definition with the pr: trigger GitHub-hosted repositories honour, and reports that a human still has to register it once — the build result is the check GitHub reads, so there is no status to post and no Build Validation policy to attach.",
-      },
-      {
-        flag: "--dry-run",
-        detail:
-          "Prints the plan and writes nothing. It needs no credential and contacts no host, which makes it the safe way to see what onboarding would do to a repository you do not own.",
-      },
-      {
-        flag: "--skip <list> / --with <list>",
-        detail:
-          "Deselects or re-selects a capability the repository already has its own answer for: gate, merge-policy, labels, review-ownership. A deselected capability is not attempted, not written and not reported as missing. review-ownership is the one that starts deselected — a CODEOWNERS file names owners Redline cannot verify exist, and a ruleset requiring code-owner review with no resolvable owner blocks every pull request in the repository, so it is written only when --with review-ownership asks for it. The security floor cannot be skipped — it is the org-wide minimum and is refused by name rather than recorded.",
-      },
-      {
-        flag: "--speckit / --no-speckit, --tmf / --no-tmf",
-        detail:
-          "The optional context sections rendered into the standards artifacts beside the rules — background about how this repository works, not rules with ids. speckit says the repository is spec-first and is on by default; it is dropped automatically, with a note in the report, where the repository already runs Spec Kit, which is a separate tool with its own installer that Redline neither creates nor edits. tmf says the repository implements TM Forum interfaces and is off unless asked for. The selection is reversible: passing the negative on a later run removes a section already rendered, because the block is regenerated rather than appended to.",
-      },
-      {
-        flag: "--adr / --no-adr",
-        detail:
-          "Whether a pull request over the ADR threshold (300 changed lines) must link a decision record under docs/adr/. On by default. A single pull request can still skip it with the no-adr label; --no-adr turns the check off for the whole repository, for a team that does not keep decision records, and --adr on a later run turns it back on.",
-      },
-      {
-        flag: "--repair",
-        detail:
-          "Re-applies every capability even where the repository looks onboarded already. It exists for the capabilities whose recorded pendingAdmin entry a plain re-run can never clear on its own — labels, review-ownership, repo-property, gate, merge-policy. Composes with --dry-run.",
-      },
-      {
-        flag: "--adopt-caller",
-        detail:
-          "Lets Redline take over an existing gate machinery file that carries nothing attributing it to Redline — a 2.1-era caller, in practice. Without it the run refuses rather than overwrite a file that may be the repository's own.",
-      },
-      {
-        flag: "--rung <name>",
-        detail:
-          "Where this repository sits on the enforcement ladder: observe, block-blocker, block-high. A PROMOTION needs recorded evidence — seed BLOCKER recall at 100%, no false positive on the clean corpus, an acted-on rate above the threshold, and a sample large enough that the rate is not a coincidence — and is refused with the specific reason when the evidence is not there. A DEMOTION needs nothing at all: a repository whose gate is misfiring at 3am must be able to step back without waiting for anyone, and a ladder that made the safe direction hard would be switched off entirely rather than stepped down. Omitting the flag keeps whatever the repository already recorded, because a re-run for an unrelated reason silently promoting a repository is how a ladder loses the trust it exists to build.",
-      },
-      {
-        flag: "--blocking",
-        detail:
-          "The older, binary switch: advisory or blocking. Prefer --rung, which is the same decision with evidence behind it and a step between.",
+        title: "Change one choice later",
+        commands: "{redline} init --vendors copilot,claude\n{redline} init --pipeline azure-pipelines\n{redline} init --with review-ownership --review-owners @acme/platform",
       },
     ],
-    output:
-      "Rendered standards artifacts for the detected vendors, the gate caller workflow, a pull request template, and .redline.json recording the profile, vendors, capability selections and onboarding date. The template is written only where the host would resolve none; a template the repository wrote for itself is never edited, and if it lacks a section the gate's checklist job reads, the run says so by name and tells you to add it or deselect the gate — a red check the install could have predicted is worse than a blunt sentence during onboarding. CODEOWNERS is written only under --with review-ownership. Anything it could not apply for lack of rights is recorded as a pendingAdmin entry rather than reported as success. Exit codes follow the CLI's own contract: 1 failed, 2 usage, 3 permission, 4 host.",
-    edit: "cli/commands/init.ts, with the install path unit-tested against a fake host client in cli/platforms/*/__tests__/install.test.ts.",
+    exitCodes: [
+      { code: "0", meaning: "Onboarded, already onboarded, or the dry run finished. Items an administrator still has to enable are printed as a warning, not an error." },
+      { code: "1", meaning: "The changes are committed on the onboarding branch, but the pull request could not be opened. Push the branch and open it by hand." },
+      EXIT_USAGE,
+      { code: "3", meaning: "The host refused the credential." },
+      { code: "4", meaning: "The host could not be reached, or the repository was not found." },
+      { code: "130", meaning: "Cancelled at a menu prompt. Nothing was written." },
+    ],
+    related: [
+      { href: "/docs/onboarding", label: "Onboarding: every file init writes" },
+      { href: "/docs/adaptors", label: "Adaptors: the files for each assistant" },
+      { href: "/docs/enforcement", label: "Enforcement rungs" },
+      { href: "/docs/cli/remove", label: "redline remove" },
+    ],
+    source: "cli/commands/init.ts",
   },
-  verify: {
-    what: "Checks that a repository still matches what its own .redline.json claims — the gate still reports, the ruleset was not edited by hand, push protection is still on, the rendered artifacts are not stale. With --gate it is also the Azure gate itself.",
-    built: true,
-    onboard:
-      "Nothing to install: it ships with the CLI. It runs against the current checkout by default, or against any repository over the API with --repo owner/name — which is what lets the weekly drift sweep verify the whole estate without cloning it.",
-    usage: [
-      "redline verify                        # report drift in this checkout",
-      "redline verify --repo acme/web-app    # over the API, no checkout needed",
-      "redline verify --gate                 # run as the Azure DevOps merge gate",
-    ],
-    flags: [
-      {
-        flag: "--repo <owner/name>",
-        detail:
-          "Verifies a repository over the API. Every check that can be sourced from the host is; one that genuinely needs a working tree reports ?? rather than passing, and an ?? never fails the report. That distinction is what makes this safe to schedule across an estate — a check reported as passing when it never ran is a false all-clear on every repository at once.",
-      },
-      {
-        flag: "--gate",
-        detail:
-          "The mode the Azure pipeline template invokes. Materially weaker than the GitHub gate: it runs none of GitHub's dependency review or diff secret scan, which are the two hard-fail, never-exemptible checks there. It publishes this repository's own merge status, so it is refused together with --repo rather than silently ignoring one of them.",
-      },
-    ],
-    output:
-      "One line per check: ok, FAIL, or ?? for a check that could not run. Findings name what was checked and what was found — a gate that no longer publishes its check, a merge policy that exists but was switched out of enforcement, zero required approvals, artifacts left stale by an ignored sync pull request, work still waiting on an administrator. Exit 0 when clean, 1 on drift, 2 when the repository was never onboarded — a distinction that matters, because those two need different people to act.",
-    edit: "cli/commands/verify.ts for the local path and cli/verify/remote.ts for --repo. Both parse the gate caller with the same function, deliberately: two independent answers to \"what does this file publish\" would eventually disagree, and that disagreement is the difference between a repository reported healthy and one reported broken.",
-  },
-  remove: {
-    what: "Takes Redline back out of a repository: the rendered standards, the gate machinery, the slash-command files, the host state init applied, and .redline.json last of all. It lands as a pull request on its own branch, exactly as onboarding does — backing out changes how this repository is reviewed and merged, which is a decision its own team reviews rather than one a command makes on a laptop.",
-    built: true,
-    onboard:
-      "Nothing to install: it ships with the CLI. Run it from inside the repository, the same way as init — it reads .redline.json to know what was installed, and the git remote to know which host to withdraw from. A repository that was never onboarded exits 2 with \"nothing to remove\" rather than crashing.",
-    usage: [
-      "redline remove --dry-run              # print the plan; writes nothing, contacts no host",
-      "redline remove                        # open the removal pull request",
-    ],
-    flags: [
-      {
-        flag: "--dry-run",
-        detail:
-          "Prints exactly the plan it would carry out and changes nothing — no file, no host setting, no branch. It needs no credential and contacts no host, which is what lets someone evaluating Redline find out what backing it out would cost before they adopt it. That question gets asked in the first five minutes, and \"by hand, and we haven't told you how\" is not an answer.",
-      },
-    ],
-    output:
-      "One line per path, saying whether it was removed outright, had only its REDLINE block taken out, or was left in place — and why, in every case. Nothing is deleted that Redline cannot prove it wrote: proof is the redline- prefix at a path a vendor's own prune rule owns, a REDLINE:BEGIN/END pair, the \"Managed by Redline\" attribution line, or a content identifier .redline.json recorded when Redline last wrote those bytes. A merged file keeps every byte outside its block; a file whose markers are half-edited is left completely alone and named, the same refusal the renderer already makes. A pre-existing CODEOWNERS, a workflow that carries no Redline attribution, and .redline/local.md are never touched. Host state Redline applied — the branch ruleset and its required check, the labels still carrying the descriptions Redline gave them, the repository property — is withdrawn; a capability the token cannot reach is reported denied and listed as needing an administrator, never silently skipped. The security floor is NOT withdrawn and there is no flag that withdraws it: secret scanning, push protection and dependency alerts are the organisation's minimum rather than Redline's own state, and removing Redline is not a reason to lower a repository's security. .redline.json goes last, and the report says what that means — redline verify stops recognising the repository and reports it as never onboarded.",
-    edit: "cli/commands/remove.ts for the plan and the file work, cli/remove/host.ts for the host withdrawal. The removal surface is taken from the renderers themselves — each vendor's own PruneRule and merge flags — rather than restated, because a second list of those paths would drift from what init writes, and the entry that drifted out of it is the artifact nobody ever removes.",
-  },
-  policy: {
-    what: "Evaluates the rules a checker can decide, with no model call. A share of what the standard asserts needs no judgement — a ticket reference is present or it is not, a suppression carries one or it does not — and sending those to an LLM costs tokens and invites a false positive on a fact, which is the worst kind: an author cannot argue with a model about whether the word TODO appears.",
-    built: true,
-    onboard:
-      "Nothing to install. The gate runs it as the `policy` job on every pull request. Which rules it evaluates is decided by standards/manifest.json → deterministic, not by the checker: a rule with an implementation but no classification does not run.",
-    usage: [
-      "git diff main...HEAD > change.diff",
-      "redline policy --diff-file change.diff              # exit 1 on a BLOCKER",
-      "redline policy --diff-file change.diff --fail-on HIGH",
-    ],
-    flags: [
-      {
-        flag: "--diff-file <path>",
-        detail:
-          "A unified diff. Only ADDED lines are examined, and that is a rule rather than an optimisation: flagging an existing `var` in a file the author merely renamed is exactly the noise the standard's \"what NOT to flag\" section forbids, and an author who is right to ignore one finding learns to ignore the next.",
-      },
-      {
-        flag: "--fail-on <severity>",
-        detail:
-          "The floor, BLOCKER by default. Deliberately not HIGH: a deterministic tier that failed merges over a missing ticket reference on day one would be switched off by week two, and then nothing it decides is enforced at all.",
-      },
-    ],
-    output:
-      "One finding per violation in the output contract — severity, rule id, and the problem — each with the file and line a reviewer can open. The run always states how many rules were evaluated, including when it found nothing: silence has to be distinguishable from not having checked. A rule the manifest classifies as deterministic but which has no implementation is warned about by name, because a rule everyone believes is machine-checked and is in fact checked by nobody is worse than one left to the model.",
-    edit: "cli/policy/checks.ts holds the checks and cli/policy/diff.ts the diff parse. The classification lives in standards/manifest.json → deterministic, NOT in the markdown: standards/*.md is what a reviewer reads, and removing a rule from it because a checker also covers it would narrow what the model considers. scripts/validate.mjs fails the build if a classified rule has no check.",
-  },
-  exempt: {
-    what: "Decides whether a pull request carries a valid exemption for a failing process check. The gate calls it; you rarely will. It exists because `redline-exempt` was a bare label that recorded nothing — not who accepted the failing check, not why, not until when.",
-    built: true,
-    onboard:
-      "Nothing to install. The gate invokes it when a soft-fail label is present and a process check has failed, and the pull request template carries the `## Redline exemption` section an author fills in. A repository moves from `warn` to `require` one standards version after the block was introduced, so nobody's open pull request is failed by a rule that did not exist when they opened it.",
-    usage: [
-      "redline exempt --body-file pr-body.md                 # is there a valid exemption at all?",
-      "redline exempt --body-file pr-body.md --scope adr     # does it cover this check?",
-    ],
-    flags: [
-      {
-        flag: "--body-file <path>",
-        detail:
-          "The pull request body, as a file. A file rather than an argument on purpose: a pull request body is attacker-controlled text full of backticks and $(...), and anyone who can open a pull request can write it — interpolating that into a command is how a body becomes a command.",
-      },
-      {
-        flag: "--scope <check>",
-        detail:
-          "The failing check the exemption is being asked to cover. An exemption scoped to `checklist` does not silently cover `adr`; omitting `scope:` in the block covers both, which is what the bare label meant implicitly.",
-      },
-    ],
-    output:
-      "Exit 0 and a line naming the expiry, scope and reason when a valid exemption applies. Exit 1 and the specific problem when it does not — no block at all, a reason under 20 characters, a missing or unparseable expiry, an expiry in the past, an expiry more than 90 days out, or a scope that does not cover the failing check. Exit 1, not 2: a pull request without a valid exemption is a normal answer the gate acts on, not the caller misusing the command.",
-    edit: "cli/exempt/parse.ts holds the parse; scripts/lib/exemptions.mjs mirrors it for the collector, which runs in the metrics repo with no build step to import from. scripts/validate.mjs fails the build if the two diverge — the failure it guards is the gate accepting a block the audit cannot read, which is exactly the state this piece exists to end.",
-  },
-  sync: {
-    what: "Lands the current standards on every registered repository as a pull request, quoting the version it came from. Targets come from registry.json, the register derived nightly from the estate — nobody maintains a list.",
-    built: true,
-    onboard:
-      "Nothing to install in a product repository: sync runs in the Redline source repo, on a push to standards/ and on demand. It needs REDLINE_SYNC_TOKEN with contents:write, pull_requests:write and workflows:write on every target — without the workflows scope the push of .github/workflows/redline.yml is rejected and the whole pull request fails.",
-    usage: [
-      "redline sync --dry-run              # print the plan; pushes nothing, opens nothing",
-      "redline sync                        # open a pull request on every repo that is behind",
-      "redline sync --repo acme/web-app    # one repository",
-      "redline sync --force                # re-render a repo already at the current version",
-    ],
-    flags: [
-      {
-        flag: "--dry-run",
-        detail:
-          "Plans and renders but never pushes a branch or opens a pull request. Unlike redline init --dry-run it still reads from the host — it has to fetch each target's .redline.json and current artifacts to know what would change — so it needs a read credential.",
-      },
-      {
-        flag: "--repo <owner/name>",
-        detail:
-          "One repository instead of the estate. Every other registered repository is reported as skipped with the reason, so a narrowed run still shows you the whole picture.",
-      },
-      {
-        flag: "--force",
-        detail:
-          "Re-renders a repository already recording the current standards version. For a renderer change that alters output without moving the standards version — otherwise nothing would be behind and nothing would sync.",
-      },
-    ],
-    output:
-      "One pull request per target that is behind, titled with the standards version and listing the generated files it changes. A repository whose artifacts already match gets nothing — no branch, no empty pull request. A target with an unmerged sync pull request already open has its branch updated and that pull request's body refreshed, never a second one opened. One unreachable repository is reported and the rest of the estate still syncs, but the run exits non-zero, because a distribution that reports success while missing repositories is how coverage silently rots.",
-    edit: "cli/sync/ — plan.ts decides who is behind, render.ts produces each target's artifacts, run.ts drives the estate. The host calls live in cli/platforms/github/push.ts.",
-  },
-  review: {
-    what: "Reviews a change against ONLY the rules that apply to the files it touches. Anyone can ask an assistant to review a diff; what this adds is the bound — a model handed the composed standard for an eighteen-stack profile spends most of its attention on languages the diff never touches, and the findings get worse rather than better.",
-    built: true,
-    onboard:
-      "Nothing to install. It reads the profile from the repository's .redline.json, or takes --profile. The embedded engine is the default and calls no model at all: it emits the bounded prompt for the assistant already running the command, which is the common case in Claude Code, Copilot or Cursor. --engine api makes the CLI call an endpoint itself.",
-    usage: [
-      "redline review                                  # working tree against the merge base",
-      "redline review --staged                         # staged changes, before you commit",
-      "redline review --diff-file change.diff          # any unified diff",
-      "redline review --engine api --model qwen2.5-coder:14b   # a local model, no data leaves the machine",
-      "redline review --engine api --provider anthropic --model <id>",
-    ],
-    flags: [
-      {
-        flag: "--engine embedded | api",
-        detail:
-          "embedded (the default) hands the prompt back for the assistant running the command to apply. That is the design, not a stub: the CLI is usually being run BY an assistant that already has a model and a context, and calling a second model from inside that session pays twice for a worse answer. api makes the CLI call an endpoint — OpenAI-compatible or Anthropic.",
-      },
-      {
-        flag: "--provider openai | anthropic, --model, --base-url",
-        detail:
-          "openai covers every OpenAI-compatible endpoint, which is the fully local case for free: Ollama, LM Studio and vLLM all expose it, and a local endpoint needs no API key. That matters — a review that has to send a diff to a third party is a review several markets cannot run at all. The model is never baked in: one that is would be a model nobody can change when it is deprecated or when a regulator objects.",
-      },
-      {
-        flag: "--print-prompt",
-        detail:
-          "Writes the bounded prompt to stdout and everything else to stderr, so `redline review --print-prompt | pbcopy` copies the prompt alone. For anyone whose model is a browser tab rather than an API key or an assistant in the terminal. Refused together with --engine api, which has no prompt to hand back.",
-      },
-      {
-        flag: "--base <ref>",
-        detail:
-          "What to diff against, the repository's default branch otherwise. The comparison is a three-dot merge-base diff: two dots would hand the model every commit that landed on the base branch since yours started, and it would dutifully review someone else's work.",
-      },
-    ],
-    output:
-      "One line per finding in the output contract, with the file and line. The CLI renders that line itself from the validated rule id and severity — a model that writes the prefix will eventually write a severity that does not exist or an id it invented, and every aggregate keyed on that line becomes fiction. A finding citing a rule the prompt did not carry is discarded with the reason said out loud. A changed file no stack covers is reported too, because that is a gap in the standard and reviewing it against core alone while saying nothing hides it. It always exits 0: a non-zero exit would invite someone to wire this into CI as a second gate, where it would enforce nothing while looking like it did.",
-    edit: "cli/review/ — scope.ts resolves the applicable rules, prompt.ts builds the bounded prompt, schema.ts is the published findings contract, engines/ holds the two engines. Local findings are excluded from rule-tuning telemetry by construction and the report says so on every run: a local run has no thread to resolve and no reviewer to attribute, so counting it would compute acted-on rate partly from runs nobody can verify.",
-  },
-  status: {
-    what: "Answers \"what is Redline doing in this repository?\" from the checkout alone. What is installed, which rung the gate sits at, what an administrator still owes you, and whether the standards this CLI carries have moved on from the ones the repository was rendered against.",
-    built: true,
-    onboard:
-      "Nothing to install, and nothing to authorise. It reads .redline.json and the rendered artifacts in the working tree — it contacts no host and needs no credential, which is what makes it the right first command on a repository you have not seen before. On a repository that was never onboarded it says so and names the next command rather than failing at an API call it should not have attempted.",
-    usage: [
-      "redline status                        # what is installed here",
-      "redline status --json                 # the same, for a wrapper that has to act on it",
-    ],
-    flags: [
-      {
-        flag: "--json",
-        detail:
-          "The whole report as a stable object — onboarded, profile, stacks, host, rung, vendors, capabilities, integrations, pendingAdmin, standardsVersion against currentStandards, drifted, and the two timestamps. Shaped so a script can branch on `drifted` or on a non-empty `pendingAdmin` without parsing prose.",
-      },
-    ],
-    output:
-      "Three or four lines on a healthy repository, naming the profile, the rung and the standards version it was rendered from. Two things it will not do: it will not report a repository healthy on the strength of a check it could not run, and it will not claim a host setting it never read — everything here comes from the working tree, so a ruleset edited by hand in the GitHub UI is invisible to it by design. That is what `redline verify` is for, and status says so rather than implying it covered it.",
-    edit: "cli/commands/status.ts, reading cli/config/redline-json.ts for the recorded state and cli/render/manifest.ts for the standards version to compare against. The drift comparison is a version comparison, not a content diff: a repository that re-rendered from the same version is current even if a human has since edited an artifact, which is the case `redline verify` catches.",
-  },
-  explain: {
-    what: "Turns the bracketed rule id in a finding back into the rule, the file it is defined in, and the profiles that receive it. Every finding Redline posts cites an id; this is the command that makes that id mean something to the person who has to act on it.",
-    built: true,
-    onboard:
-      "Nothing to install. The rule catalogue is compiled from standards/ inside the CLI, so explain works in any directory — including one that has never been onboarded. It is the fastest route from a comment on a pull request to the line in standards/ a human would edit to change the rule.",
-    usage: [
-      "redline explain core/hardcoded-secrets    # what this rule is and where it came from",
-      "redline explain --list                    # every rule id in the standards, with severity",
-      "redline explain react/effect-derived-state --json",
-    ],
-    flags: [
-      {
-        flag: "--list",
-        detail:
-          "Every id in the standards with its severity, which is how you find the id you half-remember. It is also the check that a finding cited a real rule: an id that does not appear here was invented by the model, and the output contract treats it as untagged.",
-      },
-      {
-        flag: "--json",
-        detail:
-          "The rule (id, stack, severity, text, source file and line) plus the full profile list. The source line is what makes this actionable — it is the exact place in standards/ to edit, not a paraphrase of it.",
-      },
-    ],
-    output:
-      "Severity and id, the rule text, then four attributions: who decided it, the standards file and line it is defined at, which files it is scoped to, and every profile that receives it. An unknown id is an error that names `--list` rather than a guess at what you meant — a rule explained approximately is worse than one not explained, because the reader acts on it.",
-    edit: "cli/rules/catalogue.ts compiles the catalogue from standards/; the command surface is in cli/bin/redline.ts. Ids are permanent by design — reword a rule freely, but never edit its id, or every historical telemetry record for it orphans and its tuning history resets to nothing.",
-  },
+
   doctor: {
-    what: "Answers \"can this machine run Redline against this repository?\" before anything has gone wrong: the Node version, git, whether origin is a host Redline knows, a credential, and whether .redline.json is here and readable. It is the command to run first on a new laptop and the one to paste into an issue.",
-    built: true,
-    onboard:
-      "Nothing to install and nothing to authorise. It contacts no host — a credential is read from GH_TOKEN, GITHUB_TOKEN or `gh auth status`, never tested with a request. It is exempt from the Node floor every other command enforces, because refusing to run the diagnostic on the machine that needs diagnosing is the failure it exists to prevent.",
-    usage: [
-      "redline doctor                        # what is set up here, and the fix for what is not",
-      "redline doctor --json                 # the same checks, for a script or an issue",
-    ],
+    group: "setup",
+    summary: "Check this machine can run Redline here: Node, git, the remote, a credential, onboarding.",
+    what: "Checks whether this machine can run Redline against the repository you are in: the Node version, git, whether origin points at a host Redline supports, a credential, and whether .redline.json is present. Every line that is not ok prints the fix beneath it. Run it first on a new laptop, and paste its output into a bug report.",
+    runsIn:
+      "Anywhere, including before onboarding. It contacts no host, needs no credential, and runs on a Node version too old for every other command.",
+    synopsis: ["redline doctor [--json]"],
     flags: [
+      { flag: "--json", default: "off", detail: "Every check as JSON on stdout: name, status, detail and fix, plus an overall ok." },
+    ],
+    examples: [
       {
-        flag: "--json",
-        detail:
-          "Every check as { name, status, detail, fix? } plus an overall ok. A warning is not a failure: a machine that has deliberately not logged in warns on credential, and the preview commands are exactly what that machine is meant to run.",
+        title: "Before onboarding",
+        commands: "{npx} doctor",
+        output: `ok    node                   v24.21.0 — at or above the required 18.11
+ok    git                    git version 2.54.0 (Apple Git-157)
+ok    remote                 github — acme/web-app
+ok    credential             gh is logged in as your-user
+warn  onboarded              no .redline.json here yet
+        npx redlinegate init`,
       },
     ],
-    output:
-      "One line per check — ok, warn or FAIL, the same three columns verify prints — with the fix indented beneath anything that is not ok: `gh auth refresh -s repo,read:org` for a login missing a scope, `npx redlinegate init` for a repository not yet onboarded. A remote on a host Redline does not know is named without printing the URL, because a remote can carry a token and this output is written to be pasted. Exit 0 unless a check FAILs.",
-    edit: "cli/commands/doctor.ts. Each check is a function returning a status, a detail and an optional fix; the bin only prints them. A new check belongs here only if it can be answered from the machine alone — a host round-trip would make the one command that must always run depend on the network.",
-  },
-  evidence: {
-    what: "Shows the measurement behind this repository's enforcement rung and what the next rung asks for. With record, it writes a measurement into .redline.json — the only thing that can raise a rung. A repository starts at observe and earns its way up on recorded figures; without this the ladder refused every promotion, because nothing ever supplied the evidence it asks for.",
-    built: true,
-    onboard:
-      "Reads and writes the checkout only. The figures come from the metrics plane, which sees the estate over a window; the CLI supplies the audit trail — validated, dated, attributed, and in git where a reviewer can see it move — not the numbers. Once a record makes the next rung eligible, raise it with `redline init --rung <name>`.",
-    usage: [
-      "redline evidence                      # the rung, the record, what the next rung asks for",
-      "redline evidence record --source <where> --seed-recall 1 --acted-on-rate 0.72 --sample-size 40 --false-positives 0",
-      "redline evidence --json",
+    exitCodes: [
+      { code: "0", meaning: "Every check is ok or warn. A warning is not a failure." },
+      { code: "1", meaning: "At least one check is FAIL." },
     ],
+    related: [
+      { href: "/docs/troubleshooting", label: "Troubleshooting" },
+      { href: "/docs/cli/status", label: "redline status" },
+    ],
+    source: "cli/commands/doctor.ts",
+  },
+
+  status: {
+    group: "setup",
+    summary: "What is installed here, how hard the gate blocks, and what an administrator still owes you.",
+    what: "Reports what Redline has installed in this repository: the profile, the host and CI, the enforcement rung, the assistants, the capabilities, anything still waiting on an administrator, and whether the standards have moved on since the repository was rendered. Run it when you arrive at a repository and want to know what Redline does there.",
+    runsIn: `${PRODUCT_REPO} It reads the checkout only, so it needs no credential and cannot see a setting changed on the host. Use redline verify for that.`,
+    synopsis: ["redline status [--json]"],
     flags: [
+      { flag: "--json", default: "off", detail: "The whole report as JSON on stdout: onboarded, profile, stacks, host, pipeline, rung, vendors, capabilities, integrations, pendingAdmin, standardsVersion, currentStandards, drifted and the timestamps." },
+    ],
+    examples: [
       {
-        flag: "--source <where>",
-        detail:
-          "Required on record: a workflow run URL, a job name, or a person — whatever answers \"where did this number come from\" for whoever reads it next. Evidence with no provenance is an assertion.",
-      },
-      {
-        flag: "--seed-recall, --acted-on-rate <0..1>",
-        detail:
-          "Seeded-corpus BLOCKER recall for this stack, and the share of findings acted on over the window. A value outside 0..1 is refused rather than clamped: a 94 meant as 94% and clamped to 1 would read as exactly the perfect recall the blocking rungs require.",
-      },
-      {
-        flag: "--sample-size, --false-positives <n>",
-        detail:
-          "How many pull requests the rate is computed from, and findings raised on the clean corpus. Whole numbers only. Any false positive at all blocks a blocking rung: a reviewer that flags correct code cannot be given a veto.",
+        title: "An onboarded repository",
+        commands: "{redline} status",
+        output: `profile      javascript-typescript (javascript, typescript)
+host         github
+checks       GitHub Actions
+rung         observe — findings are reported, only the security floor fails the check
+assistants   claude
+installed    gate, merge-policy, labels
+standards    0.2.2 — current
+onboarded    2026-10-13, last run 2026-10-13`,
       },
     ],
-    output:
-      "The rung, then the recorded figures with the date and source — marked STALE past 90 days, when evidence stops justifying a promotion. Then either `eligible for <rung>` with the command that raises it, or `not yet eligible` with each blocker and the thresholds the next rung asks for. Not being eligible is an answer, not a failure: it exits 0, so a script asking how far off it is does not break.",
-    edit: "cli/commands/evidence.ts for the command, cli/enforce/ladder.ts for the rungs and REQUIREMENTS — the thresholds each rung asks for live there and nowhere else. The record's shape is validated in cli/config/redline-json.ts on the way in and on the way out.",
+    exitCodes: [
+      { code: "0", meaning: "Always, including when the repository is not onboarded. Not onboarded is an answer, not a failure." },
+      EXIT_USAGE,
+    ],
+    related: [
+      { href: "/docs/cli/verify", label: "redline verify: check the host too" },
+      { href: "/docs/cli/doctor", label: "redline doctor" },
+    ],
+    source: "cli/commands/status.ts",
   },
-  funnel: {
-    what: "Where your own runs of this CLI succeed and where they stop: runs, successes, failures and median time per command, and which errors happen most. Every fix to this tool before it came from watching one terminal over someone's shoulder, which does not scale past the people sitting nearby.",
-    built: true,
-    onboard:
-      "Off unless you switch it on: `export REDLINE_TELEMETRY=1`. There is no endpoint in the code that writes it. The record is ~/.redline/funnel.jsonl on this machine and holds a command name, an outcome, a duration and an error kind — never arguments, paths, repository names or diffs. Moving it anywhere is your deliberate act.",
-    usage: [
-      "export REDLINE_TELEMETRY=1            # start recording, locally",
-      "redline funnel                        # what has been recorded",
-      "redline funnel clear                  # delete the file",
-    ],
+
+  remove: {
+    group: "setup",
+    summary: "Take Redline back out of this repository, as a pull request.",
+    what: "Removes what init installed: the assistant files, the gate machinery, the slash commands, the host settings Redline applied, and .redline.json last. It only deletes what it can prove Redline wrote. A file you also edited keeps every byte outside the Redline block. It never turns off the security floor. On a repository with a remote, the removal lands as a pull request on the redline/remove branch for your team to review.",
+    runsIn: `${PRODUCT_REPO} --dry-run needs no credential.`,
+    synopsis: ["redline remove [--dry-run] [--json]"],
     flags: [
+      { flag: "--dry-run", default: "off", detail: "Print the plan. Writes nothing, needs no credential, contacts no host." },
+      { flag: "--json", default: "off", detail: "The whole report as JSON on stdout." },
+    ],
+    examples: [
       {
-        flag: "--json",
-        detail:
-          "The file path, whether recording is on, and the summary — per-command runs, ok, failed and median milliseconds, plus the most frequent error kinds.",
+        title: "See what removal would do",
+        commands: "{redline} remove --dry-run",
+        output: `  would remove   AGENTS.md  — nothing but the Redline block was in it
+  would remove   CLAUDE.md  — nothing but the Redline block was in it
+  would remove   .claude/commands/redline-init.md  — its frontmatter carries the Redline ownership line
+  …
+  would remove   .github/workflows/redline.yml  — it references Redline's reusable gate and publishes redline-gate / gate
+  would unmerge  .github/pull_request_template.md  — the Redline block only — every byte outside it is kept as it is
+  would remove   .redline.json  — Redline's own record of this repository — removed last
+  would apply   withdraw Redline's own state on github: the merge policy it applied, the labels it created, and the repository property it set where the host has them
+  would apply   pull request on redline/remove
+dry run — nothing was written, read or changed on the host
+
+warn  what this did not do
+warn    · the security floor stays on: secret scanning, push protection and dependency alerts are the organisation's minimum, not Redline's own state, and removing Redline is not a reason to lower them. This command has no flag that turns them off
+warn    · once .redline.json is gone, redline verify stops recognising this repository: it reports "not onboarded" and exits 2 rather than reporting drift — which reads identically to a repository that was never onboarded, so record this removal somewhere verify cannot`,
       },
     ],
-    output:
-      "A row per command and the five commonest error kinds, closing on a line that says the file has never left the machine. When recording is off it says so and how to turn it on; when nothing is recorded it names where the file would be written. An unrecognised command word is recorded as `unknown`, never as typed: `redline ghp_xxx` is a paste that missed its terminal.",
-    edit: "cli/core/telemetry.ts for recording and summarising, and the funnel branch of cli/bin/redline.ts for the command. A failure to write the record is silent on purpose — a full disk must never turn a successful onboarding into an error.",
+    exitCodes: [
+      EXIT_OK,
+      { code: "1", meaning: "The removal is on the redline/remove branch, but the pull request could not be opened." },
+      { code: "2", meaning: "Usage error, or the repository was never onboarded." },
+      { code: "3 / 4", meaning: "The host refused the credential, or could not be reached." },
+    ],
+    related: [
+      { href: "/docs/removing", label: "Removing Redline" },
+      { href: "/docs/cli/init", label: "redline init" },
+    ],
+    source: "cli/commands/remove.ts",
   },
+
   completion: {
-    what: "Prints a tab-completion script for bash, zsh or fish: every command with its one-line summary, every flag each command accepts, and the metrics subcommands with their own flags.",
-    built: true,
-    onboard:
-      "Load it from your shell's startup file. It is generated from the same table the argument parser reads, so it cannot offer a flag the command refuses. It runs on any Node — a shell sourcing it at startup must never print an error on every new terminal.",
-    usage: [
-      "source <(redline completion bash)     # in ~/.bashrc",
-      "source <(redline completion zsh)      # in ~/.zshrc, after compinit",
-      "redline completion fish > ~/.config/fish/completions/redline.fish",
-    ],
+    group: "setup",
+    summary: "Print a tab-completion script for bash, zsh or fish.",
+    what: "Prints a shell script that tab-completes every command, every flag, and the metrics subcommands. It completes both redline and redlinegate. Load it once from your shell's startup file.",
+    runsIn: "Anywhere. It needs redline or redlinegate on your PATH, for example from a global install.",
+    synopsis: ["redline completion bash|zsh|fish"],
     flags: [],
-    output:
-      "The script on stdout and nothing else. It completes both `redline` and `redlinegate`. A missing or unknown shell exits 2 and points at `redline completion --help`.",
-    edit: "cli/bin/commands.ts — completionTree builds the words from COMMANDS and the metrics option tables, completionScript renders them per shell. Adding a command or a flag to the table updates completion with no change here.",
+    examples: [
+      {
+        title: "Load it in your shell",
+        commands: `# bash, in ~/.bashrc
+source <(redline completion bash)
+# zsh, in ~/.zshrc, after compinit
+source <(redline completion zsh)
+# fish
+redline completion fish > ~/.config/fish/completions/redline.fish`,
+      },
+    ],
+    exitCodes: [
+      { code: "0", meaning: "The script was printed on stdout." },
+      { code: "2", meaning: "No shell, or a shell other than bash, zsh or fish." },
+    ],
+    related: [{ href: "/docs/cli", label: "All commands" }],
+    source: "cli/bin/commands.ts",
   },
+
+  review: {
+    group: "everyday",
+    summary: "Review your change against only the rules that apply to the files it touches.",
+    what: "Reviews your change before you push, against the rules for the stacks your diff actually touches. At a terminal with no --engine, it prints what a checker can decide without a model, straight away. Inside an assistant's shell or a pipe, it prints a prompt for that assistant to apply. With --engine api, it sends the diff to a model endpoint you configure, which can be local. Results are never recorded and never fail anything.",
+    runsIn: `${PRODUCT_REPO} The profile comes from .redline.json unless you pass --profile.`,
+    synopsis: [
+      "redline review [--staged] [--diff-file <path>] [--base <ref>] [--engine <name>] [--print-prompt]",
+      "               [--provider openai|anthropic] [--model <name>] [--base-url <url>] [--json]",
+    ],
+    flags: [
+      { flag: "--staged", default: "off", detail: "Review only what is staged." },
+      { flag: "--diff-file <path>", default: "none", detail: "Review a unified diff from a file instead of the checkout." },
+      { flag: "--base <ref>", default: "the default branch", detail: "The branch to diff against. The diff is taken from the merge base, so commits that landed on the base since you branched are not reviewed." },
+      { flag: "--profile <name>", default: "from .redline.json", detail: "The profile whose rules apply." },
+      { flag: "--engine embedded", default: "see above", detail: "Print the bounded prompt for the assistant running the command." },
+      { flag: "--engine api", default: "off", detail: "Call a model endpoint and print its findings. Nothing is sent unless you pass this flag." },
+      { flag: "--provider openai|anthropic", default: "from the API key", detail: "Which API the api engine speaks. Inferred from OPENAI_API_KEY or ANTHROPIC_API_KEY. openai covers any OpenAI-compatible server, such as Ollama, LM Studio or vLLM." },
+      { flag: "--model <name>", default: "REDLINE_REVIEW_MODEL", detail: "The model the api engine calls. Required one way or the other." },
+      { flag: "--base-url <url>", default: "the provider's", detail: "The endpoint the api engine calls. A local OpenAI-compatible server needs no key." },
+      { flag: "--print-prompt", default: "off", detail: "Write only the prompt to stdout, everything else to stderr, so redline review --print-prompt | pbcopy copies the prompt alone. Not with --engine api." },
+      { flag: "--json", default: "off", detail: "Scope, prompt and findings as JSON on stdout." },
+    ],
+    examples: [
+      {
+        title: "At a terminal",
+        commands: "{redline} review",
+        output: `profile javascript-typescript — rules in scope: core, typescript
+src/a.ts:2
+  Redline/HIGH [core/untracked-todo]: this TODO carries no ticket reference, so nothing will bring anyone back to it. Add the ticket id on the same line, or do the work now.
+1 finding(s)
+that is every rule a checker can decide; the rest of the standard needs a model — run /redline-review in your assistant, or \`redline review --engine api\`
+local review — not recorded, and not counted in rule-tuning telemetry`,
+      },
+      {
+        title: "With a local model",
+        commands: "{redline} review --engine api --provider openai --base-url http://localhost:11434/v1 --model qwen2.5-coder:14b",
+      },
+      {
+        title: "Paste the prompt into any assistant",
+        commands: "{redline} review --print-prompt | pbcopy",
+      },
+    ],
+    exitCodes: [
+      { code: "0", meaning: "Always when the review ran, whatever it found. It is a pre-push check, not a gate." },
+      EXIT_USAGE,
+    ],
+    related: [
+      { href: "/docs/local-review", label: "Reviewing before you push" },
+      { href: "/docs/output-contract", label: "The output contract" },
+      { href: "/docs/cli/policy", label: "redline policy" },
+    ],
+    source: "cli/commands/review.ts",
+  },
+
+  explain: {
+    group: "everyday",
+    summary: "Turn the rule id in a finding into the rule, where it is defined, and who receives it.",
+    what: "Every finding cites a rule id in brackets, such as [core/hardcoded-secrets]. explain prints that rule's text, whether a checker or review judgement decides it, the standards file and line that defines it, the files it applies to, and every profile that receives it. Run it when a finding on your pull request is not clear.",
+    runsIn: "Anywhere, including a directory that was never onboarded. The rules are built into the CLI.",
+    synopsis: ["redline explain <rule-id> [--json]", "redline explain --list"],
+    flags: [
+      { flag: "--list", default: "off", detail: "Every rule id in the standards, with its severity." },
+      { flag: "--json", default: "off", detail: "The rule, its scope and the profiles it reaches, as JSON on stdout." },
+    ],
+    examples: [
+      {
+        title: "Explain a finding",
+        commands: "{redline} explain core/hardcoded-secrets",
+        output: `BLOCKER core/hardcoded-secrets
+
+  No hardcoded secrets, API keys, tokens, or credentials — including in test files, fixtures, config samples, and comments.
+
+  decided by   review judgement
+  defined in   standards/core.md:64
+  applies to   every file — the core standard is not scoped by stack
+  reaches      javascript-typescript, web-react, web-nextjs, …`,
+      },
+      {
+        title: "Find an id you half remember",
+        commands: "{redline} explain --list | grep secret",
+      },
+    ],
+    exitCodes: [
+      EXIT_OK,
+      { code: "2", meaning: "No rule id given, or no rule with that id. The error points at --list." },
+    ],
+    related: [
+      { href: "/docs/standards", label: "The standards" },
+      { href: "/docs/output-contract", label: "The output contract" },
+    ],
+    source: "cli/rules/catalogue.ts",
+  },
+
+  verify: {
+    group: "everyday",
+    summary: "Check the repository and its host settings still match what .redline.json claims.",
+    what: "Checks that the repository still matches what .redline.json records: the gate still publishes its check, the branch policy is still enforced, the security floor is still on, and the rendered assistant files are not stale. Run it after a re-onboard, after someone changes repository settings, or when a pull request is not being gated as you expect. With --gate it is the merge gate itself in Azure Pipelines.",
+    runsIn: `${PRODUCT_REPO} It reads host settings, so it needs a credential. With --repo it checks any repository over the API, with no checkout.`,
+    synopsis: ["redline verify [--gate] [--repo <owner/name>] [--json]"],
+    flags: [
+      { flag: "--repo <owner/name>", default: "this checkout", detail: "Check a repository over the API. A check that needs a working tree reports ?? instead of passing, and ?? never fails the run." },
+      { flag: "--gate", default: "off", detail: "Run as the merge gate in CI. A setting the build identity cannot see does not fail the pull request. Ends on a pass/fail line. Not with --repo." },
+      { flag: "--json", default: "off", detail: "The whole report as JSON on stdout." },
+    ],
+    examples: [
+      {
+        title: "In a repository that was never onboarded",
+        commands: "{redline} verify",
+        output: `FAIL  onboarded              no /path/to/repo/.redline.json — run: npx redlinegate init`,
+      },
+      {
+        title: "Another repository, without cloning it",
+        commands: "{redline} verify --repo acme/web-app",
+      },
+    ],
+    exitCodes: [
+      { code: "0", meaning: "Every check passed or could not run (??)." },
+      { code: "1", meaning: "Drift: at least one check is FAIL." },
+      { code: "2", meaning: "The repository was never onboarded, there is no git remote, or a usage error." },
+      { code: "3 / 4", meaning: "The host refused the credential, or could not be reached." },
+    ],
+    related: [
+      { href: "/docs/distribution", label: "Distribution and drift" },
+      { href: "/docs/gate", label: "The merge gate" },
+      { href: "/docs/cli/status", label: "redline status" },
+    ],
+    source: "cli/commands/verify.ts",
+  },
+
+  policy: {
+    group: "everyday",
+    summary: "Evaluate the rules a checker can decide, with no model call.",
+    what: "Some rules need no judgement: a TODO has a ticket reference or it does not. policy checks those rules against the added lines of a diff, with no model, and fails on a BLOCKER. The gate runs it as the policy job on every pull request. Run it yourself to reproduce that job. It also says how many rules it could not decide; redline review covers those.",
+    runsIn: "Inside the product repository, or anywhere you have a diff. The gate runs it in CI.",
+    synopsis: ["redline policy --diff-file <path> [--fail-on <severity>] [--json]"],
+    flags: [
+      { flag: "--diff-file <path>", default: "required", detail: "The unified diff to evaluate. Only added lines are checked." },
+      { flag: "--fail-on <severity>", default: "BLOCKER", detail: "The lowest severity that fails the run: BLOCKER, HIGH or SUGGESTION." },
+      { flag: "--json", default: "off", detail: "ok, findings, the rules evaluated, and how many need a model, as JSON on stdout." },
+    ],
+    examples: [
+      {
+        title: "Check your branch",
+        commands: "git diff main...HEAD > change.diff\n{redline} policy --diff-file change.diff",
+        output: `src/a.ts:2
+  Redline/HIGH [core/untracked-todo]: this TODO carries no ticket reference, so nothing will bring anyone back to it. Add the ticket id on the same line, or do the work now.
+1 finding(s) from 53 deterministic rule(s)
+443 of the 496 rule(s) in the catalogue cannot be decided without a model and were not checked here — run \`redline review\` for those`,
+      },
+      {
+        title: "Fail on HIGH as well",
+        commands: "{redline} policy --diff-file change.diff --fail-on HIGH",
+      },
+    ],
+    exitCodes: [
+      { code: "0", meaning: "No finding at or above --fail-on. The example above exits 0: one HIGH does not fail the BLOCKER default." },
+      { code: "1", meaning: "At least one finding at or above --fail-on." },
+      { code: "2", meaning: "No --diff-file, or an unknown severity." },
+    ],
+    related: [
+      { href: "/docs/deterministic", label: "Deterministic rules" },
+      { href: "/docs/gate", label: "The merge gate" },
+      { href: "/docs/cli/review", label: "redline review" },
+    ],
+    source: "cli/policy/checks.ts",
+  },
+
+  exempt: {
+    group: "everyday",
+    summary: "Decide whether a pull request carries a valid exemption for a failing process check.",
+    what: "Reads the ## Redline exemption section of a pull request description and decides whether it covers a failing process check, such as the ADR or checklist check. A valid exemption has a reason of at least 20 characters, an until date no more than 90 days away, and a scope that covers the check. The gate runs it for you. Run it yourself to test a description before you push it.",
+    runsIn: "Anywhere you have the pull request description in a file. The gate runs it in CI.",
+    synopsis: ["redline exempt --body-file <path> [--scope <check>] [--json]"],
+    flags: [
+      { flag: "--body-file <path>", default: "required", detail: "The pull request description, as a file. A file, not an argument, because the description is untrusted text." },
+      { flag: "--scope <check>", default: "any", detail: "The failing check the exemption has to cover. An exemption with no scope: line covers every check." },
+      { flag: "--json", default: "off", detail: "Whether it applies, and why, as JSON on stdout." },
+    ],
+    examples: [
+      {
+        title: "Test an exemption",
+        commands: `cat > body.md <<'EOF'
+## Redline exemption
+reason: vendor SDK upgrade lands next sprint, ADR to follow
+until: 2026-11-30
+scope: adr
+EOF
+{redline} exempt --body-file body.md --scope adr
+{redline} exempt --body-file body.md --scope checklist`,
+        output: `exempt until 2026-11-30 (adr): vendor SDK upgrade lands next sprint, ADR to follow
+warn  the exemption covers adr — it does not cover "checklist". Widen its scope deliberately, or fix the check.`,
+      },
+    ],
+    exitCodes: [
+      { code: "0", meaning: "A valid exemption applies." },
+      { code: "1", meaning: "No valid exemption: missing, too short a reason, a bad or expired date, more than 90 days out, or the wrong scope." },
+      { code: "2", meaning: "No --body-file." },
+    ],
+    related: [
+      { href: "/docs/exemptions", label: "Exemptions" },
+      { href: "/docs/gate", label: "The merge gate" },
+    ],
+    source: "cli/commands/exempt.ts",
+  },
+
+  evidence: {
+    group: "everyday",
+    summary: "Show the measurement behind this repository's rung, and record a new one.",
+    what: "A repository starts at the observe rung, where the gate reports findings but blocks only on the security floor. To move up, it needs recorded evidence that the reviewer is accurate. evidence shows what is recorded and what the next rung asks for. evidence record writes a new measurement into .redline.json, with its source. Once eligible, raise the rung with redline init --rung.",
+    runsIn: `${PRODUCT_REPO} It reads and writes the checkout only. The figures themselves come from the metrics dashboard.`,
+    synopsis: [
+      "redline evidence [--json]",
+      "redline evidence record --source <where> [--seed-recall <0..1>] [--acted-on-rate <0..1>]",
+      "                        [--sample-size <n>] [--false-positives <n>]",
+    ],
+    flags: [
+      { flag: "--source <where>", default: "required for record", detail: "Where the figures came from: a workflow run, a dashboard, a report." },
+      { flag: "--seed-recall <0..1>", default: "none", detail: "Share of seeded-corpus BLOCKERs the reviewer caught for this stack. A value outside 0..1 is refused." },
+      { flag: "--acted-on-rate <0..1>", default: "none", detail: "Share of findings acted on over the window." },
+      { flag: "--sample-size <n>", default: "0", detail: "Pull requests the rate is computed from." },
+      { flag: "--false-positives <n>", default: "none", detail: "Findings raised on the clean corpus. Any at all blocks a blocking rung." },
+      { flag: "--json", default: "off", detail: "The whole report as JSON on stdout." },
+    ],
+    examples: [
+      {
+        title: "Nothing recorded yet",
+        commands: "{redline} evidence",
+        output: `rung         observe
+evidence     none recorded — nothing can raise the rung until something does
+
+not yet eligible for block-blocker:
+  - 20 reviewed pull requests are needed and 0 have been recorded — a perfect rate over a handful is a coincidence, not evidence
+  - the seeded corpus has never been scored for this stack, so there is no evidence the reviewer catches known defects at all
+  - the clean corpus has never been scored, so nothing shows the reviewer stays quiet on correct code
+  - too few findings have fired to compute an acted-on rate
+
+what block-blocker asks for:
+  sample size      >= 20 reviewed pull requests
+  seed recall      >= 100%
+  acted-on rate    >= 60%
+  false positives  <= 0
+  measured within  90 days`,
+      },
+      {
+        title: "Record a measurement",
+        commands:
+          "{redline} evidence record --source <dashboard-url> --seed-recall 1 --acted-on-rate 0.72 --sample-size 40 --false-positives 0",
+      },
+    ],
+    exitCodes: [
+      { code: "0", meaning: "Reported or recorded. Not eligible is an answer, not a failure." },
+      { code: "2", meaning: "The repository is not onboarded, a figure is not a number or out of range, or --source is missing." },
+    ],
+    related: [
+      { href: "/docs/enforcement", label: "Enforcement rungs" },
+      { href: "/docs/telemetry", label: "Telemetry and validation" },
+    ],
+    source: "cli/commands/evidence.ts",
+  },
+
+  funnel: {
+    group: "everyday",
+    summary: "Where your own runs of the CLI succeed and fail. Off by default, local only.",
+    what: "Summarises your own runs of the CLI: runs, successes, failures and median time per command, and the most common errors. Recording is off until you set REDLINE_TELEMETRY=1. The record is a file on your machine that holds only a command name, an outcome, a duration and an error kind. Nothing sends it anywhere. Use it when you want to report where the CLI gets in your way.",
+    runsIn: "Anywhere. The record is ~/.redline/funnel.jsonl.",
+    synopsis: ["redline funnel [--json]", "redline funnel clear"],
+    flags: [
+      { flag: "--json", default: "off", detail: "The summary, the file path and whether recording is on, as JSON." },
+      { flag: "clear", default: "", detail: "Delete the record." },
+    ],
+    examples: [
+      {
+        title: "Before recording is on",
+        commands: "{redline} funnel",
+        output: `off — export REDLINE_TELEMETRY=1 to record locally
+nothing recorded yet
+  it would be written to /Users/you/.redline/funnel.jsonl, on this machine, and sent nowhere`,
+      },
+      {
+        title: "Record, then read it back",
+        commands: "export REDLINE_TELEMETRY=1\n{redline} funnel",
+      },
+    ],
+    exitCodes: [EXIT_OK, { code: "2", meaning: "A subcommand other than clear." }],
+    related: [{ href: "/docs/troubleshooting", label: "Troubleshooting" }],
+    source: "cli/core/telemetry.ts",
+  },
+
+  sync: {
+    group: "estate",
+    summary: "Open a pull request on every registered repository whose standards are behind.",
+    what: "Re-renders the current standards for every repository in registry.json and opens a pull request on each one that is behind. A repository that is already current gets nothing. A repository with a sync pull request still open has that pull request updated, not a second one opened. Run it after a standards release; the redline-sync workflow runs it on a push to standards/.",
+    runsIn:
+      "From a built checkout of the Redline source repository (npm ci && npm run build), never from a product repository. GH_TOKEN needs contents, pull_requests and workflows write on every target; without workflows the push of .github/workflows/redline.yml is rejected.",
+    synopsis: ["redline sync [--dry-run] [--repo <owner/name>] [--force] [--concurrency <n>] [--json]"],
+    flags: [
+      { flag: "--dry-run", default: "off", detail: "Plan and render, but push nothing and open nothing. It still reads every target, so it needs a read credential." },
+      { flag: "--repo <owner/name>", default: "every registered repository", detail: "One repository instead of the estate." },
+      { flag: "--force", default: "off", detail: "Re-render a repository already at the current standards version, for a renderer change that did not move the version." },
+      { flag: "--concurrency <n>", default: "8", detail: "Repositories in flight at once. Lower it if the host rate limits; a 429 is waited out." },
+      { flag: "--json", default: "off", detail: "Per-repository outcomes as JSON on stdout, with no progress lines." },
+    ],
+    examples: [
+      {
+        title: "Preview, then sync",
+        commands: "node dist/bin/redline.js sync --dry-run\nnode dist/bin/redline.js sync",
+      },
+      {
+        title: "One repository",
+        commands: "node dist/bin/redline.js sync --repo acme/web-app",
+      },
+    ],
+    exitCodes: [
+      { code: "0", meaning: "Every target synced, was current, or was skipped." },
+      { code: "1", meaning: "At least one repository failed. The rest of the estate still synced." },
+      EXIT_USAGE,
+    ],
+    related: [
+      { href: "/docs/distribution", label: "Distribution and drift" },
+      { href: "/docs/cli/registry", label: "redline registry" },
+      { href: "/docs/who-runs-what", label: "Who runs what" },
+    ],
+    source: "cli/commands/sync.ts",
+  },
+
   registry: {
-    what: "Derives the register of onboarded repositories by walking the organisation and reading the .redline.json each one carries. It is the input both redline sync and the estate dashboard run off — sync needs to know who to open a pull request on, and coverage needs to know the denominator.",
-    built: true,
-    onboard:
-      "It runs in the source repository, nightly, from .github/workflows/registry.yml — not in a product repository, where it would be meaningless. It needs a token with org read access and nothing more: the register is derived from what each repository already publishes about itself, so nothing here is hand-maintained. A repository that removes Redline stops appearing, and stops being a sync target, without anyone editing a list.",
-    usage: [
-      "redline registry --org acme --source acme/redline",
-      "redline registry --org acme --source acme/redline --out registry.json",
-    ],
+    group: "estate",
+    summary: "Build registry.json, the list of onboarded repositories, by walking the organisation.",
+    what: "Walks the organisation, reads the .redline.json each repository carries, and writes registry.json: every onboarded repository with its profile, vendors, rung, capabilities and standards version. redline sync uses it to know who to update, and the dashboard uses it for coverage. Nobody edits the list by hand; a repository that removes Redline drops out on the next run.",
+    runsIn:
+      "From a built checkout of the Redline source repository. The registry workflow runs it nightly. It needs a token with organisation read access, and writes to nothing it walks.",
+    synopsis: ["redline registry --org <name> --source <owner/name> [--token <string>] [--out <path>]"],
     flags: [
+      { flag: "--org <string>", default: "required", detail: "The GitHub organisation. Environment variable: ORG." },
+      { flag: "--source <string>", default: "required", detail: "owner/name of the Redline source repository, recorded so a reader knows which estate the file describes. Environment variable: SOURCE." },
+      { flag: "--token <string>", default: "GH_TOKEN", detail: "A token with organisation read access." },
+      { flag: "--out <path>", default: "registry.json", detail: "Where to write the register." },
+    ],
+    examples: [
       {
-        flag: "--org <name>",
-        detail: "The organisation to walk. Required — there is no default, because a default here would be a guess about whose estate you meant.",
-      },
-      {
-        flag: "--source <owner/name>",
-        detail:
-          "This repository, recorded into the register so a consumer knows which estate the file describes. Required: a registry.json that does not say where it came from is one nobody can safely act on when two of them exist.",
-      },
-      {
-        flag: "--token <string>, --out <path>",
-        detail:
-          "A token with org read access (or GH_TOKEN in the environment), and where to write the file — registry.json by default.",
+        title: "Build the register",
+        commands: "GH_TOKEN=<org-read-token> node dist/bin/redline.js registry --org acme --source acme/redline",
       },
     ],
-    output:
-      "A JSON register of every onboarded repository with the profile, vendors, rung, capabilities and standards version each one recorded. Read-only on every repository it walks: deriving the register grants Redline no write access to anything in it.",
-    edit: "cli/registry/discover.ts walks the org and reads each .redline.json; serialize.ts is the file shape. The register's contract matters more than its content — cli/sync/plan.ts and scripts/build-dashboard.mjs both consume it, so a field removed here goes missing in two places at once.",
+    exitCodes: [
+      EXIT_OK,
+      { code: "2", meaning: "A required option is missing, or a usage error." },
+      { code: "4", meaning: "The organisation walk failed, for example on a bad token." },
+    ],
+    related: [
+      { href: "/docs/cli/sync", label: "redline sync" },
+      { href: "/docs/distribution", label: "Distribution and drift" },
+    ],
+    source: "cli/registry/discover.ts",
   },
+
   metrics: {
-    what: "The estate's measurement plane, as eight subcommands over the runners in scripts/. These act on an organisation or on its collected telemetry, never on the repository you are standing in — several of them are meaningless in a product repo, and each one says where it runs in its own --help rather than letting you find out the slow way.",
-    built: true,
-    onboard:
-      "Mostly nothing you run by hand. collect, dashboard, digest and inbox are driven by the scheduled workflows in workflows/, in the metrics repo or the source repo; the CLI exists so the same run is reproducible in a terminal when a scheduled one looks wrong. baseline is run once, by a maintainer, before any of it means anything. What this layer adds over the runners is a front door: every flag has a type, a default and a help line, and an unknown value is refused by name instead of quietly becoming \"unknown\" inside a figure someone later quotes.",
-    usage: [
-      "redline metrics                                   # the eight subcommands",
-      "redline metrics collect --help                    # and the flags for one",
-      "redline metrics collect --org acme --days 8",
-      "redline metrics dashboard --org acme --data data --out dist",
-      "redline metrics digest --org acme --days 7",
-      "redline metrics inbox --org acme --out dist",
-      "redline metrics score-seeds --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl",
-      "redline metrics roi --data data --spend-total 4200 --spend-grain org",
-    ],
+    group: "estate",
+    summary: "Collect review telemetry and build the dashboard, digest, inbox and ROI pages.",
+    what: "Eight subcommands that measure Redline across the organisation. collect pulls review outcomes for merged pull requests; dashboard, digest, inbox and roi build pages from them; baseline records the starting figures; correlate is a research tool; score-seeds scores a reviewer against the seeded corpus. Scheduled workflows run most of them. Run one by hand to reproduce a scheduled run that looks wrong.",
+    runsIn:
+      "collect, dashboard, digest, roi and correlate run in the metrics repository, through the published package. inbox runs in the source repository. baseline runs once from a maintainer's terminal. score-seeds runs anywhere. Each subcommand's --help says where it runs, and every option can also be set as an environment variable.",
+    synopsis: ["redline metrics <command> [options]", "redline metrics <command> --help"],
     flags: [
+      { flag: "collect", default: "", detail: "Pull review outcomes for merged pull requests across the org. --org (required), --days (8), --since, --out (data), --dry-run, --skip-sarif, --token." },
+      { flag: "dashboard", default: "", detail: "Build the telemetry dashboard page. --org (required), --data (data), --days (90), --out (dist), --registry (registry.json), --seed-scores, --onboarded, --standards-version." },
+      { flag: "digest", default: "", detail: "Build the weekly digest as an Adaptive Card. --org (required), --data, --days (7), --out (stdout), --open-prs, --stale-prs, --seed-scores, --dashboard-url." },
+      { flag: "inbox", default: "", detail: "Build the org-wide prioritised pull request inbox. --org (required), --out (dist), --max-pages (10), --token." },
+      { flag: "baseline", default: "", detail: "Compute the baseline later phases are measured against. --data, --org, --registry, --days (90), --out (baseline.json), --spend-total, --spend-currency (USD), --spend-grain (org)." },
+      { flag: "roi", default: "", detail: "Build the page that sets review cost against what it caught. --data, --days (90), --out (roi.json), --html (roi.html), --spend-total, --spend-currency, --spend-grain (org), --spend-source." },
+      { flag: "correlate", default: "", detail: "Research: whether ignoring a finding cost anything later. --data, --days (180), --window-days (30), --min-sample (10), --out (correlation.json)." },
+      { flag: "score-seeds", default: "", detail: "Score a reviewer against the seeded corpus on a pull request. --repo and --pr (required), --window (4), --history, --baseline, --json, --token." },
+    ],
+    examples: [
       {
-        flag: "collect · dashboard · digest · inbox",
-        detail:
-          "The loop. collect pulls review outcomes for merged pull requests across the org with a read-only token; dashboard builds the static page (acted-on rate, trends, seed-recall history, the rule tuning queue); digest builds the weekly Adaptive Card; inbox builds the org-wide prioritised pull request page. Each is also a scheduled workflow — running one here reproduces that run.",
+        title: "List the subcommands",
+        commands: "npx redlinegate@latest metrics",
+        output: `redline metrics <command>
+
+  collect        pull review outcomes for merged pull requests across the org
+  dashboard      build the telemetry dashboard page
+  digest         build the weekly stakeholder digest as an Adaptive Card
+  inbox          build the org-wide prioritised pull request inbox
+  baseline       compute the baseline every roadmap phase is measured against
+  roi            build the page that says what review cost against what it caught
+  correlate      research: whether ignoring a finding cost anything
+  score-seeds    score an automated reviewer against the seeded corpus
+
+Run \`redline metrics <command> --help\` for its flags.`,
       },
       {
-        flag: "score-seeds",
-        detail:
-          "Scores an automated reviewer against the seeded corpus on a pull request that carries it: recall, precision and attribution. --history appends to a JSONL so recall has a trend rather than a single reading, and --baseline records the first one as the line everything after is compared to. This is the command that tells \"no findings\" apart from \"nothing to find\".",
-      },
-      {
-        flag: "baseline · roi · correlate",
-        detail:
-          "baseline computes the figures every later phase is judged against, once, from a maintainer terminal. roi sets what review cost against what it caught — and refuses to answer a per-repository question with an org-wide spend figure, which is why --spend-grain exists. correlate is explicitly research, not a loop: whether ignoring a finding cost anything later.",
-      },
-      {
-        flag: "every flag has an environment variable",
-        detail:
-          "The runners under scripts/ are env-configured programs, so each flag maps to a documented variable (--days to DAYS, --data to DATA_DIR). The names are deliberately the same ones the workflows set, so somebody debugging a scheduled run reads one vocabulary and not two.",
+        title: "Reproduce the scheduled collection and dashboard, in the metrics repository",
+        commands:
+          "GH_TOKEN=<org-read-token> npx redlinegate@latest metrics collect --org acme --days 8 --out data\nnpx redlinegate@latest metrics dashboard --org acme --data data --out dist",
       },
     ],
-    output:
-      "Per subcommand: JSONL telemetry, a static HTML page, an Adaptive Card, or a score. What none of them will do is invent a number — a figure that could not be computed states why instead of defaulting, because a measurement plane that fills gaps with zeros is one that reports a stalled collector as a quiet week.",
-    edit: "cli/metrics/options.ts declares the whole flag surface as data — env name, type, default, help, and the accepted values for an enum. Adding a flag is a row in that table, and the tests assert the mapping (that --days 90 becomes DAYS=90, that --days banana is refused by name). The work itself stays in scripts/; this layer only configures and validates.",
+    exitCodes: [
+      EXIT_OK,
+      { code: "2", meaning: "No subcommand, an unknown option, a missing required option, or a value of the wrong type." },
+      { code: "4", meaning: "The run itself failed, for example on a bad token or an unreadable data file." },
+    ],
+    related: [
+      { href: "/docs/telemetry", label: "Telemetry and validation" },
+      { href: "/docs/scripts", label: "Scripts" },
+      { href: "/docs/who-runs-what", label: "Who runs what" },
+    ],
+    source: "cli/metrics/options.ts",
   },
 };

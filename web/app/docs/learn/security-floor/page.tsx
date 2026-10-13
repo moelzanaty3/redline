@@ -90,16 +90,16 @@ gh pr checks --watch`}
               <>
                 <Terminal
                   commands="gh pr checks"
-                  output={`✓  CI / test
-✓  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / PR checklist
-✓  Redline / redline-gate / ADR required for significant changes
-X  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-X  Redline / redline-gate / gate`}
+                  output={`✓  test
+✓  redline-gate / Deterministic policy
+✓  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+X  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+X  redline-gate / gate`}
                 />
                 <p>
-                  Open <code>Redline / redline-gate / Dependency review</code>. The job is
+                  Open <code>redline-gate / Dependency review</code>. The job is
                   GitHub&apos;s <code>dependency-review-action</code>, and its log has three parts:
                 </p>
                 <Terminal
@@ -149,8 +149,7 @@ X  Redline / redline-gate / gate`}
               <>
                 <Terminal
                   commands="# from the gate job"
-                  output={`Error: Redline gate failed on security checks (not label-exemptible,
-       and not on the enforcement ladder): dependency-review`}
+                  output="Error: Redline gate failed on security checks (not label-exemptible, and not on the enforcement ladder): dependency-review"
                 />
                 <p>
                   Compare step 02: there, a failing job left the gate green. Same rung, opposite
@@ -163,11 +162,19 @@ X  Redline / redline-gate / gate`}
             label: "With the exempt label",
             content: (
               <>
+                <p>
+                  <code>redline-exempt</code> is the label that waives a failing process check.
+                  Step 01&apos;s <code>init</code> created it in your repository. Add it, and let
+                  the gate run again:
+                </p>
                 <Terminal
-                  commands="gh pr edit --add-label redline-exempt"
+                  commands={`gh pr edit --add-label redline-exempt
+gh pr checks --watch`}
+                />
+                <Terminal
+                  commands="# from the gate job"
                   output={`Soft-fail label present: redline-exempt
-Error: Redline gate failed on security checks (not label-exemptible,
-       and not on the enforcement ladder): dependency-review`}
+Error: Redline gate failed on security checks (not label-exemptible, and not on the enforcement ladder): dependency-review`}
                 />
                 <p>
                   The gate sees the label and fails anyway. Exemptions (step 08) cover process
@@ -186,13 +193,13 @@ Error: Redline gate failed on security checks (not label-exemptible,
         </p>
         <Terminal
           commands="gh pr checks"
-          output={`✓  CI / test
-✓  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / PR checklist
-✓  Redline / redline-gate / ADR required for significant changes
--  Redline / redline-gate / Dependency review                 skipped
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate`}
+          output={`✓  test
+✓  redline-gate / Deterministic policy
+✓  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+-  redline-gate / Dependency review                           skipping
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate`}
         />
         <p>
           This is the trade-off step 01 described, now on a real change. Nothing in the pull
@@ -223,13 +230,13 @@ pnpm test
 git commit -am "fix(deps): lodash 4.18.1"
 git push
 gh pr checks --watch`}
-        output={`✓  CI / test
-✓  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / PR checklist
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate`}
+        output={`✓  test
+✓  redline-gate / Deterministic policy
+✓  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate`}
       />
       <p>
         Deleting the dependency would have fixed it too: <code>Object.groupBy</code>, in Node 21 and
@@ -245,7 +252,7 @@ git pull`}
 
       <h2>The other half: the secret scan</h2>
       <p>
-        <code>Redline / redline-gate / Secret scan (diff)</code> runs TruffleHog over the commits in
+        <code>redline-gate / Secret scan (diff)</code> runs TruffleHog over the commits in
         the pull request and behaves the same way: it fails at every rung, and no label waives it.
         It runs on every repository, private ones included, with no licence. Where GitHub&apos;s
         push protection is on, it usually stops a recognised token before it is even pushed, so the

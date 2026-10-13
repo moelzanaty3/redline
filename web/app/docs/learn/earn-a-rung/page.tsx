@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Quiz } from "@/components/learn/interactive";
+import { Quiz, RedlineCode } from "@/components/learn/interactive";
 import { File, LearnPage, RedlineTerminal, Term, Terminal } from "@/components/learn/parts";
 
 export const metadata: Metadata = { title: "Learn: earn a stricter rung" };
@@ -36,13 +36,13 @@ git commit -m "feat: add legacy id"
 git push -u origin feat/legacy-id
 gh pr create --title "feat: add legacy id" --body-file .github/pull_request_template.md
 gh pr checks --watch`}
-        output={`✓  CI / test
-X  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / PR checklist
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate`}
+        output={`✓  test
+X  redline-gate / Deterministic policy
+✓  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate`}
       />
       <p>
         Tick the <code>## Launch readiness</code> boxes as usual. The Deterministic policy job caught
@@ -150,10 +150,12 @@ git pull`}
   ▲ the seeded corpus has never been scored for this stack, so there is no
     evidence the reviewer catches known defects at all
   ▲ the clean corpus has never been scored, so nothing shows the reviewer stays
-    quiet on correct code`}
+    quiet on correct code
+  ▲ too few findings have fired to compute an acted-on rate`}
       />
       <p>
-        Redline refuses, and no flag or admin gets past it. To see why, think about what happens
+        Redline refuses, and no flag or admin gets past it. The rung stays at{" "}
+        <code>observe</code>. To see why, think about what happens
         when the reviewer is wrong.
       </p>
       <p>
@@ -237,18 +239,21 @@ git pull`}
 
       <h2>5. Record what you really have</h2>
       <p>
-        You do have some evidence: nine merged pull requests, steps 01 to 09, not counting the
-        throwaway one you closed. Every finding the gate raised on them was fixed: step 02&apos;s
-        in step 03, and today&apos;s in your cleanup. Record that on a branch, with where it came
-        from:
+        You do have some evidence. Count your merged pull requests:
+      </p>
+      <Terminal
+        commands="gh pr list --state merged --json number --jq length"
+        output="9"
+      />
+      <p>
+        Nine, from steps 01 to 09; the throwaway pull requests you closed do not count. Every
+        finding the gate raised on them was fixed: step 02&apos;s in step 03, and today&apos;s in
+        your cleanup. Record that on a branch, with where the figures came from:
       </p>
       <RedlineTerminal
         commands={`git checkout -b chore/evidence
-gh pr list --state merged --json number --jq length
-{redline} evidence record --sample-size 9 --acted-on-rate 1 --source "the 9 merged pull requests of the Learn path; every finding was fixed"
-{redline} evidence`}
-        output={`9
-recorded.
+{redline} evidence record --sample-size 9 --acted-on-rate 1 --source "the 9 merged pull requests of the Learn path; every finding was fixed"`}
+        output={`recorded.
 
 rung         observe
 seed recall  not measured
@@ -260,10 +265,18 @@ recorded     <today> (0 day(s) ago) — the 9 merged pull requests of the Learn 
 not yet eligible for block-blocker:
   - 20 reviewed pull requests are needed and 9 have been recorded — a perfect rate over a handful is a coincidence, not evidence
   - the seeded corpus has never been scored for this stack, so there is no evidence the reviewer catches known defects at all
-  - the clean corpus has never been scored, so nothing shows the reviewer stays quiet on correct code`}
+  - the clean corpus has never been scored, so nothing shows the reviewer stays quiet on correct code
+
+what block-blocker asks for:
+  sample size      >= 20 reviewed pull requests
+  seed recall      >= 100%
+  acted-on rate    >= 60%
+  false positives  <= 0
+  measured within  90 days`}
       />
       <p>
-        <code>evidence</code> is the to-do list for the next rung. <code>--source</code> is
+        The report is the to-do list for the next rung. Run <RedlineCode args="evidence" /> any
+        time to see it again. <code>--source</code> is
         required: a figure with no source is just a claim. A real team takes these figures from
         its metrics over a few weeks of normal work, not from a count by hand. The record lives in{" "}
         <code>.redline.json</code>, so it is reviewed like any other change. Merge it:
@@ -299,15 +312,16 @@ gh pr create --title "Do not merge: practice a blocking rung" --body-file .githu
 gh pr checks --watch
 gh pr view --json mergeStateStatus`}
         output={`recorded.
+…
   ▲ enforcement: observe -> block-blocker
 …
-✓  CI / test
-X  Redline / redline-gate / Deterministic policy
-✓  Redline / redline-gate / PR checklist
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-X  Redline / redline-gate / gate
+✓  test
+X  redline-gate / Deterministic policy
+✓  redline-gate / PR checklist
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+X  redline-gate / gate
 {"mergeStateStatus":"BLOCKED"}`}
       />
       <p>Tick the launch-readiness boxes again. The gate&apos;s log:</p>

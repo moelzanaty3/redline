@@ -61,7 +61,10 @@ export default function Page() {
       ]}
     >
       <h2>Ask why</h2>
-      <p>Take the rule id from the brackets of any finding:</p>
+      <p>
+        Step 02 left findings on your pull request. Before you change any code, find out what
+        a rule asks for and why. Take the rule id from the brackets of a finding:
+      </p>
       <RedlineTerminal
         commands="{redline} explain core/unsafe-assertion"
         output={`BLOCKER core/unsafe-assertion
@@ -150,7 +153,10 @@ export default function Page() {
       />
 
       <h2>Check it</h2>
-      <Terminal commands="pnpm test" />
+      <p>The tests first: the two from step 00 and the three you just added.</p>
+      <Terminal commands="pnpm test" output={`ℹ pass 5
+ℹ fail 0`} />
+      <p>Then the same review that found the problems:</p>
       <RedlineTerminal
         commands={`git add src/users.ts src/users.test.ts
 {redline} review`}
@@ -158,7 +164,7 @@ export default function Page() {
 no findings`}
       />
       <p>
-        That is the checker&apos;s four. The fifth, line 30, needs a model, so run{" "}
+        The checker&apos;s four findings are gone. The fifth, line 30, needs a model, so run{" "}
         <code>/redline-review</code> in your assistant again and expect no{" "}
         <code>[core/customer-data-in-logs]</code> finding: the error no longer names anyone.
       </p>
@@ -169,16 +175,16 @@ no findings`}
         commands={`git commit -m "fix: validate the user payload, and keep personal data out of errors"
 git push
 gh pr checks --watch`}
-        output={`✓  CI / test
-✓  Redline / redline-gate / Deterministic policy
-X  Redline / redline-gate / PR checklist                      the box you left unticked
-✓  Redline / redline-gate / ADR required for significant changes
-✓  Redline / redline-gate / Dependency review
-✓  Redline / redline-gate / Secret scan (diff)
-✓  Redline / redline-gate / gate`}
+        output={`✓  test
+✓  redline-gate / Deterministic policy
+X  redline-gate / PR checklist                                the box you left unticked
+✓  redline-gate / ADR required for significant changes
+✓  redline-gate / Dependency review
+✓  redline-gate / Secret scan (diff)
+✓  redline-gate / gate`}
       />
       <p>
-        <code>Redline / redline-gate / Deterministic policy</code> is green now. On GitHub, tick the
+        <code>redline-gate / Deterministic policy</code> is green now. On GitHub, tick the
         input-validation item you left unticked in step 02, honestly this time, because the code
         validates. Ticking it re-runs the checklist, and every check is green. Then merge, and
         bring <code>main</code> back to your machine for the next step:

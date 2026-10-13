@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { DocsPage } from "@/components/docs-page";
 import { FileViewer } from "@/components/file-viewer";
 import { loadManifest } from "@/lib/manifest";
-import { STANDARDS, findBySlug } from "@/lib/registry";
+import { SEEDS, STANDARDS, findBySlug } from "@/lib/registry";
 import { bySeverityDesc, rulesForStack, type RuleEntry } from "@/lib/rules";
 import { STANDARDS_INFO } from "@/lib/standards-info";
 import { ruleAnchor } from "@/lib/search-index";
@@ -79,6 +79,7 @@ export default async function Page({
   // severity rule — a generic placeholder would not tell the reader what their
   // findings will actually look like.
   const sample = bySeverityDesc(rules)[0];
+  const seed = findBySlug(SEEDS, slug);
   const example = sample
     ? `Redline/${sample.severity} [${sample.id}]: <one-line problem>`
     : `Redline/BLOCKER [${ruleStack}/<slug>]: <one-line problem>`;
@@ -133,7 +134,7 @@ export default async function Page({
               ? "The rules that apply to every file in every profile, regardless of stack — security, type safety, error handling, scope discipline, and the output contract itself."
               : (STANDARDS_INFO[slug] ?? entry.description)}
           </p>
-          {stack?.extends && stack.extends.length > 0 && (
+          {stack?.extends && stack.extends.length > 0 ? (
             <p>
               Extends{" "}
               {stack.extends.map((base, i) => (
@@ -145,7 +146,7 @@ export default async function Page({
               — those rules apply too; this file only adds what&apos;s specific
               to {entry.title}.
             </p>
-          )}
+          ) : null}
 
           <h2>Which repositories get it</h2>
           {isCore ? (
@@ -208,19 +209,39 @@ export default async function Page({
 
           <h2>Changing a rule</h2>
           <p>
-            Edit <code>{entry.file}</code> and nowhere else: the copies in{" "}
-            <code>AGENTS.md</code>, <code>.github/copilot-instructions.md</code>{" "}
-            and <code>.github/instructions/</code> are generated and the next
-            render overwrites them. A change here reaches every onboarded
-            repository as a pull request, so treat it as a production change.
+            Edit <code>{entry.file}</code> and nowhere else. Every other copy is
+            generated from it. A merged change reaches every onboarded repository
+            as a pull request, so treat it as a production change.
+          </p>
+          <p>
+            <b>Rule ids are permanent.</b> Reword a rule freely; it keeps its id.
+            Renaming or removing an id orphans every telemetry record that cited
+            it.
           </p>
           <LifecycleSteps steps={STANDARDS_EDIT} />
-          <p>
-            <b>Rule ids are permanent.</b> Rewording a rule keeps its id; renaming
-            or removing an id orphans every telemetry record that cited it.
-          </p>
         </>
       )}
+
+      <h2>Related</h2>
+      <ul>
+        <li>
+          <Link href="/docs/output-contract">The output contract</Link> — what
+          each severity obliges you to do.
+        </li>
+        <li>
+          <Link href="/docs/profiles">Profiles &amp; stacks</Link> — how a
+          repository ends up with a set of rules.
+        </li>
+        {seed ? (
+          <li>
+            <Link href={`/docs/seeds/${seed.slug}`}>Seeded corpus: {seed.title}</Link>{" "}
+            — the known-bad code that tests whether reviewers catch these rules.
+          </li>
+        ) : null}
+        <li>
+          <Link href="/docs/standards">All standards</Link>
+        </li>
+      </ul>
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={720} />
