@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
+import { RedlineCode } from "@/components/learn/interactive";
+import { RedlineTerminal } from "@/components/learn/parts";
 
 export const metadata: Metadata = { title: "Troubleshooting" };
 
@@ -25,10 +26,7 @@ export default function Page() {
         not what a config file claims, and names every check that is wrong. Run
         it before reading further; the row it prints is the section you want.
       </p>
-      <CodeWindow title="terminal" copyText="npx redlinegate verify">
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redlinegate verify</span>
-      </CodeWindow>
+      <RedlineTerminal commands="{redline} verify" />
       <div className="table-scroll">
         <table>
           <thead>
@@ -148,16 +146,15 @@ export default function Page() {
         </li>
         <li>
           <b>A rung that is not what you think.</b> At{" "}
-          <code>observe</code> and <code>warn</code> the process checks report
-          and never block. That is the default for a fresh repository and it is
-          deliberate — see the{" "}
+          <code>observe</code> the process checks report and never block. That
+          is the default for a fresh repository and it is deliberate — see the{" "}
           <Link href="/docs/enforcement">enforcement ladder</Link>.
         </li>
       </ul>
       <p>
-        Do not reason about it — run{" "}
-        <Link href="/docs/verification">the nine scenarios</Link> and watch the
-        gate pass, block, and refuse to be waived.
+        Do not reason about it —{" "}
+        <Link href="/docs/onboarding#prove-it">prove it</Link>: watch the gate
+        pass, block, and refuse to be waived.
       </p>
 
       <h2 id="pending-admin">
@@ -165,25 +162,17 @@ export default function Page() {
         <code>denied</code>
       </h2>
       <p>
-        This is the normal path, not a failure —{" "}
-        <Link href="/docs/onboarding">onboarding</Link> covers why a run without
-        admin rights still lands everything file-level. To clear it, have an
-        administrator re-run with a token that has the rights:
-      </p>
-      <CodeWindow title="terminal" copyText="npx redlinegate init --repair">
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redlinegate init --repair</span>
-      </CodeWindow>
-      <p>
-        <code>--repair</code> re-applies every capability and recomputes{" "}
-        <code>pendingAdmin</code> from the fresh outcomes. It is not{" "}
-        <code>rm .redline.json</code>: your recorded menu, rung and onboarding
-        date survive it.
+        This is the normal path, not a failure: a run without admin rights
+        still lands everything file-level and records what it was refused. An
+        administrator clears it with <RedlineCode args="init --repair" /> —{" "}
+        <Link href="/docs/onboarding#after-merge">After the pull request merges</Link>{" "}
+        has the details. It is not <code>rm .redline.json</code>: your recorded
+        menu, rung and onboarding date survive it.
       </p>
       <div className="callout">
         <p>
-          <b>If your gate is vendored</b> (<code>--gate-source local</code>),{" "}
-          <code>--repair</code> also rewrites{" "}
+          <b>If your gate is vendored</b> (<code>--gate-source local</code>),
+          every <code>init</code> run, <code>--repair</code> included, rewrites{" "}
           <code>.github/workflows/redline-gate.yml</code> from the shipped copy.
           Anything you added to that file by hand is gone. Put your own checks in
           their own workflow — <Link href="/docs/gate#adding-a-check">option 1</Link>.
@@ -265,15 +254,7 @@ export default function Page() {
         Set where your organisation publishes the standard, and every finding
         carries the address of the rule it cites:
       </p>
-      <CodeWindow
-        title="terminal"
-        copyText="npx redlinegate init --docs-url https://your-docs.example.com"
-      >
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">
-          npx redlinegate init --docs-url https://your-docs.example.com
-        </span>
-      </CodeWindow>
+      <RedlineTerminal commands="{redline} init --docs-url https://your-docs.example.com" />
       <p>
         It is recorded in <code>.redline.json</code> as{" "}
         <code>docsBaseUrl</code> and is empty by default. There is no default on
@@ -286,21 +267,53 @@ export default function Page() {
         Verify says the artifacts are stale and I did not touch them
       </h2>
       <p>
-        The standard moved. <code>standards/</code> is versioned, and a change
-        there reaches every onboarded repository as a pull request — see{" "}
-        <Link href="/docs/distribution">Distribution &amp; drift</Link>.
-        Re-render locally with:
+        The rendered files are compared with what the CLI running{" "}
+        <code>verify</code> would render. Which of these lines{" "}
+        <code>artifacts-current</code> prints tells you what moved:
       </p>
-      <CodeWindow title="terminal" copyText="npx redlinegate init --no-commit">
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redlinegate init --no-commit</span>
-      </CodeWindow>
+      <ul>
+        <li>
+          <b>
+            <code>standards updated upstream (vA → vB) — re-run redline init to adopt</code>
+          </b>{" "}
+          — the CLI running the check is newer than the one that rendered this
+          repository, so it carries a newer standard. Re-running{" "}
+          <code>init</code> with the copy pinned in <code>package.json</code>{" "}
+          changes nothing: it renders the version this repository already has.
+          Bump the pin, then re-run <code>init</code> and merge the pull request
+          — the walk-through is in{" "}
+          <Link href="/docs/learn/next-steps">Learn 10</Link>.
+        </li>
+        <li>
+          <b>
+            <code>this CLI renders standards vA, older than the vB this repository recorded</code>
+          </b>{" "}
+          — your copy of the CLI is behind the repository. Install the version
+          in <code>package.json</code> rather than re-running <code>init</code>,
+          which would render the repository backwards.
+        </li>
+        <li>
+          <b>
+            <code>this repository&apos;s own .redline/local.md has changed since the last render</code>
+          </b>{" "}
+          — re-run <RedlineCode args="init" /> to fold it in.
+        </li>
+        <li>
+          <b>
+            <code>stale: …</code>
+          </b>{" "}
+          — the same version renders differently, so somebody edited inside a{" "}
+          <code>REDLINE</code> block. <RedlineCode args="init" /> restores it;
+          your own content outside the markers is never touched.
+        </li>
+      </ul>
       <p>
-        <code>--no-commit</code> writes the files into the working tree and
-        stops: no host request, no branch, no pull request. It needs no
-        credential and works offline, so it is the safe way to see what a
-        re-render would do. Your own content above every{" "}
-        <code>REDLINE:BEGIN</code> marker is never touched.
+        On a repository in the register, the platform team does the first case
+        for you: <code>redline sync</code>, run from a checkout of the Redline
+        source repository, opens the update pull request — see{" "}
+        <Link href="/docs/distribution">Distribution &amp; drift</Link>. It only
+        reaches repositories listed in <code>registry.json</code>; any other
+        repository updates itself.
       </p>
 
       <h2 id="get-out">I want it off this repository</h2>

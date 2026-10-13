@@ -80,23 +80,23 @@ export function SiteFooter() {
           <div>
             <h4>Adaptors</h4>
             <ul>
-              <li><Link href="/docs/adaptors/github-copilot">GitHub Copilot</Link></li>
-              <li><Link href="/docs/adaptors/claude">Claude</Link></li>
-              <li><Link href="/docs/adaptors/agents-md">AGENTS.md agents</Link></li>
+              <li><Link href="/docs/adaptors#copilot">GitHub Copilot</Link></li>
+              <li><Link href="/docs/adaptors#claude">Claude</Link></li>
+              <li><Link href="/docs/adaptors#agents">AGENTS.md agents</Link></li>
               <li>
-                <Link href="/docs/adaptors/cursor">
+                <Link href="/docs/adaptors#cursor">
                   Cursor
                   {cursorEnabled ? null : <span className="off">off by default</span>}
                 </Link>
               </li>
-              <li><Link href="/docs/adaptors/custom">Custom vendor</Link></li>
+              <li><Link href="/docs/adaptors/custom">Add a vendor</Link></li>
             </ul>
           </div>
           <div>
             <h4>Reference</h4>
             <ul>
               <li><Link href="/docs/standards">Standards</Link></li>
-              <li><Link href="/docs/scripts">Scripts</Link></li>
+              <li><Link href="/docs/scripts">Maintainer scripts</Link></li>
               <li><Link href="/docs/workflows">Workflows</Link></li>
               <li><Link href="/docs/templates">Templates & rulesets</Link></li>
             </ul>

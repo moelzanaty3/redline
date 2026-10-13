@@ -1,184 +1,96 @@
-// Maintainer-facing detail for each script in scripts/. Nothing here runs against an
-// onboarded repo — these are the Redline source repo's own CI, telemetry and validation
-// tooling. Facts are sourced from .github/workflows/ci.yml and workflows/*.yml, not
-// guessed: see each script's own header comment for the same claims.
-//
-// Where a script has a front door on the published CLI, the `command` lines name the
-// CLI form, because that is what a reader can actually run without a checkout:
-// `npx redlinegate metrics <command>` validates the flags and hands the runner the
-// environment contract it already documents (cli/metrics/options.ts). The `env` list
-// stays — it is the same contract, and a scheduled run still shows those names.
-// The four that have no CLI equivalent — validate, assign-rule-ids, render-self,
-// check-pins — are source-repo checks and keep their `node scripts/...` form.
+// Who runs each script in scripts/, read off package.json and the workflow files
+// rather than the scripts' own header comments, which describe intent. Every
+// script with a CLI front door is documented on that command's page; this module
+// only says that the door exists.
+export type ScriptGroup = "source" | "measurement" | "local";
+
 export type ScriptInfo = {
-  what: string;
-  runsIn: string;
-  trigger: string;
-  command: string[];
-  env: string[];
-  produces: string;
-  action: string;
+  group: ScriptGroup;
+  runBy: string;
+  // The command a maintainer types, exactly as package.json or CI spells it.
+  command?: string;
+  when?: string;
+  cli?: { command: string; href: string };
 };
 
 export const SCRIPTS_INFO: Record<string, ScriptInfo> = {
   validate: {
-    what: "Bundle self-check: manifest integrity, the severity output contract survives edits, every rule id is well-formed, ruleset JSON matches the advertised required check, workflow files exist, the seed corpus is well-formed.",
-    runsIn: "This (source) repo.",
-    trigger: "CI (.github/workflows/ci.yml), job validate, step \"Bundle invariants\" — every pull request and every push to main.",
-    command: ["node scripts/validate.mjs"],
-    env: [],
-    produces: "Prints each failure as `FAIL: ...` and each warning as `warn: ...` to stdout, then a count line. Exits 1 if any check failed, 0 otherwise.",
-    action: "Run it locally before pushing a change to standards/, rulesets/ or workflows/ — it's exactly what CI runs, so a local pass means the CI job passes too.",
+    group: "source",
+    runBy: "CI on every pull request and push to main (ci.yml), and release.yml before a publish.",
+    command: "node scripts/validate.mjs",
+    when: "Before pushing any change to standards/, manifest.json, rulesets/, workflows/ or seeded/. It prints each failure as FAIL: and each warning as warn: on stderr, then a count, and exits 1 on any failure.",
   },
   "assign-rule-ids": {
-    what: "Assigns a permanent `<stack>/<slug>` id to every rule bullet in standards/ that doesn't have one yet, and rewrites the source file in place. Ids are written into the markdown, not derived at render time, so a later reword of the rule text never orphans its historical telemetry.",
-    runsIn: "This (source) repo.",
-    trigger: "CI (.github/workflows/ci.yml), job validate, step \"Every rule carries an id\" — every pull request and push to main, always with --check.",
-    command: [
-      "node scripts/assign-rule-ids.mjs         # assign missing ids, rewrite standards/ in place",
-      "node scripts/assign-rule-ids.mjs --check  # fail if any rule is missing an id — what CI runs",
-    ],
-    env: [],
-    produces: "Without --check: rewrites the affected standards/*.md files and prints how many ids were assigned. With --check: lists any rule missing an id and exits 1; exits 0 and prints the total rule count otherwise.",
-    action: "Run it (without --check) locally right after adding a new rule bullet to standards/ — it assigns the id for you rather than you inventing one by hand.",
+    group: "source",
+    runBy: "You, after adding a rule. CI and release.yml run it with --check, which fails instead of writing.",
+    command: "node scripts/assign-rule-ids.mjs",
+    when: "After adding a rule bullet to a file in standards/. It writes the new id into the markdown; commit it with the rule. Never write an id by hand, and never change one.",
   },
   "render-self": {
-    what: "Renders this repository's own standards artifacts (AGENTS.md, CLAUDE.md, .github/copilot-instructions.md) using the same TypeScript renderer (cli/render/standards.ts) that product repos get via redline init, profile javascript-typescript.",
-    runsIn: "This (source) repo.",
-    trigger: "CI (.github/workflows/ci.yml), job validate, step \"Rendered artifacts are current\", always with --check. Also referenced by workflows/redline-sync.yml, which is disabled in Phase 1 — see the Workflows section.",
-    command: [
-      "node scripts/render-self.mjs         # re-render and write the artifacts",
-      "node scripts/render-self.mjs --check  # fail if the checked-in artifacts are stale — what CI runs",
-    ],
-    env: [],
-    produces: "Without --check: writes/prunes the rendered files and lists each with `write` or `prune`. With --check: exits 1 and names the stale files if the checked-in output doesn't match a fresh render; exits 0 otherwise.",
-    action: "Run it (without --check) locally after editing standards/ so the checked-in AGENTS.md/CLAUDE.md/copilot-instructions.md stay in sync — otherwise CI's --check step fails your PR.",
-  },
-  "build-registry": {
-    what: "Derives registry.json — the register of onboarded repositories — by walking every repo in the org for a .redline.json. The register is never hand-edited and redline init never writes it: an entry exists exactly as long as the repository's own file does, so a repo that removes Redline leaves the register on the next run.",
-    runsIn: "This (source) repo.",
-    trigger: ".github/workflows/registry.yml — nightly at 04:00 UTC, plus workflow_dispatch.",
-    command: ["GH_TOKEN=... npx redlinegate registry --org acme --source owner/repo"],
-    env: [
-      "GH_TOKEN — read access to org repos.",
-      "ORG — the owner whose repositories are walked.",
-      "SOURCE — owner/name of this repo, recorded in the register so a consumer knows which estate it describes.",
-      "OUT — output path, default registry.json.",
-    ],
-    produces: "registry.json, with entries ordered by org then repo so a nightly commit only diffs when the estate actually changed. Prints one line per problem — a repository whose .redline.json is malformed, one with no default branch — and exits 1 without writing anything if no onboarded repository was found at all: an empty register is indistinguishable from a token that lost access, and publishing it would erase the dashboard's coverage figure and every sync target in one commit.",
-    action: "Nothing, normally — the nightly workflow runs it. Run it by hand after onboarding a batch of repositories if you do not want to wait for the next refresh.",
-  },
-  "build-correlation": {
-    what: "Research. Redline can say a rule was ignored; it cannot say ignoring it mattered. Where a finding was left unresolved and the same repository later attracted a revert or a hotfix, that is evidence the rule earns its place — computed from merged-pull-request history alone, with no incident feed.",
-    runsIn: "The redline-metrics repo, or a maintainer's terminal against a checkout of its data/.",
-    trigger: "Run by hand, occasionally. It is an experiment, not a loop.",
-    command: ["npx redlinegate metrics correlate --data data --days 180 --window-days 30"],
-    env: [
-      "DATA_DIR — collected telemetry, default data.",
-      "DAYS — how much history to read, default 180.",
-      "WINDOW_DAYS — how long after a merge a revert still counts as related, default 30.",
-      "MIN_SAMPLE — ignored findings a rule needs before any rate is reported, default 10.",
-    ],
-    produces: "A rate per rule, but only for rules with enough ignored findings for a rate to mean anything — and a verdict on the experiment itself. Below the threshold it reports that it CANNOT SAY rather than a number: a correlation quoted without its sample size is how a plausible story becomes a policy nobody can unwind. Where it does report, the caveat travels with it — correlation, not causation, useful for prioritising which rules to examine and never for justifying a rule on its own.",
-    action: "Read the verdict before the numbers. \"Not reportable\" is the honest output of a weak experiment rather than a failure of it, and the roadmap sequences this piece last precisely so it can be cut without regret if the signal stays thin.",
-  },
-  "build-roi": {
-    what: "Builds the one page a finance stakeholder can read: what AI review cost against what it caught, with lead time and change failure rate beside it. The headline is cost per BLOCKER caught — a figure nobody else in the toolchain can compute, because a cost tool has spend and no findings and a DORA tool has neither.",
-    runsIn: "The redline-metrics repo, or a maintainer's terminal against a checkout of its data/.",
-    trigger: "Run by hand, or on a schedule alongside the dashboard.",
-    command: [
-      "npx redlinegate metrics roi --data data --days 90",
-      "npx redlinegate metrics roi --spend-total 850 --spend-grain org --spend-source 'vendor console'",
-    ],
-    env: [
-      "DATA_DIR — collected telemetry, default data.",
-      "DAYS — window, default 90.",
-      "OUT / HTML — output paths, default roi.json and roi.html.",
-      "SPEND_TOTAL, SPEND_CURRENCY, SPEND_GRAIN, SPEND_SOURCE, SPEND_PERIOD — the AI spend figure from the assistant vendor's own usage reporting. No script here can read a vendor's billing for you, and none of it is estimated.",
-    ],
-    produces: "roi.html and roi.json. Value is measured as what was ACTED ON, not what was reported — a finding nobody acted on caught nothing, and counting it would let the return be inflated by producing more noise. Every unavailable figure prints its reason in place of the number: MTTR is refused by name because it needs an incident feed Redline does not have, deployment frequency is unknown rather than zero without the deployments API, and an org-level spend figure refuses to answer a per-repository question rather than inventing one.",
-    action: "Run it before a budget conversation. Read the change-failure-rate caveat that travels with the number — it is a floor, not the true rate, because a team that fixes forward without saying \"hotfix\" scores better than one that labels honestly.",
-  },
-  "build-baseline": {
-    what: "Computes the Phase 0 baseline the roadmap's acceptance criteria name: acted-on rate, coverage, findings per week, the merge rate on Redline's own pull requests, which SARIF producers the estate already runs, and AI spend. It is the set of numbers every later phase is judged against.",
-    runsIn: "A maintainer's terminal, once, with org credentials — alongside a checkout of the metrics repo's data/.",
-    trigger: "Run by hand. It is a measurement, not a loop.",
-    command: [
-      "npx redlinegate metrics baseline --data data --registry registry.json --days 90",
-      "GH_TOKEN=... npx redlinegate metrics baseline --org acme --spend-total 850   # the full picture",
-    ],
-    env: [
-      "DATA_DIR — collected telemetry, default data.",
-      "REGISTRY — the derived register, default registry.json.",
-      "DAYS — window in days, default 90.",
-      "GH_TOKEN + ORG — needed to survey Redline's own pull requests and scan for SARIF producers.",
-      "SPEND_TOTAL, SPEND_CURRENCY, SPEND_GRAIN — AI spend from the vendor's own usage reporting, which no script here can read for you.",
-    ],
-    produces: "baseline.json plus a readable summary. Every figure it cannot source is reported as unavailable WITH ITS REASON rather than as zero — a zero that means \"nobody measured this\" reads as a finding, and would make every later comparison look like progress that did not happen. Cost per BLOCKER caught is computed only when both halves exist, and names the missing half when they do not.",
-    action: "Run it before starting any roadmap phase past 0. The roadmap says plainly that the ordering of Phases 1-4 is a hypothesis until this exists, and that the baseline is allowed to reorder them.",
+    group: "source",
+    runBy: "You, after editing standards/. CI, release.yml and redline-sync.yml run it with --check, which fails if the checked-in output is stale.",
+    command: "node scripts/render-self.mjs",
+    when: "After any change to standards/ or cli/render/. It imports the CLI's TypeScript renderer directly, so it needs a Node that runs .ts files (CI uses Node 24) but no build.",
   },
   "check-pins": {
-    what: "Re-resolves every SHA-pinned third-party GitHub Action (`uses: owner/repo@<sha> # <tag>`) against the tag its trailing comment claims, and separately checks whether a newer release exists. The only check in the bundle that needs network access.",
-    runsIn: "This (source) repo.",
-    trigger: "CI (.github/workflows/ci.yml), its own job pins, continue-on-error: true — every pull request, but a GitHub outage can't fail the rest of CI.",
-    command: [
-      "node scripts/check-pins.mjs            # verify pins, warn on available updates",
-      "node scripts/check-pins.mjs --strict   # also fail when an update is available",
-    ],
-    env: ["GH_TOKEN or GITHUB_TOKEN — anonymous GitHub API calls hit rate limits fast; CI passes github.token."],
-    produces: "Prints `ok` or `FAIL` per pin plus an update note where relevant, then a summary line. Exits 1 if any pin doesn't match its claimed tag (or, with --strict, if any update is available); exits 0 otherwise.",
-    action: "Run it after bumping a pinned action's SHA, or periodically to see what updates are available — CI runs the non-strict form, so an available update alone won't fail your PR.",
+    group: "source",
+    runBy: "CI's pins job on every pull request and push to main, allowed to fail because it needs the network.",
+    command: "node scripts/check-pins.mjs",
+    when: "After adding or bumping a pinned action, a Docker image digest or the gate's REDLINE_CLI_VERSION. Set GH_TOKEN to avoid the API rate limit; add --strict to fail on available updates as well as on mismatches.",
   },
   "score-seeds": {
-    what: "Scores an automated reviewer's comments on a pull request against the seeded corpus's known-answer key: BLOCKER recall, false positives on clean code, and whether caught defects cited the correct rule id. Vendor-neutral — findings are attributed by reviewer login, so the same command scores Copilot, Claude or Codex on identical input.",
-    runsIn: "The redline-metrics repo, against a throwaway PR on a canary target repo — never this repo.",
-    trigger: "workflows/seed-canary.yml, step \"Score against the corpus\" — weekly (Monday 03:00 UTC) plus workflow_dispatch, one run per configured canary target.",
-    command: [
-      "GH_TOKEN=... npx redlinegate metrics score-seeds --repo acme/pilot-web --pr 12",
-      "GH_TOKEN=... npx redlinegate metrics score-seeds --repo acme/pilot-web --pr 12 --json",
-      "GH_TOKEN=... npx redlinegate metrics score-seeds --repo acme/pilot-web --pr 12 --history data/seed-scores.jsonl --baseline",
-    ],
-    env: ["GH_TOKEN — read access to the target repo's PR comments."],
-    produces: "Human-readable report to stdout by default; with --json, a machine-readable score object instead. Exits 1 if BLOCKER recall is below 1.0, any false positive landed on seeded/clean/**, or (with --history/--baseline) the run regressed against the last recorded score.",
-    action: "Run it by hand against a real PR when investigating why the weekly canary flagged a regression, or when trialling a new AI reviewer vendor against the same seeded input.",
+    group: "measurement",
+    runBy: "seed-canary.yml, weekly, in redline-metrics.",
+    cli: { command: "redline metrics score-seeds", href: "/docs/cli/metrics" },
   },
   "collect-telemetry": {
-    what: "Central nightly pull of review outcomes for merged PRs across the org, written as monthly JSONL. Replaced the old per-repo telemetry workflow so no cross-repo write token is ever stored in a product repo.",
-    runsIn: "The redline-metrics repo — never this repo.",
-    trigger: "workflows/redline-collect.yml — daily (05:00 UTC) plus workflow_dispatch with a days input.",
-    command: ["GH_TOKEN=... npx redlinegate metrics collect --org acme"],
-    env: [
-      "GH_TOKEN — read access to org repos and pull requests (required).",
-      "ORG (required), SINCE=YYYY-MM-DD, DAYS=8, OUT=data, DRY_RUN=1",
-    ],
-    produces: "Writes/updates monthly JSONL files under OUT (default data/) and prints a record count per file, then a total collected count.",
-    action: "Nothing, normally — it runs itself nightly. Run it by hand with workflow_dispatch (or locally with a longer DAYS window) to backfill a gap after an outage.",
+    group: "measurement",
+    runBy: "redline-collect.yml, daily, in redline-metrics.",
+    cli: { command: "redline metrics collect", href: "/docs/cli/metrics" },
   },
   "build-digest": {
-    what: "Builds the Monday stakeholder digest — open/stale PR counts, seed recall, dashboard link — as a Teams Adaptive Card from already-collected telemetry.",
-    runsIn: "The redline-metrics repo — never this repo.",
-    trigger: "workflows/weekly-digest.yml, step \"Build Adaptive Card\" — every Monday 07:00 UTC plus workflow_dispatch. A separate step then POSTs the card to a Power Automate Teams webhook.",
-    command: ["npx redlinegate metrics digest --org acme --out digest.json"],
-    env: ["DATA_DIR=data, DAYS=7, ORG=org, OPEN_PRS, STALE_PRS, CAPPED, DASHBOARD_URL, SEED_SCORES=data/seed-scores.jsonl"],
-    produces: "Writes the Adaptive Card JSON to the file named by --out (stdout otherwise). Produces nothing on its own — delivery to Teams is a separate workflow step and needs TEAMS_WEBHOOK_URL.",
-    action: "Nothing, normally — it runs itself every Monday. Run it locally to preview digest.json before changing what the card reports.",
+    group: "measurement",
+    runBy: "weekly-digest.yml, Mondays, in redline-metrics.",
+    cli: { command: "redline metrics digest", href: "/docs/cli/metrics" },
   },
   "build-inbox": {
-    what: "Aggregates open PRs across the org into one prioritised static HTML page.",
-    runsIn: "This (source) repo.",
-    trigger: "workflows/inbox.yml — every 30 minutes, 06:00-19:00 UTC, Monday-Friday, plus workflow_dispatch. Refuses to build unless the GitHub Pages site's visibility has been explicitly acknowledged as private or internal.",
-    command: ["GH_TOKEN=... npx redlinegate metrics inbox --org acme"],
-    env: ["GH_TOKEN — org read (required).", "ORG (required), OUT=dist, MAX_PAGES=10"],
-    produces: "Writes OUT/index.html (default dist/index.html), then deployed to GitHub Pages by the same workflow.",
-    action: "Nothing, normally — it runs itself every 30 minutes on weekdays. Run it locally with a scoped GH_TOKEN to preview a layout change before it ships.",
+    group: "measurement",
+    runBy: "inbox.yml, every 30 minutes on weekdays, in this repository.",
+    cli: { command: "redline metrics inbox", href: "/docs/cli/metrics" },
   },
   "build-dashboard": {
-    what: "Builds the telemetry dashboard: acted-on rate, weekly trend lines, seed recall history, and the noisiest-rules tuning queue — one static page, no server.",
-    runsIn: "The redline-metrics repo — never this repo.",
-    trigger: "workflows/dashboard.yml — daily (05:30 UTC), plus workflow_dispatch, plus automatically after Redline Collect or Redline Seed Canary finishes. Refuses to build unless Pages visibility has been acknowledged as private or internal.",
-    command: ["npx redlinegate metrics dashboard --org acme"],
-    env: ["DATA_DIR=data, ORG (required), DAYS=90, OUT=dist, SEED_SCORES=data/seed-scores.jsonl, ONBOARDED, STANDARDS_VERSION"],
-    produces: "Writes OUT/index.html (default dist/index.html), then deployed to GitHub Pages by the same workflow.",
-    action: "Nothing, normally — it runs itself daily. Run it locally against a copy of data/ to preview a metric or chart change before it ships.",
+    group: "measurement",
+    runBy: "dashboard.yml, daily and after each collect or canary run, in redline-metrics.",
+    cli: { command: "redline metrics dashboard", href: "/docs/cli/metrics" },
+  },
+  "build-registry": {
+    group: "measurement",
+    runBy: ".github/workflows/registry.yml, nightly, in this repository.",
+    cli: { command: "redline registry", href: "/docs/cli/registry" },
+  },
+  "build-correlation": {
+    group: "measurement",
+    runBy: "A human, by hand. No workflow runs it.",
+    cli: { command: "redline metrics correlate", href: "/docs/cli/metrics" },
+  },
+  "build-roi": {
+    group: "measurement",
+    runBy: "A human, by hand, with the spend figure. No workflow runs it.",
+    cli: { command: "redline metrics roi", href: "/docs/cli/metrics" },
+  },
+  "build-baseline": {
+    group: "measurement",
+    runBy: "The owner, once, with org credentials. No workflow runs it.",
+    cli: { command: "redline metrics baseline", href: "/docs/cli/metrics" },
+  },
+  "fetch-stars": {
+    group: "local",
+    runBy: "A maintainer, by hand, with an authenticated gh. The site build never calls the network.",
+    command: "npm run stars",
+  },
+  "publish-local": {
+    group: "local",
+    runBy: "A maintainer, by hand, to try the working tree as the installed redline.",
+    command: "npm run publish:local",
   },
 };

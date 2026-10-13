@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 import { STANDARDS } from "@/lib/registry";
+import { loadManifest } from "@/lib/manifest";
 import { findRule, getRules } from "@/lib/rules";
 
 export const metadata: Metadata = { title: "Standards" };
@@ -12,19 +13,22 @@ const EXAMPLE_RULE_ID = "core/query-string-concatenation";
 export default function Page() {
   const rules = getRules();
   const example = findRule(EXAMPLE_RULE_ID);
+  const { stacks, profiles } = loadManifest();
+  const stackCount = Object.keys(stacks).length;
+  const profileCount = Object.keys(profiles).length;
 
   return (
     <DocsPage
       crumb="Reference"
       title="Standards"
-      intro={`A versioned catalogue of ${rules.length} rules — core plus 20 stacks — and the only files a human edits. Everything a developer's tooling actually sees is generated from these.`}
+      intro={`A versioned catalogue of ${rules.length} rules — core plus ${stackCount} stacks — and the only files a human edits. Everything a developer's tooling actually sees is generated from these.`}
       href="/docs/standards"
     >
       <h2>What a standard is here</h2>
       <p>
         Two paths and a version number:{" "}
         <code>standards/core.md</code> for the rules every repository gets,{" "}
-        <code>standards/stacks/*.md</code> for the sixteen stack sets, both
+        <code>standards/stacks/*.md</code> for the {stackCount} stack sets, both
         versioned together in <code>standards/manifest.json</code>. What a
         repository ends up with —{" "}
         <code>.github/copilot-instructions.md</code>, <code>AGENTS.md</code>,{" "}
@@ -65,8 +69,8 @@ export default function Page() {
         sets that contradict each other — which is what keeps every stack&apos;s
         globs plain and unambiguous inside a repository.{" "}
         <code>redline init</code> proposes one by scanning the repo;{" "}
-        <code>--profile &lt;name&gt;</code> overrides the guess. The sixteen of
-        them, and why glob negation was not the answer, are on{" "}
+        <code>--profile &lt;name&gt;</code> overrides the guess. The {profileCount}{" "}
+        profiles, and why glob negation was not the answer, are on{" "}
         <Link href="/docs/profiles">Profiles &amp; stacks</Link>.
       </p>
 

@@ -3,31 +3,53 @@ import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 import { PackageBadge } from "@/components/package-badge";
+import { RedlineCode } from "@/components/learn/interactive";
+import { PrivateRepo, RedlineTerminal, Terminal } from "@/components/learn/parts";
 import { loadManifest } from "@/lib/manifest";
-import { browserRegistry, PACKAGE_NAME, packageState, standardsVersion } from "@/lib/package-version";
+import { browserRegistry, installCommand, PACKAGE_NAME, packageState, standardsVersion } from "@/lib/package-version";
 
 export const metadata: Metadata = { title: "Onboard a repository" };
+
+const STAND_DOWN = `git checkout -b redline/prove-stand-down
+# in .github/workflows/redline.yml, change   stand-down: ''   to   stand-down: policy
+git commit -am "test(redline): stand the policy job down"
+git push -u origin redline/prove-stand-down
+gh pr create --draft --title "Do not merge: prove a stand-down" --body-file .github/pull_request_template.md
+gh pr checks --watch`;
 
 export default async function Page() {
   const manifest = loadManifest();
   const state = await packageState();
+  const hero = installCommand(state, "init --profile web-react");
   return (
     <DocsPage
       crumb="Onboard a repository"
       title="Onboard a repository"
-      intro="One command per repo. redline detects GitHub or Azure DevOps from your git remote, installs the floor, and opens a pull request — never a direct push."
+      intro="Your team's rules only help if every assistant reads them and every pull request is checked against them. Onboarding puts both in place with one command, delivered as a pull request your team reviews like any other change."
       href="/docs/onboarding"
     >
+      <p>
+        This is the reference for onboarding your own repository: the full
+        sequence, what it installs, and what to do when your token cannot do
+        everything. New to Redline? The{" "}
+        <Link href="/docs/learn">Learn path</Link> walks the same thing on a
+        practice repository, one step at a time.
+      </p>
       {/* Laid out as cli/ui/report.ts renders it, for a run whose token could not
-          enable one capability. With a flag, init asks nothing. */}
-      <CodeWindow title="terminal" copyText="npx redlinegate@latest init --profile web-react">
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate@latest init --profile web-react</span>{"\n"}
+          enable one capability. With a flag, init asks nothing. The file list is
+          cut short: a real run writes one file per stack and per assistant. */}
+      <CodeWindow title="terminal" copyText={hero}>
+        <span className="tk-prompt">$</span> <span className="tk-white">{hero}</span>{"\n"}
         {"  "}profile <span className="tk-blue">web-react</span>{"\n"}
         {"\n"}
-        {"  "}<span className="tk-bold">Files</span><span className="tk-dim">  3 written</span>{"\n"}
+        {"  "}<span className="tk-bold">Files</span><span className="tk-dim">  … written</span>{"\n"}
         {"   "}<span className="tk-green">+</span> AGENTS.md{"\n"}
         {"   "}<span className="tk-green">+</span> CLAUDE.md{"\n"}
         {"   "}<span className="tk-green">+</span> .github/copilot-instructions.md{"\n"}
+        {"   "}<span className="tk-dim">…</span>{"\n"}
+        {"   "}<span className="tk-green">+</span> .github/workflows/redline.yml{"\n"}
+        {"   "}<span className="tk-green">+</span> .github/pull_request_template.md{"\n"}
+        {"   "}<span className="tk-green">+</span> .redline.json{"\n"}
         {"\n"}
         {"  "}<span className="tk-bold">Repository settings</span><span className="tk-dim">  2 in place · 1 refused</span>{"\n"}
         {"   "}<span className="tk-green">✓ applied    </span> <span className="tk-bold">secret-scanning  </span>  <span className="tk-dim">secret scanning</span>{"\n"}
@@ -55,9 +77,17 @@ export default async function Page() {
           add one and run it again.
         </li>
         <li>
-          Nothing to install: <code>npx {PACKAGE_NAME}</code> fetches the CLI on
-          demand. The npm package is <code>{PACKAGE_NAME}</code>; the command it
-          installs is <code>redline</code>.
+          The first run fetches the CLI for that one command:{" "}
+          <code>npx {PACKAGE_NAME}@latest init</code>, or{" "}
+          <code>pnpm dlx</code>, <code>yarn dlx</code> or <code>bunx</code>.
+          The npm package is <code>{PACKAGE_NAME}</code>; the command it installs
+          is <code>redline</code>. Let <code>init</code> pin it — answer yes when
+          it asks, or pass <code>--pin-cli</code> — and it adds{" "}
+          <code>{PACKAGE_NAME}</code> to <code>devDependencies</code> at that
+          exact version in the same pull request. From then on every command
+          runs the project&apos;s own copy, such as{" "}
+          <RedlineCode args="verify" />, so the team, its assistants and its
+          hooks all run one known Redline.
         </li>
       </ul>
       <p>
@@ -73,8 +103,9 @@ export default async function Page() {
       <h2 id="sequence">The whole sequence</h2>
       <p>
         <code>redline init</code> is one command, but onboarding is not one step.
-        Steps 4 and 5 are the ones most often skipped, and skipping them leaves a
-        repository that reports as onboarded and enforces nothing.
+        Step 4 is the one most often skipped, and skipping it leaves a
+        repository that reports as onboarded while anyone with push access can
+        still go around the gate.
       </p>
       <div className="table-scroll">
         <table>
@@ -84,12 +115,12 @@ export default async function Page() {
           <tbody>
             <tr>
               <td>1</td>
-              <td><code>npx redlinegate init --dry-run</code> — read the plan. Writes nothing, needs no credential, contacts no host.</td>
+              <td><code>{installCommand(state, "init --dry-run")}</code> — read the plan. Writes nothing, needs no credential, contacts no host.</td>
               <td>anyone</td>
             </tr>
             <tr>
               <td>2</td>
-              <td><code>npx redlinegate init</code> — files, whatever repository settings your token allows, and a pull request. Never a direct push.</td>
+              <td><code>{installCommand(state, "init")}</code> — files, whatever repository settings your token allows, and a pull request. Never a direct push.</td>
               <td>anyone with push</td>
             </tr>
             <tr>
@@ -99,17 +130,17 @@ export default async function Page() {
             </tr>
             <tr>
               <td>4</td>
-              <td><code>npx redlinegate init --repair</code> with an <b>admin</b> token — applies everything the first run recorded in <code>pendingAdmin</code>, including the branch ruleset that makes the check required.</td>
+              <td><RedlineCode args="init --repair" /> with an <b>admin</b> token — applies everything the first run recorded in <code>pendingAdmin</code>, including the branch ruleset. See <a href="#after-merge">After the pull request merges</a>.</td>
               <td>repo admin</td>
             </tr>
             <tr>
               <td>5</td>
-              <td><Link href="/docs/verification">Run the nine verification scenarios</Link> — watch the gate pass, block, and refuse to be waived.</td>
+              <td><a href="#prove-it">Prove it</a> — watch the gate pass, block, and refuse to be waived.</td>
               <td>anyone with push</td>
             </tr>
             <tr>
               <td>6</td>
-              <td>Soak at <code>observe</code>, then promote: <code>redline init --rung block-blocker</code> once the evidence supports it. A promotion the recorded evidence does not support is refused.</td>
+              <td>Soak at <code>observe</code>, then promote with <RedlineCode args="init --rung block-blocker" /> once recorded evidence supports it. A promotion the evidence does not support is refused — see the <Link href="/docs/enforcement">enforcement ladder</Link>.</td>
               <td>the team</td>
             </tr>
           </tbody>
@@ -118,51 +149,44 @@ export default async function Page() {
       <div className="callout">
         <p>
           <b>Step 4 is not optional cleanup.</b> A non-admin run installs the
-          workflow and opens the pull request, so the gate <i>runs</i> — but
-          nothing marks its check required, and no ruleset requires an approval.
-          Every check can be clicked past. The repository looks onboarded on the
-          dashboard and a merge is still one button.
+          workflow and opens the pull request, so the gate <i>runs</i> — but no
+          branch ruleset is applied, so nothing stops a push straight to the
+          default branch. The repository looks onboarded on the dashboard and
+          the gate can be walked around.
         </p>
       </div>
 
-      <h2>What it installs — the floor, no opt-out</h2>
+      <h2>What it installs</h2>
       <ul>
-        <li><b>Rendered standards</b> for the detected profile, plus the review output contract — Copilot, AGENTS.md, CLAUDE.md, Cursor, whichever vendors the manifest enables.</li>
+        <li><b>Rendered standards</b> for the detected profile, plus the review output contract, in the files each enabled assistant reads — <Link href="/docs/adaptors">Adaptors</Link> lists them per tool.</li>
         <li><b>Context sections</b>, where selected — background about how this repository works, rendered into the same artifacts as the rules and carrying no rule ids, because they are chosen per repository rather than by stack. Spec-first is on by default; TM Forum is opt-in.</li>
-        <li><b>Security floor</b> — secret scanning with push protection and dependency alerts; anything it couldn&apos;t enable is reported, not silently skipped.</li>
-        <li><b>Merge-readiness gate, advisory</b> — one human approval always, plus the required check name. It reports; it does not block, until promoted deliberately.</li>
+        <li><b>Security floor</b> — secret scanning with push protection and dependency alerts on the host, and dependency review plus a secret scan in the gate. Anything it could not enable is reported, not silently skipped. The floor fails the gate at every rung and no label waives it — see <Link href="/docs/gate">the gate</Link>.</li>
+        <li><b>Merge gate, advisory</b> — the gate reports on every pull request as <code>redline-gate / gate</code>, and a branch ruleset requires a pull request to merge. Required approvals default to none (<code>--approvals</code>). The gate reports; it stops a merge only once it is made required (<code>--blocking</code>) and the rung is raised.</li>
         <li><b><code>.redline.json</code></b> — profile, vendors, menu choices, pending-admin list, and the standards/CLI versions that produced it. This is what makes the repo visible to central telemetry — read-only, no secret is ever written to the repo.</li>
       </ul>
+      <PrivateRepo title="Dependency review needs GitHub Code Security">
+        <p>
+          On a public repository GitHub provides every part of the floor. On a
+          private one, the gate&apos;s dependency review needs GitHub Code
+          Security, and secret scanning with push protection needs GitHub Secret
+          Protection. Without Code Security the dependency review job fails, and
+          because it is on the floor it turns the gate red at every rung.{" "}
+          <Link href="/docs/learn/onboard">Learn 01</Link> walks through the two
+          ways to answer it.
+        </p>
+      </PrivateRepo>
 
-      <h2 id="menu">Menu — offered, defaulted, skippable</h2>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr><th>Flag</th><th>Default</th><th>Effect in Phase 1</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>--blocking</code></td><td>off</td><td>Promotes the gate from advisory to blocking.</td></tr>
-            <tr><td><code>--profile &lt;name&gt;</code></td><td>detected</td><td>Overrides stack detection.</td></tr>
-            <tr><td><code>--vendors &lt;list&gt;</code></td><td>detected</td><td>Comma-separated vendor ids (<code>copilot,agents,codex,claude,cursor</code>) to render for — overrides detection and any recorded selection; a vendor the org has not enabled never renders regardless.</td></tr>
-            <tr><td><code>--dry-run</code></td><td>off</td><td>Prints the plan — files, repository settings, resolved menu — and exits; writes nothing, needs no credential.</td></tr>
-            <tr><td><code>--no-commit</code></td><td>off</td><td>Writes the files into your working tree and stops — no setting changed, no branch, no pull request. Offline, so an org-sourced caller is written without confirming the organisation publishes the gate it references.</td></tr>
-            <tr><td><code>--gate-source org|local</code></td><td><code>org</code></td><td>Where the gate machinery lives — see <a href="#gate-source">below</a>. Omitting it keeps whatever the repository already recorded.</td></tr>
-            <tr><td><code>--repair</code></td><td>off</td><td>Re-applies capabilities a plain re-run treats as already settled — the fix once an administrator grants rights a read can never confirm on its own.</td></tr>
-            <tr><td><code>--no-a11y</code></td><td>on</td><td>Recorded in <code>.redline.json</code>; doesn&apos;t change what&apos;s rendered yet.</td></tr>
-            <tr><td><code>--speckit</code> / <code>--no-speckit</code></td><td>on</td><td>Renders the spec-first context section into the standards artifacts. Dropped automatically, with a note in the report, where the repository already runs Spec Kit — that is a separate tool with its own installer, and Redline neither creates nor edits its files. <code>--no-speckit</code> on a later run removes a section already rendered.</td></tr>
-            <tr><td><code>--tmf</code> / <code>--no-tmf</code></td><td>off</td><td>Renders the TM Forum context section — resource naming, <code>@type</code>/<code>@baseType</code>, offset/limit paging, the TMF error body. Ask for it only in a repository that actually implements TMF interfaces.</td></tr>
-            <tr><td><code>--with review-ownership</code></td><td>off</td><td>Seeds <code>.github/CODEOWNERS</code> and lets the ruleset require code-owner review. Off by default — see <a href="#owners">Name an owner that exists</a>.</td></tr>
-            <tr><td><code>--review-owners &lt;list&gt;</code></td><td><code>@&lt;org&gt;/platform-engineering</code></td><td>Who owns the paths seeded into <code>CODEOWNERS</code> — a team, a user or an email, comma-separated. <b>Set this:</b> the default is a guess, and a wrong owner fails silently.</td></tr>
-            <tr><td><code>--rung &lt;name&gt;</code></td><td><code>observe</code></td><td><code>observe</code>, <code>block-blocker</code>, <code>block-high</code> — the <Link href="/docs/enforcement">enforcement ladder</Link>.</td></tr>
-            <tr><td><code>--skip &lt;list&gt;</code> / <code>--with &lt;list&gt;</code></td><td>—</td><td>Capabilities this repository does not want Redline to install, because it has its own. A deselected capability is not attempted, not written and not reported as missing. The security floor is refused by name rather than deselected.</td></tr>
-            <tr><td><code>--integrations &lt;list&gt;</code></td><td>detected</td><td>Controls you already run (<code>sonarqube,snyk,mend,dependabot,renovate,gitleaks,trufflehog,codeql</code>). This is what writes <code>stand-down:</code> into the caller — from what you declared, never from detection alone, because detection reads a checkout and cannot see a scanner wired through a shared pipeline template.</td></tr>
-            <tr><td><code>--setup &lt;list&gt;</code></td><td>off</td><td>Controls to install alongside Redline: <code>dependabot</code>, <code>renovate</code>, <code>codeql</code>. Only what works with no account and no token. An existing file is never overwritten.</td></tr>
-            <tr><td><code>--pipeline &lt;name&gt;</code></td><td>detected</td><td><code>github-actions</code>, <code>azure-pipelines</code> or <code>local-agent</code> — what actually runs this repository&apos;s pull request checks. Asked separately from the host, because the two come apart: a repository on GitHub can be built entirely by Azure Pipelines, and installing an Actions workflow there gates nothing. <code>local-agent</code> is for a repository with no CI: the gate is a committed pre-push hook — see <Link href="/docs/gate#local-agent">the gate</Link>.</td></tr>
-            <tr><td><code>--branches &lt;patterns&gt;</code></td><td>default branch</td><td>Which branches the merge policy governs, in the host&apos;s own syntax. Widening this widens an enforcement boundary, so it is never detected for you.</td></tr>
-            <tr><td><code>--adopt-caller</code></td><td>off</td><td>Lets Redline take over gate machinery already at its path when what is there carries nothing attributing it to Redline — a 2.1 caller, in practice. Without it the run refuses rather than clobbering somebody&apos;s workflow.</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <h2 id="menu">Choosing what it installs</h2>
+      <p>
+        Every choice has a default, and <code>init</code> asks about the ones
+        that matter when run interactively. Each is also a flag, and each is
+        recorded in <code>.redline.json</code> so the next run keeps it.{" "}
+        <Link href="/docs/cli/init">redline init</Link> lists every flag. The
+        two that deserve a decision before you run it are{" "}
+        <a href="#gate-source">where the gate lives</a> and, if you protect the
+        gate with <code>CODEOWNERS</code>,{" "}
+        <a href="#owners">who owns it</a>.
+      </p>
 
       <h2 id="owners">Name an owner that exists</h2>
       <p>
@@ -248,10 +272,14 @@ export default async function Page() {
       </div>
       <p>
         A vendored gate is a copy, so it does not update itself the way the
-        organisation one does. <code>redline verify</code> reports a{" "}
-        <code>gate-vendored</code> check comparing the version stamped in the
-        file against the CLI running the check;{" "}
-        <code>redline init --repair</code> brings it level.
+        organisation one does. Raising <code>{PACKAGE_NAME}</code> in{" "}
+        <code>devDependencies</code> does not change it either: only{" "}
+        <code>init</code> rewrites it. To take a newer gate, bump the
+        dependency, run <RedlineCode args="init" /> and merge the pull request —
+        the same update as <Link href="/docs/learn/next-steps">Learn 10</Link>{" "}
+        describes. <code>redline verify --repo &lt;owner/name&gt;</code> reports
+        a <code>gate-vendored</code> check comparing the version stamped in the
+        file against the CLI running the check.
       </p>
       <p>
         A repo installs exactly one profile — see <b>Profiles &amp; stacks</b>{" "}
@@ -284,24 +312,29 @@ export default async function Page() {
       </div>
 
       <h2>Verify</h2>
-      <CodeWindow title="terminal" copyText="npx redlinegate verify">
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate verify</span>{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">onboarded</span>              profile web-react, standards v{manifest.version}{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">capabilities</span>           every capability selected{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">merge-policy</span>           policy is advisory, config says advisory{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">gate-machinery</span>         .github/workflows/redline.yml publishes redline-gate / gate{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">check-name-reported</span>    no required check configured yet (advisory gate) — PR #42 reported: <span className="tk-blue">redline-gate / gate</span>{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">security-floor</span>         security floor enabled{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">artifacts-current</span>      rendered artifacts match standards v{manifest.version}{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">review-ownership</span>       no CODEOWNERS on this host{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">commands-current</span>       slash commands match what this CLI renders{"\n"}
-        <span className="tk-green">ok</span>  <span className="tk-dim">pull-request-template</span>  .github/pull_request_template.md — maintained inside REDLINE markers{"\n"}
-        <span className="tk-red">FAIL</span> <span className="tk-dim">pending-admin</span>          partially onboarded — an administrator must still enable: dependency-alerts
-      </CodeWindow>
+      <p>
+        <code>verify</code> reads back what the host actually has and compares it
+        with what <code>.redline.json</code> says was installed. It asks the
+        host, so it needs <code>gh auth login</code> or <code>GH_TOKEN</code>.
+      </p>
+      <RedlineTerminal
+        commands="{redline} verify"
+        output={`ok    onboarded              profile web-react, standards v${manifest.version}
+ok    capabilities           every capability selected
+ok    merge-policy           policy is advisory as configured, 0 approval(s), code-owner review off
+ok    gate-machinery         .github/workflows/redline.yml publishes redline-gate / gate
+ok    check-name-reported    no required check configured yet (advisory gate) — PR #42 reported: redline-gate / gate
+ok    security-floor         security floor enabled
+ok    artifacts-current      rendered artifacts match standards v${manifest.version}
+ok    review-ownership       no CODEOWNERS on this host
+ok    commands-current       slash commands match what this CLI renders
+ok    pull-request-template  .github/pull_request_template.md — maintained inside REDLINE markers
+FAIL  pending-admin          partially onboarded — an administrator must still enable: dependency-alerts`}
+      />
       <p>
         Eleven checks, each named after what it reads. Three are worth knowing
-        before you see them: <code>check-name-reported</code> is skipped rather
-        than failed on a repository with no pull request yet — a fresh repo is
+        before you see them: <code>check-name-reported</code> passes rather
+        than fails on a repository with no pull request yet — a fresh repo is
         not drifted, it is new; <code>review-ownership</code> resolves every
         owner in <code>CODEOWNERS</code> against the host, which is what tells an
         enforcing file from a decorative one; and <code>pending-admin</code> is
@@ -309,41 +342,28 @@ export default async function Page() {
         <code>redline verify --gate</code> into CI — the same checks, exiting
         non-zero on failure. <Link href="/docs/troubleshooting">Troubleshooting</Link>{" "}
         has what <code>ok</code>, <code>FAIL</code> and <code>??</code> each
-        oblige you to do.
+        oblige you to do. Once the gate is required (<code>--blocking</code>),{" "}
+        <code>check-name-reported</code> becomes a real assertion: a required
+        name nothing reports is the{" "}
+        <Link href="/docs/troubleshooting#waiting-for-status">
+          &ldquo;waiting for status&rdquo; hang
+        </Link>
+        .
       </p>
-      <div className="callout info">
-        <span className="ic">ℹ</span>
-        <p>
-          The sample above is the default <b>advisory</b> install, where
-          nothing is marked required yet, so{" "}
-          <code>check-name-reported</code> only confirms the check is being
-          reported at all. Onboard with <code>--blocking</code> and GitHub
-          gets a real required check named <code>redline-gate / gate</code>{" "}
-          — from then on this line reads{" "}
-          <code>required checks reported on PR #42: redline-gate / gate</code>{" "}
-          on success, and fails outright if that check is required but never
-          reported.
-        </p>
-      </div>
 
       <h2 id="after-merge">After the pull request merges</h2>
       <p>
         Merging installs the files. It does not grant the permissions the first
         run was refused, and a plain re-run will not retry them — a capability
         already recorded as pending is treated as settled, which is exactly what{" "}
-        <code>--repair</code> exists to override.
+        <code>--repair</code> exists to override. Run it with a token that has
+        repository admin:
       </p>
-      <CodeWindow title="terminal" copyText="npx redlinegate init --repair">
-        <span className="tk-prompt">$</span> <span className="tk-white">npx redlinegate init --repair</span>{"\n"}
-        <span className="tk-green">applied</span>     secret-scanning{"\n"}
-        <span className="tk-green">applied</span>     push-protection{"\n"}
-        <span className="tk-green">applied</span>     dependency-alerts{"\n"}
-        <span className="tk-green">applied</span>     merge-policy       branch ruleset — <span className="tk-blue">redline-gate / gate</span> required{"\n"}
-        <span className="tk-green">applied</span>     repo-property      redline=onboarded
-      </CodeWindow>
+      <RedlineTerminal commands="{redline} init --repair" />
       <p>
-        Run it with a token that has repository admin. Everything under{" "}
-        <code>pendingAdmin</code> in <code>.redline.json</code> is retried, and the
+        Everything under <code>pendingAdmin</code> in <code>.redline.json</code>{" "}
+        is retried, the <b>Repository settings</b> section of the report shows
+        each one as <code>applied</code> or still <code>denied</code>, and the
         file is rewritten with what actually stuck.
       </p>
       <div className="callout">
@@ -351,16 +371,16 @@ export default async function Page() {
           <b>Approvals are your choice.</b> Redline&apos;s job is to fail the
           pipeline, so a new onboarding requires no approving review: a solo
           engineer can merge their own pull request once the checks pass. To
-          require reviews, run <code>redline init --approvals 1</code> (or any
+          require reviews, run <RedlineCode args="init --approvals 1" /> (or any
           number up to 10). The count is recorded as{" "}
-          <code>requiredApprovals</code> in <code>.redline.json</code>; edit it
-          and run <code>redline init --repair</code> to apply a new one.
+          <code>requiredApprovals</code> in <code>.redline.json</code>, and a
+          later run keeps it unless you pass the flag again.
         </p>
       </div>
       <p>
-        Then <Link href="/docs/verification">run the verification scenarios</Link>.
         Everything up to this point proves the gate is <i>installed</i>; only a
-        pull request that the gate actually stopped proves it is a gate.
+        pull request the gate actually stopped proves it is a gate. That is the{" "}
+        <a href="#prove-it">last section</a>.
       </p>
 
       <h2>Exit codes</h2>
@@ -396,14 +416,104 @@ export default async function Page() {
           repository, not from a product repo, and only reaches repositories in
           the register — see{" "}
           <Link href="/docs/distribution">Distribution &amp; drift</Link>. One
-          that is not in it picks up a standards change by re-running{" "}
-          <code>redline init</code>.
+          that is not in it picks up a standards change by bumping{" "}
+          <code>{PACKAGE_NAME}</code> and re-running <code>redline init</code>.
         </li>
         <li>
           No offline single-file executable yet, which matters for air-gapped
           Azure agents without npm registry access.
         </li>
       </ul>
+
+      <h2 id="prove-it">Prove it</h2>
+      <p>
+        A merge gate that never runs looks exactly like a merge gate that finds
+        nothing: both are green. The difference shows up on the pull request you
+        needed it to stop, which is the worst moment to find out. So before you
+        trust the gate, watch it pass, block, and refuse to be waived — on a
+        branch you throw away.
+      </p>
+      <p>
+        The <Link href="/docs/learn">Learn path</Link> shows most of that on a
+        real pull request. Run the same on your repository, or at least confirm
+        each line:
+      </p>
+      <ul>
+        <li>
+          <b>A failing process check does not fail the gate at <code>observe</code>.</b>{" "}
+          <Link href="/docs/learn/first-finding">Learn 02</Link>.
+        </li>
+        <li>
+          <b>The security floor fails the gate at every rung, label or not.</b>{" "}
+          <Link href="/docs/learn/security-floor">Learn 06</Link>.
+        </li>
+        <li>
+          <b>The gate stops the merge once it is required.</b>{" "}
+          <Link href="/docs/learn/required-gate">Learn 07</Link>.
+        </li>
+        <li>
+          <b>The <code>redline-exempt</code> label alone is refused.</b> Without a{" "}
+          <code>## Redline exemption</code> block it fails at a blocking rung.{" "}
+          <Link href="/docs/learn/exemptions">Learn 08</Link>.
+        </li>
+        <li>
+          <b>A BLOCKER fails the gate at <code>block-blocker</code>.</b> The same
+          finding that merged at <code>observe</code>.{" "}
+          <Link href="/docs/learn/earn-a-rung">Learn 09</Link>.
+        </li>
+      </ul>
+
+      <h3 id="prove-stand-down">A stood-down job reads as a pass</h3>
+      <p>
+        The one behaviour the Learn path does not show. When a repository
+        already runs a tool that covers one of the gate&apos;s jobs,{" "}
+        <code>init</code> writes that job into <code>stand-down:</code> in the
+        caller, and the job is skipped. The aggregate must read a skip as a
+        pass — if it fails instead, the repository is punished for narrowing the
+        gate to match tooling it already runs. Check it on a throwaway branch:
+      </p>
+      <Terminal commands={STAND_DOWN} />
+      <p>
+        <b>Expected:</b> <code>Deterministic policy</code> reports{" "}
+        <b>skipped</b>, and <code>gate</code> passes. If the aggregate fails on
+        a skip, do not stand anything down until it is fixed. Close the pull
+        request without merging and delete the branch.
+      </p>
+
+      <h3 id="prove-vendored">What a branch can change about its own gate</h3>
+      <div className="callout">
+        <p>
+          The rung and the stand-down list are inputs in the caller,{" "}
+          <code>.github/workflows/redline.yml</code>, and the caller runs from
+          the pull request&apos;s own head commit. A pull request can therefore
+          change both for itself — on an organisation gate as much as a
+          vendored one. Learn 09 uses exactly that to try a blocking rung on a
+          branch.
+        </p>
+        <p>
+          The job definitions are different. With{" "}
+          <code>--gate-source org</code> they live in{" "}
+          <code>&lt;org&gt;/.github</code>, and a pull request here cannot reach
+          them. With a <a href="#gate-source">vendored gate</a> they are in{" "}
+          <code>.github/workflows/redline-gate.yml</code>, so a pull request can
+          edit the secret-scan job — one of the two checks no label can waive —
+          and the gate judging it will run the edited copy.
+        </p>
+        <p>
+          The mitigation is the <code>/.github/workflows/</code> entry in{" "}
+          <code>.github/CODEOWNERS</code>, and{" "}
+          <b>it does nothing until the branch ruleset is applied</b> — admin
+          work a non-admin <code>redline init</code> leaves in{" "}
+          <code>pendingAdmin</code> (<a href="#after-merge">step 4</a>). Until
+          then, anyone with push access can do this on purpose.
+        </p>
+      </div>
+      <p>
+        Run these again after promoting a rung, after moving between{" "}
+        <code>--gate-source local</code> and <code>org</code>, and after standing
+        a job down or{" "}
+        <Link href="/docs/gate#adding-a-check">adding one of your own</Link>.
+      </p>
     </DocsPage>
   );
 }

@@ -112,9 +112,10 @@ export default function Page() {
         <code>workflows/redline-gate.yml</code> — hosted in the org{" "}
         <code>.github</code> repository and called by the thin{" "}
         <code>.github/workflows/redline.yml</code> each onboarded repo carries.
-        Both are invoked as{" "}
-        <code>npx --yes redlinegate@latest</code> from the org-hosted gate, or at
-        the version that wrote it in a vendored copy.
+        The org-hosted gate runs <code>redlinegate@latest</code> — the{" "}
+        <code>policy</code> job from an <code>npm install --prefix</code> into a
+        directory of its own, <code>exempt</code> through{" "}
+        <code>npx --yes</code>; a vendored copy runs the version that wrote it.
       </p>
       <ul>
         <li>
@@ -161,7 +162,7 @@ export default function Page() {
       <p>
         The entire measurement plane runs on it —{" "}
         <code>redline metrics collect | dashboard | digest | inbox | baseline |
-        roi | correlate | context | score-seeds</code> and{" "}
+        roi | correlate | score-seeds</code> and{" "}
         <code>redline registry</code>, driven by{" "}
         <code>redline-collect.yml</code>, <code>dashboard.yml</code>,{" "}
         <code>inbox.yml</code>, <code>weekly-digest.yml</code>,{" "}
@@ -244,9 +245,8 @@ export default function Page() {
         </span>
       </CodeWindow>
       <p>
-        Three write-capable credentials could have been one. They are three
-        because a token that can do everything is a token nobody can reason
-        about.
+        These three could have been one token. They are three because a token
+        that can do everything is a token nobody can reason about.
       </p>
 
       <h2>Tier 4 — Redline&apos;s own maintainers</h2>
@@ -255,18 +255,23 @@ export default function Page() {
         <code>scripts/assign-rule-ids.mjs</code>,{" "}
         <code>scripts/render-self.mjs</code> and{" "}
         <code>scripts/check-pins.mjs</code>, run by{" "}
-        <code>.github/workflows/ci.yml</code> and <code>release.yml</code> in
-        this repository. They act on this repository&apos;s own{" "}
+        <code>.github/workflows/ci.yml</code> in this repository, and all but{" "}
+        <code>check-pins</code> again by <code>release.yml</code> before a
+        publish. They act on this repository&apos;s own{" "}
         <code>standards/</code> and pinned actions — Redline enforced on Redline.
         Nobody installs the CLI to run them, and they need no credential beyond
         the CI run&apos;s own.
       </p>
       <p>
         <code>check-pins.mjs</code> is the only one that needs network: it
-        re-resolves every SHA-pinned third-party action against the tag its
-        trailing comment claims. It runs as its own CI job here, and{" "}
-        <b>only here</b> — the gate references it in a comment explaining where
-        its own pin is reviewed, but does not invoke it in your repository.
+        re-resolves every SHA-pinned third-party action and every digest-pinned
+        Docker image against the tag its trailing comment claims, and compares
+        the gate&apos;s <code>redlinegate</code> pin with the published latest.
+        It runs as its own CI job here, and <b>only here</b> — the gate
+        references it in a comment explaining where its own pin is reviewed, but
+        does not invoke it in your repository. All four, and the scripts behind{" "}
+        <code>metrics</code>, are on{" "}
+        <Link href="/docs/scripts">Maintainer scripts</Link>.
       </p>
 
       <h2>What this means for you</h2>
@@ -301,8 +306,8 @@ export default function Page() {
           sync plane is GitHub-only today — see{" "}
           <Link href="/docs/telemetry">Telemetry &amp; validation</Link>.{" "}
           <code>redline-sync.yml</code> and <code>verify-onboarding.yml</code>{" "}
-          are <b>active</b> where a platform team has installed them and created
-          the tokens, so <code>sync</code> is a real cross-repository write on a
+          are <b>active</b> wherever the platform team has created the tokens
+          they name, so <code>sync</code> is a real cross-repository write on a
           GitHub estate — scoped and pull-request-only as described above, but
           not hypothetical. On Azure DevOps both report a registered repository
           as <b>unsupported</b> rather than skipping it silently, so an Azure

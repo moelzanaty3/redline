@@ -139,19 +139,15 @@ git pull`}
       </p>
       <RedlineTerminal commands="{redline} verify" />
       <p>
-        It asks GitHub, so it needs <code>gh auth login</code> or <code>GH_TOKEN</code>.{" "}
-        <Link href="/docs/success">What success looks like</Link> shows a healthy result.
+        It asks GitHub, so it needs <code>gh auth login</code> or <code>GH_TOKEN</code>.
       </p>
 
       <h2>Where to go next</h2>
       <ul>
         <li>
           <Link href="/docs/onboarding">Onboard a repository</Link>: your own, with the options this
-          path skipped, including your organisation&apos;s gate.
-        </li>
-        <li>
-          <Link href="/docs/verification">Verification</Link>: nine scenarios that prove the gate
-          passes, blocks and refuses a bad exemption, run once on a throwaway branch.
+          path skipped, including your organisation&apos;s gate, and a short check that the gate is
+          real.
         </li>
         <li>
           <Link href="/docs/adopting">Adopting Redline</Link>: day one to month two with a real team.

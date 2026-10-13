@@ -29,7 +29,7 @@ const RULE_HREF = "/docs/standards/javascript";
 
 // Where "And more" under the hero's finding goes: the adaptor pages, which list
 // every assistant the standard is rendered for.
-const ADAPTORS_HREF = "/docs/adaptors/github-copilot";
+const ADAPTORS_HREF = "/docs/adaptors";
 
 // A second rule, for the one panel whose claim is that ids are many and each is
 // countable on its own. Illustrating that with the same id the hero and the

@@ -92,7 +92,6 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       intro={entry.description}
       href={`/docs/seeds/${slug}`}
     >
-      <h2>What this is</h2>
       {isClean ? (
         <p>
           Correct code with nothing wrong in it. It measures <b>precision</b>, and
@@ -112,15 +111,12 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         </p>
       )}
 
-      <h2>How to onboard it</h2>
+      <h2>Running it</h2>
       <p>
-        Nothing is installed and nothing here is ever merged. The corpus is used
-        by opening a throwaway pull request on a pilot repository already
-        onboarded for this stack, adding this directory <b>and</b>{" "}
-        <Link href="/docs/seeds/clean">seeded/clean</Link> together. Label it{" "}
-        <code>redline-exempt</code> so the readiness gate does not block a pull
-        request nobody will merge, wait for the automated review to finish, then
-        score it.
+        Nothing here is ever merged. Open a throwaway pull request on a pilot
+        repository already onboarded for this stack, adding this directory{" "}
+        <b>and</b> <Link href="/docs/seeds/clean">seeded/clean</Link> together,
+        wait for the automated review to finish, then score it.
       </p>
       <p>
         <Link href="/docs/workflows/seed-canary">seed-canary.yml</Link> does exactly
@@ -128,13 +124,21 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         the run fails.
       </p>
 
-      <h2>How to use it</h2>
       <CodeWindow title="terminal" copyText={score}>
         <span className="tk-prompt">$</span> <span className="tk-white">{score}</span>
       </CodeWindow>
-      {!isClean && <DefectTable defects={corpus.defects} />}
+      <p>
+        Flags and output are on{" "}
+        <Link href="/docs/cli/metrics">redline metrics</Link>.
+      </p>
+      {!isClean && (
+        <>
+          <h2>The {corpus.defects.length} defects</h2>
+          <DefectTable defects={corpus.defects} />
+        </>
+      )}
 
-      <h2>Expected output</h2>
+      <h2>Scoring</h2>
       {isClean ? (
         <p>
           Zero review comments. Any comment on this corpus is a false positive and
@@ -144,7 +148,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         </p>
       ) : (
         <p>
-          A score from <code>scripts/score-seeds.mjs</code>: BLOCKER recall, false
+          The score reports BLOCKER recall, false
           positives, and rule attribution. The canary appends it to{" "}
           <code>data/seed-scores.jsonl</code> and fails the run if BLOCKER recall
           drops below 1.0 or the clean corpus attracts a false positive. Of the{" "}
@@ -158,12 +162,11 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         </p>
       )}
 
-      <h2>How to edit it</h2>
+      <h2>Adding a defect</h2>
       <p>
         Add a defect by adding the code and one marker line above it. There is no
-        separate expectations file to keep in sync —{" "}
-        <code>scripts/score-seeds.mjs</code> parses the markers straight out of the
-        source:
+        separate expectations file to keep in sync — the scorer parses the
+        markers straight out of the source:
       </p>
       <CodeWindow
         title="marker format"

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
+import { RedlineTerminal } from "@/components/learn/parts";
 
 export const metadata: Metadata = { title: "Reviewing before you push" };
 
@@ -15,31 +15,27 @@ export default function Page() {
     >
       <h2>Why bounding matters more than the model</h2>
       <p>
-        Hand a model the composed standard for a sixteen-stack profile and it
-        spends most of its attention on rules for languages your change never
-        touched. <b>The findings get worse, not better.</b>{" "}
-        <code>redline review</code> resolves the applicable stacks from the
-        changed files and the prompt carries only those.
+        Hand a model every rule in the standard and it spends most of its attention on rules for
+        files your change never touched. <b>The findings get worse, not better.</b>{" "}
+        <code>review</code> resolves the applicable stacks from the changed files and the prompt
+        carries only those.
       </p>
-      <CodeWindow
-        title="terminal"
-        copyText={"redline review\nredline review --staged\nredline review --engine api --model qwen2.5-coder:14b"}
-      >
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">redline review</span>
-        <span className="tk-dim">{"                # working tree vs the merge base"}</span>
-        {"\n"}
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">redline review --staged</span>
-        <span className="tk-dim">{"       # before you commit"}</span>
-        {"\n"}
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">redline review --engine api --model qwen2.5-coder:14b</span>
-      </CodeWindow>
+      <RedlineTerminal
+        commands={`# the working tree against its merge base
+{redline} review
+# only what is staged, before you commit
+{redline} review --staged
+# a local model through Ollama: the diff never leaves the machine
+{redline} review --engine api --provider openai --base-url http://localhost:11434/v1 --model qwen2.5-coder:14b`}
+      />
+      <p>
+        <Link href="/docs/learn/first-finding">Learn step 02</Link> runs a review on your machine and
+        in your assistant.
+      </p>
 
       <h2>Two engines, and the default calls no model</h2>
       <p>
-        Typed at a terminal with no <code>--engine</code>, <code>redline review</code>{" "}
+        Typed at a terminal with no <code>--engine</code>, <code>review</code>{" "}
         prints the findings the checker decides without a model and says where
         the rest come from — it never sends the diff anywhere unasked.
       </p>
@@ -56,9 +52,12 @@ export default function Page() {
           <b>api</b> — the CLI calls an endpoint itself, in either the
           OpenAI-compatible or the Anthropic dialect. The OpenAI-compatible half
           covers the <b>fully local case for free</b>: Ollama, LM Studio and vLLM
-          all expose it, and a local endpoint needs no key. That matters — a
+          all expose it, and a local endpoint needs no key. That matters: a
           review that must send a diff to a third party is one several markets
-          cannot run at all.
+          cannot run at all. For a local server, pass <code>--provider openai</code>{" "}
+          and its <code>--base-url</code>: with no API key exported there is nothing
+          to infer the provider from, and with <code>OPENAI_API_KEY</code> exported
+          and no <code>--base-url</code> the engine calls OpenAI&apos;s hosted API.
         </li>
       </ul>
 
@@ -79,7 +78,7 @@ export default function Page() {
         <p>
           A local review is opt-in and therefore <b>enforces nothing</b>. The pull
           request review remains the system of record, and{" "}
-          <code>redline review</code> always exits 0 — a non-zero exit would
+          <code>review</code> always exits 0 — a non-zero exit would
           invite someone to wire it into CI as a second gate, where it would
           enforce nothing while looking like it did.
         </p>
@@ -88,8 +87,9 @@ export default function Page() {
         Local findings are <b>excluded from rule-tuning telemetry</b>, and the
         command says so on every run. A local run has no thread to resolve, no
         reviewer to attribute, and no way to tell a finding that was fixed from
-        one the author never read — counting it would compute acted-on rate partly
-        from runs nobody can verify.
+        one the author never read. Counting it would compute the{" "}
+        <Link href="/docs/telemetry#acted-on">acted-on rate</Link> partly from runs nobody can
+        verify.
       </p>
 
       <h2>It tells you what the standard does not cover</h2>

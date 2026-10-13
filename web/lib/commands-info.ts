@@ -402,7 +402,7 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     what: "Derives the register of onboarded repositories by walking the organisation and reading the .redline.json each one carries. It is the input both redline sync and the estate dashboard run off — sync needs to know who to open a pull request on, and coverage needs to know the denominator.",
     built: true,
     onboard:
-      "It runs in the source repository, nightly, from workflows/registry.yml — not in a product repository, where it would be meaningless. It needs a token with org read access and nothing more: the register is derived from what each repository already publishes about itself, so nothing here is hand-maintained. A repository that removes Redline stops appearing, and stops being a sync target, without anyone editing a list.",
+      "It runs in the source repository, nightly, from .github/workflows/registry.yml — not in a product repository, where it would be meaningless. It needs a token with org read access and nothing more: the register is derived from what each repository already publishes about itself, so nothing here is hand-maintained. A repository that removes Redline stops appearing, and stops being a sync target, without anyone editing a list.",
     usage: [
       "redline registry --org acme --source acme/redline",
       "redline registry --org acme --source acme/redline --out registry.json",

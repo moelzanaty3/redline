@@ -4,8 +4,6 @@ import { DocsPage } from "@/components/docs-page";
 import { FileViewer } from "@/components/file-viewer";
 import { TEMPLATES, findBySlug } from "@/lib/registry";
 import { TEMPLATES_INFO } from "@/lib/templates-info";
-import { LifecycleSteps } from "@/components/lifecycle-steps";
-import { TEMPLATE_EDIT } from "@/lib/lifecycle";
 
 export function generateStaticParams() {
   return TEMPLATES.map((t) => ({ slug: t.slug }));
@@ -39,36 +37,26 @@ export default async function Page({
       intro={entry.description}
       href={`/docs/templates/${slug}`}
     >
-      <h2>What this is</h2>
       <p>{info.what}</p>
-
-      <h2>How to onboard it</h2>
       <ul>
         <li>
           <b>Installed as:</b>{" "}
-          {info.installedAs ? <code>{info.installedAs}</code> : "Nowhere — not installed by anything."}
+          {info.installedAs ? <code>{info.installedAs}</code> : "Nowhere — nothing installs it."}
         </li>
         <li>
           <b>Installed by:</b> {info.installedBy}
         </li>
       </ul>
 
-      <h2>How to use it</h2>
-      <p>{info.action}</p>
+      <h2>What to know</h2>
       <ul>
         {info.detail.map((d) => (
           <li key={d}>{d}</li>
         ))}
       </ul>
 
-      <h2>Expected output</h2>
-      <p>{info.output}</p>
-
-      <h2>How to edit it</h2>
-      <p>
-        <b>The real source:</b> {info.editWhere}
-      </p>
-      <LifecycleSteps steps={TEMPLATE_EDIT} />
+      <h2>Where to change it</h2>
+      <p>{info.editWhere}</p>
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={420} />

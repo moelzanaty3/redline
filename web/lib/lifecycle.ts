@@ -1,11 +1,7 @@
-// The four questions every reference page has to answer about its item: how it
-// reaches you, how you use it, what it produces, and how you change it.
-//
-// Most of the answer is the same for every item in a category and is derived
-// here from the repository itself — manifest profiles, rule ids, the CI steps
-// that guard each file — rather than restated by hand 39 times, where it would
-// drift the first time a workflow changed. Per-item facts that the derivation
-// cannot know live in the *-info modules beside the copy they belong to.
+// Facts the reference pages derive from the repository itself — manifest
+// profiles, rule ids, the CI steps that guard each file — rather than restate by
+// hand on every page, where they would drift the first time a workflow changed.
+// Per-item facts the derivation cannot know live in the *-info modules.
 import { loadManifest } from "./manifest";
 import { rulesForStack, type Severity } from "./rules";
 
@@ -72,25 +68,7 @@ export const STANDARDS_EDIT: Step[] = [
   },
 ];
 
-// --- scripts, workflows, templates -------------------------------------------
-
-export const SCRIPT_EDIT: Step[] = [
-  {
-    label: "Edit the .mjs file directly",
-    detail:
-      "Nothing generates these — scripts/ is hand-written maintainer tooling with no runtime dependencies. Keep it that way: package.json declares none, and these run in CI with only Node's builtins available.",
-  },
-  {
-    label: "node --check scripts/<file>.mjs",
-    detail:
-      "CI's lint job parses every script in scripts/. A syntax error there fails the build without running anything.",
-  },
-  {
-    label: "Run it locally with the same env CI gives it",
-    detail:
-      "Each script is env-configured with no argument parsing, so a local run is the CI run. The environment variables it needs are listed above.",
-  },
-];
+// --- workflows, templates ----------------------------------------------------
 
 export const WORKFLOW_EDIT: Step[] = [
   {
@@ -106,7 +84,7 @@ export const WORKFLOW_EDIT: Step[] = [
   {
     label: "node scripts/check-pins.mjs",
     detail:
-      "If you add a third-party action, pin it to a 40-character commit SHA with a trailing # vX.Y.Z comment. First-party actions/* are referenced by tag. The pin checker re-resolves the SHA against the tag the comment claims.",
+      "If you add a third-party action, pin it to a 40-character commit SHA with a trailing # vX.Y.Z comment; a Docker image, to its digest with the tag in the comment. First-party actions/* are referenced by tag. The pin checker re-resolves each pin against the tag its comment claims. CI runs it as its own job, allowed to fail, because it needs the network.",
   },
   {
     label: "node scripts/validate.mjs",
@@ -119,7 +97,7 @@ export const TEMPLATE_EDIT: Step[] = [
   {
     label: "Check whether the CLI reads this file at all",
     detail:
-      "Several of these are reference shapes: the CLI generates the equivalent in code and never opens the checked-in copy. Editing one of those changes nothing about what redline init writes. The onboarding section above says which kind this is.",
+      "Several of these are reference shapes: the CLI generates the equivalent in code and never opens the checked-in copy, so editing one changes nothing redline init writes. Each template's page says which kind it is.",
   },
   {
     label: "Edit the real source",

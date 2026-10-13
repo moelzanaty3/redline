@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
+import { RedlineTerminal } from "@/components/learn/parts";
 import { loadManifest } from "@/lib/manifest";
 import { findRule } from "@/lib/rules";
 
@@ -89,21 +89,22 @@ export default function Page() {
       </p>
 
       <h2>Running it yourself</h2>
-      <CodeWindow
-        title="terminal"
-        copyText={"git diff main...HEAD > change.diff\nnpx redlinegate policy --diff-file change.diff"}
-      >
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">git diff main...HEAD &gt; change.diff</span>
-        {"\n"}
-        <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx redlinegate policy --diff-file change.diff</span>
-      </CodeWindow>
       <p>
-        The floor is <code>BLOCKER</code>, not <code>HIGH</code>, on purpose: a
-        deterministic tier that failed merges over a missing ticket reference on
-        day one would be switched off by week two, and then nothing it decides is
-        enforced at all.
+        The same check the gate runs, on your machine, before you push. It reads the
+        repository&apos;s <code>.redline.json</code> and needs no network:
+      </p>
+      <RedlineTerminal
+        commands={`git diff main...HEAD > change.diff
+{redline} policy --diff-file change.diff`}
+      />
+      <p>
+        In the gate, the repository&apos;s <Link href="/docs/enforcement">rung</Link> sets the
+        severity that fails the job: <code>BLOCKER</code> at <code>observe</code> and{" "}
+        <code>block-blocker</code>, <code>HIGH</code> and above at <code>block-high</code>. Starting
+        at <code>BLOCKER</code> is deliberate: a tier that failed merges over a missing ticket
+        reference on day one would be switched off by week two, and then nothing it decides is
+        enforced at all. <Link href="/docs/learn/earn-a-rung">Learn step 09</Link> runs it on a
+        real fix.
       </p>
 
       <h2>What is deliberately not in the tier</h2>

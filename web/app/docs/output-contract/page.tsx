@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
 
@@ -50,9 +51,16 @@ export default function Page() {
         the rule they apply, exactly as written.
       </p>
       <ul>
-        <li>Ids are <b>stable across wording changes</b> and aggregated per rule — that&apos;s how the org learns which rules earn their place and which only generate noise.</li>
+        <li>
+          Ids are <b>stable across wording changes</b> and aggregated per rule. That is how the org
+          learns which rules earn their place and which only generate noise: a rule&apos;s{" "}
+          <Link href="/docs/telemetry#acted-on">acted-on rate</Link> is counted against its id.
+        </li>
         <li><code>core/uncatalogued</code> is reserved for a real finding no rule covers. A rising count there is how a missing rule gets discovered.</li>
-        <li>A finding without a valid id cannot be measured and is treated as untagged — untagged counts appear in telemetry.</li>
+        <li>
+          A finding without a valid id cannot be measured and is treated as untagged. Untagged
+          findings are counted as <Link href="/docs/telemetry#noise">noise</Link>.
+        </li>
       </ul>
 
       <h2>Noise control</h2>

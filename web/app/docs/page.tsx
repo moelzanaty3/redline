@@ -41,7 +41,7 @@ export default function Page() {
         and its data ends at merge — those are a delivery platform&apos;s job and
         are well served. Findings can come from Redline&apos;s own checker, your
         AI reviewer or another tool: Redline{" "}
-        <Link href="/docs/ingestion">normalises whoever found what</Link>, and
+        <Link href="/docs/telemetry#ingestion">normalises whoever found what</Link>, and
         measures whether anyone acted.
       </p>
 

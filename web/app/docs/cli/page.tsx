@@ -19,9 +19,11 @@ export default function Page() {
         repository you are standing in; <code>sync</code>,{" "}
         <code>registry</code> and <code>metrics</code> act on the estate instead,
         and running them in a product repo is a wasted afternoon rather than an
-        error message. For what any of it is <i>for</i>, start with{" "}
-        <Link href="/docs/success">What success looks like</Link>, which walks
-        them in the order you would reach for them; for who may run what, under
+        error message. In a product repository, run them through the
+        project&apos;s pinned copy, such as <code>pnpm redline verify</code>.
+        For what any of it is <i>for</i>, start with the{" "}
+        <Link href="/docs/learn">Learn path</Link>, which uses them in the order
+        you would reach for them; for who may run what, under
         which credential, see{" "}
         <Link href="/docs/who-runs-what">Who runs what</Link>.
       </p>

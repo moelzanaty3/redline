@@ -17,6 +17,21 @@ to check understanding. Progress is ticked off per step and kept in the browser 
 Tutorial's unique parts moved in: the no-GitHub path, `/redline-review` in an assistant, and
 how new rules arrive. The old URLs redirect. The home page and the header link to Learn.
 
+### Site — fewer docs pages, each checked against the code
+
+With Learn covering the hands-on half, the reference pages were audited against the CLI and the
+gate and cut down to one home per fact. Verification's unique scenarios moved to the end of
+Onboard, Success into Adopting, Scanner ingestion and Cost into Telemetry, the four per-tool
+adaptor pages into one Adaptors overview, and thirteen per-script pages into one Maintainer
+scripts table. Every old address redirects to the section that replaced it.
+
+Claims the code contradicted were corrected: the `warn` rung that no longer exists, exemptions
+covering three process checks rather than two, a gate of five jobs rather than four, the Azure
+gate's secret scan, `--approvals` defaulting to none, and a stale-artifacts fix that changed
+nothing (a repository updates by raising its `redlinegate` pin and running `init`). Commands
+after onboarding run the project's pinned copy. The express and nextjs stacks and four seed
+corpora that had no pages now do. `init --help` lists `codex` among the vendors it accepts.
+
 ### Init — a tool you said you do not run stays unticked
 
 `redline init --integrations ''` recorded an empty list in `.redline.json`, and the next plain
