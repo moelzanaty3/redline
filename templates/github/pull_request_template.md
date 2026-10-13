@@ -49,7 +49,7 @@ exemption.
              can act on. "Needed for release" is not one.
   - until:   YYYY-MM-DD, at most 90 days out. Longer than that is a standards change,
              not an exemption — raise it in the Redline source repo.
-  - scope:   which checks it covers (checklist, adr). Omit to cover both.
+  - scope:   which checks it covers (checklist, adr, policy). Omit to cover all three.
 
 This can never exempt dependency review or the secret scan. Those do not soft-fail.
 -->
