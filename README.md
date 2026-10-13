@@ -264,7 +264,7 @@ it is the cheapest way to see the findings before a reviewer does.
 Redline's hardest failure mode is not breaking — it is running, looking green, and doing
 nothing. Each checkpoint below has a command that proves it, and a quiet failure that
 looks identical from the outside. The long version, with the numbers to expect, is
-[docs/success](https://redline-gate.vercel.app/docs/success).
+[docs/success](https://www.redlinegate.dev/docs/success).
 
 **New install?** Work through [docs/verifying.md](docs/verifying.md) once. It is a
 ten-minute guided run that makes the gate fail on purpose — a green run you have never
