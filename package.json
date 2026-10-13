@@ -4,7 +4,7 @@
   "description": "Engineering control plane for AI-assisted development: standards, merge gates and evidence across GitHub and Azure DevOps",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://redline-gate.vercel.app",
+  "homepage": "https://www.redlinegate.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/moelzanaty3/redline.git"

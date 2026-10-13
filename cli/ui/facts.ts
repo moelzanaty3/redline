@@ -124,9 +124,9 @@ export function gatherFacts(opts: GatherOptions): WizardFacts {
             ...(recorded.profile !== undefined ? { profile: recorded.profile } : {}),
             ...(recorded.vendors !== undefined ? { vendors: recorded.vendors } : {}),
             ...(recorded.rung !== undefined ? { rung: recorded.rung } : {}),
-            // Empty means nobody has said, which must fall through to detection
-            // rather than record "this repository runs nothing".
-            ...(recorded.integrations.length > 0 ? { integrations: recorded.integrations } : {}),
+            // Null means nobody has said, which must fall through to detection.
+            // An empty list is an answer and is passed on as one.
+            ...(recorded.integrations !== null ? { integrations: recorded.integrations } : {}),
           },
   };
 }

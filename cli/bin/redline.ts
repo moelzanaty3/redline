@@ -357,6 +357,8 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
       if (values['no-a11y'] !== undefined) menu.accessibility = !values['no-a11y'];
       if (values.speckit !== undefined) menu.speckit = values.speckit;
       if (values['no-speckit'] === true) menu.speckit = false;
+      if (values.adr !== undefined) menu.adrForLargeDiffs = values.adr;
+      if (values['no-adr'] === true) menu.adrForLargeDiffs = false;
       if (values.tmf !== undefined) menu.tmf = values.tmf;
       if (values['no-tmf'] === true) menu.tmf = false;
       if (wizard) {

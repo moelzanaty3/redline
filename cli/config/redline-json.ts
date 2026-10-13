@@ -140,9 +140,10 @@ export interface RedlineConfig {
   // wired through a shared pipeline template, and it believes a config file that
   // nothing references. Both are wrong in a way only a human can correct, and
   // the correction has to survive the next run or it has to be made every time.
-  // Empty for a repository onboarded before the field existed, which reads back
-  // as "ask detection", not as "runs nothing".
-  integrations: string[];
+  // Null for a repository onboarded before the field existed, which means "ask
+  // detection". An empty list is an answer — "runs none of them" — and has to
+  // survive the next run as one, or a tool unticked once is detected back in.
+  integrations: string[] | null;
   // Where this repository's gate machinery lives. Absent reads back as `org`,
   // which is what every repository onboarded before the choice existed has: it
   // references the organisation's reusable workflow. `local` means the gate is
@@ -413,7 +414,7 @@ export function parseConfig(raw: unknown): RedlineConfig {
     commandFiles,
     integrations: Array.isArray(o['integrations'])
       ? o['integrations'].filter((id): id is string => typeof id === 'string')
-      : [],
+      : null,
     gateSource: o['gateSource'] === 'local' ? 'local' : 'org',
     gateVersion: typeof o['gateVersion'] === 'string' ? o['gateVersion'] : '',
     // Anything that is not a string reads back as "no link", which is also what

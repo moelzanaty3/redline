@@ -641,8 +641,7 @@ export async function init(platform: Platform | null, opts: InitOptions): Promis
   // Precedence, strongest first: what the caller stated this run, then what the
   // repository recorded, then what detection found. Someone who corrected the
   // survey once must not have to correct it again on every re-run.
-  const stated =
-    opts.integrations ?? (existing !== null && existing.integrations.length > 0 ? existing.integrations : null);
+  const stated = opts.integrations ?? existing?.integrations ?? null;
   const integrations =
     stated ?? survey.tools.map((tool) => tool.id);
   const evidenceOf = new Map(survey.tools.map((tool) => [tool.id, tool.evidence]));
