@@ -36,9 +36,14 @@ const valid: RedlineConfig = {
 // Absent means "nobody has said", which must fall back to detection rather than
 // silence the survey. Those are different answers and the config cannot tell
 // them apart unless the empty case is preserved exactly.
-test('an absent integrations list reads back empty, not as "runs nothing"', () => {
+test('an absent integrations list reads back as unanswered, not as "runs nothing"', () => {
   const { integrations, ...withoutField } = valid;
   const parsed = parseConfig(withoutField);
+  assert.equal(parsed.integrations, null);
+});
+
+test('an empty integrations list reads back as the answer "runs none of them"', () => {
+  const parsed = parseConfig({ ...valid, integrations: [] });
   assert.deepEqual(parsed.integrations, []);
 });
 

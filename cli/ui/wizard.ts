@@ -384,9 +384,7 @@ export async function runWizard(p: Prompter, facts: WizardFacts): Promise<Wizard
   // already runs is still detected, and still stands Redline's own gate jobs
   // down; it just does not need a question to do it.
   const already = new Set(
-    facts.recorded?.integrations?.length
-      ? facts.recorded.integrations
-      : survey.tools.map((tool) => tool.id)
+    facts.recorded?.integrations ?? survey.tools.map((tool) => tool.id)
   );
   const setupChoices: Choice<string>[] = facts.offerable.map((offer) => ({
     value: offer.id,
