@@ -181,8 +181,13 @@ const agents: VendorRenderer = (ctx) => {
   };
 };
 
+// CLAUDE.md is a pointer: it imports AGENTS.md, where the rules actually are.
+// So claude renders AGENTS.md too, the same way codex does. Selected on its
+// own — `--vendors claude`, or a repository whose only marker is CLAUDE.md —
+// it used to write the import and not the file, and Claude read nothing.
 const claude: VendorRenderer = (ctx) => ({
   files: new Map([
+    ...agents(ctx).files,
     [
       'CLAUDE.md',
       {

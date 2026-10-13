@@ -45,7 +45,7 @@ function matches(
 
 function Card({ entry, activePhase }: { entry: CatalogEntry; activePhase: PhaseFilter }) {
   const p = publisherOf(entry);
-  const cmd = installCommand(p);
+  const cmd = installCommand(entry);
   return (
     // Not an <a> wrapping the card. The most valuable string on it is the
     // install command, and a copy button inside a link is both invalid markup

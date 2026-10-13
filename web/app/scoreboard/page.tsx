@@ -33,7 +33,7 @@ export const dynamic = "force-static";
 // the shape and links to the detail rather than restating the whole workflow.
 const CANARY_HREF = "/docs/workflows/seed-canary";
 const SEEDS_HREF = "/docs/seeds";
-const SCORER_HREF = "/docs/scripts/score-seeds";
+const SCORER_HREF = "/docs/cli/metrics";
 
 export default function ScoreboardPage() {
   const data = scoreboard();
@@ -105,7 +105,7 @@ export default function ScoreboardPage() {
           <p className="sb-sec-lede">
             A review system fails in more than one direction, and only one of those
             directions is loud. These are counted by{" "}
-            <Link href={SCORER_HREF}>scripts/score-seeds.mjs</Link> from the reviewer&rsquo;s
+            <Link href={SCORER_HREF}>redline metrics score-seeds</Link> from the reviewer&rsquo;s
             own comments; a comment is matched to at most one marker, within four lines of
             it, and only when it carries the marked severity or higher.
           </p>

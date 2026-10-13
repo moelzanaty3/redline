@@ -1,9 +1,9 @@
 :root {
-  --bg: #0a0a0a;
-  --bg-soft: #111111;
-  --card: #0f0f0f;
-  --border: #232323;
-  --border-strong: #333333;
+  --bg: #000000;
+  --bg-soft: #0a0a0a;
+  --card: #000000;
+  --border: #242424;
+  --border-strong: #3d3d3d;
   --text: #ededed;
   --muted: #a1a1a1;
   /* AA on --bg: #6f6f6f measured 3.94:1, which is under the 4.5 floor for the
@@ -35,6 +35,10 @@
      nav that does not line up with the page under it reads as a rendering bug
      before it reads as a design. */
   --shell: 1224px;
+  /* Display type: medium weight, tracked tight. Headlines carry the page by
+     size and spacing, not by weight, gradient or glow. */
+  --display-weight: 500;
+  --display-tracking: -0.055em;
   color-scheme: dark;
 }
 
@@ -85,14 +89,19 @@ kbd {
 }
 
 /* ================= nav ================= */
+/* No border and no fill over the fold: the bar is just the page. Once content
+   scrolls under it, it takes a blurred backdrop so the links stay legible. */
 .site-nav {
   position: sticky;
   top: 0;
   z-index: 60;
-  background: rgba(10, 10, 10, 0.92);
-  backdrop-filter: saturate(1.6) blur(12px);
-  -webkit-backdrop-filter: saturate(1.6) blur(12px);
-  border-bottom: 1px solid var(--border);
+  background: transparent;
+  transition: background-color 0.2s;
+}
+.site-nav[data-scrolled="true"] {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: saturate(1.6) blur(14px);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
 }
 /* A hairline that fills as the page scrolls — the one affordance telling a
    reader how far through a long single page they are. Sits on the header's
@@ -111,7 +120,7 @@ kbd {
   width: 100%;
   transform-origin: 0 50%;
   transform: scaleX(0);
-  background: linear-gradient(90deg, var(--red-soft), #ff8a4d);
+  background: var(--red);
   transition: transform 0.1s linear;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -137,12 +146,11 @@ kbd {
   letter-spacing: -0.01em;
 }
 .logo .mark {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, #ff3d3d, var(--red) 55%, #8f0000);
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--red);
   position: relative;
-  box-shadow: 0 0 14px rgba(230, 0, 0, 0.45);
 }
 .logo .mark::after {
   content: "";
@@ -174,19 +182,20 @@ kbd {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
 }
 .search-pill {
   display: flex;
   align-items: center;
-  gap: 26px;
+  height: 32px;
+  gap: 12px;
   font-family: var(--sans);
   font-size: 13px;
   color: var(--muted);
   background: var(--bg-soft);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 8px 7px 12px;
+  border-radius: 6px;
+  padding: 0 6px 0 12px;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
 }
@@ -202,17 +211,22 @@ kbd {
   border-radius: 5px;
   padding: 1px 6px;
 }
+/* Outlined, not filled: the page's one filled button is the hero's. */
 .nav-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
   font-size: 13.5px;
-  font-weight: 550;
-  background: #fff;
-  color: #000;
-  border-radius: 8px;
-  padding: 7px 14px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0 12px;
   transition: background 0.15s;
 }
 .nav-cta:hover {
-  background: #d9d9d9;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* ================= buttons ================= */
@@ -231,176 +245,356 @@ kbd {
 }
 
 /* ================= hero ================= */
+/* Quiet on purpose. A mid-size headline, the command and one pill, the
+   definition in small type; on the right one small object. The red line lives
+   in that object, struck through the code it is about — it is the only accent
+   above the fold apart from the product's name. */
+/* The fold is a column: the hero content takes the free height and centres in
+   it, and the evidence strip sits on the bottom edge — so a tall viewport
+   reads as composed, not empty. */
 .hero {
   position: relative;
-  padding: 92px 0 84px;
-  text-align: center;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: min(780px, calc(100svh - 62px));
+  padding: 40px 0 36px;
 }
-.hero-glow {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  /* Aimed at the copy column, not the middle: the hero is no longer a centred
-     stack, and a glow centred on the gutter lit the gap between the two halves. */
-  background:
-    radial-gradient(ellipse 640px 300px at 34% -8%, rgba(230, 0, 0, 0.2), transparent 70%),
-    radial-gradient(ellipse 900px 420px at 40% 0%, rgba(255, 255, 255, 0.045), transparent 70%);
-}
-.hero-lines {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 80px 80px;
-  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 20%, transparent 70%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 20%, transparent 70%);
+.hero-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: center;
+  width: 100%;
 }
 .hero h1 {
-  position: relative;
-  font-size: clamp(42px, 6.6vw, 76px);
-  font-weight: 700;
-  line-height: 1.04;
-  letter-spacing: -0.045em;
-  max-width: 880px;
-  margin: 0 auto 18px;
-  background: linear-gradient(180deg, #ffffff 55%, #9a9a9a);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.hero .sub {
-  position: relative;
-  color: var(--muted);
-  font-size: 17px;
-  max-width: 640px;
-  margin: 0 auto 16px;
-}
-.hero .sub b {
-  color: var(--text);
-  font-weight: 550;
-}
-.hero .ctas {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 22px;
-}
-
-/* the differentiator line — its own strip, not the tail of a paragraph */
-.hero-claim {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px 0;
-  margin: 0 0 22px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-}
-
-/* the two commands, in the form a reader should remember them */
-.hero-cmd {
-  position: relative;
-  max-width: 520px;
-  margin: 0 auto 22px;
-  text-align: left;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.hc-row .copy-btn {
-  flex: none;
-}
-
-/* One quiet line under the command, not a bordered six-cell table. As a table
-   it outweighed the install command it sat beneath — the eye landed on the box
-   and never on the thing you are meant to type. */
-.hero-proof {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  row-gap: 6px;
-  column-gap: 0;
-  width: auto;
-  margin: 26px 0 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.hero-proof li:not(:last-child)::after {
-  content: "·";
-  margin: 0 10px;
-  color: var(--faint);
-}
-
-/* Every section the page links to by id. Without this an anchor jump puts the
-   heading under the 62px sticky header — today it clears only because .hm-sec
-   carries 64px of top padding, which is a coincidence, not a rule. */
-main section[id] {
-  scroll-margin-top: 80px;
-}
-
-/* ================= hero · split ================= */
-
-/* Asymmetric, and the copy is left-aligned rather than centred. Five centred
-   blocks stacked down the middle gave nothing on the page dominance, and the
-   only thing that could have earned it — an actual finding — was below the
-   fold behind a "see a finding" link. The finding moves up here and takes the
-   right half; the command keeps the left. */
-.hero-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  align-items: center;
-  gap: 52px;
-  text-align: left;
-}
-
-/* The h1 gradient goes with the layout. It was the page's one decorative move
-   and it ran the wrong way — white at the setup line, grey by the claim. Solid
-   text, with the accent spent on the single word the product is named after. */
-.hero-split h1 {
-  max-width: none;
-  margin: 0 0 18px;
-  /* Sized so "Redline holds the line." holds one line in this column. Above
-     ~50px it folds after "the", which puts a single orphan word on row three. */
-  font-size: clamp(36px, 3.6vw, 50px);
-  text-wrap: balance;
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-  color: var(--text);
-  -webkit-text-fill-color: currentColor;
+  font-size: clamp(38px, 4.5vw, 64px);
+  font-weight: var(--display-weight);
+  line-height: 1.02;
+  letter-spacing: var(--display-tracking);
 }
 .hero-h1-a,
 .hero-h1-b {
   display: block;
+  text-wrap: balance;
 }
 .hero-h1-a {
-  font-size: 0.68em;
-  letter-spacing: -0.035em;
   color: var(--muted);
 }
 .hero-mark {
   color: var(--red);
 }
-.hero-split .sub {
-  max-width: 48ch;
-  margin: 0 0 4px;
-  font-size: 16.5px;
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 36px;
 }
-.hero-split .hm-hero-cmd {
-  margin: 32px 0 18px;
+.hero-pkg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 20px;
+  font-size: 13px;
+}
+/* ================= hero · evidence strip ================= */
+.hero-strip-wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+/* The number on top, what it means underneath — in plain words. */
+.hero-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px 32px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.hero-strip li {
+  max-width: 26ch;
+}
+.hero-strip b {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 24px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text);
+}
+.hero-pkg a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+.hero-pkg a:hover {
+  color: var(--text);
+}
+.hero-pkg svg {
+  border-radius: 2px;
+}
+.hero .sub {
+  max-width: 44ch;
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.6;
+}
+.hero .sub b {
+  color: var(--text);
+  font-weight: 500;
+}
+.hero-art {
+  min-width: 0;
+}
+.hero-grid {
+  position: relative;
+  z-index: 1;
+}
+/* A faint 80px grid behind the visual, fading out in every direction. The
+   only background the hero has. */
+.hero-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 80px 80px;
+  background-position: center top;
+  /* Centred on the visual, not the top edge: it frames the object rather than
+     decorating the empty band under the nav. */
+  mask-image: radial-gradient(ellipse 55% 65% at 72% 48%, #000 15%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 55% 65% at 72% 48%, #000 15%, transparent 75%);
+}
+[data-theme="light"] .hero-lines {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+}
+
+/* ================= hero · the line through the code ================= */
+/* Flush to the container's right edge, so it lines up with the nav above. */
+.hl {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 0;
+  padding: 24px 0;
+}
+.hl-stage {
+  --row: 22px;
+  position: relative;
+  width: min(100%, 460px);
+}
+.hl-card {
+  position: relative;
+  z-index: 1;
+  background: #0a0a0a;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+.hl-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-bottom: 1px solid #222;
+  font-size: 13px;
+  color: #ededed;
+}
+.hl-file svg {
+  color: #8f8f8f;
+}
+.hl-code {
+  padding: 10px 0 12px;
+  font-size: 12px;
+  line-height: var(--row);
+  color: #8f8f8f;
+  white-space: pre;
+}
+/* Each row ellipses its own text; the gutter never shrinks. */
+.hl-row {
+  position: relative;
+  display: flex;
+  padding: 0 14px;
+}
+.hl-t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hl-g {
+  flex: none;
+  width: 16px;
+  color: #4ec97a;
+}
+.hl-ctx .hl-g {
+  color: transparent;
+}
+.hl-add {
+  color: #c9c9c9;
+}
+/* The flagged row: the only one in colour, marked by a red edge. */
+.hl-hot {
+  color: #ffd9d9;
+  background: rgba(230, 0, 0, 0.12);
+  box-shadow: inset 2px 0 0 var(--red);
+}
+.hl-hot .hl-g {
+  color: #ff6b6b;
+}
+/* ================= hero · the finding, per reviewer ================= */
+.ht {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 12px;
+  width: min(100%, 460px);
+}
+.ht-card {
+  padding: 12px 14px 14px;
+  background: #0a0a0a;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: #c9c9c9;
+}
+.ht-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #ededed;
+}
+.ht-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff5b5b;
+}
+.ht-where {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: #8f8f8f;
+}
+.ht-prefix {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #ededed;
+}
+.ht-sev {
+  color: #ff5b5b;
+}
+.ht-prefix a {
+  color: #6fbaff;
+}
+.ht-prefix a:hover {
+  text-decoration: underline;
+}
+/* Every reviewer's prose in one cell: the card holds the height of the longest,
+   and the swap is a cross-fade, not a reflow. */
+.ht-stack {
+  display: grid;
+  margin-top: 6px;
+}
+.ht-prose {
+  grid-area: 1 / 1;
+  font-size: 13.5px;
+  line-height: 1.65;
+  transition:
+    opacity 0.45s ease,
+    transform 0.45s ease,
+    filter 0.45s ease;
+}
+.ht-prose[data-on="false"] {
+  opacity: 0;
+  transform: translateY(6px);
+  filter: blur(3px);
+  pointer-events: none;
+}
+.ht-prose code {
+  font-size: 12px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #ededed;
+}
+.ht-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.ht-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  overflow: hidden;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+.ht-chip:hover,
+.ht-chip[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+/* The dwell, shown as a hairline filling under the reviewer on screen. */
+.ht-chip[data-run="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--red);
+  transform-origin: 0 50%;
+  animation: ht-dwell 5.2s linear both;
+}
+@keyframes ht-dwell {
+  from {
+    transform: scaleX(0);
+  }
+}
+.ht-chip:focus-visible {
+  outline: 2px solid var(--red-soft);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ht-prose {
+    transition: none;
+  }
+}
+
+/* Every section the page links to by id. Without this an anchor jump puts the
+   heading under the 62px sticky header. */
+main section[id] {
+  scroll-margin-top: 80px;
 }
 
 /* ================= hero · the finding ================= */
@@ -442,6 +636,21 @@ main section[id] {
   letter-spacing: 0.1em;
   color: var(--sev-blocker);
 }
+/* The diff the comment is about, dark in both themes like every terminal panel
+   on the page. Smaller than section 6's: it has half the width to fit the same
+   hot line, and it scrolls with the same fade when it still does not. */
+.hf-code {
+  background: #0c0c0c;
+  border-bottom: 1px solid var(--border);
+}
+.hf-diff {
+  padding: 10px 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+.hf-diff .hm-dl {
+  padding: 0 14px;
+}
 .hf-body {
   padding: 16px 16px 14px;
 }
@@ -475,6 +684,10 @@ main section[id] {
 /* The payload is a filename, and without a box around it the semicolon and the
    pipe read as punctuation in the sentence rather than as the attack. */
 .hf-prose code {
+  /* The fix in the prose is longer than a line of the card. Cloned, each
+     wrapped piece keeps its own padding and corners instead of a torn box. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
   padding: 1px 5px;
   background: rgba(255, 255, 255, 0.07);
   border-radius: 5px;
@@ -485,27 +698,48 @@ main section[id] {
 [data-theme="light"] .hf-prose code {
   background: rgba(0, 0, 0, 0.06);
 }
+.hf-prose-stack {
+  display: grid;
+}
+.hf-prose-stack > p {
+  grid-area: 1 / 1;
+}
+.hf-prose-stack > p[data-on="false"] {
+  visibility: hidden;
+}
 .hf-prose {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 13.5px;
   line-height: 1.6;
   color: var(--muted);
 }
-.hf-fix {
+/* The reviewer switch, inside the card so the prose it changes sits right above
+   it. Smaller buttons than section 6's, which has a whole column to itself. */
+.hf-switch {
   display: flex;
-  gap: 8px;
-  margin: 0;
-  padding: 9px 11px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--muted);
-  overflow-wrap: anywhere;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 14px;
 }
-.hf-fix code {
-  color: var(--text);
+.hf-switch-l {
+  margin-right: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.hf-switch .hm-switch-b {
+  min-height: 30px;
+  padding: 5px 11px;
+  font-size: 12px;
+}
+.hf-switch-cap {
+  flex-basis: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--faint);
 }
 .hf-foot {
   display: flex;
@@ -529,27 +763,33 @@ main section[id] {
 }
 
 @media (max-width: 1000px) {
-  .hero-split {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 34px;
+  .hero {
+    min-height: 0;
   }
-  /* Still left-aligned. Recentring the copy here would put back the shape the
-     split exists to break, in the viewport where it read worst. */
-  .hero-split h1 {
-    font-size: clamp(34px, 6vw, 50px);
+  .hl {
+    align-items: stretch;
+  }
+  .hl-stage,
+  .ht {
+    width: 100%;
+  }
+  .ht-chips {
+    justify-content: flex-start;
+  }
+  .hero-strip {
+    grid-template-columns: 1fr 1fr;
+    margin-top: 32px;
+  }
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 }
 @media (max-width: 640px) {
-  /* The desktop padding buys presence on a 900px fold. On a phone the card
-     stacks under the copy, so the same padding just pushes the card further
-     out of sight. */
   .hero {
-    padding: 60px 0 52px;
+    padding: 48px 0 24px;
   }
-  .hero-split {
-    gap: 26px;
-  }
-  .hero-split .sub {
+  .hero .sub {
     font-size: 15.5px;
   }
   /* The seed path is longer than half a 390px card, so the two halves stack
@@ -865,23 +1105,6 @@ main section[id] {
   font-size: 11.5px;
   color: #6f6f6f;
 }
-.jr-replay {
-  min-height: 32px;
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: #a1a1a1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-  padding: 7px 12px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.jr-replay:hover {
-  color: #f2f2f2;
-  border-color: #4a4a4a;
-}
 /* A terminal that wraps stops reading as a terminal: at 340px the column-aligned
    output folded mid-path (".github/instructions/redline-" / "javascript.…") and
    the whole panel read as broken markup. Real terminals scroll sideways, so this
@@ -940,29 +1163,7 @@ main section[id] {
 .jr-probe .tk-dim {
   color: #8f8f8f;
 }
-.jr-l {
-  transition: opacity 0.18s ease;
-}
-/* Replay dims the lines it has not reached yet; it never removes them. Hiding
-   them left the panel's full height reserved and empty — a ~750px black
-   rectangle for the three seconds the transcript took to type, in the one
-   section whose job is to prove the tool actually runs. Pending text stays
-   readable, so every frame of the sweep still shows a working terminal, and
-   nothing reflows because the lines never leave the flow. */
-.jr-l.pend {
-  opacity: 0.34;
-}
-.jr-l.cur::after {
-  content: "\25AE";
-  margin-left: 2px;
-  color: #ff5b5b;
-  animation: jr-blink 1s steps(1) infinite;
-}
-@keyframes jr-blink {
-  50% {
-    opacity: 0;
-  }
-}/* ================= roadmap note ================= */
+/* ================= roadmap note ================= */
 
 /* ================= sections ================= */
 .section {
@@ -1101,63 +1302,57 @@ main section[id] {
 /* ================= final cta ================= */
 .final-cta {
   position: relative;
-  text-align: center;
-  padding: 120px 0;
-  overflow: hidden;
-  border-top: 1px solid var(--border);
+  padding: 128px 0 136px;
 }
-.final-cta .glow {
+/* The page closes on the line: one red rule across the top of the last
+   section, the same red and the same draw as the one through the hero's code. */
+.final-cta-line {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 600px 300px at 50% 115%, rgba(230, 0, 0, 0.2), transparent 70%);
-  pointer-events: none;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--red) 10%, var(--red) 90%, transparent);
 }
 .final-cta h2 {
-  position: relative;
-  font-size: clamp(32px, 5vw, 56px);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1.05;
-  margin-bottom: 16px;
+  font-size: clamp(40px, 6vw, 80px);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: 1;
 }
-.final-cta p {
-  position: relative;
-  color: var(--muted);
-  max-width: 540px;
-  margin: 0 auto 38px;
-}
-.final-cta .ctas {
-  position: relative;
+.final-cta-actions {
   display: flex;
-  justify-content: center;
-  gap: 14px;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+  margin-top: 44px;
 }
 
 /* ================= footer ================= */
 .site-footer {
+  overflow: hidden;
   border-top: 1px solid var(--border);
-  background: var(--bg-soft);
-  font-size: 13px;
+  background: var(--bg);
+  font-size: 14px;
   color: var(--muted);
 }
 .site-footer .cols {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr;
   gap: 32px;
-  padding: 52px 0 40px;
+  padding: 64px 0 48px;
 }
 .site-footer h4 {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .site-footer ul {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 .site-footer ul a:hover {
   color: var(--text);
@@ -1169,13 +1364,78 @@ main section[id] {
 }
 .site-footer .legal {
   border-top: 1px solid var(--border);
-  padding: 20px 0 26px;
+  padding: 20px 0;
   display: flex;
-  justify-content: space-between;
-  gap: 14px;
+  align-items: center;
+  gap: 14px 24px;
   flex-wrap: wrap;
   color: var(--faint);
-  font-size: 12.5px;
+  font-size: 13px;
+}
+/* A status pill on the right of the bar: the live standards version. */
+.site-footer .f-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.site-footer .legal a.f-status {
+  text-decoration: none;
+}
+.site-footer .legal a.f-status:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.site-footer .f-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+/* The closing wordmark. Sized to the shell's width, filled with a gradient that
+   fades into the page, cut off at the bottom so it reads as bleeding off the
+   edge, and struck through by the red line at the height of the logo's bar. */
+.site-footer .f-word {
+  position: relative;
+  max-width: var(--shell);
+  height: min(19vw, 238px);
+  margin: 8px auto 0;
+  padding: 0 24px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.site-footer .f-word span {
+  display: block;
+  font-size: min(29.5vw, 382px);
+  font-weight: var(--display-weight);
+  letter-spacing: -0.065em;
+  line-height: 0.8;
+  background: linear-gradient(180deg, #1f1f1f 10%, rgba(0, 0, 0, 0) 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.site-footer .f-word::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 44%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--red) 12%, var(--red) 88%, transparent);
+}
+[data-theme="light"] .site-footer .f-word span {
+  background: linear-gradient(180deg, #e8e8e8 10%, rgba(255, 255, 255, 0) 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 .site-footer .legal a {
   color: var(--muted);
@@ -1728,8 +1988,8 @@ main section[id] {
 
 /* ================= light theme ================= */
 [data-theme="light"] {
-  --bg: #fafafa;
-  --bg-soft: #f2f2f0;
+  --bg: #ffffff;
+  --bg-soft: #fafafa;
   --card: #ffffff;
   --border: #e4e4e4;
   --border-strong: #cfcfcf;
@@ -1754,39 +2014,18 @@ main section[id] {
   background: rgba(230, 0, 0, 0.25);
   color: #171717;
 }
-[data-theme="light"] .site-nav {
-  background: rgba(250, 250, 250, 0.93);
+[data-theme="light"] .site-nav[data-scrolled="true"] {
+  background: rgba(255, 255, 255, 0.8);
 }
-[data-theme="light"] .nav-cta,
 [data-theme="light"] .btn-white {
   background: #171717;
   color: #fff;
 }
-[data-theme="light"] .nav-cta:hover,
 [data-theme="light"] .btn-white:hover {
   background: #333;
 }
-[data-theme="light"] .hero h1 {
-  background: linear-gradient(180deg, #111 55%, #5c5c5c);
-  -webkit-background-clip: text;
-  background-clip: text;
-}
-[data-theme="light"] .hero-split h1 {
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-}
-[data-theme="light"] .hf-fix {
-  background: rgba(0, 0, 0, 0.04);
-}
-[data-theme="light"] .hero-lines {
-  background-image: linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
-}
-[data-theme="light"] .hero-glow {
-  background:
-    radial-gradient(ellipse 640px 300px at 50% -8%, rgba(230, 0, 0, 0.1), transparent 70%),
-    radial-gradient(ellipse 900px 420px at 50% 0%, rgba(0, 0, 0, 0.03), transparent 70%);
+[data-theme="light"] .nav-cta:hover {
+  background: rgba(0, 0, 0, 0.05);
 }
 [data-theme="light"] .search-pill kbd,
 [data-theme="light"] .cmdk-input-row kbd,
@@ -1840,19 +2079,16 @@ main section[id] {
   background: #fff;
   box-shadow: 0 40px 120px rgba(0, 0, 0, 0.25);
 }
-[data-theme="light"] .final-cta .glow {
-  background: radial-gradient(ellipse 600px 300px at 50% 115%, rgba(230, 0, 0, 0.09), transparent 70%);
-}
 
 /* theme toggle */
 .theme-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -1860,7 +2096,7 @@ main section[id] {
 }
 .theme-toggle:hover {
   color: var(--text);
-  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* .reveal is opacity:0 until a client effect adds .in — with scripting off that
@@ -1886,17 +2122,6 @@ main section[id] {
   .reveal {
     opacity: 1;
     transform: none;
-  }
-  /* JourneyTerminal already refuses to sweep under this preference, but .pend is
-     state rather than animation — if the preference flips mid-sweep the
-     transcript must land complete instead of freezing half-dimmed. Same for the
-     replay cursor, whose blink is off above but whose glyph would otherwise sit
-     on a line for no reason. */
-  .jr-l.pend {
-    opacity: 1;
-  }
-  .jr-l.cur::after {
-    content: none;
   }
   /* The rule above already clears every transition; stated here so the caret's
      rotation is not something a future edit has to rediscover. The disclosure
@@ -2174,9 +2399,7 @@ main section[id] {
      text-wrap: balance evens the halves if a narrow enough screen still folds
      one. */
   .hero h1 {
-    font-size: clamp(25px, 7.9vw, 42px);
-    letter-spacing: -0.04em;
-    text-wrap: balance;
+    font-size: clamp(34px, 10.4vw, 48px);
   }
   .jr-pre {
     font-size: 10.5px;

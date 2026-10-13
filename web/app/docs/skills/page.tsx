@@ -20,102 +20,95 @@ export default function Page() {
     <DocsPage
       crumb="Skills"
       title="Skills"
-      intro={`${SKILLS.length} public agent skills from ${PUBS} publishers, placed on the delivery lifecycle. Every one is somebody else's — install it from the registry, not from here.`}
+      intro={`${SKILLS.length} public skills from ${PUBS} publishers, grouped by the stage of delivery they help with. Find one for the task in front of you, then install it from its publisher.`}
       href="/docs/skills"
     >
-      {/* The tool comes before the essay. Everything needed to use the filters
-          is in these two paragraphs; install mechanics and caveats sit under
-          the catalogue, where they are read once rather than scrolled past on
-          every visit. */}
       <p>
-        Redline reviews the diff. It has no opinion on how the diff gets
-        written — but the engineers asking for the standard keep asking the next
-        question, which is what to give the agent so the diff arrives in better
-        shape. A <b>skill</b> is the answer: a file the model loads when it
-        recognises the situation, carrying procedure it would otherwise guess
-        at. It is nearly free — it loads, it shifts the output, you move on.
+        A <b>skill</b> is a file of instructions an AI coding assistant loads when it recognises
+        the task, such as how to write a migration or review a React component. It changes what the
+        assistant writes while you work. It does not run anything on its own.
       </p>
       <p>
-        Something that takes the wheel instead — spawns subagents, drives a
-        browser, keeps going on its own — is on{" "}
-        <Link href="/docs/agents">the agents page</Link> ({AGENTS.length} of
-        them). That split is a judgement we made, not a field the registry
-        publishes: skills.sh lists both as skills, and we separated them because
-        the question you ask before installing one is not the question you ask
-        before installing the other. Everything below is knowledge applied to
-        work you are already doing.
+        This catalogue is a reading list of public skills from{" "}
+        <a href="https://skills.sh" rel="noopener noreferrer" target="_blank">
+          skills.sh
+        </a>
+        , placed on the stage of delivery each one helps with: plan, design, build, test, review,
+        secure, ship and operate. Redline does not write, copy or host any of them. Skills that run
+        their own multi-step loop are on{" "}
+        <Link href="/docs/agents">the agents page</Link> ({AGENTS.length} of them).
       </p>
+
+      <h2>How to use the catalogue</h2>
+      <ol>
+        <li>Pick a delivery stage, a stack, or search for the task in front of you.</li>
+        <li>
+          Open an entry. It says when to reach for the skill, who publishes it, and links to the
+          source, where you can read the skill itself before installing it.
+        </li>
+        <li>Copy the install command from the entry and run it in your project.</li>
+      </ol>
 
       <SkillsExplorer kind="skill" />
 
       <h2>Installing</h2>
       <p>
-        One CLI, and it works across Claude Code, Codex, Cursor, Copilot,
-        Windsurf, Zed and the rest — it writes into whichever agent directories
-        it finds:
+        Skills install with the <code>skills</code> CLI, which writes them into the directories
+        your assistants read: Claude Code, Codex, Cursor, Copilot and many others. Name the skill
+        you want with <code>--skill</code>:
       </p>
-      <CodeWindow copyText="npx skills add addyosmani/agent-skills" title="terminal">
+      <CodeWindow
+        copyText="npx skills add addyosmani/agent-skills --skill <name>"
+        title="terminal"
+      >
         <span className="tk-prompt">$</span>{" "}
-        <span className="tk-white">npx skills add addyosmani/agent-skills</span>
+        <span className="tk-white">npx skills add addyosmani/agent-skills --skill &lt;name&gt;</span>
       </CodeWindow>
       <div className="callout warn">
         <span className="ic">!</span>
         <p>
-          <b>The unit is the repository, not the skill.</b> That command
-          installs every skill in <code>addyosmani/agent-skills</code> — all of
-          them, not just the one you read about. Worth knowing before you
-          install <code>dotnet/skills</code>, which has 107. Install
-          deliberately: context you do not need is context the model has to
-          ignore.
+          <b>A publisher&apos;s repository can hold many skills.</b> Without{" "}
+          <code>--skill</code>, the CLI offers every skill in the repository, and{" "}
+          <code>--all</code> installs every one of them. <code>dotnet/skills</code> has 107. Install
+          only what you need: every skill you add is context the assistant has to read past.
         </p>
       </div>
       <p>
-        Telemetry is on by default and feeds the registry&apos;s install
-        rankings. <code>DISABLE_TELEMETRY=1</code> turns it off.
+        The <code>skills</code> CLI sends anonymous usage data by default. Set{" "}
+        <code>DISABLE_TELEMETRY=1</code> to turn it off.
       </p>
 
-      <h2>If you install only one thing</h2>
+      <h2>Where to start</h2>
       <p>
-        <code>addyosmani/agent-skills</code> covers every phase above with one
-        consistent vocabulary — it is the highest-coverage single install here.
-        Add <code>obra/superpowers</code> for the execution discipline (TDD,
-        plans, subagents, worktrees) and you have the spine of the lifecycle
-        from two commands. Everything after that should be your stack: Expo for
-        mobile, Trail of Bits for security work, the .NET set for .NET.
+        <code>addyosmani/agent-skills</code> covers every stage with one consistent vocabulary. Add{" "}
+        <code>obra/superpowers</code> for working discipline: test-driven development, written
+        plans, subagents and worktrees. After that, add skills for your own stack, such as Expo for
+        mobile, Trail of Bits for security work, or the .NET set for .NET.
       </p>
 
-      <h2>What this page is not</h2>
-      <div className="callout info">
-        <span className="ic">ℹ</span>
-        <p>
-          <b>Nothing on this page is ours.</b> Redline does not vendor, fork,
-          host or modify any of these. Each entry links to the publisher&apos;s
-          repository, and the install command pulls from them directly. If a
-          publisher changes a skill, you get their change — this is a map, not a
-          mirror.
-        </p>
-      </div>
-      <p>
-        Star counts appear on each entry as a <b>dated snapshot</b>: the number
-        GitHub returned on the day we counted, printed with that date beside it.
-        Install counts and audit verdicts are not here at all — we have no way
-        to date those honestly, and a number that drifts with nothing to anchor
-        it is worse than no number. {OFFICIAL} of the {PUBLISHERS.length}{" "}
-        publishers carry an <b>Official</b> badge, which means they ship the
-        thing the skill is about — Vercel on React, Expo on Expo, the .NET team
-        on MSBuild.
-      </p>
+      <h2>What the entries show</h2>
+      <ul>
+        <li>
+          <b>Nothing here is ours.</b> Each entry links to the publisher&apos;s repository, and the
+          install command pulls from there. When the publisher changes a skill, you get their change.
+        </li>
+        <li>
+          <b>Star counts</b> are a snapshot, printed with the date they were counted. Install counts
+          and audit verdicts are not shown, because they cannot be dated.
+        </li>
+        <li>
+          <b>Official</b> marks a publisher that ships the thing the skill is about, such as Vercel
+          on React or Expo on Expo. {OFFICIAL} of the {PUBLISHERS.length} publishers carry it.
+        </li>
+      </ul>
 
       <h2>Where this stops</h2>
       <p>
-        Skills shape what the agent writes. They do not enforce anything: no
-        skill blocks a merge, and none of them is versioned against your
-        repository or measured for whether it changed an outcome. That is the
-        other half of the loop, and it is the half Redline does — see{" "}
+        Skills shape what the assistant writes. They enforce nothing: no skill blocks a merge, and
+        none is measured for whether it changed an outcome. Redline does that half, with{" "}
         <Link href="/docs/output-contract">the output contract</Link> and{" "}
-        <Link href="/docs/gate">the merge gate</Link>. Use both: skills to
-        raise the floor on what gets written, the gate to catch what still gets
-        through.
+        <Link href="/docs/gate">the merge gate</Link>. Use skills to improve what gets written, and
+        the gate to catch what still gets through.
       </p>
     </DocsPage>
   );

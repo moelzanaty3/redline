@@ -1,4 +1,5 @@
-import { COMMANDS, SCRIPTS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
+import { COMMANDS, SEEDS, STANDARDS, TEMPLATES, WORKFLOWS, type RegistryEntry } from "@/lib/registry";
+import { LEARN_STEPS, learnHref } from "@/lib/learn";
 import { entriesOfKind, hrefOf, publisherOf, type Kind } from "@/lib/skills-catalog";
 
 export type DocLink = {
@@ -76,72 +77,34 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "overview what is redline oversight ai review standards architecture delivery loop",
       },
       {
-        title: "Quick start",
-        href: "/docs/quickstart",
-        description: "Take a small TypeScript service from no Redline to a merge gate that has earned its rung, one pull request per step.",
-        keywords: "quickstart quick start get started learn step by step walkthrough redline-demo demo onboard first finding explain fix team rule adr security floor dependency review blocking required check exemption evidence rung",
-      },
-      {
-        title: "Tutorial",
-        href: "/docs/tutorial",
-        description: "Write code Redline rejects, see the finding, understand it, fix it, and keep the rules current. Starts from an empty folder; about fifteen minutes.",
-        keywords: "tutorial walkthrough workshop demo first finding try it hands on learn review explain fix playground sandbox new repo",
-        children: [
-          {
-            title: "1. Your first finding",
-            href: "/docs/tutorial/first-finding",
-            description: "Plant four violations in a TypeScript file and watch redline review catch them with no model call.",
-            keywords: "tutorial first finding review staged git add untracked as unknown as ts-ignore todo blocker high",
-          },
-          {
-            title: "2. Ask your assistant",
-            href: "/docs/tutorial/assistant",
-            description: "Run the same review inside Claude Code, Copilot or Cursor with /redline-review, or paste the prompt into any chat.",
-            keywords: "tutorial assistant llm claude copilot cursor slash command redline-review print-prompt pbcopy chat",
-          },
-          {
-            title: "3. Explain and fix",
-            href: "/docs/tutorial/explain-and-fix",
-            description: "Ask Redline what a rule means and who decided it, fix the code, and re-run until it is clean.",
-            keywords: "tutorial explain rule id fix safety comment type predicate no findings clean",
-          },
-          {
-            title: "4. Push and stay current",
-            href: "/docs/tutorial/stay-current",
-            description: "What the gate does on the pull request, and how new standards reach your repository.",
-            keywords: "tutorial push pull request gate observe status drift behind sync verify standards version resync",
-          },
-        ],
+        title: "Learn",
+        href: "/docs/learn",
+        description: "Take a small TypeScript service from no Redline to a merge gate that has earned its rung, one pull request per step. No prior knowledge needed.",
+        keywords: "learn tutorial quickstart quick start get started step by step walkthrough workshop redline-demo demo onboard first finding explain fix team rule adr security floor dependency review blocking required check exemption evidence rung",
+        children: LEARN_STEPS.map((step) => ({
+          title: `${step.n} · ${step.title}`,
+          href: learnHref(step),
+          description: step.summary,
+          keywords: `learn tutorial step ${step.n} ${step.title.toLowerCase()} ${step.tag ?? ""}`,
+        })),
       },
       {
         title: "Onboard a repository",
         href: "/docs/onboarding",
-        description: "One command per repo, on GitHub or Azure DevOps, then verify the gate is real.",
-        keywords: "onboard repo install setup installation prerequisites node npx redlinegate npm package redline init verify profile security floor merge policy pending admin azure github reusable gate workflow limitations",
+        description: "Your own repository, on GitHub or Azure DevOps: the one-off first run, what an administrator still owes, and a short check that the gate is real.",
+        keywords: "onboard repo install setup installation prerequisites node npx redlinegate npm package devDependency pin-cli redline init verify profile security floor merge policy pending admin azure github reusable gate workflow limitations prove it verification scenarios stand-down vendored gate",
       },
       {
-        title: "Verification",
-        href: "/docs/verification",
-        description: "Nine scenarios that prove the gate passes, blocks, and refuses to be waived — run once on a throwaway branch.",
-        keywords: "verification verify test gate scenarios prove drill checklist adr policy exemption stand-down rung block-blocker secret scan security floor throwaway branch runbook does the gate work",
+        title: "Adopting Redline",
+        href: "/docs/adopting",
+        description: "Day one to month two: what happens in order, and when it is reasonable to start blocking merges.",
+        keywords: "adopting rollout adoption path day one week one month two pilot promote blocking evidence ownership break glass success is it used end state estate commands",
       },
       {
         title: "Troubleshooting",
         href: "/docs/troubleshooting",
         description: "Every failure that actually happens, the string it prints, and the command that resolves it.",
         keywords: "troubleshooting troubleshoot problem broken error help stuck fix debug waiting for status expected never resolves check name required context partially onboarded pendingAdmin denied admin rights repair exemption ignored label not working checklist heading deleted rule not firing globs added lines stale artifacts drift no link docsBaseUrl docs-url ?? FAIL exit code 1 2 green but nothing checked false green needs aggregate remove uninstall",
-      },
-      {
-        title: "What success looks like",
-        href: "/docs/success",
-        description: "Four checkpoints after onboarding — the command that proves each one, and the quiet failure that looks identical from the outside.",
-        keywords: "success working proof checkpoint what should i see after onboarding status verify explain pendingAdmin rule id healthy quiet failure waiting for status acted on rate enforcement ladder",
-      },
-      {
-        title: "Adopting Redline",
-        href: "/docs/adopting",
-        description: "Day one to month two: what happens in order, and when it is reasonable to start blocking merges.",
-        keywords: "adopting rollout adoption path day one week one month two pilot promote blocking evidence ownership break glass",
       },
       {
         title: "Removing Redline",
@@ -170,14 +133,8 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Profiles & stacks",
         href: "/docs/profiles",
-        description: "16 stack rule sets composed into profiles — a repo installs exactly one.",
+        description: "Why a NestJS service never gets React rules: stack rule sets composed into one profile per repository.",
         keywords: "profiles stacks javascript react nodejs java go python kotlin swift terraform glob negation",
-      },
-      {
-        title: "The merge gate",
-        href: "/docs/gate",
-        description: "Checklist, ADR-for-big-diffs, dependency review, diff secret scan — advisory on both hosts.",
-        keywords: "gate merge redline-gate redline/gate required check ruleset checklist adr secret scan exempt label azure github advisory blocking",
       },
       {
         title: "Deterministic rules",
@@ -186,22 +143,28 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "deterministic policy tier checker no model todo ticket suppression radix added lines classification manifest",
       },
       {
-        title: "Exemptions",
-        href: "/docs/exemptions",
-        description: "Merging with a failing process check, on the record: who accepted what, why, and until when.",
-        keywords: "exemption redline-exempt label reason until scope expiry 90 days waiver process checks security floor grace warn require",
-      },
-      {
-        title: "Enforcement ladder",
-        href: "/docs/enforcement",
-        description: "Four rungs a repository climbs on evidence — and steps back from without asking.",
-        keywords: "enforcement ladder rung observe block-blocker block-high promotion evidence demotion market floor advisory blocking",
-      },
-      {
         title: "Reviewing before you push",
         href: "/docs/local-review",
         description: "redline review: only the rules that apply to what you changed, in either engine.",
         keywords: "local review redline review staged diff engine embedded api ollama local model bounded prompt findings schema telemetry excluded",
+      },
+      {
+        title: "The merge gate",
+        href: "/docs/gate",
+        description: "The five checks on every pull request: three process checks the rung governs, and a security floor that blocks at every rung.",
+        keywords: "gate merge redline-gate redline/gate required check ruleset checklist launch readiness adr no-adr secret scan dependency review security floor process checks policy exempt label azure github blocking vendored gate-source",
+      },
+      {
+        title: "Enforcement ladder",
+        href: "/docs/enforcement",
+        description: "Three rungs a repository climbs on evidence — and steps back from without asking.",
+        keywords: "enforcement ladder rung observe block-blocker block-high promotion evidence record acted-on seed recall false positives 90 days demotion blocking required check",
+      },
+      {
+        title: "Exemptions",
+        href: "/docs/exemptions",
+        description: "Merging with a failing process check, on the record: who accepted what, why, and until when.",
+        keywords: "exemption redline-exempt label reason until scope expiry 90 days waiver process checks checklist adr policy security floor exemption-enforcement",
       },
       {
         title: "Distribution & drift",
@@ -210,22 +173,10 @@ export const DOCS_NAV: DocSection[] = [
         keywords: "distribution sync registry register drift verify remote weekly sweep tracking issue coverage markers agents.md",
       },
       {
-        title: "Scanner ingestion",
-        href: "/docs/ingestion",
-        description: "Consuming CodeQL, Snyk and Semgrep under one severity contract — measured, never gating.",
-        keywords: "sarif ingestion code scanning codeql snyk semgrep severity map provenance source tool aggregation acted-on",
-      },
-      {
-        title: "Telemetry & validation",
+        title: "Telemetry & value",
         href: "/docs/telemetry",
-        description: "Acted-on findings, the dashboard tiles and what an unhealthy one means, seeded corpus scoring, digest and inbox.",
-        keywords: "telemetry metrics digest teams inbox acted-on noise recall precision attribution seeded corpus validation score dashboard tiles tuning queue registry collect score-seeds history canary estate",
-      },
-      {
-        title: "Cost and value",
-        href: "/docs/cost",
-        description: "Cost per BLOCKER caught, DORA beside it, and every figure that refuses rather than approximates.",
-        keywords: "cost roi value spend dora lead time change failure rate deployment frequency mttr finance stakeholder blocker caught",
+        description: "Acted-on findings, the dashboard, scanner findings under one severity contract, and cost per BLOCKER caught.",
+        keywords: "sarif ingestion code scanning codeql snyk semgrep cost roi value spend dora finance telemetry metrics digest teams inbox acted-on noise recall precision attribution seeded corpus validation score dashboard tiles tuning queue registry collect score-seeds history canary estate",
       },
     ],
   },
@@ -233,33 +184,15 @@ export const DOCS_NAV: DocSection[] = [
     label: "Adaptors",
     links: [
       {
-        title: "GitHub Copilot",
-        href: "/docs/adaptors/github-copilot",
-        description: "Connect Copilot code review to the rendered instruction files.",
-        keywords: "github copilot adaptor connect copilot-instructions applyTo automatic code review",
+        title: "Adaptors overview",
+        href: "/docs/adaptors",
+        description: "One standard, the files each assistant reads it from: Copilot, Claude, Cursor, Codex and AGENTS.md agents.",
+        keywords: "adaptors adaptor vendors github copilot copilot-instructions applyTo claude CLAUDE.md agents.md codex cursor mdc globs alwaysApply marker block local.md prompts slash commands detection",
       },
       {
-        title: "Claude",
-        href: "/docs/adaptors/claude",
-        description: "Claude Code and Claude in GitHub via CLAUDE.md.",
-        keywords: "claude adaptor claude code claude github CLAUDE.md import agents.md anthropic",
-      },
-      {
-        title: "AGENTS.md agents",
-        href: "/docs/adaptors/agents-md",
-        description: "OpenAI Codex, Copilot coding agent, Jules, Devin, Cursor agent.",
-        keywords: "agents.md adaptor codex jules devin cursor agent openai concatenated",
-      },
-      {
-        title: "Cursor rules",
-        href: "/docs/adaptors/cursor",
-        description: "Scoped .mdc rules for the Cursor IDE.",
-        keywords: "cursor adaptor rules mdc globs ide",
-      },
-      {
-        title: "Add your own vendor",
+        title: "Add a vendor",
         href: "/docs/adaptors/custom",
-        description: "One function in cli/render/vendors.ts — merge markers, pruning, manifest toggle.",
+        description: "Everything a new assistant needs: the renderer, the manifest entry, detection, help text, commands and tests.",
         keywords: "custom vendor adaptor cli render vendors.ts add new vendor merge prune manifest",
       },
     ],
@@ -303,8 +236,8 @@ export const DOCS_NAV: DocSection[] = [
       {
         title: "Workflows",
         href: "/docs/workflows",
-        description: "What each workflow does, what triggers it, where it lives, and whether it works in Phase 1.",
-        keywords: "workflows github actions gate sync collect digest inbox canary phase 1 disabled azure",
+        description: "Where each workflow runs, what starts it, and what it leaves behind.",
+        keywords: "workflows github actions gate sync collect digest inbox canary dashboard registry azure redline-metrics",
         children: childrenOf(WORKFLOWS, "/docs/workflows", "workflow github actions"),
       },
       {
@@ -333,11 +266,16 @@ export const DOCS_NAV: DocSection[] = [
     label: "Maintaining Redline",
     links: [
       {
-        title: "Scripts",
+        title: "Maintainer scripts",
         href: "/docs/scripts",
-        description: "Internal maintainer tooling for this repo's own CI, telemetry and validation — not something an onboarded repo runs.",
-        keywords: "scripts maintainer ci validate score collect digest inbox dashboard assign-rule-ids check-pins render-self internal redline-metrics",
-        children: childrenOf(SCRIPTS, "/docs/scripts", "script source"),
+        description: "The scripts that keep the Redline source repository honest, who runs each one, and how. Product repositories never run them.",
+        keywords: "scripts maintainer ci validate score-seeds collect digest inbox dashboard registry assign-rule-ids check-pins render-self fetch-stars publish-local internal redline-metrics",
+      },
+      {
+        title: "Who runs what",
+        href: "/docs/who-runs-what",
+        description: "Where each command and workflow runs, under which credential, and what it can reach.",
+        keywords: "credentials tokens REDLINE_ORG_READ_TOKEN REDLINE_SYNC_TOKEN REDLINE_CANARY_TOKEN tiers blast radius who runs what",
       },
     ],
   },

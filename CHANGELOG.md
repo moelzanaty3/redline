@@ -7,6 +7,59 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### Site — Learn replaces Quick start and Tutorial
+
+The docs had two beginner paths that overlapped: Quick start, one long page following
+`redline-demo`, and a four-page Tutorial on a throwaway folder. They are now one path,
+`/docs/learn`: an overview and a page per step, each with what you will learn, new terms
+explained where they first appear, tabs for each way of following along, and a short question
+to check understanding. Progress is ticked off per step and kept in the browser only. The
+Tutorial's unique parts moved in: the no-GitHub path, `/redline-review` in an assistant, and
+how new rules arrive. The old URLs redirect. The home page and the header link to Learn.
+
+### Site — fewer docs pages, each checked against the code
+
+With Learn covering the hands-on half, the reference pages were audited against the CLI and the
+gate and cut down to one home per fact. Verification's unique scenarios moved to the end of
+Onboard, Success into Adopting, Scanner ingestion and Cost into Telemetry, the four per-tool
+adaptor pages into one Adaptors overview, and thirteen per-script pages into one Maintainer
+scripts table. Every old address redirects to the section that replaced it.
+
+Claims the code contradicted were corrected: the `warn` rung that no longer exists, exemptions
+covering three process checks rather than two, a gate of five jobs rather than four, the Azure
+gate's secret scan, `--approvals` defaulting to none, and a stale-artifacts fix that changed
+nothing (a repository updates by raising its `redlinegate` pin and running `init`). Commands
+after onboarding run the project's pinned copy. The express and nextjs stacks and four seed
+corpora that had no pages now do. `init --help` lists `codex` among the vendors it accepts.
+
+A second pass rewrote every page for a developer reading it cold: why first, terms defined
+where they are used, tables for comparisons, and outputs taken from real runs. Sample `gh pr
+checks` output now shows the names the command prints (`redline-gate / gate`), not the web
+page's. Release notes written as paragraphs now appear on What changed, and each catalogue entry
+installs that skill alone (`npx skills add <owner>/<repo> --skill <name>`).
+
+### Init — `--vendors claude` writes the AGENTS.md it imports
+
+`CLAUDE.md` holds one line of substance, `@AGENTS.md`. Selected on its own, or detected from a
+repository whose only marker was `CLAUDE.md`, the claude vendor wrote that import and no
+`AGENTS.md`, so Claude read no rules at all. It now renders `AGENTS.md` too, the way `codex`
+does; selecting `agents` as well still writes it once.
+
+### Seed canary — the exemption carries a reason, not only a label
+
+The canary pull request is broken on purpose and never merged. It carried the `redline-exempt`
+label with no `## Redline exemption` block, which a blocking rung refuses, so its gate failed on
+the refused exemption instead of on its findings. Its body now names a reason, a 7-day expiry and
+the three process checks. The security floor is not covered.
+
+### check-pins — `latest` is not an outdated pin
+
+The gate asks for `REDLINE_CLI_VERSION: 'latest'` on purpose; a vendored copy is stamped with the
+version that wrote it. `check-pins` compared the word `latest` with the published version and
+reported an update on every run, failing under `--strict`. It now reports the pin as current.
+
+The pull request template's exemption comment named two process checks; it names all three.
+
 ### Init — a tool you said you do not run stays unticked
 
 `redline init --integrations ''` recorded an empty list in `.redline.json`, and the next plain
@@ -86,7 +139,8 @@ Redline it fetched a second copy, possibly a different version from the one the 
   scripts, pnpm's `.pnpmfile.cjs` and yarn's `yarnPath` are switched off, so onboarding runs none
   of the repository's own code through them; yarn plugins committed to the repository still load.
   It uses the first copy of that package manager on `PATH` that starts, so a broken install a
-  version manager puts first (Volta's pnpm 12.6.0 image has no `bin/pnpm.cjs`) does not fail it. `package.json` and the lockfile ride in the onboarding pull request.
+  version manager puts first (Volta's pnpm 12.6.0 image has no `bin/pnpm.cjs`) does not fail it.
+  `package.json` and the lockfile ride in the onboarding pull request.
   It is offered only in a Node project that does not depend on Redline yet, and a package
   manager that fails leaves a note with the command to run, not a failed onboarding.
 

@@ -15,34 +15,44 @@
    them, exactly as [data-theme="light"] .jr-probe .tk-red does. */
 
 /* ================= shared section furniture ================= */
+/* Sections are separated by space, not rules. Each opens the same way: the
+   headline on the left, the lede beside it on the right, both left-aligned. */
 .hm-sec {
-  padding: 64px 0;
+  padding: 112px 0;
 }
-.hm-sec + .hm-sec {
-  border-top: 1px solid var(--border);
+/* The fold already ends on its own rule; the first section needs less air. */
+.hero + .hm-sec {
+  padding-top: 88px;
 }
 .hm-sec-head {
-  text-align: center;
-  margin-bottom: 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px 56px;
+  align-items: start;
+  margin-bottom: 56px;
+}
+.hm-sec-head > .hm-eyebrow {
+  grid-column: 1 / -1;
 }
 .hm-h2 {
-  font-size: clamp(27px, 3.6vw, 39px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.12;
+  font-size: clamp(34px, 4.6vw, 58px);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.02;
+  text-wrap: balance;
 }
 .hm-lead {
-  max-width: 620px;
-  margin: 12px auto 0;
+  max-width: 52ch;
+  margin: 6px 0 0;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 17px;
+  line-height: 1.6;
 }
 .hm-lead b {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 .hm-lead code,
-.hm-term-cap code,
 .hm-try-lead code,
 .hm-try-list code,
 .hm-not-list code,
@@ -53,14 +63,41 @@
   border-radius: 5px;
   padding: 1px 5px;
 }
-/* small uppercase label, the same voice as .jr-band-h */
+/* The red pen. One word per major headline is underlined in red, drawn left
+   to right as the section comes into view — the way a reviewer marks the one
+   thing that matters. It is the page's recurring mark, and it echoes the
+   flagged row in the hero. Drawn only inside .reveal, so it animates once. */
+.rl-mark {
+  position: relative;
+  white-space: nowrap;
+}
+.rl-mark::after {
+  content: "";
+  position: absolute;
+  left: -0.02em;
+  right: -0.02em;
+  bottom: -0.04em;
+  height: max(3px, 0.07em);
+  border-radius: 2px;
+  background: var(--red);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 0.9s cubic-bezier(0.65, 0, 0.2, 1) 0.35s;
+}
+.reveal.in .rl-mark::after {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rl-mark::after {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* A plain label, in the body face: it names the section, it does not shout. */
 .hm-eyebrow {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--faint);
+  font-size: 15px;
+  color: var(--muted);
 }
 .hm-sec a:not(.hm-switch-b),
 .hm-cta-links a {
@@ -90,43 +127,55 @@
   animation: hm-hero-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-/* One command, presented as the call to action itself — there is nothing to
-   install first, so there is no second row and no "once / per repo" ladder. */
+/* Two pills side by side: the solid one is where to start, the outlined one
+   is the command itself, copyable in place. Same height, same radius. */
+.hm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--text);
+  color: var(--bg);
+  transition: opacity 0.15s;
+}
+.hm-pill:hover {
+  opacity: 0.86;
+}
+.hm-pill-arrow {
+  transition: transform 0.15s;
+}
+.hm-pill:hover .hm-pill-arrow {
+  transform: translateX(3px);
+}
 .hm-hero-cmd {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   width: max-content;
   max-width: 100%;
-  margin: 26px auto 14px;
-  padding: 11px 12px 11px 18px;
-  background: var(--card);
+  height: 40px;
+  padding: 0 4px 0 16px;
+  background: var(--bg-soft);
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: 999px;
 }
 .hm-hero-cmd code {
-  font-size: 15px;
+  font-size: 13px;
   color: var(--text);
   overflow-wrap: anywhere;
 }
-.hm-hero-alt {
-  position: relative;
-  margin: 0 0 24px;
-  font-size: 13.5px;
+.hm-hero-cmd .copy-btn {
+  border-radius: 999px;
 }
-.hm-hero-alt a {
-  color: var(--muted);
-}
-.hm-hero-alt a:hover {
-  color: var(--red-soft);
-}
-/* Same middot separator the final CTA row uses — two link rows on one page that
-   separate their items differently read as two different components. */
-.hm-hero-alt a + a::before {
-  content: "·";
-  margin: 0 12px;
-  color: var(--faint);
+@media (prefers-reduced-motion: reduce) {
+  .hm-pill,
+  .hm-pill-arrow {
+    transition: none;
+  }
 }
 
 /* ================= 3 · a finding ================= */
@@ -148,12 +197,8 @@
   min-width: 0;
 }
 .hm-panel-t {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--red-soft);
+  font-size: 15px;
+  color: var(--text);
   flex: none;
 }
 .hm-panel-h code,
@@ -304,12 +349,11 @@
   color: var(--muted);
 }
 /* the severity floor, folded in under the finding it explains */
+/* The top cell of one hairline block; the checked/judged split hangs off its
+   bottom edge. */
 .hm-sevfloor {
-  margin-top: 30px;
-  padding: 20px 22px;
-  background: var(--card);
+  padding: 28px 28px 24px;
   border: 1px solid var(--border);
-  border-radius: 12px;
 }
 .hm-sevfloor-h {
   display: flex;
@@ -320,8 +364,7 @@
   margin-bottom: 12px;
 }
 .hm-sevfloor-n {
-  font-family: var(--mono);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
 }
 .hm-sevfloor-n b {
@@ -344,38 +387,36 @@
 }
 
 /* ================= 4 · where it sits ================= */
+/* Hairline grids. The gap is the border: a 1px gap over a border-coloured
+   background, cells painted the page colour. Square corners, no fill. */
+.hm-steps,
+.hm-is-grid,
+.hm-gap-stats {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
 .hm-steps {
   list-style: none;
-  display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  counter-reset: none;
 }
 .hm-steps > li {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 20px 22px 22px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: border-color 0.15s;
-}
-.hm-steps > li:hover {
-  border-color: var(--border-strong);
+  padding: 28px 28px 30px;
+  background: var(--bg);
 }
 .hm-step-n {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--red-soft);
+  font-size: 15px;
+  color: var(--faint);
 }
 .hm-steps h3 {
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  margin: 6px 0 8px;
+  font-size: 22px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.03em;
+  margin: 10px 0 10px;
 }
 .hm-steps p {
   font-size: 14px;
@@ -395,7 +436,8 @@
   color: #dcdcdc;
   background: #0c0c0c;
   border: 1px solid #262626;
-  border-radius: 8px;
+  border-radius: 999px;
+  margin-top: 18px;
   overflow-x: auto;
   white-space: nowrap;
 }
@@ -404,17 +446,17 @@
 .hm-claim {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 32px;
+  gap: 56px;
   align-items: center;
-  padding: 26px 0;
+  padding: 40px 0;
 }
 .hm-claim + .hm-claim {
   border-top: 1px solid var(--border);
 }
 .hm-claim-copy h3 {
-  font-size: 21px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  font-size: 28px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.04em;
   margin-bottom: 8px;
 }
 .hm-claim-copy p {
@@ -452,59 +494,134 @@
 }
 
 /* ================= 6 · the transcript ================= */
-.hm-term-wrap {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  overflow: hidden;
+/* Steps scroll on the left; the terminal holds still on the right and grows to
+   the step being read. Steps not being read fade back, chapters not reached yet
+   are not drawn. data-state="all" is the pre-hydration and no-script state:
+   everything shown, nothing faded. */
+.js-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 64px;
+  align-items: start;
 }
-.hm-term-cap {
-  max-width: 760px;
-  margin: 16px auto 0;
-  text-align: center;
-  font-size: 13.5px;
+.js-steps {
+  list-style: none;
+}
+.js-step {
+  min-height: 62vh;
+  padding: 8px 0 40px;
+  transition: opacity 0.3s;
+}
+.js-step:last-child {
+  min-height: 40vh;
+}
+.js-step[data-state="past"],
+.js-step[data-state="next"] {
+  opacity: 0.3;
+}
+.js-n {
+  display: block;
+  font-size: 22px;
+  color: var(--faint);
+  letter-spacing: -0.02em;
+}
+.js-step[data-state="on"] .js-n {
+  color: var(--red);
+}
+.js-step h3 {
+  margin: 6px 0 12px;
+  font-size: clamp(24px, 2.4vw, 32px);
+  font-weight: var(--display-weight);
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+}
+.js-body p {
+  max-width: 44ch;
+  font-size: 16px;
   color: var(--muted);
 }
-.hm-term-cap b {
+.js-body code {
+  font-size: 0.88em;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   color: var(--text);
-  font-weight: 600;
+}
+.js-stage {
+  position: sticky;
+  top: 96px;
+}
+.js-term {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.js-pre {
+  position: relative;
+  height: min(620px, calc(100vh - 160px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.js-ch {
+  display: block;
+  transition: opacity 0.3s;
+}
+.js-ch[data-state="past"] {
+  opacity: 0.38;
+}
+.js-ch[data-state="next"] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .js-step,
+  .js-ch {
+    transition: none;
+  }
+}
+/* Below the split there is nothing to hold still beside: the steps read as a
+   list and the whole transcript follows them. */
+@media (max-width: 900px) {
+  .js-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .js-step {
+    min-height: 0;
+    padding-bottom: 28px;
+  }
+  .js-step[data-state] {
+    opacity: 1;
+  }
+  .js-stage {
+    position: static;
+  }
+  .js-pre {
+    height: auto;
+    overflow-y: visible;
+  }
+  .js-ch[data-state] {
+    display: block;
+    opacity: 1;
+  }
 }
 
 /* ================= 7 · try it ================= */
 .hm-try-card {
-  padding: 34px 38px 36px;
-  background: var(--card);
+  padding: 56px 56px 48px;
   border: 1px solid var(--border);
-  border-radius: 16px;
   position: relative;
 }
-.hm-try-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12%;
-  right: 12%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(230, 0, 0, 0.7), transparent);
-}
 .hm-try-lead {
-  margin-top: 12px;
-  max-width: 720px;
-  font-size: 15px;
+  margin-top: 16px;
+  max-width: 64ch;
+  font-size: 16px;
   color: var(--muted);
-}
-.hm-try-card > .hm-h2,
-.hm-try-lead {
-  text-align: center;
-}
-.hm-try-lead {
-  margin-left: auto;
-  margin-right: auto;
 }
 /* The command the section is named after. It was inline prose code with no way
    to take it — the one place on the page that names the action and then does
    not offer it. */
 .hm-try-cmd {
-  margin: 22px auto 30px;
+  margin: 28px 0 8px;
 }
 .hm-try-list {
   list-style: none;
@@ -539,9 +656,8 @@
   padding: 52px 0;
 }
 .hm-not-card {
-  padding: 24px 28px 26px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  padding: 28px 0 0;
+  border-top: 1px solid var(--border);
 }
 .hm-not-h {
   font-size: 19px;
@@ -575,13 +691,9 @@
 }
 
 /* ================= 9 · final cta ================= */
-.hm-hero-cmd-cta {
-  margin: 30px auto 22px;
-}
 .hm-cta-links {
   position: relative;
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 6px 0;
   font-size: 13.5px;
@@ -597,7 +709,6 @@
    code panels stay dark, so the accent inside them keeps its dark-surface
    value — the light --red-soft would be unreadable there. */
 [data-theme="light"] .hm-lead code,
-[data-theme="light"] .hm-term-cap code,
 [data-theme="light"] .hm-try-lead code,
 [data-theme="light"] .hm-try-list code,
 [data-theme="light"] .hm-not-list code,
@@ -619,18 +730,13 @@
   background: rgba(189, 0, 0, 0.08);
   border-color: rgba(189, 0, 0, 0.45);
 }
-[data-theme="light"] .hm-try-card,
-[data-theme="light"] .hm-sevfloor,
-[data-theme="light"] .hm-steps > li {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
+
 
 /* ================= motion ================= */
 /* The vendor toggle is deliberately instant, so there is nothing to disable
    there. This only covers the hover transitions declared above. */
 @media (prefers-reduced-motion: reduce) {
-  .hm-switch-b,
-  .hm-steps > li {
+  .hm-switch-b {
     transition: none;
   }
 }
@@ -638,7 +744,11 @@
 /* ================= responsive ================= */
 @media (max-width: 1000px) {
   .hm-sec {
-    padding: 56px 0;
+    padding: 80px 0;
+  }
+  .hm-sec-head {
+    grid-template-columns: minmax(0, 1fr);
+    margin-bottom: 36px;
   }
   /* the finding stops being a split panel and becomes diff-then-finding, which
      is the reading order anyway */
@@ -658,7 +768,7 @@
     gap: 16px;
   }
   .hm-try-card {
-    padding: 28px 24px 30px;
+    padding: 36px 28px 32px;
   }
   /* two columns of 13.5px prose stop being readable well before the grid
      stops fitting, so the disqualifiers stack a breakpoint early */
@@ -669,14 +779,11 @@
   .hm-not {
     padding: 46px 0;
   }
-  .hm-hero-cmd code {
-    font-size: 14px;
-  }
 }
 
 @media (max-width: 620px) {
   .hm-sec {
-    padding: 46px 0;
+    padding: 64px 0;
   }
   .hm-sec-head {
     margin-bottom: 26px;
@@ -684,7 +791,7 @@
   .hm-hero-cmd {
     width: 100%;
     gap: 8px;
-    padding: 10px 10px 10px 14px;
+    padding: 0 6px 0 16px;
   }
   .hm-hero-cmd code {
     font-size: 13px;
@@ -713,7 +820,7 @@
     padding: 32px 0;
   }
   .hm-not-card {
-    padding: 18px 16px 20px;
+    padding: 22px 0 0;
   }
   /* On a phone each bolded case is a line of its own with half a line of dead
      space after it, five times over. Run it into the sentence instead: the
@@ -735,7 +842,7 @@
   }
   .hm-cta-links {
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
   }
   .hm-cta-links a + a::before {
@@ -795,22 +902,13 @@
 }
 
 /* ================= the review gap ================= */
-.hm-sec-head .hm-eyebrow {
-  display: block;
-  margin-bottom: 12px;
-  color: var(--red-soft);
-}
-.hm-gap .hm-h2 {
-  max-width: 860px;
-  margin: 0 auto;
+.hm-gap .hm-sec-head {
+  grid-template-columns: minmax(0, 1fr);
 }
 .hm-gap-chart {
-  max-width: 860px;
-  margin: 8px auto 0;
-  padding: 26px 28px 20px;
-  background: var(--card);
+  padding: 32px 32px 24px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-bottom: 0;
 }
 .hm-gap-cap {
   font-size: 13.5px;
@@ -901,26 +999,20 @@
 }
 .hm-gap-stats {
   list-style: none;
-  display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  max-width: 860px;
-  margin: 16px auto 0;
 }
 .hm-gap-stats li {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 18px 20px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  gap: 8px;
+  padding: 28px 28px 24px;
+  background: var(--bg);
 }
 .hm-gap-fig {
-  font-size: 30px;
-  font-weight: 750;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
+  font-size: 48px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.05em;
+  line-height: 1;
 }
 .hm-gap-stats p {
   font-size: 13.5px;
@@ -932,30 +1024,26 @@
   font-size: 11.5px;
 }
 .hm-gap-close {
-  max-width: 640px;
-  margin: 34px auto 0;
-  text-align: center;
-  font-size: clamp(18px, 2.2vw, 22px);
-  font-weight: 600;
+  max-width: 30ch;
+  margin: 72px 0 0;
+  font-size: clamp(26px, 3.2vw, 40px);
+  font-weight: var(--display-weight);
+  line-height: 1.12;
   letter-spacing: -0.02em;
   color: var(--muted);
 }
 .hm-gap-close b {
-  color: var(--red-soft);
-  font-weight: 700;
+  color: var(--text);
+  font-weight: inherit;
 }
 
 /* ================= what it is ================= */
 .hm-is-grid {
-  display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
 }
 .hm-is-card {
-  padding: 22px 22px 24px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  padding: 28px 28px 30px;
+  background: var(--bg);
 }
 .hm-is-card p,
 .hm-is-card li {
@@ -964,21 +1052,18 @@
 }
 .hm-is-tag {
   display: block;
-  margin-bottom: 10px;
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+  font-size: 22px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.03em;
   color: var(--text);
 }
 .hm-is-card:not(.hm-is-yes) .hm-is-tag {
   color: var(--muted);
 }
+/* The answer, marked by the line rather than a tint. */
 .hm-is-yes {
-  border-color: rgba(230, 0, 0, 0.4);
-  background: linear-gradient(180deg, var(--vc-wash), transparent 70%), var(--card);
-}
-.hm-is-yes .hm-is-tag {
-  color: var(--red-soft);
+  box-shadow: inset 0 2px 0 var(--red);
 }
 .hm-is-yes ul {
   list-style: none;
@@ -990,15 +1075,12 @@
   font-weight: 600;
 }
 .hm-is-steps {
-  margin-top: 16px;
+  border-top: 0;
 }
 
 /* ================= low-evidence code ================= */
 .hm-slop-table {
   border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--card);
 }
 .hm-slop-head,
 .hm-slop-row {
@@ -1009,11 +1091,7 @@
   align-items: start;
 }
 .hm-slop-head {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 14px;
   color: var(--faint);
   border-bottom: 1px solid var(--border);
 }
@@ -1077,11 +1155,57 @@
 }
 
 /* ================= checked vs judged ================= */
+/* Two cells on the same hairline grid as the rest of the page: the split of
+   the rule set by who decides a finding. */
+.hm-decide {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  list-style: none;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-top: 0;
+}
+.hm-decide li {
+  padding: 28px 28px 30px;
+  background: var(--bg);
+}
+.hm-decide b {
+  display: block;
+  font-size: 48px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+.hm-decide h3 {
+  margin: 14px 0 8px;
+  font-size: 20px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.03em;
+}
+.hm-decide p {
+  max-width: 44ch;
+  font-size: 15px;
+  color: var(--muted);
+}
+.hm-decide code {
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+}
+[data-theme="light"] .hm-decide code {
+  background: rgba(0, 0, 0, 0.05);
+}
+@media (max-width: 760px) {
+  .hm-decide {
+    grid-template-columns: 1fr;
+  }
+}
 .hm-split {
-  max-width: 760px;
-  margin: 18px auto 0;
-  text-align: center;
-  font-size: 14px;
+  max-width: 72ch;
+  margin: 24px 0 0;
+  font-size: 15px;
   color: var(--muted);
 }
 .hm-split b {

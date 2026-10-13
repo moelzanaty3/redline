@@ -1332,11 +1332,11 @@ export function repoUrl(p: Publisher): string {
   return `https://github.com/${p.owner}/${p.repo}`;
 }
 
-// One command installs every skill in the repository, not just this one — the
-// CLI's unit is the source, not the skill. Saying otherwise would have people
-// wondering why they got ten skills when they asked for one.
-export function installCommand(p: Publisher): string {
-  return `npx skills add ${p.owner}/${p.repo}`;
+// `--skill` installs this entry alone. Without it the CLI asks which of the
+// repository's skills to install, and `--all` installs every one of them.
+export function installCommand(entry: CatalogEntry): string {
+  const p = publisherOf(entry);
+  return `npx skills add ${p.owner}/${p.repo} --skill ${entry.name}`;
 }
 
 export function findEntry(owner: string, name: string): CatalogEntry | undefined {

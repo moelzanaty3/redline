@@ -103,14 +103,26 @@ jobs:
             commit -q -m "test(redline): seed canary for $STACK — DO NOT MERGE"
           git push -q origin "$branch"
 
-          # redline-exempt keeps the readiness gate from blocking a PR nobody will merge.
+          # The process checks fail on purpose here: the seeds break rules, and
+          # nobody fills in a checklist for a PR that is closed after scoring. The
+          # redline-exempt label alone is refused at a blocking rung, so the body
+          # carries the exemption block the gate reads: a reason, an expiry and
+          # the checks it covers. The security floor is not covered and cannot be.
+          until=$(date -u -d '+7 days' +%Y-%m-%d)
+          body="Automated validation run. This branch contains deliberately broken code and fake credentials. It is scored and closed automatically; never merge it.
+
+          ## Redline exemption
+
+          - reason: seed canary for $STACK; deliberately broken code, scored and closed automatically, never merged
+          - until: $until
+          - scope: checklist, adr, policy"
           pr=$(gh pr create --repo "$TARGET_REPO" --head "$branch" \
             --title "DO NOT MERGE — Redline seed canary ($STACK)" \
-            --body "Automated validation run. This branch contains deliberately broken code and fake credentials. It is scored and closed automatically; never merge it." \
+            --body "$body" \
             --label redline-exempt 2>/dev/null || \
             gh pr create --repo "$TARGET_REPO" --head "$branch" \
               --title "DO NOT MERGE — Redline seed canary ($STACK)" \
-              --body "Automated validation run. Scored and closed automatically; never merge it.")
+              --body "$body")
 
           number="${pr##*/}"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"

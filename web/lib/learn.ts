@@ -1,0 +1,155 @@
+// The Learn path, in order. One entry per page under /docs/learn: the sidebar,
+// the overview's step list, each page's stepper and the progress tracker all
+// read this, so a step renamed here is renamed everywhere at once.
+
+export const DEMO_URL = "https://github.com/moelzanaty3/redline-demo";
+// Raw files at a tag, for steps that borrow the demo's larger files.
+export const DEMO_RAW = "https://raw.githubusercontent.com/moelzanaty3/redline-demo";
+
+// From step 01 on, Redline is in the project's devDependencies, so a command
+// runs that copy through the reader's package manager: the same command the CLI
+// prints in its own hints (redlineCommand in cli/core/package-manager.ts).
+export const REDLINE_RUNNERS = {
+  pnpm: "pnpm redline",
+  npm: "npx redlinegate",
+  yarn: "yarn redline",
+  bun: "bun run redline",
+} as const;
+
+export type LearnStep = {
+  slug: string;
+  n: string;
+  title: string;
+  // One line: what the reader can do after this page that they could not before.
+  summary: string;
+  minutes: number;
+  // The demo's git tag and pull request for this step, when it has them.
+  tag?: string;
+  pr?: number;
+  // Step 00 puts the reader's own repository on GitHub; every step after works there.
+  needsGitHub: boolean;
+};
+
+export const LEARN_STEPS: LearnStep[] = [
+  {
+    slug: "starting-point",
+    n: "00",
+    title: "The starting point",
+    summary: "Get the starter files into a GitHub repository of your own, and see what it holds.",
+    minutes: 5,
+    tag: "step-00",
+    needsGitHub: true,
+  },
+  {
+    slug: "onboard",
+    n: "01",
+    title: "Onboard",
+    summary: "One command adds the rules, the review commands and a merge gate.",
+    minutes: 5,
+    tag: "step-01",
+    pr: 1,
+    needsGitHub: true,
+  },
+  {
+    slug: "first-finding",
+    n: "02",
+    title: "Your first finding",
+    summary: "Five broken rules, and which ones your machine, your assistant and the gate each catch.",
+    minutes: 8,
+    tag: "step-02",
+    pr: 2,
+    needsGitHub: true,
+  },
+  {
+    slug: "explain-and-fix",
+    n: "03",
+    title: "Explain and fix",
+    summary: "Find out why a rule exists, then fix the code instead of silencing it.",
+    minutes: 6,
+    tag: "step-03",
+    pr: 3,
+    needsGitHub: true,
+  },
+  {
+    slug: "team-rule",
+    n: "04",
+    title: "A team rule",
+    summary: "Write your team's own rule once, and every assistant and review picks it up.",
+    minutes: 6,
+    tag: "step-04",
+    pr: 4,
+    needsGitHub: true,
+  },
+  {
+    slug: "adr",
+    n: "05",
+    title: "A big change needs an ADR",
+    summary: "Past 300 changed lines, the pull request links the decision behind it.",
+    minutes: 6,
+    tag: "step-05",
+    pr: 5,
+    needsGitHub: true,
+  },
+  {
+    slug: "security-floor",
+    n: "06",
+    title: "The security floor",
+    summary: "A vulnerable dependency fails the gate from day one, and nothing waives it.",
+    minutes: 6,
+    tag: "step-06",
+    pr: 6,
+    needsGitHub: true,
+  },
+  {
+    slug: "required-gate",
+    n: "07",
+    title: "Make the gate required",
+    summary: "A red gate disables the merge button, for everyone.",
+    minutes: 5,
+    tag: "step-07",
+    pr: 12,
+    needsGitHub: true,
+  },
+  {
+    slug: "exemptions",
+    n: "08",
+    title: "Exemptions",
+    summary: "Merge past a failing check on purpose, with the reason on the record.",
+    minutes: 7,
+    tag: "step-08",
+    pr: 14,
+    needsGitHub: true,
+  },
+  {
+    slug: "earn-a-rung",
+    n: "09",
+    title: "Earn a stricter rung",
+    summary: "Watch a BLOCKER merge, then see what it takes for the gate to stop the next one.",
+    minutes: 15,
+    tag: "step-09",
+    pr: 15,
+    needsGitHub: true,
+  },
+  {
+    slug: "next-steps",
+    n: "10",
+    title: "Recap and next steps",
+    summary: "What you built, how new rules reach you, and where to go from here.",
+    minutes: 4,
+    needsGitHub: false,
+  },
+];
+
+export const LEARN_MINUTES = LEARN_STEPS.reduce((sum, s) => sum + s.minutes, 0);
+
+export function learnHref(step: LearnStep): string {
+  return `/docs/learn/${step.slug}`;
+}
+
+export function learnStep(slug: string): LearnStep {
+  const step = LEARN_STEPS.find((s) => s.slug === slug);
+  // A page asking for a step that is not listed is a build-time typo, and a
+  // page rendered without its header would hide it.
+  if (step === undefined) throw new Error(`lib/learn.ts has no step "${slug}"`);
+  return step;
+}

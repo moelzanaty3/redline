@@ -2,7 +2,8 @@ import Link from "next/link";
 import { loadManifest } from "@/lib/manifest";
 import {
   AUTHOR,
-  AUTHOR_CREDIT,
+  EMPLOYER,
+  EMPLOYER_URL,
   GITHUB_REPO,
   GITHUB_URL,
   ISSUES_URL,
@@ -70,7 +71,7 @@ export function SiteFooter() {
             <h4>Documentation</h4>
             <ul>
               <li><Link href="/docs">Introduction</Link></li>
-              <li><Link href="/docs/quickstart">Quick start</Link></li>
+              <li><Link href="/docs/learn">Learn</Link></li>
               <li><Link href="/docs/onboarding">Onboarding</Link></li>
               <li><Link href="/docs/output-contract">Output contract</Link></li>
               <li><Link href="/docs/telemetry">Telemetry</Link></li>
@@ -79,39 +80,61 @@ export function SiteFooter() {
           <div>
             <h4>Adaptors</h4>
             <ul>
-              <li><Link href="/docs/adaptors/github-copilot">GitHub Copilot</Link></li>
-              <li><Link href="/docs/adaptors/claude">Claude</Link></li>
-              <li><Link href="/docs/adaptors/agents-md">AGENTS.md agents</Link></li>
+              <li><Link href="/docs/adaptors#copilot">GitHub Copilot</Link></li>
+              <li><Link href="/docs/adaptors#claude">Claude</Link></li>
+              <li><Link href="/docs/adaptors#agents">AGENTS.md agents</Link></li>
               <li>
-                <Link href="/docs/adaptors/cursor">
+                <Link href="/docs/adaptors#cursor">
                   Cursor
                   {cursorEnabled ? null : <span className="off">off by default</span>}
                 </Link>
               </li>
-              <li><Link href="/docs/adaptors/custom">Custom vendor</Link></li>
+              <li><Link href="/docs/adaptors/custom">Add a vendor</Link></li>
             </ul>
           </div>
           <div>
             <h4>Reference</h4>
             <ul>
               <li><Link href="/docs/standards">Standards</Link></li>
-              <li><Link href="/docs/scripts">Scripts</Link></li>
+              <li><Link href="/docs/scripts">Maintainer scripts</Link></li>
               <li><Link href="/docs/workflows">Workflows</Link></li>
               <li><Link href="/docs/templates">Templates & rulesets</Link></li>
             </ul>
           </div>
         </div>
         <div className="legal">
-          <p className="built">
-            Built by <b>{AUTHOR}</b>, {AUTHOR_CREDIT}.
-          </p>
           <p className="terms">
-            © {new Date().getFullYear()} {AUTHOR} ·{" "}
+            {/* The author is named once, in the credit beside this; the
+                licence file names the copyright holder. */}
+            © {new Date().getFullYear()} ·{" "}
             <a href={LICENSE_URL} rel="noopener noreferrer" target="_blank">
               {LICENSE_NAME} licence
             </a>
           </p>
+          <p className="built">
+            Built by{" "}
+            <a href={LINKEDIN_URL} rel="noopener noreferrer" target="_blank">
+              <b>{AUTHOR}</b>
+            </a>
+            , an engineering manager at{" "}
+            <a href={EMPLOYER_URL} rel="noopener noreferrer" target="_blank">
+              {EMPLOYER}
+            </a>{" "}
+            who had this problem at scale.
+          </p>
+          {/* The standard this site documents, by the version in
+              standards/manifest.json — the one fact a footer can carry that
+              changes. */}
+          <Link className="f-status" href="/docs/changes">
+            <i aria-hidden="true" />
+            Standards v{manifest.version}
+          </Link>
         </div>
+      </div>
+      {/* The page's last mark: the name, ghosted and bleeding off the bottom
+          edge, struck through by the line it is named after. */}
+      <div className="f-word" aria-hidden="true">
+        <span>Redline</span>
       </div>
     </footer>
   );

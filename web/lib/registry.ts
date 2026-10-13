@@ -12,11 +12,13 @@ export const STANDARDS: RegistryEntry[] = [
   { slug: "typescript", title: "TypeScript", file: "standards/stacks/typescript.md", description: "Type evidence in every .ts/.tsx file: unknown at the boundary only, no widening, no reflective escapes." },
   { slug: "react", title: "React (web)", file: "standards/stacks/react.md", description: "React web applications." },
   { slug: "react-native", title: "React Native", file: "standards/stacks/react-native.md", description: "React Native apps — extends the React rules." },
+  { slug: "nextjs", title: "Next.js (App Router)", file: "standards/stacks/nextjs.md", description: "Next.js App Router — extends the React rules. Server Actions, the server/client boundary, caching and redirects." },
   { slug: "angular", title: "Angular", file: "standards/stacks/angular.md", description: "Angular applications — subscription teardown, change detection, injection sinks, guards." },
   { slug: "vue", title: "Vue", file: "standards/stacks/vue.md", description: "Vue 3 and Nuxt — reactivity that silently stops updating, v-html, SSR state leaks." },
   { slug: "svelte", title: "Svelte / SvelteKit", file: "standards/stacks/svelte.md", description: "Svelte 4 and 5 plus SvelteKit — runes, stores, and what load runs where." },
   { slug: "dom", title: "Browser / DOM", file: "standards/stacks/dom.md", description: "Framework-free browser code — the sinks and leaks a framework normally hides." },
   { slug: "nodejs", title: "Node.js (NestJS)", file: "standards/stacks/nodejs.md", description: "NestJS services." },
+  { slug: "express", title: "Express", file: "standards/stacks/express.md", description: "Express HTTP services — routers, middleware, handlers. Written for Express 5, with Express 4 differences called out." },
   { slug: "microservices", title: "Microservice cross-cutting", file: "standards/stacks/microservices.md", description: "Cross-cutting service rules: idempotency, timeouts, queues, observability." },
   { slug: "java", title: "Java (Spring Boot)", file: "standards/stacks/java.md", description: "Spring Boot services." },
   { slug: "go", title: "Go", file: "standards/stacks/go.md", description: "Go services and tools." },
@@ -28,40 +30,45 @@ export const STANDARDS: RegistryEntry[] = [
   { slug: "effect", title: "Effect", file: "standards/stacks/effect.md", description: "Repositories built on the effect library — typed error handling, tagged constructors, Layers." },
 ];
 
+// Maintainer scripts in scripts/, documented together on /docs/scripts. Who runs
+// each one, and the CLI command that fronts it where there is one, is in
+// scripts-info.ts.
 export const SCRIPTS: RegistryEntry[] = [
-  { slug: "validate", title: "validate.mjs", file: "scripts/validate.mjs", description: "Bundle self-check run by this repo's CI — manifest integrity, rule ids, ruleset/workflow files, the seed corpus." },
-  { slug: "assign-rule-ids", title: "assign-rule-ids.mjs", file: "scripts/assign-rule-ids.mjs", description: "Assigns a permanent id to every rule missing one, and rewrites standards/ in place." },
-  { slug: "render-self", title: "render-self.mjs", file: "scripts/render-self.mjs", description: "Renders this repo's own standards artifacts with the CLI's TypeScript renderer, profile javascript-typescript." },
-  { slug: "check-pins", title: "check-pins.mjs", file: "scripts/check-pins.mjs", description: "Re-resolves SHA-pinned third-party actions against the tag they claim." },
-  { slug: "score-seeds", title: "score-seeds.mjs", file: "scripts/score-seeds.mjs", description: "Scores a reviewer's PR comments against the seeded corpus: BLOCKER recall, false positives, rule attribution." },
-  { slug: "collect-telemetry", title: "collect-telemetry.mjs", file: "scripts/collect-telemetry.mjs", description: "Nightly central pull of review outcomes across the org — runs in the redline-metrics repo." },
-  { slug: "build-digest", title: "build-digest.mjs", file: "scripts/build-digest.mjs", description: "Builds the Monday Teams digest as an Adaptive Card — runs in the redline-metrics repo." },
-  { slug: "build-inbox", title: "build-inbox.mjs", file: "scripts/build-inbox.mjs", description: "Builds the org-wide prioritised PR inbox for GitHub Pages." },
-  { slug: "build-dashboard", title: "build-dashboard.mjs", file: "scripts/build-dashboard.mjs", description: "Builds the telemetry dashboard — runs in the redline-metrics repo." },
-  { slug: "build-registry", title: "build-registry.mjs", file: "scripts/build-registry.mjs", description: "Derives registry.json — the register of onboarded repositories — by walking the estate for .redline.json." },
-  { slug: "build-correlation", title: "build-correlation.mjs", file: "scripts/build-correlation.mjs", description: "Research: whether ignoring a finding cost anything. Refuses to report a rate the sample does not support." },
-  { slug: "build-roi", title: "build-roi.mjs", file: "scripts/build-roi.mjs", description: "The one page a finance stakeholder can read: what AI review cost, what it caught, and the DORA figures beside it." },
-  { slug: "build-baseline", title: "build-baseline.mjs", file: "scripts/build-baseline.mjs", description: "Computes the Phase 0 baseline every later roadmap phase is judged against, with every unavailable figure stating why." },
+  { slug: "validate", title: "validate.mjs", file: "scripts/validate.mjs", description: "Bundle self-check: manifest integrity, rule ids, the output contract, ruleset and workflow files, the seeded corpus." },
+  { slug: "assign-rule-ids", title: "assign-rule-ids.mjs", file: "scripts/assign-rule-ids.mjs", description: "Writes a permanent <stack>/<slug> id onto every rule in standards/ that lacks one; --check fails instead of writing." },
+  { slug: "render-self", title: "render-self.mjs", file: "scripts/render-self.mjs", description: "Renders this repository's own AGENTS.md, CLAUDE.md and Copilot files from standards/; --check fails if they are stale." },
+  { slug: "check-pins", title: "check-pins.mjs", file: "scripts/check-pins.mjs", description: "Checks every SHA-pinned action and digest-pinned Docker image against the tag its comment names, and that every gate job asks for the same redlinegate version. Reports newer releases." },
+  { slug: "score-seeds", title: "score-seeds.mjs", file: "scripts/score-seeds.mjs", description: "Scores a reviewer's comments on a seeded pull request: BLOCKER recall, false positives on clean code, rule attribution." },
+  { slug: "collect-telemetry", title: "collect-telemetry.mjs", file: "scripts/collect-telemetry.mjs", description: "Pulls review outcomes for merged pull requests across the org into monthly JSONL." },
+  { slug: "build-digest", title: "build-digest.mjs", file: "scripts/build-digest.mjs", description: "Builds the weekly Teams digest as an Adaptive Card from collected telemetry." },
+  { slug: "build-inbox", title: "build-inbox.mjs", file: "scripts/build-inbox.mjs", description: "Builds the org-wide prioritised pull-request inbox as a static page." },
+  { slug: "build-dashboard", title: "build-dashboard.mjs", file: "scripts/build-dashboard.mjs", description: "Builds the telemetry dashboard as a static page from collected telemetry and the register." },
+  { slug: "build-registry", title: "build-registry.mjs", file: "scripts/build-registry.mjs", description: "Derives registry.json, the register of onboarded repositories, from the .redline.json each one carries." },
+  { slug: "build-correlation", title: "build-correlation.mjs", file: "scripts/build-correlation.mjs", description: "Research: whether ignored findings were followed by reverts or hotfixes. Refuses to report below its sample threshold." },
+  { slug: "build-roi", title: "build-roi.mjs", file: "scripts/build-roi.mjs", description: "What AI review cost against what it caught: cost per BLOCKER, with the DORA figures beside it." },
+  { slug: "build-baseline", title: "build-baseline.mjs", file: "scripts/build-baseline.mjs", description: "The Phase 0 baseline later phases are judged against; every figure it cannot source says why." },
+  { slug: "fetch-stars", title: "fetch-stars.mjs", file: "scripts/fetch-stars.mjs", description: "Refreshes the GitHub star snapshot the docs site renders, with the date it was taken." },
+  { slug: "publish-local", title: "publish-local.mjs", file: "scripts/publish-local.mjs", description: "Builds, packs and installs this working tree globally, then checks the redline on PATH is the one it just built." },
 ];
 
 export const WORKFLOWS: RegistryEntry[] = [
-  { slug: "redline-gate", title: "redline-gate.yml", file: "workflows/redline-gate.yml", description: "Reusable gate: checklist, ADR-for-big-diffs, dependency review, diff secret scan, label-aware aggregation. Active." },
-  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Distributes standards and gate callers to onboarded repos as PRs. Active — runs on a push to main touching standards/, cli/render/ or templates/, and on workflow_dispatch." },
-  { slug: "redline-collect", title: "redline-collect.yml", file: "workflows/redline-collect.yml", description: "Nightly telemetry collection across the org. Lives in the redline-metrics repo." },
-  { slug: "weekly-digest", title: "weekly-digest.yml", file: "workflows/weekly-digest.yml", description: "Monday Teams digest workflow. Lives in the redline-metrics repo." },
-  { slug: "inbox", title: "inbox.yml", file: "workflows/inbox.yml", description: "Org-wide prioritised PR inbox on GitHub Pages. Lives in this (source) repo." },
-  { slug: "dashboard", title: "dashboard.yml", file: "workflows/dashboard.yml", description: "Telemetry dashboard build and publish. Lives in the redline-metrics repo." },
-  { slug: "seed-canary", title: "seed-canary.yml", file: "workflows/seed-canary.yml", description: "Weekly regression test against the seeded corpus. Lives in the redline-metrics repo." },
-  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Re-verifies onboarded repos still report the required check, and opens one tracking issue on drift. Active — weekly, Tuesday 06:00 UTC, plus workflow_dispatch." },
+  { slug: "redline-gate", title: "redline-gate.yml", file: "workflows/redline-gate.yml", description: "The reusable merge gate: five jobs (checklist, ADR, deterministic policy, dependency review, diff secret scan) aggregated into one required check." },
+  { slug: "redline-sync", title: "redline-sync.yml", file: "workflows/redline-sync.yml", description: "Lands the current standards on every registered repository as a pull request, whenever standards/ changes on main. Lives in this (source) repo." },
+  { slug: "redline-collect", title: "redline-collect.yml", file: "workflows/redline-collect.yml", description: "Nightly: runs redline metrics collect and commits the telemetry. Lives in the redline-metrics repo." },
+  { slug: "weekly-digest", title: "weekly-digest.yml", file: "workflows/weekly-digest.yml", description: "Mondays: runs redline metrics digest and posts the card to Teams. Lives in the redline-metrics repo." },
+  { slug: "inbox", title: "inbox.yml", file: "workflows/inbox.yml", description: "Weekdays every 30 minutes: builds the CLI, runs redline metrics inbox, publishes to Pages. Lives in this (source) repo." },
+  { slug: "dashboard", title: "dashboard.yml", file: "workflows/dashboard.yml", description: "Daily and after each collect or canary run: runs redline metrics dashboard and publishes to Pages. Lives in the redline-metrics repo." },
+  { slug: "seed-canary", title: "seed-canary.yml", file: "workflows/seed-canary.yml", description: "Weekly: opens a seeded pull request on each canary repo, scores it with redline metrics score-seeds, closes it. Lives in the redline-metrics repo." },
+  { slug: "verify-onboarding", title: "verify-onboarding.yml", file: "workflows/verify-onboarding.yml", description: "Weekly: re-verifies every registered repo and keeps one tracking issue listing the ones that drifted. Lives in this (source) repo." },
 ];
 
 export const TEMPLATES: RegistryEntry[] = [
   { slug: "repo-context", title: "repo-context.md", file: "templates/repo-context.md", description: "Per-repo context template — a human copies it above the generated block in AGENTS.md." },
   { slug: "codeowners", title: "CODEOWNERS", file: "templates/CODEOWNERS", description: "Reference shape of the CODEOWNERS pattern redline init seeds — the CLI generates the real content in code, it doesn't read this file." },
   { slug: "redline-caller", title: "redline.yml", file: "templates/redline.yml", description: "Thin caller installed verbatim as .github/workflows/redline.yml in every onboarded GitHub repo." },
-  { slug: "pr-template", title: "pull_request_template.md", file: ".github/pull_request_template.md", description: "GitHub PR template — the gated Launch readiness checklist, written whole by redline init when the repo has none, merged into an existing one otherwise." },
+  { slug: "pr-template", title: "pull_request_template.md", file: "templates/github/pull_request_template.md", description: "GitHub PR template — the gated Launch readiness checklist, written whole by redline init when the repo has none, merged into an existing one otherwise." },
   { slug: "azure-pr-template", title: "azure/pull_request_template.md", file: "templates/azure/pull_request_template.md", description: "The same checklist, worded for Azure DevOps, written whole by redline init when the repo has none, merged into an existing one otherwise." },
-  { slug: "azure-gate-template", title: "azure/gate-template.yml", file: "platforms/azure/gate-template.yml", description: "The Azure Pipelines gate — materially weaker than GitHub's: no dependency review, no secret scan." },
+  { slug: "azure-gate-template", title: "azure/gate-template.yml", file: "platforms/azure/gate-template.yml", description: "The Azure Pipelines gate: a diff secret scan and redline verify --gate. No dependency review, checklist or ADR job, unlike GitHub's." },
   { slug: "repo-ruleset", title: "redline-ruleset.json", file: "rulesets/redline-ruleset.json", description: "Reference shape only — nothing reads this file; redline init builds the equivalent ruleset at runtime." },
   { slug: "org-ruleset", title: "redline-org-ruleset.json", file: "rulesets/redline-org-ruleset.json", description: "Reference shape for a one-time manual org-level import — not applied by any code here." },
 ];
@@ -106,6 +113,10 @@ export const SEEDS: RegistryEntry[] = [
   { slug: "kotlin", title: "kotlin", file: "seeded/kotlin/SeededViolations.kt", description: "Seeded Kotlin defects — GlobalScope launches, swallowed CancellationException, leaked Context." },
   { slug: "swift", title: "swift", file: "seeded/swift/SeededViolations.swift", description: "Seeded Swift defects — UI off the main actor, uncancelled Tasks, retain cycles, force unwraps." },
   { slug: "terraform", title: "terraform", file: "seeded/terraform/seeded_violations.tf", description: "Seeded Terraform defects — committed secrets, public exposure, a rename with no moved block." },
+  { slug: "typescript", title: "typescript", file: "seeded/typescript/seeded-violations.ts", description: "Seeded TypeScript defects — widen-then-assert, unjustified double assertions, unknown leaking past the boundary." },
+  { slug: "effect", title: "effect", file: "seeded/effect/seeded-violations.ts", description: "Seeded Effect defects — tag branching in a broad catch, hand-built tagged errors, a service imported around its Layer." },
+  { slug: "express", title: "express", file: "seeded/express/seeded_violations.js", description: "Seeded Express defects — wildcard CORS with credentials, unbounded bodies, unhandled async rejections, path traversal." },
+  { slug: "nextjs", title: "nextjs", file: "seeded/nextjs/seeded_violations.tsx", description: "Seeded Next.js defects — Server Actions with no auth, secrets in public env, per-user data in a cached render." },
 ];
 
 export function findBySlug(list: RegistryEntry[], slug: string): RegistryEntry | undefined {

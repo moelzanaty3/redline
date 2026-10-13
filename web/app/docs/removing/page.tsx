@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CodeWindow } from "@/components/code-window";
 import { DocsPage } from "@/components/docs-page";
+import { RedlineCode } from "@/components/learn/interactive";
+import { RedlineTerminal } from "@/components/learn/parts";
 import { loadManifest } from "@/lib/manifest";
 import { LifecycleSteps } from "@/components/lifecycle-steps";
 import type { Step } from "@/lib/lifecycle";
@@ -20,12 +22,17 @@ const STEPS: Step[] = [
   {
     label: "Delete the files Redline owns whole",
     detail:
-      "Everything under the redline- prefix, the rendered command files, and the gate caller workflow. Nothing in them was written by a human.",
+      "Everything under the redline- prefix, the rendered command files, the gate caller workflow, and the vendored gate or pre-push hook where there is one. Nothing in them was written by a human.",
   },
   {
     label: "Strip the REDLINE blocks from the merged files",
     detail:
       "AGENTS.md, CLAUDE.md, .github/copilot-instructions.md and the pull request template are shared with your own content. Delete the marker pair and everything between it; leave every other byte.",
+  },
+  {
+    label: "Uninstall the redlinegate devDependency",
+    detail:
+      "If init pinned the CLI, package.json and the lockfile carry it. redline remove leaves them alone, so this one is always by hand.",
   },
   {
     label: "Delete .redline.json",
@@ -58,16 +65,46 @@ export default function Page() {
     <DocsPage
       crumb="Removing Redline"
       title="Removing Redline"
-      intro="Everything redline init wrote, and how to take it back out — which files are Redline's to delete, which are yours with a Redline block inside them, and which host settings you should think twice about switching off."
+      intro="Trying a tool is only safe if you can take it back out. redline init writes into files you already own and changes settings on your host, so this page is the full list: which files are Redline's to delete, which are yours with a Redline block inside them, and which host settings you should think twice about switching off."
       href="/docs/removing"
     >
+      <h2 id="one-command">Remove it with one command</h2>
       <p>
-        <code>redline remove</code> does this in one step and opens the pull
-        request for you. The rest of this page is the manual path, and it is
-        written out in full deliberately: <code>redline init</code> writes into
-        files you already own and changes settings on your host, so
-        &ldquo;how do I back this out&rdquo; deserves an answer you can read
-        and check rather than a command you have to trust.
+        Read the plan first. A dry run writes nothing and contacts no host:
+      </p>
+      <RedlineTerminal
+        commands="{redline} remove --dry-run"
+        output={`  would remove   AGENTS.md  — nothing but the Redline block was in it
+  would remove   CLAUDE.md  — nothing but the Redline block was in it
+  would remove   .claude/commands/redline-review.md  — its frontmatter carries the Redline ownership line
+  …
+  would remove   .github/workflows/redline.yml  — it references Redline's reusable gate and publishes redline-gate / gate
+  would unmerge  .github/pull_request_template.md  — the Redline block only — every byte outside it is kept as it is
+  would remove   .redline.json  — Redline's own record of this repository — removed last
+  would apply   withdraw Redline's own state on github: the merge policy it applied, the labels it created, and the repository property it set where the host has them
+  would apply   pull request on redline/remove
+dry run — nothing was written, read or changed on the host`}
+      />
+      <p>
+        Then run it for real. It removes only the files it can prove Redline
+        wrote. It withdraws the ruleset, labels and repository property first,
+        so a required <code>redline-gate / gate</code> check cannot hold up the
+        removal. Then it opens a pull request on the branch{" "}
+        <code>redline/remove</code>:
+      </p>
+      <RedlineTerminal commands="{redline} remove" />
+      <p>
+        Two things it leaves for you: the security floor, which you almost
+        certainly want to keep (<a href="#keep">below</a>), and the{" "}
+        <a href="#devdependency"><code>redlinegate</code> devDependency</a>,
+        which is the copy the command runs from. Once the pull request merges,{" "}
+        <code>redline verify</code> reports the repository as not onboarded and
+        exits <code>2</code>.
+      </p>
+      <p>
+        The rest of this page is the manual path, written out in full so you
+        can read and check exactly what removal touches rather than trust a
+        command.
       </p>
       <div className="callout info">
         <span className="ic">ℹ</span>
@@ -135,11 +172,19 @@ export default function Page() {
             </tr>
             <tr>
               <td>.github/prompts/redline-*.prompt.md</td>
-              <td>The rendered slash commands for Copilot. Equivalents live in <code>.claude/commands/</code>, <code>.opencode/command/</code> and <code>.cursor/commands/</code>.</td>
+              <td>The rendered slash commands for Copilot. Equivalents live in <code>.claude/commands/</code> and <code>.cursor/commands/</code>.</td>
             </tr>
             <tr>
               <td>.github/workflows/redline.yml</td>
               <td>The caller workflow: a few lines that reference your org&apos;s reusable gate. On Azure DevOps this is <code>.azuredevops/redline-gate.yml</code>.</td>
+            </tr>
+            <tr>
+              <td>.github/workflows/redline-gate.yml</td>
+              <td>The gate itself, <b>only if it was vendored</b> (<code>--gate-source local</code>). It opens with a <code># Managed by Redline</code> line; a file at this path without one is yours.</td>
+            </tr>
+            <tr>
+              <td>.redline/hooks/pre-push</td>
+              <td>The gate as a pre-push hook, <b>only on a <code>--pipeline local-agent</code> repository</b>. Each clone that enabled it also points <code>core.hooksPath</code> at <code>.redline/hooks</code>, which is per-clone configuration no pull request removes: every teammate runs <code>git config --unset core.hooksPath</code> in their own clone, or git keeps looking in a directory that no longer exists and runs no hooks at all.</td>
             </tr>
             <tr>
               <td>.redline.json</td>
@@ -275,13 +320,26 @@ export default function Page() {
         copies. The source file stays unless you delete it yourself.
       </p>
 
+      <h3 id="devdependency">The <code>redlinegate</code> devDependency</h3>
+      <p>
+        If <code>init</code> pinned the CLI, <code>package.json</code> lists{" "}
+        <code>redlinegate</code> in <code>devDependencies</code>, and your
+        lockfile carries it. <code>redline remove</code> never touches either:
+        it is the copy the removal itself runs from. Take it out after{" "}
+        <code>redline remove</code> has run, on the same branch, with your
+        package manager —<code>pnpm remove redlinegate</code>,{" "}
+        <code>npm uninstall redlinegate</code>, <code>yarn remove redlinegate</code>{" "}
+        or <code>bun remove redlinegate</code> — and commit{" "}
+        <code>package.json</code> and the lockfile into the removal pull
+        request.
+      </p>
       <h2><code>.redline.json</code> — what deleting it means</h2>
       <p>
         This is the file that makes the repository <i>onboarded</i>, and
         deleting it is what makes the removal real rather than cosmetic.
       </p>
       <ul>
-        <li><code>redline verify</code> stops recognising the repository. It reports a single finding — <code>no .redline.json — run: npx redlinegate init</code> — and exits <code>2</code>, a usage error, not drift.</li>
+        <li><code>redline verify</code> stops recognising the repository. It reports a single <code>onboarded</code> finding — no <code>.redline.json</code>, and the <code>init</code> command to run — and exits <code>2</code>, a usage error, not drift.</li>
         <li>Central discovery reads <code>.redline.json</code> from the default branch of every repository in the org. With the file gone this repository is simply not in the registry, and stops appearing in coverage and drift reporting.</li>
         <li>It also carries <code>onboardedAt</code>, the recorded menu, the pending-admin list and the content ids of the command files. All of that is gone with it — a later <code>redline init</code> would start from nothing and read as a fresh onboarding.</li>
       </ul>
@@ -303,7 +361,7 @@ export default function Page() {
         that only arrived with Redline.
       </p>
 
-      <h3>Keep these</h3>
+      <h3 id="keep">Keep these</h3>
       <p>
         Secret scanning, push protection and dependency alerts are an
         organisation-wide security floor. They are additive host settings —

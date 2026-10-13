@@ -70,15 +70,34 @@ pull request on `redline/onboard`. It never pushes to your default branch, so `g
 stays clean. Anything that needed repository admin rights you do not have is listed at the
 end for an administrator to run.
 
+New to Redline? [Learn](https://www.redlinegate.dev/docs/learn) walks through it a step at
+a time, from the first `init` to earning a blocking rung.
+
+`npx` is the default. In a pnpm, yarn or bun project, use that package manager's own runner
+(`pnpm dlx redlinegate init`, `yarn dlx redlinegate init`, `bunx redlinegate init`): npm 10.9
+and later refuse to run in a folder whose `package.json` names another package manager under
+`devEngines`.
+
 In CI, in a pipe, or with any flag present it prompts for nothing and takes the scripted
 path — a prompt in a pipeline is a hang with nobody there to answer it:
 
 ```sh
 npx redlinegate init --dry-run                 # the plan; writes nothing, contacts no host
-npx redlinegate init --profile web-react,infra # a React app with its own Terraform beside it
+npx redlinegate init --profile web-react,infra-terraform  # a React app with its own Terraform beside it
 npx redlinegate init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines
 npx redlinegate init --pipeline local-agent      # no CI: the gate is a pre-push hook
+npx redlinegate init --pin-cli                   # add redlinegate to devDependencies at this exact version
+npx redlinegate init --no-adr                    # this repository keeps no decision records
 ```
+
+Profiles are named `<kind>-<technology>`: `web-react`, `service-java`, `infra-terraform`,
+`javascript-typescript`. The old short names (`infra`, `tooling`, `web-vanilla`, `mobile-rn`, …)
+are kept as aliases, so an existing `--profile`, `.redline.json` or `sync-targets.txt` keeps
+working. A repository is recorded under the new name the next time it runs `init` or is synced.
+
+With `--pin-cli`, or yes to the wizard's question, every later hint and slash command runs the
+pinned copy (`pnpm redline …`, `yarn redline …`, `bun run redline …`) rather than downloading
+another one. It is offered only in a Node project that does not depend on Redline yet.
 
 ### Where the gate runs
 
@@ -264,7 +283,7 @@ it is the cheapest way to see the findings before a reviewer does.
 Redline's hardest failure mode is not breaking — it is running, looking green, and doing
 nothing. Each checkpoint below has a command that proves it, and a quiet failure that
 looks identical from the outside. The long version, with the numbers to expect, is
-[docs/success](https://www.redlinegate.dev/docs/success).
+[docs/adopting](https://www.redlinegate.dev/docs/adopting#is-it-used).
 
 **New install?** Work through [docs/verifying.md](docs/verifying.md) once. It is a
 ten-minute guided run that makes the gate fail on purpose — a green run you have never
@@ -340,8 +359,8 @@ Redline carries two versions that move independently. Do not conflate them.
 
 | Axis | Lives in | Bumped by | Example |
 | --- | --- | --- | --- |
-| **CLI version** | `redlinegate` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.0.2` |
-| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.0.2` |
+| **CLI version** | `redlinegate` on npm (git `v*` tags) | semantic-release, from conventional commits on `main` | `0.2.11` |
+| **Standards version** | `standards/manifest.json` → `version` | A human, in the same PR as the rule change (see above) | `0.2.2` |
 
 The CLI version is the tool's release line: [CHANGELOG.md](CHANGELOG.md) tracks it, and
 semantic-release computes the next one from commit messages — never edit
@@ -368,7 +387,7 @@ exact semantic-release version pinned in the lockfile.
   dashboard turns that into a tuning queue: the specific rules to cut, named. See
   [docs/measurement.md](docs/measurement.md).
 - **The reviewer itself is regression-tested.** A weekly canary opens a PR of known-bad
-  code against a pilot repo, scores what came back against 117 seeded BLOCKER defects and
+  code against a pilot repo, scores what came back against 175 seeded BLOCKER defects and
   a corpus of correct code that must draw zero comments, then closes it. "No findings"
   and "nothing to find" are otherwise indistinguishable.
 - **Distribution.** One source of truth, rendered per profile. `redline sync` lands the
@@ -402,6 +421,9 @@ exact semantic-release version pinned in the lockfile.
   gates.
 - The gate separates **process checks from security checks**. `redline-exempt` downgrades
   the checklist and ADR requirements to warnings for a reviewer who accepts the
-  trade-off; it does nothing to dependency review or the secret scan.
+  trade-off; it does nothing to dependency review or the secret scan. The ADR check counts
+  only a link to an actual record file, so the template's own placeholder no longer satisfies
+  it. A single pull request opts out with the `no-adr` label, and a repository with
+  `redline init --no-adr`.
 - **Profiles, not glob negation.** Rule sets that would contradict each other are never
   installed in the same repo, so no rule depends on unsupported negation syntax.

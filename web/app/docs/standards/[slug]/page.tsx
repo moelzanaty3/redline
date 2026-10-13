@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { DocsPage } from "@/components/docs-page";
 import { FileViewer } from "@/components/file-viewer";
 import { loadManifest } from "@/lib/manifest";
-import { STANDARDS, findBySlug } from "@/lib/registry";
+import { SEEDS, STANDARDS, findBySlug } from "@/lib/registry";
 import { bySeverityDesc, rulesForStack, type RuleEntry } from "@/lib/rules";
 import { STANDARDS_INFO } from "@/lib/standards-info";
 import { ruleAnchor } from "@/lib/search-index";
@@ -79,6 +79,7 @@ export default async function Page({
   // severity rule — a generic placeholder would not tell the reader what their
   // findings will actually look like.
   const sample = bySeverityDesc(rules)[0];
+  const seed = findBySlug(SEEDS, slug);
   const example = sample
     ? `Redline/${sample.severity} [${sample.id}]: <one-line problem>`
     : `Redline/BLOCKER [${ruleStack}/<slug>]: <one-line problem>`;
@@ -92,60 +93,48 @@ export default async function Page({
     >
       {isManifest ? (
         <>
-          <h2>What this is</h2>
           <p>
-            The single config file everything else is generated from — stack
-            globs, which stacks compose each profile, vendor on/off switches,
-            and the standards version every rendered file names.
+            The one config file the renderer reads to decide which rule files go
+            into which artifact, under which globs, for which assistants. It
+            ships inside the published package; a product repository never
+            carries a copy. <code>redline init</code> reads it to detect a
+            profile and to know which vendors it can render for.
           </p>
-          <h2>How to onboard it</h2>
-          <p>
-            Nothing to onboard: it arrives with the CLI. <code>redline init</code>{" "}
-            reads it to detect which stacks your profile includes and which
-            vendors to render for. You never install or copy this file into a
-            product repository — it stays in the source repo and ships inside
-            the published package.
-          </p>
-          <h2>How to use it</h2>
+          <h2>What it holds</h2>
           <ul>
-            <li><code>core</code> — the source file every profile always includes.</li>
+            <li><code>version</code> — the standards version every rendered file and every sync pull request names.</li>
+            <li><code>core</code> — the source file every profile includes.</li>
             <li><code>stacks</code> — one entry per stack: title, source markdown, <code>globs</code> (plain, never negated or brace-expanded — Copilot&apos;s <code>applyTo</code> can&apos;t express either), and an optional <code>extends</code> list.</li>
-            <li><code>profiles</code> — named lists of stack ids; see <Link href="/docs/standards">Standards</Link> for the full table.</li>
-            <li><code>profileAliases</code> — legacy profile names accepted for backwards compatibility.</li>
-            <li><code>vendors</code> — which of the four renderers are enabled by default (Cursor ships off).</li>
+            <li><code>profiles</code> — named lists of stack ids. A repository installs exactly one; see <Link href="/docs/profiles">Profiles &amp; stacks</Link>.</li>
+            <li><code>profileAliases</code> — older profile names, still accepted, mapped to current ones.</li>
+            <li><code>vendors</code> — the assistants the renderer can write for, and whether each is on by default.</li>
+            <li><code>deterministic</code> — the rule ids a checker decides without a model; see <Link href="/docs/deterministic">Deterministic rules</Link>.</li>
           </ul>
-          <h2>Expected output</h2>
+          <h2>What a mistake here looks like</h2>
           <p>
-            The manifest produces no findings of its own. What it decides is
-            which rule files get composed into each rendered artifact and under
-            which <code>applyTo</code> globs — so an error here shows up as a
-            stack that never loads, or one that loads on the wrong files, rather
-            than as a bad review comment.
-          </p>
-          <p>
-            <code>scripts/validate.mjs</code> is what catches that: it fails the
-            build on a stack whose source is missing, a profile naming an unknown
-            stack, an alias shadowing a real profile, and on globs Copilot&apos;s{" "}
+            Not a bad review comment: a stack that never loads, or one that loads
+            on the wrong files. <code>scripts/validate.mjs</code> fails CI on a
+            stack whose source is missing, a profile naming an unknown stack, an
+            alias shadowing a real profile, and globs Copilot&apos;s{" "}
             <code>applyTo</code> cannot express — negated (<code>!</code>), brace
             expansions, or a glob containing the separator comma.
           </p>
-          <h2>How to edit it</h2>
+          <h2>Changing it</h2>
           <p>
-            It is part of <code>standards/</code>, so the same discipline applies
-            as to the rule files themselves — including the version bump, which
-            lives in this very file.
+            It is part of <code>standards/</code>, so the same loop applies as to
+            the rule files, including the version bump, which lives in this very
+            file.
           </p>
           <LifecycleSteps steps={STANDARDS_EDIT} />
         </>
       ) : (
         <>
-          <h2>What this is</h2>
           <p>
             {isCore
               ? "The rules that apply to every file in every profile, regardless of stack — security, type safety, error handling, scope discipline, and the output contract itself."
               : (STANDARDS_INFO[slug] ?? entry.description)}
           </p>
-          {stack?.extends && stack.extends.length > 0 && (
+          {stack?.extends && stack.extends.length > 0 ? (
             <p>
               Extends{" "}
               {stack.extends.map((base, i) => (
@@ -157,53 +146,38 @@ export default async function Page({
               — those rules apply too; this file only adds what&apos;s specific
               to {entry.title}.
             </p>
-          )}
+          ) : null}
 
-          <h2>How to onboard it</h2>
+          <h2>Which repositories get it</h2>
           {isCore ? (
             <p>
-              Nothing to do, and nothing you can opt out of. Core is included by
-              every profile and applies to every file — it has no globs to match
-              because it is not stack-scoped. Onboarding a repository at all
-              onboards these rules.
+              Every one. Core is in every profile and applies to every file, so it
+              has no globs. Onboarding a repository at all onboards these rules.
             </p>
           ) : (
             <>
-              <p>
-                A repository picks up this stack by onboarding on a profile that
-                includes it. <code>redline init</code> detects the profile from
-                what is in the repository, so in most cases this is automatic:
-              </p>
-              <CodeWindow title="terminal" copyText={`npx redlinegate init --profile ${profiles[0] ?? "web"}`}>
-                <span className="tk-prompt">$</span>{" "}
-                <span className="tk-white">npx redlinegate init</span>
-                <span className="tk-dim">{"  # detects the profile"}</span>
-                {"\n"}
-                <span className="tk-prompt">$</span>{" "}
-                <span className="tk-white">npx redlinegate init --profile {profiles[0] ?? "web"}</span>
-                <span className="tk-dim">{"  # or name one"}</span>
-              </CodeWindow>
               {profiles.length > 0 ? (
                 <p>
-                  {profiles.length === 1 ? "One profile pulls" : `${profiles.length} profiles pull`}{" "}
-                  these rules in:{" "}
+                  A repository on {profiles.length === 1 ? "this profile" : `any of these ${profiles.length} profiles`}:{" "}
                   {profiles.map((name, i) => (
                     <span key={name}>
                       {i > 0 && ", "}
                       <code>{name}</code>
                     </span>
                   ))}
-                  . {stack?.extends?.length ? "A profile that includes a stack extending this one gets these rules too." : ""}
+                  . <code>redline init</code> detects the profile and{" "}
+                  <code>--profile</code> overrides it — see{" "}
+                  <Link href="/docs/profiles">Profiles &amp; stacks</Link>.
                 </p>
               ) : (
                 <p>
-                  No profile in the manifest currently pulls this stack in, so no
-                  repository receives these rules today.
+                  None today: no profile in the manifest pulls this stack in, so no
+                  repository receives these rules.
                 </p>
               )}
               {stack && (
                 <>
-                  <p>Once onboarded, your files match this stack when they fit any of these globs:</p>
+                  <p>Within such a repository, a file gets these rules when it matches one of these globs:</p>
                   <ul>
                     {stack.globs.map((g) => (
                       <li key={g}><code>{g}</code></li>
@@ -214,14 +188,18 @@ export default async function Page({
             </>
           )}
 
-          <h2>How to use it — {rules.length} rules</h2>
+          <h2>The {rules.length} rules</h2>
           <p>
-            Nothing to run. Once your profile includes{" "}
-            {isCore ? "core (every profile does)" : entry.title},{" "}
-            <code>redline init</code> renders these rules into your repository&apos;s
-            AI tooling and the reviewer applies them on every pull request. When a
-            review comment cites one of these ids, this table is where to look up
-            what it catches and why.
+            When a review comment cites one of these ids, this is where to look up
+            what it catches. Of the {rules.length}, {breakdown}. A finding from
+            this file opens like this:
+          </p>
+          <CodeWindow title="a finding from this file" copyText={example}>
+            <span className="tk-white">{example}</span>
+          </CodeWindow>
+          <p>
+            What each severity obliges you to do is on{" "}
+            <Link href="/docs/output-contract">The output contract</Link>.
           </p>
           {rules.length > 0 ? (
             <RuleTable rules={rules} />
@@ -229,47 +207,41 @@ export default async function Page({
             <p>No rules were found for this stack at build time.</p>
           )}
 
-          <h2>Expected output</h2>
+          <h2>Changing a rule</h2>
           <p>
-            A finding from this file, and every finding Redline produces, opens
-            with a machine-readable first line — severity, then the rule id in
-            brackets, then the problem in one line:
-          </p>
-          <CodeWindow title="a finding from this file" copyText={example}>
-            <span className="tk-white">{example}</span>
-          </CodeWindow>
-          <p>
-            Ids are aggregated per rule, which is how the organisation finds out
-            which rules earn their place and which only generate noise — so a
-            finding without a valid id cannot be measured and counts as untagged.
-            Of the {rules.length} rules here, {breakdown}. Only a BLOCKER must not
-            merge; a SUGGESTION may be dismissed without justification, and is
-            never upgraded to get attention.
-          </p>
-          <p>
-            If a rule here fires constantly on code your team has deliberately
-            decided to allow, that is the signal to raise with the standards owner
-            — the rule id is what makes that conversation measurable — not to
-            argue it away comment by comment.
-          </p>
-
-          <h2>How to edit it</h2>
-          <p>
-            Rules are edited in <code>{entry.file}</code> and nowhere else. The
-            rendered copies in <code>AGENTS.md</code>,{" "}
-            <code>.github/copilot-instructions.md</code> and{" "}
-            <code>.github/instructions/</code> are generated and are overwritten by
-            the next render. A change here propagates to every onboarded repository
+            Edit <code>{entry.file}</code> and nowhere else. Every other copy is
+            generated from it. A merged change reaches every onboarded repository
             as a pull request, so treat it as a production change.
           </p>
-          <LifecycleSteps steps={STANDARDS_EDIT} />
           <p>
-            <b>Rule ids are permanent.</b> Rewording a rule is fine and keeps its
-            id; renaming or removing an id orphans every historical telemetry
-            record that cited it.
+            <b>Rule ids are permanent.</b> Reword a rule freely; it keeps its id.
+            Renaming or removing an id orphans every telemetry record that cited
+            it.
           </p>
+          <LifecycleSteps steps={STANDARDS_EDIT} />
         </>
       )}
+
+      <h2>Related</h2>
+      <ul>
+        <li>
+          <Link href="/docs/output-contract">The output contract</Link> — what
+          each severity obliges you to do.
+        </li>
+        <li>
+          <Link href="/docs/profiles">Profiles &amp; stacks</Link> — how a
+          repository ends up with a set of rules.
+        </li>
+        {seed ? (
+          <li>
+            <Link href={`/docs/seeds/${seed.slug}`}>Seeded corpus: {seed.title}</Link>{" "}
+            — the known-bad code that tests whether reviewers catch these rules.
+          </li>
+        ) : null}
+        <li>
+          <Link href="/docs/standards">All standards</Link>
+        </li>
+      </ul>
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={720} />

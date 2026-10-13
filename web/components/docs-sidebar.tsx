@@ -152,8 +152,11 @@ export function DocsSidebar() {
     // gets carried in after them, rather than unfurling the whole list: the
     // sidebar still shows where you are, and a 59-item category still does not
     // bury every category below it.
-    const preview = all.slice(0, CHILD_PREVIEW);
-    const carried = !open && activeIndex >= CHILD_PREVIEW;
+    // A toggle that would hide a single item costs a line to save a line, and
+    // hides the last step of a path like Learn behind "Show all".
+    const truncates = all.length > CHILD_PREVIEW + 1;
+    const preview = truncates ? all.slice(0, CHILD_PREVIEW) : all;
+    const carried = truncates && !open && activeIndex >= CHILD_PREVIEW;
     if (carried) {
       const activeChild = all[activeIndex];
       if (activeChild) preview.push(activeChild);
@@ -181,7 +184,7 @@ export function DocsSidebar() {
             </li>
           ))}
         </ul>
-        {all.length > CHILD_PREVIEW && (
+        {truncates && (
           <button
             type="button"
             className="child-toggle"

@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DocsPage } from "@/components/docs-page";
 import { FileViewer } from "@/components/file-viewer";
 import { WORKFLOWS, findBySlug } from "@/lib/registry";
 import { WORKFLOWS_INFO } from "@/lib/workflows-info";
-import { LifecycleSteps } from "@/components/lifecycle-steps";
-import { WORKFLOW_EDIT } from "@/lib/lifecycle";
 
 export function generateStaticParams() {
   return WORKFLOWS.map((w) => ({ slug: w.slug }));
@@ -39,47 +38,69 @@ export default async function Page({
       intro={entry.description}
       href={`/docs/workflows/${slug}`}
     >
-      {info.disabled && (
-        <div className="callout info">
-          <span className="ic">ℹ</span>
-          <p>
-            <b>Disabled in Phase 1.</b> This job carries <code>if: false</code> and
-            does not run on its trigger, regardless of what fires it.
-          </p>
-        </div>
-      )}
-
-      <h2>What this is</h2>
       <p>{info.what}</p>
 
-      <h2>How to onboard it</h2>
-      <p>{info.onboard}</p>
-      <ul>
-        <li>
-          <b>Lives in:</b> {info.livesIn}
-        </li>
-        <li>
-          <b>Trigger:</b> {info.trigger}
-        </li>
-      </ul>
+      <div className="table-scroll">
+        <table>
+          <tbody>
+            <tr>
+              <th scope="row">Runs in</th>
+              <td>{info.livesIn}</td>
+            </tr>
+            <tr>
+              <th scope="row">Runs on</th>
+              <td>{info.trigger}</td>
+            </tr>
+            <tr>
+              <th scope="row">Credential</th>
+              <td>{info.credential}</td>
+            </tr>
+            <tr>
+              <th scope="row">Leaves behind</th>
+              <td>{info.output}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-      <h2>How to use it</h2>
-      <p>{info.action}</p>
+      {info.steps.length > 0 ? (
+        <>
+          <h2>What a run does</h2>
+          <ol>
+            {info.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </>
+      ) : null}
+
+      <h2>Setting it up</h2>
+      <p>{info.install}</p>
+
+      <h2>Changing it</h2>
       <p>
-        <b>What a run does, in order:</b>
+        Edit <code>{entry.file}</code> in this repository, then follow{" "}
+        <Link href="/docs/workflows#changing-a-workflow">Changing a workflow</Link>
+        . {info.home === "metrics"
+          ? "The copy in redline-metrics does not update itself: copy the file across again after the change merges."
+          : info.home === "source"
+            ? "It runs from this repository, so the change takes effect when it merges."
+            : "The org gate is a separate copy in <org>/.github: copy the merged file there. Callers reference it at @main, so every repository runs the new version on its next pull request. A vendored copy (--gate-source local) is rewritten only when redline init runs in that repository again."}
       </p>
+
+      <h2>Related</h2>
       <ul>
-        {info.steps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
+        <li>
+          <Link href={info.docs.href}>{info.docs.label}</Link>
+        </li>
+        <li>
+          <Link href="/docs/who-runs-what">Who runs what</Link> — every
+          credential, side by side.
+        </li>
+        <li>
+          <Link href="/docs/workflows">All workflows</Link>
+        </li>
       </ul>
-      <p>{info.phase1}</p>
-
-      <h2>Expected output</h2>
-      <p>{info.output}</p>
-
-      <h2>How to edit it</h2>
-      <LifecycleSteps steps={WORKFLOW_EDIT} />
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={720} />

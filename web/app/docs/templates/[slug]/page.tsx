@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DocsPage } from "@/components/docs-page";
 import { FileViewer } from "@/components/file-viewer";
 import { TEMPLATES, findBySlug } from "@/lib/registry";
-import { TEMPLATES_INFO } from "@/lib/templates-info";
-import { LifecycleSteps } from "@/components/lifecycle-steps";
-import { TEMPLATE_EDIT } from "@/lib/lifecycle";
+import { TEMPLATE_KIND_LABEL, TEMPLATES_INFO } from "@/lib/templates-info";
 
 export function generateStaticParams() {
   return TEMPLATES.map((t) => ({ slug: t.slug }));
@@ -39,36 +38,57 @@ export default async function Page({
       intro={entry.description}
       href={`/docs/templates/${slug}`}
     >
-      <h2>What this is</h2>
       <p>{info.what}</p>
 
-      <h2>How to onboard it</h2>
-      <ul>
-        <li>
-          <b>Installed as:</b>{" "}
-          {info.installedAs ? <code>{info.installedAs}</code> : "Nowhere — not installed by anything."}
-        </li>
-        <li>
-          <b>Installed by:</b> {info.installedBy}
-        </li>
-      </ul>
+      <div className="table-scroll">
+        <table>
+          <tbody>
+            <tr>
+              <th scope="row">Lands at</th>
+              <td>
+                {info.installedAs ? <code>{info.installedAs}</code> : "Nowhere. Nothing installs it."}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Put there by</th>
+              <td>{info.installedBy}</td>
+            </tr>
+            <tr>
+              <th scope="row">Editing this file</th>
+              <td>{TEMPLATE_KIND_LABEL[info.kind]}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-      <h2>How to use it</h2>
-      <p>{info.action}</p>
+      <h2>What to know</h2>
       <ul>
         {info.detail.map((d) => (
           <li key={d}>{d}</li>
         ))}
       </ul>
 
-      <h2>Expected output</h2>
-      <p>{info.output}</p>
-
-      <h2>How to edit it</h2>
+      <h2>Changing it</h2>
+      <p>{info.editWhere}</p>
       <p>
-        <b>The real source:</b> {info.editWhere}
+        The full checklist is on{" "}
+        <Link href="/docs/templates#changing-a-template">Changing a template</Link>.
       </p>
-      <LifecycleSteps steps={TEMPLATE_EDIT} />
+
+      <h2>Related</h2>
+      <ul>
+        <li>
+          <Link href="/docs/onboarding">Onboard a repository</Link> — what{" "}
+          <code>redline init</code> installs, and what it asks an administrator for.
+        </li>
+        <li>
+          <Link href="/docs/gate">The merge gate</Link> — the required check these
+          files feed.
+        </li>
+        <li>
+          <Link href="/docs/templates">All templates and rulesets</Link>
+        </li>
+      </ul>
 
       <h2>The full file</h2>
       <FileViewer file={entry.file} maxHeight={420} />

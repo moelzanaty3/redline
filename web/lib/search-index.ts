@@ -131,7 +131,6 @@ const RENDERED_FILES: [base: string, entries: { slug: string; file: string }[]][
   ["/docs/standards", STANDARDS],
   ["/docs/workflows", WORKFLOWS],
   ["/docs/templates", TEMPLATES],
-  ["/docs/scripts", SCRIPTS],
   ["/docs/seeds", SEEDS],
 ];
 
@@ -165,6 +164,12 @@ export function pageText(): Record<string, string> {
       // them — both are on the page, so both are searchable.
       out[href] = tokenise(`${out[href] ?? ""} ${body}`);
     }
+  }
+
+  // Scripts share one page, so every script's source is searchable from it.
+  for (const script of SCRIPTS) {
+    const body = read(join(REPO_ROOT, script.file));
+    if (body) out["/docs/scripts"] = tokenise(`${out["/docs/scripts"] ?? ""} ${body}`);
   }
 
   return out;

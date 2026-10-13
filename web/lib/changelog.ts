@@ -6,18 +6,25 @@ import { readRepoFile } from "./content";
 // release-notes page maintained by hand is one that is accurate on the day it
 // ships and misleading a month later — and this one carries the sentences that
 // say what changed and why, which are the reason anyone reads it.
+// Entries are written two ways: bullets in the older releases, and a `###`
+// heading followed by paragraphs in the newer ones. Both carry the "why", so
+// both have to survive the parse.
+export type ChangelogEntry =
+  | { kind: "heading"; text: string }
+  | { kind: "bullet"; text: string }
+  | { kind: "paragraph"; text: string };
+
 export type ChangelogSection = {
   heading: string;
   // The unreleased section, which is what a reader upgrading actually needs.
   unreleased: boolean;
-  entries: string[];
+  entries: ChangelogEntry[];
 };
 
 let cached: ChangelogSection[] | null = null;
 
 const HEADING = /^##\s+(.+?)\s*$/;
-// A `### Sub heading` groups a release's entries; treated as an entry so the
-// grouping survives without inventing a second level of structure here.
+// A `### Sub heading` groups a release's entries.
 const SUBHEADING = /^###\s+(.+?)\s*$/;
 const BULLET = /^-\s+(.*)$/;
 
@@ -27,10 +34,11 @@ export function loadChangelog(): ChangelogSection[] {
   const sections: ChangelogSection[] = [];
   let current: ChangelogSection | null = null;
   let buffer: string[] = [];
+  let bufferKind: "bullet" | "paragraph" = "paragraph";
 
   const flush = (): void => {
     if (current && buffer.length > 0) {
-      current.entries.push(buffer.join(" ").replace(/\s+/g, " ").trim());
+      current.entries.push({ kind: bufferKind, text: buffer.join(" ").replace(/\s+/g, " ").trim() });
       buffer = [];
     }
   };
@@ -52,19 +60,24 @@ export function loadChangelog(): ChangelogSection[] {
     const sub = SUBHEADING.exec(line);
     if (sub) {
       flush();
-      current.entries.push(`## ${sub[1]}`);
+      current.entries.push({ kind: "heading", text: sub[1] ?? "" });
       continue;
     }
 
     const bullet = BULLET.exec(line);
     if (bullet) {
       flush();
+      bufferKind = "bullet";
       buffer.push(bullet[1] ?? "");
       continue;
     }
-    // A continuation line of the bullet above. Blank lines end one.
+    // A blank line ends a bullet or a paragraph. Any other line continues the
+    // one in progress, or starts a paragraph.
     if (line.trim() === "") flush();
-    else if (buffer.length > 0) buffer.push(line.trim());
+    else {
+      if (buffer.length === 0) bufferKind = "paragraph";
+      buffer.push(line.trim());
+    }
   }
   flush();
 

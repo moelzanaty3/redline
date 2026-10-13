@@ -10,8 +10,8 @@ export const LINKEDIN_URL = "https://www.linkedin.com/in/moelzanaty3/";
 // a copyright line reads as a side project; the same name stated as the reason
 // the tool exists reads as provenance. The role is the claim — it is why the
 // rules look the way they do — so it is in the sentence, not in a footnote.
-export const AUTHOR_CREDIT =
-  "an engineering manager at Vodafone who had this problem at scale";
+export const EMPLOYER = "Vodafone";
+export const EMPLOYER_URL = "https://www.vodafone.co.uk/";
 
 export const GITHUB_REPO = "moelzanaty3/redline";
 export const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
@@ -33,12 +33,11 @@ export const PRODUCT_BLURB =
 export type NavLink = { readonly href: string; readonly label: string };
 
 export const NAV_LINKS: readonly NavLink[] = [
+  { href: "/docs/learn", label: "Learn" },
   { href: "/docs", label: "Docs" },
   { href: "/docs/standards", label: "Standards" },
   { href: "/docs/skills", label: "Skills" },
-  { href: "/docs/agents", label: "Agents" },
-  { href: "/docs/adaptors/github-copilot", label: "Adaptors" },
-  { href: "/docs/onboarding", label: "Onboarding" },
+  { href: "/docs/adaptors", label: "Adaptors" },
 ];
 
 // Where a reader reports something. `/issues/new` rather than the list: the

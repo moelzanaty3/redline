@@ -42,6 +42,26 @@ test('codex and agents render the same AGENTS.md, once', (t) => {
   );
 });
 
+// CLAUDE.md only imports AGENTS.md. Claude selected alone must still get the
+// file it imports, identical to the one the agents vendor writes.
+test('claude alone writes the AGENTS.md its CLAUDE.md imports', (t) => {
+  const claudeOnly = tmp(t);
+  const r = render({ root, profile: 'web', out: claudeOnly, vendors: ['claude'] });
+  assert.ok(r.managed.includes('CLAUDE.md'));
+  assert.ok(r.managed.includes('AGENTS.md'));
+  assert.match(readFileSync(join(claudeOnly, 'CLAUDE.md'), 'utf8'), /^@AGENTS\.md$/m);
+
+  const agentsOnly = tmp(t);
+  render({ root, profile: 'web', out: agentsOnly, vendors: ['agents'] });
+  assert.equal(
+    readFileSync(join(claudeOnly, 'AGENTS.md'), 'utf8'),
+    readFileSync(join(agentsOnly, 'AGENTS.md'), 'utf8')
+  );
+
+  const both = render({ root, profile: 'web', out: tmp(t), vendors: ['agents', 'claude'] });
+  assert.equal(both.managed.filter((p) => p === 'AGENTS.md').length, 1);
+});
+
 test('a second render of an unchanged tree writes nothing', (t) => {
   const out = tmp(t);
   render({ root, profile: 'web', out });

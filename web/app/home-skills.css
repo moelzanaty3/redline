@@ -6,8 +6,9 @@
 .hm-sk-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
-  margin-top: 26px;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
 }
 
 .hm-sk-card {
@@ -16,14 +17,10 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  padding: 24px 24px 22px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  padding: 32px 32px 28px;
+  background: var(--bg);
   text-decoration: none;
-  transition:
-    border-color 0.18s,
-    transform 0.18s;
+  transition: background 0.18s;
 }
 
 /* .hm-sec a:hover in home.css sets text-decoration: underline globally, and
@@ -37,8 +34,7 @@
 }
 
 .hm-sk-card:hover {
-  border-color: var(--red);
-  transform: translateY(-2px);
+  background: var(--bg-soft);
 }
 
 .hm-sk-card:focus-visible {
@@ -51,9 +47,9 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 19px;
-  font-weight: 640;
-  letter-spacing: -0.02em;
+  font-size: 24px;
+  font-weight: var(--display-weight);
+  letter-spacing: -0.035em;
   color: var(--text);
 }
 
@@ -103,21 +99,12 @@
   color: var(--muted);
 }
 
-[data-theme="light"] .hm-sk-card {
-  background: #fff;
-}
-
-[data-theme="light"] .hm-sk-card:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .hm-sk-card,
   .hm-sk-card h3 span {
     transition: none;
   }
 
-  .hm-sk-card:hover,
   .hm-sk-card:hover h3 span {
     transform: none;
   }
