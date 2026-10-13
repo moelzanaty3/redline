@@ -53,7 +53,7 @@ export const COMMANDS = {
       '                  rendered together — a React app with its own Terraform beside it is',
       '                  web,infra. The recorded name is sorted, so the order you type cannot',
       '                  change the artifacts. Omitted, the stack is detected from the checkout',
-      '      --vendors <list>  comma-separated vendor ids (copilot,agents,claude,cursor) to render for —',
+      '      --vendors <list>  comma-separated vendor ids (copilot,agents,codex,claude,cursor) to render for —',
       '                  overrides both detection and whatever .redline.json already recorded; a vendor',
       '                  the org has not enabled never renders no matter what this list names',
       '      --blocking  promote the merge gate from advisory to blocking',
