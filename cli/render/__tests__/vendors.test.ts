@@ -57,9 +57,10 @@ test('agents emits one merged AGENTS.md with demoted stack headings', () => {
   assert.ok(file!.body.includes('## JavaScript Review Rules'));
 });
 
-test('claude emits a fixed pointer at AGENTS.md', () => {
+test('claude emits a fixed pointer at AGENTS.md, and the AGENTS.md it points at', () => {
   const out = VENDORS['claude']!(ctx('web'));
-  assert.deepEqual([...out.files.keys()], ['CLAUDE.md']);
+  assert.deepEqual([...out.files.keys()], ['AGENTS.md', 'CLAUDE.md']);
+  assert.equal(out.files.get('AGENTS.md')?.body, VENDORS['agents']!(ctx('web')).files.get('AGENTS.md')?.body);
   assert.equal(
     out.files.get('CLAUDE.md')?.body,
     'Engineering standards and review rules for this repository are defined by Redline\n' +
