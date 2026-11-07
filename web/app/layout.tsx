@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Cmdk } from "@/components/cmdk";
 import { SiteFooter } from "@/components/footer";
 import { SiteNav } from "@/components/nav";
-import { pageText, ruleHits } from "@/lib/search-index";
 import "./globals.css";
 import "./chrome.css";
 import "./home.css";
@@ -49,11 +48,7 @@ export default function RootLayout({
         <SiteNav />
         {children}
         <SiteFooter />
-        {/* Both indexes are read off disk at build time, so they are assembled
-            here — in a server component — and handed down. The rule index is
-            what makes pasting `Redline/HIGH [javascript/var-in-new-code]` into
-            search resolve to the rule it names. */}
-        <Cmdk rules={ruleHits()} body={pageText()} />
+        <Cmdk />
       </body>
     </html>
   );

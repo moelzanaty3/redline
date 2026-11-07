@@ -12,9 +12,10 @@
 // request and paste it into the docs. Answering that with "No results" is the
 // product contradicting itself in the one place a reader tests it.
 //
-// Two indexes are built here, both server-side, both handed to the client
-// component as props — `lib/rules.ts` reads standards/ off disk and the page
-// scanner reads app/, so neither can be imported into a "use client" module.
+// Two indexes are built here, both server-side — `lib/rules.ts` reads standards/
+// off disk and the page scanner reads app/, so neither can be imported into a
+// "use client" module. app/search-index.json/route.ts writes them to one static
+// file that the palette fetches on first open.
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +30,12 @@ export type RuleHit = {
   text: string;
   href: string;
   stackTitle: string;
+};
+
+/** What /search-index.json serves: rule results and page href → token soup. */
+export type SearchIndex = {
+  rules: RuleHit[];
+  body: Record<string, string>;
 };
 
 /**
