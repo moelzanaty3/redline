@@ -1,0 +1,26 @@
+# Cloudflare Pages redirects: https://developers.cloudflare.com/pages/configuration/redirects/
+# Old docs addresses that are in bookmarks, the home page's past links and the
+# demo repository's README. Moved here from next.config.mjs when the site became
+# a static export.
+
+# /docs/installation was merged into /docs/onboarding.
+/docs/installation  /docs/onboarding  301
+
+# Quick start and the four-page Tutorial were merged into Learn.
+/docs/quickstart  /docs/learn  301
+/docs/tutorial  /docs/learn  301
+/docs/tutorial/first-finding  /docs/learn/first-finding  301
+/docs/tutorial/assistant  /docs/learn/first-finding  301
+/docs/tutorial/explain-and-fix  /docs/learn/explain-and-fix  301
+/docs/tutorial/stay-current  /docs/learn/next-steps  301
+
+# Pages folded into others once Learn covered their hands-on half.
+/docs/verification  /docs/onboarding#prove-it  301
+/docs/success  /docs/adopting#is-it-used  301
+/docs/ingestion  /docs/telemetry#ingestion  301
+/docs/cost  /docs/telemetry#cost  301
+/docs/adaptors/github-copilot  /docs/adaptors#copilot  301
+/docs/adaptors/claude  /docs/adaptors#claude  301
+/docs/adaptors/agents-md  /docs/adaptors#agents  301
+/docs/adaptors/cursor  /docs/adaptors#cursor  301
+/docs/scripts/:slug  /docs/scripts#:slug  301
