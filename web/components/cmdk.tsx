@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SEARCH_INDEX, type SearchEntry } from "@/lib/docs-nav";
-import type { RuleHit } from "@/lib/search-index";
+import type { RuleHit, SearchIndex } from "@/lib/search-index";
 
 export function openCmdk() {
   window.dispatchEvent(new CustomEvent("redline:cmdk"));
@@ -22,14 +22,13 @@ const RULE_GROUP = "Rules";
 // the catalogue, and 300 rows of rule would bury every page result under it.
 const RULE_LIMIT = 8;
 
-export function Cmdk({
-  rules = [],
-  body = {},
-}: {
-  rules?: RuleHit[];
-  body?: Record<string, string>;
-}) {
+export function Cmdk() {
   const [open, setOpen] = useState(false);
+  // Rule ids and page bodies, fetched on first open rather than shipped with
+  // every page. Until it arrives, or if it fails, search falls back to titles,
+  // descriptions and keywords — the navigation index bundled with this file.
+  const [index, setIndex] = useState<SearchIndex | null>(null);
+  const [indexFailed, setIndexFailed] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +60,25 @@ export function Cmdk({
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open || index) return;
+    const controller = new AbortController();
+    setIndexFailed(false);
+    fetch("/search-index.json", { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`search index: HTTP ${res.status}`);
+        // SAFETY: same-origin build artifact, written by app/search-index.json/route.ts typed as SearchIndex.
+        return res.json() as Promise<SearchIndex>;
+      })
+      .then(setIndex)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.error(error);
+        setIndexFailed(true);
+      });
+    return () => controller.abort();
+  }, [open, index]);
+
   const results = useMemo<Hit[]>(() => {
     const q = query.trim().toLowerCase();
     const pages = (entries: SearchEntry[]): Hit[] =>
@@ -77,6 +95,8 @@ export function Cmdk({
 
     // Rules first when the query looks like one. A reader who pasted a rule id
     // wants the rule, not the nine pages that mention its stack.
+    const rules = index?.rules ?? [];
+    const body = index?.body ?? {};
     const ruleHits: Hit[] = rules
       .filter((r) => {
         const hay = `${r.id} ${r.severity} ${r.text} ${r.stackTitle}`.toLowerCase();
@@ -101,7 +121,7 @@ export function Cmdk({
     const rest = pageHits.filter((e) => !titled.includes(e));
 
     return [...ruleHits, ...pages(titled), ...pages(rest)];
-  }, [query, rules, body]);
+  }, [query, index]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { hit: Hit; index: number }[]>();
@@ -164,7 +184,12 @@ export function Cmdk({
           <kbd>ESC</kbd>
         </div>
         <div className="cmdk-list" ref={listRef}>
-          {results.length === 0 && <div className="cmdk-empty">No results for “{query}”</div>}
+          {results.length === 0 ? (
+            <div className="cmdk-empty">
+              {index || indexFailed ? `No results for “${query}”` : "Loading the search index…"}
+            </div>
+          ) : null}
+          {indexFailed ? <div className="cmdk-empty">Full-text and rule search failed to load. Searching titles only.</div> : null}
           {grouped.map(([group, items]) => (
             <div key={group}>
               <div className="cmdk-group">{group}</div>

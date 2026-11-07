@@ -87,8 +87,12 @@ async function resolve(): Promise<PackageState> {
   // function's own catch turns into "unknown", so the pages lose the version
   // entirely rather than pinning a stale one. A query parameter the registry
   // ignores changes the key while leaving the fetch statically prerenderable.
+  // Cloudflare Pages and Workers Builds each name the commit differently.
   const buildId =
-    process.env["VERCEL_GIT_COMMIT_SHA"] ?? process.env["GITHUB_SHA"] ?? String(Date.now());
+    process.env["CF_PAGES_COMMIT_SHA"] ??
+    process.env["WORKERS_CI_COMMIT_SHA"] ??
+    process.env["GITHUB_SHA"] ??
+    String(Date.now());
 
   try {
     const response = await fetch(`${registry}/${PACKAGE_NAME}?redline-build=${buildId}`, {
