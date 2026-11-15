@@ -62,7 +62,7 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
     summary: "Onboard this repository: assistant rules, security floor, merge gate and a pull request with all of it.",
     what: "Onboards the repository you are in. It writes the standards into the files each AI assistant reads, turns on the organisation's security floor (secret scanning, push protection, dependency alerts), installs the merge gate in advisory mode, and records every choice in .redline.json. On a repository with a remote, everything lands as one pull request on the redline/onboard branch. Run it once to onboard, and again whenever you want to change what is installed: omitted flags keep what .redline.json already recorded.",
     runsIn:
-      "Inside the product repository. The first run uses the published package; after that, use the pinned copy (add it with --pin-cli). With no flags at a terminal, init walks a menu with what it detected preselected and offers a dry run before applying. Any flag, a pipe, CI, or REDLINE_NO_PROMPT=1 skips the menu.",
+      "Inside the product repository. The first run uses the published package; after that, use the pinned copy init adds by default. With no flags at a terminal, init walks a menu with what it detected preselected and offers a dry run before applying. Any flag, a pipe, CI, or REDLINE_NO_PROMPT=1 skips the menu.",
     synopsis: [
       "redline init [--profile <list>] [--vendors <list>] [--blocking] [--no-a11y] [--dry-run] [--repair]",
       "             [--adopt-caller] [--skip <list>] [--with <list>] [--pipeline <name>]",
@@ -85,7 +85,7 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
       { flag: "--docs-url <base>", default: "unset", detail: "Where your organisation publishes the standard. Each finding then links to <base>/r/<rule-id>. Pass an empty string to clear it." },
       { flag: "--integrations <list>", default: "detected", detail: "Controls this repository already runs: sonarqube, snyk, mend, dependabot, renovate, gitleaks, trufflehog, codeql. Corrects detection, which cannot see a scanner wired through a shared pipeline template." },
       { flag: "--setup <list>", default: "none", detail: "Extra controls to install: dependabot, renovate, codeql. Writes .github/dependabot.yml, renovate.json or .github/workflows/codeql.yml. Never overwrites an existing file." },
-      { flag: "--pin-cli", default: "off", detail: "Add redlinegate to devDependencies at this exact version, with the project's package manager, in the same pull request. The team then runs pnpm redline, yarn redline or npx redlinegate." },
+      { flag: "--pin-cli / --no-pin-cli", default: "on", detail: "Add redlinegate to devDependencies at this exact version, with the project's package manager, in the same pull request. On in npm and pnpm projects that do not list redlinegate yet; yarn and bun projects need --pin-cli, since committed yarn plugins still load. The team then runs pnpm redline, yarn redline or npx redlinegate." },
       { flag: "--speckit / --no-speckit", default: "on", detail: "Add the spec-first context section to the assistant files. Dropped automatically where the repository already runs Spec Kit." },
       { flag: "--tmf / --no-tmf", default: "off", detail: "Add the TM Forum context section. The negative removes a section rendered earlier." },
       { flag: "--adr / --no-adr", default: "on", detail: "Require a pull request over 300 changed lines to link a decision record in docs/adr/. One pull request can skip it with the no-adr label." },
@@ -123,8 +123,8 @@ export const COMMANDS_INFO: Record<string, CommandInfo> = {
 dry run — nothing was written, read or changed on the host`,
       },
       {
-        title: "Onboard, and pin the CLI for the team",
-        commands: "{npx} init --pin-cli",
+        title: "Onboard without pinning the CLI",
+        commands: "{npx} init --no-pin-cli",
       },
       {
         title: "Change one choice later",

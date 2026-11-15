@@ -20,7 +20,7 @@ export default function Page() {
         The package is <code>redlinegate</code>, and it installs two names for the same CLI:{" "}
         <code>redline</code> and <code>redlinegate</code>. In a product repository, run the copy
         pinned in the project&apos;s devDependencies, so everyone runs the same version.{" "}
-        <code>redline init --pin-cli</code> adds it. Before that, or in a repository without it, run
+        <code>redline init</code> adds it by default. Before that, or in a repository without it, run
         the published package with <code>npx redlinegate@latest</code>.
       </p>
       <RedlineTerminal commands={`{redline} --help\n{redline} init --help`} />

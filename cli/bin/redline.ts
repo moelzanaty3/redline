@@ -40,6 +40,7 @@ import { Cancelled, createPrompter, isInteractive, type Prompter, type Task } fr
 import { renderReport } from '../ui/report.ts';
 import { colorDepth, colorEnabled, glyphs, palette, type Palette } from '../ui/tty.ts';
 import { gatherFacts } from '../ui/facts.ts';
+import { pinsByDefault } from '../core/package-manager.ts';
 import { runWizard, type Host as WizardHost, type WizardAnswers } from '../ui/wizard.ts';
 import {
   capabilitySelection,
@@ -493,7 +494,16 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(values['docs-url'] !== undefined ? { docsUrl: values['docs-url'] } : {}),
         ...(approvals !== undefined ? { approvals } : {}),
         ...(gateSourceChoice ? { gateSource: gateSourceChoice } : {}),
-        ...(wizard?.answers.pinCli === true || values['pin-cli'] === true ? { pinCli: true } : {}),
+        // On by default in an npm or pnpm project that does not depend on
+        // redlinegate yet — see pinsByDefault for why yarn and bun still need
+        // asking. Repositories with no package.json get no note at all.
+        ...((values['no-pin-cli'] === true
+          ? false
+          : wizard
+            ? wizard.answers.pinCli
+            : values['pin-cli'] === true || pinsByDefault(cwd))
+          ? { pinCli: true }
+          : {}),
         // Offered only at a terminal, and only when the planning pass finds the
         // organisation publishes no gate. A scripted run gets the denial it has
         // always got: vendoring the gate is a weaker control, and nothing

@@ -86,7 +86,7 @@ npx redlinegate init --dry-run                 # the plan; writes nothing, conta
 npx redlinegate init --profile web-react,infra-terraform  # a React app with its own Terraform beside it
 npx redlinegate init --pipeline azure-pipelines  # on GitHub, but built by Azure Pipelines
 npx redlinegate init --pipeline local-agent      # no CI: the gate is a pre-push hook
-npx redlinegate init --pin-cli                   # add redlinegate to devDependencies at this exact version
+npx redlinegate init --no-pin-cli                # leave package.json alone (pinning is on by default)
 npx redlinegate init --no-adr                    # this repository keeps no decision records
 ```
 
@@ -95,9 +95,12 @@ Profiles are named `<kind>-<technology>`: `web-react`, `service-java`, `infra-te
 are kept as aliases, so an existing `--profile`, `.redline.json` or `sync-targets.txt` keeps
 working. A repository is recorded under the new name the next time it runs `init` or is synced.
 
-With `--pin-cli`, or yes to the wizard's question, every later hint and slash command runs the
-pinned copy (`pnpm redline …`, `yarn redline …`, `bun run redline …`) rather than downloading
-another one. It is offered only in a Node project that does not depend on Redline yet.
+`init` adds `redlinegate` to `devDependencies` at its own exact version by default, with the
+project's package manager, in the same pull request. Every later hint and slash command then runs
+the pinned copy (`pnpm redline …`, `yarn redline …`, `bun run redline …`) rather than downloading
+another one. It applies by default only in an npm or pnpm project that does not depend on Redline yet: yarn
+plugins committed to a repository still load during an add, so yarn and bun projects pin only with
+`--pin-cli`. `--no-pin-cli`, or no to the wizard's question, skips it.
 
 ### Where the gate runs
 

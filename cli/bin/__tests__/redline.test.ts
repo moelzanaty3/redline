@@ -295,6 +295,50 @@ test('init --dry-run prints the plan, writes nothing and exits 0', async () => {
   assert.ok(lines.some((l) => l.includes('to write')), lines.join('\n'));
 });
 
+// --- init pins the CLI by default --------------------------------------------
+//
+// The test suite runs the development build, which cannot pin itself, so the
+// note naming that refusal is how these tests see that a pin was attempted.
+const DEV_BUILD_PIN_NOTE = 'a development build cannot pin itself';
+
+test('init pins redlinegate by default in a project with a package.json', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['init', '--dry-run'], opts), 0);
+  assert.ok(lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), lines.join('\n'));
+});
+
+test('init --no-pin-cli leaves the project dependencies alone', async () => {
+  const { opts, lines } = deps(repo());
+  assert.equal(await run(['init', '--dry-run', '--no-pin-cli'], opts), 0);
+  assert.ok(!lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), lines.join('\n'));
+});
+
+test('init does not try to pin where there is no package.json', async () => {
+  const { opts, lines } = deps(tmp('redline-bin-nopkg-'));
+  assert.equal(await run(['init', '--dry-run'], opts), 0);
+  assert.ok(!lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), lines.join('\n'));
+});
+
+test('init does not pin a yarn project unless asked, since committed yarn plugins still load', async () => {
+  const cwd = tmp('redline-bin-yarn-');
+  writeFileSync(join(cwd, 'package.json'), '{"packageManager":"yarn@4.1.0"}');
+  const quiet = deps(cwd);
+  assert.equal(await run(['init', '--dry-run'], quiet.opts), 0);
+  assert.ok(!quiet.lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), quiet.lines.join('\n'));
+
+  const asked = deps(cwd);
+  assert.equal(await run(['init', '--dry-run', '--pin-cli'], asked.opts), 0);
+  assert.ok(asked.lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), asked.lines.join('\n'));
+});
+
+test('init does not re-pin a project that already depends on redlinegate', async () => {
+  const cwd = tmp('redline-bin-pinned-');
+  writeFileSync(join(cwd, 'package.json'), '{"devDependencies":{"redlinegate":"0.2.11"}}');
+  const { opts, lines } = deps(cwd);
+  assert.equal(await run(['init', '--dry-run'], opts), 0);
+  assert.ok(!lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), lines.join('\n'));
+});
+
 test('a flagless re-run does not demote a repository that was onboarded with --blocking', async () => {
   const cwd = repo();
   const first = deps(cwd);

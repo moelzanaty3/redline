@@ -7,6 +7,17 @@ Record seed scores here. A standards change with no measurement is an opinion.
 
 ## Unreleased
 
+### CLI — `init` pins Redline in the project by default
+
+`redline init` now adds `redlinegate` to `devDependencies` at its own exact version, with the
+project's package manager, wherever there is a `package.json` that does not list it yet — the
+same thing `--pin-cli` or yes to the wizard's question did before. A scripted `init` with any
+flag used to skip it silently, so the team kept running whatever `@latest` was that day.
+`--no-pin-cli` opts out; a repository without a `package.json`, or one that already depends on
+`redlinegate`, is left alone with no note. The default covers npm and pnpm only: yarn berry
+plugins committed to a repository still load during an add, and `init` is often run on a
+repository its operator does not own, so yarn and bun projects still pin only on `--pin-cli`.
+
 ### Site — Learn replaces Quick start and Tutorial
 
 The docs had two beginner paths that overlapped: Quick start, one long page following
