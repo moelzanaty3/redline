@@ -82,8 +82,8 @@ export default async function Page() {
           <code>npx {PACKAGE_NAME}@latest init</code>, or{" "}
           <code>pnpm dlx</code>, <code>yarn dlx</code> or <code>bunx</code>.
           The npm package is <code>{PACKAGE_NAME}</code>; the command it installs
-          is <code>redline</code>. Let <code>init</code> pin it — answer yes when
-          it asks, or pass <code>--pin-cli</code> — and it adds{" "}
+          is <code>redline</code>. <code>init</code> pins it by default — pass{" "}
+          <code>--no-pin-cli</code> to skip it — and it adds{" "}
           <code>{PACKAGE_NAME}</code> to <code>devDependencies</code> at that
           exact version in the same pull request. From then on every command
           runs the project&apos;s own copy, such as{" "}
