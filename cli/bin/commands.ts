@@ -107,7 +107,7 @@ export const COMMANDS = {
       '      renovate.json, .github/workflows/codeql.yml. An existing file is never overwritten.',
       '      --pin-cli / --no-pin-cli   add redlinegate to package.json devDependencies at this exact',
       '      version, with the project\'s own package manager, in the same pull request. On by default',
-      '      wherever there is a package.json that does not list redlinegate yet. Then the team, its',
+      '      in an npm or pnpm project that does not list redlinegate yet (yarn and bun: pass it). Then the team, its',
       '      assistants and its hooks run one known Redline: pnpm redline, yarn redline, npx redlinegate.',
       '      It runs that package manager in this repository, with install scripts, .pnpmfile.cjs and',
       '      yarnPath switched off; yarn plugins committed here still load, so pin only where you trust them.',

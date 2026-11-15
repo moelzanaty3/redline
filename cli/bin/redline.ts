@@ -40,7 +40,7 @@ import { Cancelled, createPrompter, isInteractive, type Prompter, type Task } fr
 import { renderReport } from '../ui/report.ts';
 import { colorDepth, colorEnabled, glyphs, palette, type Palette } from '../ui/tty.ts';
 import { gatherFacts } from '../ui/facts.ts';
-import { pinnableManager } from '../core/package-manager.ts';
+import { pinsByDefault } from '../core/package-manager.ts';
 import { runWizard, type Host as WizardHost, type WizardAnswers } from '../ui/wizard.ts';
 import {
   capabilitySelection,
@@ -494,15 +494,14 @@ async function runCommand(argv: string[], deps: RunDeps = {}): Promise<number> {
         ...(values['docs-url'] !== undefined ? { docsUrl: values['docs-url'] } : {}),
         ...(approvals !== undefined ? { approvals } : {}),
         ...(gateSourceChoice ? { gateSource: gateSourceChoice } : {}),
-        // On by default wherever the wizard would have offered it: a project with
-        // a package.json that does not depend on redlinegate yet. Without that
-        // guard every Java or Terraform repository would get a note about a
-        // package.json it was never meant to have.
+        // On by default in an npm or pnpm project that does not depend on
+        // redlinegate yet — see pinsByDefault for why yarn and bun still need
+        // asking. Repositories with no package.json get no note at all.
         ...((values['no-pin-cli'] === true
           ? false
           : wizard
             ? wizard.answers.pinCli
-            : values['pin-cli'] === true || pinnableManager(cwd) !== null)
+            : values['pin-cli'] === true || pinsByDefault(cwd))
           ? { pinCli: true }
           : {}),
         // Offered only at a terminal, and only when the planning pass finds the

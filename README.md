@@ -98,8 +98,9 @@ working. A repository is recorded under the new name the next time it runs `init
 `init` adds `redlinegate` to `devDependencies` at its own exact version by default, with the
 project's package manager, in the same pull request. Every later hint and slash command then runs
 the pinned copy (`pnpm redline …`, `yarn redline …`, `bun run redline …`) rather than downloading
-another one. It applies only in a Node project that does not depend on Redline yet; `--no-pin-cli`,
-or no to the wizard's question, skips it.
+another one. It applies by default only in an npm or pnpm project that does not depend on Redline yet: yarn
+plugins committed to a repository still load during an add, so yarn and bun projects pin only with
+`--pin-cli`. `--no-pin-cli`, or no to the wizard's question, skips it.
 
 ### Where the gate runs
 

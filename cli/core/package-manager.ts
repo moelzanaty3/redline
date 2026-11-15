@@ -222,6 +222,18 @@ export function pinnableManager(cwd: string): PackageManager | null {
   return runner.packageManager;
 }
 
+/**
+ * Whether `init` may pin without being asked. Only where adding one package
+ * runs no code the repository supplies: npm and pnpm, whose hooks are switched
+ * off (see addCommand). Yarn berry plugins committed to the repository still
+ * load and bun is unaudited, so those pin only on an explicit --pin-cli or a yes
+ * at the wizard — `init` is often run on a repository its operator does not own.
+ */
+export function pinsByDefault(cwd: string): boolean {
+  const manager = pinnableManager(cwd);
+  return manager === 'npm' || manager === 'pnpm';
+}
+
 // Yarn berry has no --ignore-scripts flag and classic reads npm's config from
 // the environment, so both are told here rather than on the command line.
 // YARN_IGNORE_PATH makes yarn ignore `yarnPath`, which otherwise hands the

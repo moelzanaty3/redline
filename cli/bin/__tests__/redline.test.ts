@@ -319,6 +319,18 @@ test('init does not try to pin where there is no package.json', async () => {
   assert.ok(!lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), lines.join('\n'));
 });
 
+test('init does not pin a yarn project unless asked, since committed yarn plugins still load', async () => {
+  const cwd = tmp('redline-bin-yarn-');
+  writeFileSync(join(cwd, 'package.json'), '{"packageManager":"yarn@4.1.0"}');
+  const quiet = deps(cwd);
+  assert.equal(await run(['init', '--dry-run'], quiet.opts), 0);
+  assert.ok(!quiet.lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), quiet.lines.join('\n'));
+
+  const asked = deps(cwd);
+  assert.equal(await run(['init', '--dry-run', '--pin-cli'], asked.opts), 0);
+  assert.ok(asked.lines.some((l) => l.includes(DEV_BUILD_PIN_NOTE)), asked.lines.join('\n'));
+});
+
 test('init does not re-pin a project that already depends on redlinegate', async () => {
   const cwd = tmp('redline-bin-pinned-');
   writeFileSync(join(cwd, 'package.json'), '{"devDependencies":{"redlinegate":"0.2.11"}}');
